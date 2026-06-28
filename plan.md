@@ -121,7 +121,7 @@ Adopt Claude's two axes, plus our `partial` and `preload`:
 | `disable-model-invocation: true` | listed | hidden | no | user-only command (e.g. `/deploy`) |
 | `user-invocable: false` | hidden | searchable + callable | no | model-only background |
 | `partial: true` *(ours)* | hidden | hidden | no | `{% include %}` target only; never callable |
-| `preload: true` *(ours)* | listed | callable | **yes** (body injected) | always-on; see §7 |
+| `preload: true` *(ours)* | listed | searchable + callable | **yes** (body injected) | body always-on in Instructions; re-calling is redundant; see §7 |
 
 - **`SkillsRegistry.commandListing()`** → `[SkillListing]` for the user `/` menu, carrying
   **structured, parsed parameters** (§6.1). **We produce data only** — autocomplete, fuzzy
@@ -155,7 +155,10 @@ inference:
 - **Body inference** — when neither is present, scan the body for `$0`/`$N`/`$ARGUMENTS[N]` and
   synthesize positional params so the listing is never empty.
 
-Diagnostics flag mismatches between sources.
+`acceptsTrailingArguments` is true only when the body **references** `$ARGUMENTS` (a
+meaningful free-form tail the UI should prompt for). The §5 auto-append (`ARGUMENTS: <value>`
+when `$ARGUMENTS` is absent) is a no-data-loss fallback for stray args and does **not** set the
+flag. Diagnostics flag mismatches between sources.
 
 ## 7. Discovery, preload & reload — the model-facing dynamics *(new)*
 
@@ -168,11 +171,13 @@ The single **`SkillsTool`** (the root session's entry point) has three actions:
 - **`call(id, arguments)`** → renders the chosen skill (pipeline §5) and returns its body as
   tool output. Dereferences the **live registry at call time**, validates `id`, and on an
   unknown/stale id returns the current list — so hot-reload stays correct even though FM
-  snapshots tool definitions per turn. The id **is** constrained to a runtime enum:
-  `Tool.parameters` is a settable `GenerationSchema`, so the `SkillsTool` builds it
-  per-instance from the current id set via `DynamicGenerationSchema` (decoding `Arguments`
-  from `GeneratedContent`). The enum reflects ids at session start; call-time validation is
-  the backstop for ids that go stale between turns (decision #18).
+  snapshots tool definitions per turn. The id **is** constrained to a runtime enum: the `Tool`
+  protocol's `parameters: GenerationSchema` is an instance property a conforming type
+  implements itself (not fixed by a `@Generable Arguments`), so `SkillsTool` returns a schema
+  built per-instance from the current id set via `DynamicGenerationSchema`, with
+  `Arguments = GeneratedContent`. The enum reflects ids at session start; call-time validation
+  is the backstop for ids that go stale between turns. *(Confirm against the shipping
+  FoundationModels SDK — WWDC26 API. Decision #18.)*
 
 **`SkillSearchAgent` — a separate `LanguageModelSession`.** It is seeded with the registry's
 **skill metadata** (id, description, params; not full bodies) and searches it by intent on
@@ -235,9 +240,11 @@ construction and the generic **`call(id:arguments:)`** used by both the tool and
 17. **Packaging → single SwiftPM target.** Layering (§3) is conceptual — by type, not module
     — so FoundationModels is a dependency of the whole package and the future `AgentRegistry`
     lives in the same target.
-18. **Tool arg schema → dynamic.** `Tool.parameters` is a settable `GenerationSchema`, so the
-    `SkillsTool` builds it per-instance from the current id set (`DynamicGenerationSchema`,
+18. **Tool arg schema → dynamic.** `Tool.parameters: GenerationSchema` is an instance property
+    a conformer implements itself (not fixed by a `@Generable Arguments`), so `SkillsTool`
+    returns a per-instance schema built from the current id set (`DynamicGenerationSchema`,
     `Arguments` = `GeneratedContent`). Call-time validation backstops between-turn staleness.
+    *(Confirm against the shipping WWDC26 SDK.)*
 
 **All open items resolved — the plan is decision-complete.**
 
