@@ -204,6 +204,46 @@ On reload we: (a) **re-inject** the new metadata into the `SkillSearchAgent`; (b
 the live registry per call). The registry also exposes an **initial** metadata list at
 construction and the generic **`call(id:arguments:)`** used by both the tool and any host code.
 
+### 7.1 How skills reach a session
+
+The **listing (metadata) and a skill's rendered body travel by different channels** — the
+full catalog is never dumped into the root session. One `SkillsRegistry`, three consumers:
+
+```
+                       ┌──────────── SkillsRegistry (source of truth) ────────────┐
+  UI (presentation) ◀──┤ commandListing()  →  [SkillListing] (data only)          │
+  search session    ◀──┤ metadata()        →  SkillSearchAgent (re-injected/reload)│
+  root session      ◀──┤ preloadedBodies() →  Instructions at startup              │
+                       │ call(id:arguments:) → one rendered body, on demand        │
+                       └──────────────────────────────────────────────────────────┘
+```
+
+**What enters the root session:** only (a) `preloadedBodies()` at construction and (b) the
+rendered body of each skill explicitly called — one at a time. The catalog/metadata does
+**not** enter the root; the only catalog-derived thing baked in is the `SkillsTool` `id` enum
+(model-visible ids at session start, §7).
+
+**Metadata is shared with an actual `LanguageModelSession` only via the `SkillSearchAgent`** —
+deliberately, so the root stays lean and avoids the all-descriptions-in-context token cost.
+
+**Two invocation paths put a rendered body into the transcript:**
+- **Model-driven** — the model calls `SkillsTool.search(query)` → search agent returns
+  candidate ids → `SkillsTool.call(id:, arguments:)` → registry renders → body returned as the
+  tool's output.
+- **User-driven (`/command`)** — this is where the UI listing connects to a session. The UI
+  used `commandListing()` only to present the command and collect arg values; on submit it
+  resolves the choice into a registry call and feeds the result in as that turn's input:
+
+```swift
+// UI collected: id = "deploy", values = ["production"]
+let rendered = try registry.call(id: "deploy", arguments: ["production"])
+try await root.respond(to: rendered)     // rendered body enters the transcript
+```
+
+(Mirrors Claude: the `/` menu shows descriptions, but invoking a command injects the rendered
+`SKILL.md` as a message.) So the **listing informs the UI; the render is what's shared with the
+session.**
+
 ## 8. Platform & security
 - **macOS primary** (on-device): full feature set — args, shell injection, env, scripts.
 - **iOS: graceful "unavailable on platform"** stub; no shell/script attempted.
