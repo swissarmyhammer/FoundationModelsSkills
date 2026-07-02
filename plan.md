@@ -4,22 +4,29 @@ A Swift package that loads [agentskills.io](https://agentskills.io/specification
 [Claude-style](https://code.claude.com/docs/en/slash-commands) skill directories from disk
 and exposes them to Apple's
 [Foundation Models framework](https://developer.apple.com/videos/play/wwdc2026/241/)
-(WWDC26) through **one tool** — plus a separate listing surface for command/`/`-matching.
-Built on a generic, reusable stacked-folder layer. **Primary target: macOS, on-device.**
+(WWDC26) through **one fused operation tool** — built on the
+[`FoundationModelsOperations`](https://github.com/swissarmyhammer/FoundationModelsOperationTool)
+package (the sah "operation" pattern: `op: "verb noun"` dispatch, forgiving resolver,
+dual-use CLI) — plus a separate listing surface for command/`/`-matching. Built on a
+generic, reusable stacked-folder layer. **Primary target: macOS, on-device.**
 
 ---
 
 ## 1. Guiding principles
 
-- **A skill is just a tool — no special case.** In an FM session, skills are reached through
-  one `FoundationModels.Tool` — `SkillsTool` (**search / list / call**). The framework has no
-  skills concept; we add a *tool*, not a new primitive.
+- **A skill is just data behind a tool — no special case.** In an FM session, skills are
+  reached through one fused `OperationTool` whose vocabulary is **`search skill` /
+  `list skill` / `use skill`**. The framework has no skills concept; we add operations over
+  a registry, not a new primitive.
+- **Skills are rows, not operations.** Operations are compile-time declarations; skills are
+  runtime data that hot-reloads. The op vocabulary is a small fixed set of meta-verbs whose
+  `id` parameter names the skill — never one op per skill.
 - **Keep the root session lean.** The full catalog is **not** dumped into the root context.
   Discovery is offloaded to a **separate search-agent session**; only an explicitly chosen
-  skill's body (plus any preloaded skills) ever enters the root transcript. *(new)*
+  skill's body (plus any preloaded skills) ever enters the root transcript.
 - **One registry, many consumers.** A reloadable **`SkillsRegistry`** is the source of truth;
-  it powers the root `SkillsTool`, the search agent, the preload injection, and the
-  user-facing `/` command listing — all *views* of one registry. *(new)*
+  it powers the fused skills tool, the search agent, the preload injection, the
+  user-facing `/` command listing, **and the CLI** — all *views* of one registry.
 - **Generic stack underneath, domain validation on top.** The folder-stacking machinery
   (override, render, list, watch) knows nothing about skills, so the **same stack also serves
   agents** — the downstream [`../FoundationModelsAgents`](../FoundationModelsAgents/plan.md)
@@ -36,8 +43,8 @@ Built on a generic, reusable stacked-folder layer. **Primary target: macOS, on-d
   type**.
 - The experimental **`FoundationModelsUtilities`** package ships a `Skills { … }` builder
   (the model activates a skill *by generating a tool call*). **We do not depend on it** — we
-  roll our own tool on the core `Tool` protocol for full control over search, the call
-  contract, arguments, preload, and reload.
+  build on `FoundationModelsOperations`, which conforms to the core `Tool` protocol and
+  gives us full control over search, the call contract, arguments, preload, and reload.
 
 ## 3. Layered architecture
 
@@ -45,10 +52,12 @@ Four layers, bottom to top. Lower layers are domain-agnostic and reusable.
 
 ```
 ┌─ Layer 4  FM adapter (skills) ─────────────────────────────────────────────┐
-│   SkillsTool — one core FoundationModels.Tool: search / list / call         │
-│   SkillSearchAgent — a SEPARATE LanguageModelSession over skill metadata    │
-│   preload injection (rendered bodies → root Instructions)                   │
-│   commandListing() — user `/` menu view (separate from the model surface)   │
+│   Skill operations — SearchSkill / ListSkill / UseSkill structs fused by   │
+│   FoundationModelsOperations.OperationTool into ONE core Tool              │
+│   SkillSearchAgent — a SEPARATE LanguageModelSession over skill metadata   │
+│   preload injection (rendered bodies → root Instructions)                  │
+│   commandListing() — user `/` menu view (separate from the model surface)  │
+│   OperationCLIDriver — dual-use CLI from the same op declarations          │
 ├─ Layer 3  SkillsRegistry  (domain validation + semantics) ──────────────────┤
 │   agentskills.io + Claude validation, visibility, arguments, partial,       │
 │   reload → injectable metadata, generic call(id:arguments:) — built ON L2   │
@@ -76,13 +85,15 @@ Four layers, bottom to top. Lower layers are domain-agnostic and reusable.
   agentskills.io + Claude validation, the visibility model (§6), argument handling (§5),
   `partial`/include semantics, and **reload → injectable metadata** (§7). Exposes a generic
   `call(id:arguments:)`. **Skill validation is strictly above the raw stack.**
-- **FM adapter** (Layer 4) — `SkillsTool`, the `SkillSearchAgent`, preload injection, and the
-  `commandListing()`, all reading the registry.
+- **FM adapter** (Layer 4) — the skill operation structs and their fused `OperationTool`,
+  the `SkillSearchAgent`, preload injection, the `commandListing()`, and the CLI driver —
+  all reading the registry.
 
 ## 4. Identity & naming
 
 - **Directory name = canonical id.** It is the key for stack override, `{% include %}`
-  partials, `/name` command matching, and `SkillsTool.call(id:)` — never the frontmatter `name`.
+  partials, `/name` command matching, and the `use skill` op's `id` — never the frontmatter
+  `name`.
 - **agentskills.io requires `name`, and it must equal the directory name.** Enforced rules:
   1–64 chars, `[a-z0-9-]` only, no leading/trailing hyphen, no consecutive `--`,
   `name == directoryName`.
@@ -103,7 +114,14 @@ bust). One ordered pipeline, each pass single-shot and **not re-scanned** by lat
    - `\$` escapes a literal `$`.
 2. **Shell injection** — `` !`command` `` (only at line start / after whitespace) and fenced
    ` ```! ` blocks; run via `/bin/sh`, output inlined as plain text, **not** re-scanned. macOS
-   only (§8). A `disableShellExecution` policy flag mirrors Claude's `disableSkillShellExecution`.
+   only (§8). **Dynamic at render, static in transcript:** commands re-execute on *every*
+   render — each `use skill` dispatch, user-driven `/command`, or CLI `use` — so output
+   reflects current state; once returned, it is fixed in the transcript. **Body only** —
+   `description`/`metadata` values render at metadata-build/reload/list time, where shell
+   execution would fire on every watcher event, so they get passes 1 and 3 only (matches
+   Claude). A `disableShellExecution` policy flag, **set at registry construction** so all
+   render paths honor it (model, `/command`, CLI), mirrors Claude's
+   `disableSkillShellExecution`. *(decision #25)*
 3. **Stencil** — `{{ env.* }}` (all of `ProcessInfo.environment`) + `{% include "other-skill" %}`
    partials resolved against the merged registry (including `partial:` skills), rendered
    recursively with **cycle detection**.
@@ -123,16 +141,19 @@ Adopt Claude's two axes, plus our `partial` and `preload`:
 
 | Field | User `/` menu | Model surface | In context at startup | Notes |
 |---|---|---|---|---|
-| *(default)* | listed | searchable + callable | no (body on call) | both audiences |
+| *(default)* | listed | searchable + usable | no (body on use) | both audiences |
 | `disable-model-invocation: true` | listed | hidden | no | user-only command (e.g. `/deploy`) |
-| `user-invocable: false` | hidden | searchable + callable | no | model-only background |
+| `user-invocable: false` | hidden | searchable + usable | no | model-only background |
 | `partial: true` *(ours)* | hidden | hidden | no | `{% include %}` target only; never callable |
-| `preload: true` *(ours)* | listed | searchable + callable | **yes** (body injected) | body always-on in Instructions; re-calling is redundant; see §7 |
+| `preload: true` *(ours)* | listed | searchable + usable | **yes** (body injected) | body always-on in Instructions; re-use is redundant; see §7 |
 
 - **`SkillsRegistry.commandListing()`** → `[SkillListing]` for the user `/` menu, carrying
   **structured, parsed parameters** (§6.1). **We produce data only** — autocomplete, fuzzy
   search, and input validation are the UI's job, out of scope here.
 - `partial:` accepts **top-level canonical** else `metadata.partial: "true"`.
+- "Model surface" filtering is applied by the operation implementations: `search skill` /
+  `list skill` exclude model-hidden skills; `use skill` refuses them with a corrective
+  message.
 
 ### 6.1 Parsed parameter model
 
@@ -166,76 +187,86 @@ meaningful free-form tail the UI should prompt for). The §5 auto-append (`ARGUM
 when `$ARGUMENTS` is absent) is a no-data-loss fallback for stray args and does **not** set the
 flag. Diagnostics flag mismatches between sources.
 
-## 7. Discovery, preload & reload — the model-facing dynamics *(new)*
+## 7. The operation vocabulary — nouns, verbs & model-facing dynamics
 
-The single **`SkillsTool`** (the root session's entry point) has three actions:
-- **`search(query)`** → delegates to the **`SkillSearchAgent`** and returns ranked matches
-  (id + description + parsed params). This is the primary discovery path; it keeps the root
-  context lean because the catalog lives in the search agent, not the root.
-- **`list`** → returns the catalog (full or filtered) on demand, for small sets or explicit
-  enumeration.
-- **`call(id, arguments)`** → renders the chosen skill (pipeline §5) and returns its body as
-  tool output. Dereferences the **live registry at call time**, validates `id`, and on an
-  unknown/stale id returns the current list — so hot-reload stays correct even though FM
-  snapshots tool definitions per turn. The id **is** constrained to a runtime enum: the `Tool`
-  protocol's `parameters: GenerationSchema` is an instance property a conforming type
-  implements itself (not fixed by a `@Generable Arguments`), so `SkillsTool` returns a schema
-  built per-instance from the current id set via `DynamicGenerationSchema`, with
-  `Arguments = GeneratedContent`. The enum reflects ids at session start; call-time validation
-  is the backstop for ids that go stale between turns. *(Confirm against the shipping
-  FoundationModels SDK — WWDC26 API. Decision #18.)*
+The model-facing surface is **one fused `OperationTool`** (from
+`FoundationModelsOperations`) built from three operation structs sharing a
+`SkillsToolContext` (registry + search agent). The fused schema is a **flat union**:
+a required `op` string enum (`"search skill"`, `"list skill"`, `"use skill"`) plus the union
+of all fields as optionals — dispatch validates and returns **corrective messages, never
+throws** (upstream's return-don't-throw + retry-cap pattern).
+
+| op | parameters | behavior |
+|---|---|---|
+| `search skill` | `query`, `limit?` | delegates to the **`SkillSearchAgent`** and returns ranked matches (id + description + parsed params). Primary discovery path; keeps the root context lean because the catalog lives in the search agent, not the root. |
+| `list skill` | `filter?` | returns the catalog (full or filtered) on demand, for small sets or explicit enumeration. |
+| `use skill` | `id`, `arguments?` | renders the chosen skill (pipeline §5) and returns its body as tool output. Dereferences the **live registry at dispatch time**. |
+
+- **Noun is singular `skill`**; the forgiving resolver tolerates plurals, reversed order
+  (`skill list`), and `_`/`-` separators. Verb aliases ride the shared resolver table:
+  `find/discover → search`, `call/run/invoke/get → use`. *(decisions #20–21)*
+- **`id` is a plain string, validated at dispatch.** No dynamic id enum: skills hot-reload
+  between turns, and Apple's enum-enforcement bug (forums 812501/811620) means the model can
+  emit values outside an `anyOf` list anyway. An unknown/stale/model-hidden id returns a
+  corrective message carrying the current id list; upstream's retry cap (default 2) stops
+  loops. This **supersedes decision #18.** *(decision #22)*
+- **M6 resources are future nouns, not parameters:** `list resource`, `read resource`,
+  `run script` join the same fused tool (or a second `OperationTool` if the op count grows
+  past upstream's 5–15 guidance). Vocabulary deferred to M6. *(decision #23)*
 
 **`SkillSearchAgent` — a separate `LanguageModelSession`.** It is seeded with the registry's
 **skill metadata** (id, description, params; not full bodies) and searches it by intent on
 behalf of the root agent. Benefits: (a) the root session is never clogged with the whole
 catalog; (b) it can run a cheaper model / Private Cloud Compute; (c) it can be backed by
 semantic search (Spotlight RAG) instead of pure LLM matching for large catalogs. Returns
-candidate ids the root then `call`s.
+candidate ids the root then feeds to `use skill`.
 
-**Builder.** The `SkillsTool` (and the search-agent session it owns) is assembled through a
-**builder** — `SkillsTool.builder(registry:)` — because the wiring has many optional knobs:
-which actions to enable (search/list/call), the search agent's model/reasoning level and its
-search backend (LLM vs Spotlight RAG), the id-enum constraint toggle, and the
-`disableShellExecution` policy. `build()` returns a ready `Tool` plus the live search session.
-*(decision #15)*
+**Assembly.** The old many-knobbed builder (#15) dissolves: `OperationTool` init takes
+`(name:description:context:operations:)`, and the remaining knobs live in three places —
+`SkillsRegistry` construction (render policy, e.g. `disableShellExecution` — it must sit
+where the pipeline runs so the `/command` and CLI paths honor it too, #25),
+`SkillsToolContext` construction (search agent's model/reasoning level, LLM-vs-Spotlight
+backend), and upstream `OperationTool` options (`includesSchemaInInstructions`, retry cap).
+Which actions exist = which operation structs you pass. *(supersedes decision #15)*
 
 **Preload.** Skills with `preload: true` have their **rendered bodies injected into the root
-session's `Instructions`** at startup, alongside the `SkillsTool` — always-on context, no
-search/call needed. Use sparingly (every preloaded line is a recurring token cost).
+session's `Instructions`** at startup, alongside the fused tool — always-on context, no
+search/use needed. Use sparingly (every preloaded line is a recurring token cost).
 
 **Reload & metadata injection.** The `FolderStack` watcher fires on add/remove/edit up the
 stack → `SkillsRegistry` rebuilds and publishes a **refreshed metadata list** (observable).
 On reload we: (a) **re-inject** the new metadata into the `SkillSearchAgent`; (b) refresh the
-**preloaded** bodies in the root; (c) leave the root `SkillsTool` untouched (it dereferences
-the live registry per call). The registry also exposes an **initial** metadata list at
-construction and the generic **`call(id:arguments:)`** used by both the tool and any host code.
+**preloaded** bodies in the root; (c) leave the fused tool untouched — its schema is
+id-free and its operations dereference the live registry per dispatch, so hot-reload is
+invisible to the root session. The registry also exposes an **initial** metadata list at
+construction and the generic **`call(id:arguments:)`** used by both the ops and any host code.
 
 ### 7.1 How skills reach a session
 
 The **listing (metadata) and a skill's rendered body travel by different channels** — the
-full catalog is never dumped into the root session. One `SkillsRegistry`, three consumers:
+full catalog is never dumped into the root session. One `SkillsRegistry`, four consumers:
 
 ```
                        ┌──────────── SkillsRegistry (source of truth) ────────────┐
   UI (presentation) ◀──┤ commandListing()  →  [SkillListing] (data only)          │
   search session    ◀──┤ metadata()        →  SkillSearchAgent (re-injected/reload)│
   root session      ◀──┤ preloadedBodies() →  Instructions at startup              │
-                       │ call(id:arguments:) → one rendered body, on demand        │
+  CLI (§7.2)        ◀──┤ call(id:arguments:) → one rendered body, on demand        │
                        └──────────────────────────────────────────────────────────┘
 ```
 
 **What enters the root session:** only (a) `preloadedBodies()` at construction and (b) the
-rendered body of each skill explicitly called — one at a time. The catalog/metadata does
-**not** enter the root; the only catalog-derived thing baked in is the `SkillsTool` `id` enum
-(model-visible ids at session start, §7).
+rendered body of each skill explicitly used — one at a time. The catalog/metadata does
+**not** enter the root; the only catalog-derived thing in the schema is nothing at all — the
+fused tool's schema is the fixed op vocabulary, independent of which skills exist (§7).
 
 **Metadata is shared with an actual `LanguageModelSession` only via the `SkillSearchAgent`** —
 deliberately, so the root stays lean and avoids the all-descriptions-in-context token cost.
 
 **Two invocation paths put a rendered body into the transcript:**
-- **Model-driven** — the model calls `SkillsTool.search(query)` → search agent returns
-  candidate ids → `SkillsTool.call(id:, arguments:)` → registry renders → body returned as the
-  tool's output.
+- **Model-driven** — the model calls `{op: "search skill", query: …}` → search agent returns
+  candidate ids → `{op: "use skill", id: …, arguments: …}` → registry renders → body returned
+  as the tool's output.
 - **User-driven (`/command`)** — this is where the UI listing connects to a session. The UI
   used `commandListing()` only to present the command and collect arg values; on submit it
   resolves the choice into a registry call and feeds the result in as that turn's input:
@@ -250,10 +281,26 @@ try await root.respond(to: rendered)     // rendered body enters the transcript
 `SKILL.md` as a message.) So the **listing informs the UI; the render is what's shared with the
 session.**
 
+### 7.2 Dual-use CLI *(new, free from the operation pattern)*
+
+The same operation declarations drive an `OperationCLIDriver` command tree
+(`<executable> <noun> <verb> …`), converging on the **exact payload the model sends** —
+upstream pins this with round-trip tests. This gives skill authors a way to inspect and
+render skills outside any session:
+
+```
+skills skill list
+skills skill search "commit my changes"
+skills skill use deploy --arguments production
+```
+
+Help, did-you-mean, and shell completions come from stock ArgumentParser. The CLI respects
+the same visibility rules as the user surface (it is a user, not a model).
+
 ## 8. Platform & security
 - **macOS primary** (on-device): full feature set — args, shell injection, env, scripts.
 - **iOS: graceful "unavailable on platform"** stub; no shell/script attempted.
-- **No cache concern** — render-once at list/call; fixed in transcript.
+- **No cache concern** — render-once at list/use; fixed in transcript.
 - **Server-side providers see the transcript** — with all env exposed and shell output inlined,
   a rendered skill can carry that off-device if a session routes to a cloud provider.
   Documented; accepted for the on-device-Mac use case. (The search agent sees only metadata,
@@ -263,8 +310,9 @@ session.**
 1. **Template engine → Stencil** (`{{ }}` + `{% include %}`).
 2. **Env → all** of `ProcessInfo.environment` as `{{ env.* }}`.
 3. **Override → full replace** (higher layer shadows lower entirely).
-4. **FM integration → our own single `SkillsTool`** on core `FoundationModels.Tool`; no
-   `FoundationModelsUtilities` dependency.
+4. **FM integration → a fused `OperationTool`** from `FoundationModelsOperations` on core
+   `FoundationModels.Tool`; no `FoundationModelsUtilities` dependency. *(Supersedes the
+   bespoke single `SkillsTool`.)*
 5. **`partial:` → accept both, top-level canonical.**
 6. **Arguments → Claude-compatible** (`$ARGUMENTS`, `$ARGUMENTS[N]`/`$N` 0-based, `$name`,
    `argument-hint:`).
@@ -274,15 +322,16 @@ session.**
 9. **Visibility → `user-invocable` + `disable-model-invocation` + `partial`**; two listing
    surfaces (command vs model).
 10. **Parameters → infer from body** when frontmatter is absent; frontmatter refines.
-11. **FM entry point → one `SkillsTool`** with **search / list / call** actions.
+11. **FM entry point → one fused tool** with ops **`search skill` / `list skill` /
+    `use skill`**. *(Restates the old search/list/call actions in operation vocabulary.)*
 12. **Discovery → a separate `SkillSearchAgent` session**, so the root session is not clogged
     with skill metadata; only a chosen skill's body enters the root.
 13. **Source of truth → `SkillsRegistry`**: reloadable; publishes an initial + injectable
     refreshed metadata list; generic `call(id:arguments:)`.
 14. **Preload → `preload: true`** skills' rendered bodies injected into the root session at
     startup (and refreshed on reload).
-15. **Builder → `SkillsTool.builder(registry:)`** assembles the tool + its search-agent
-    session (actions, search model/reasoning/backend, id-enum constraint, shell policy).
+15. ~~Builder~~ **Superseded by #20:** assembly is `OperationTool` init + `SkillsToolContext`
+    construction; action set = the operation structs passed in.
 16. **Partials → render standalone** (env + own `$`-tokens; not the parent's arguments).
 17. **Packaging → single SwiftPM target.** Layering (§3) is conceptual — by type, not module
     — so FoundationModels is a dependency of the whole package. *(Superseded in part:)*
@@ -290,16 +339,35 @@ session.**
     `../FoundationModelsAgents` package, which depends on this one. Layers 1–2
     (`FrontmatterDocument`, `FolderStack`) are therefore **exported public API**, part of
     this package's contract.
-18. **Tool arg schema → dynamic.** `Tool.parameters: GenerationSchema` is an instance property
-    a conformer implements itself (not fixed by a `@Generable Arguments`), so `SkillsTool`
-    returns a per-instance schema built from the current id set (`DynamicGenerationSchema`,
-    `Arguments` = `GeneratedContent`). Call-time validation backstops between-turn staleness.
-    *(Confirm against the shipping WWDC26 SDK.)*
+18. ~~Tool arg schema → dynamic id enum~~ **Superseded by #22:** the fused schema is
+    upstream's flat union (required `op` enum + optional fields); the skill `id` is a plain
+    string validated at dispatch. Rationale: hot-reload safety + Apple's enum-enforcement
+    bug (forums 812501/811620) means guided id sampling was never guaranteed anyway.
 19. **Entry shapes → `FolderStack` supports both.** A skill is a **directory-shaped** entry
     (`name/SKILL.md`, id = directory name); a Claude-style agent is a **file-shaped** entry
     (a flat `*.md` discovered recursively, id from frontmatter `name`). The `EntryKind`
     decides shape, discovery, and identity — required by `../FoundationModelsAgents`, whose
     M1–M2 depend on this landing in our M1.
+20. **Operation pattern → depend on `FoundationModelsOperations`** (SwiftPM). Our three ops
+    can hand-conform `OperationDefinition` (upstream's manual path) — the `@Operation` macro
+    is optional for so small a vocabulary. We inherit schema fusion, the forgiving resolver,
+    return-don't-throw corrective errors, the retry cap, `includesSchemaInInstructions`, and
+    the CLI driver. Upstream tasks 2/4/5/6 are prerequisites for our M4.
+21. **Vocabulary → noun `skill`, verbs `search` / `list` / `use`.** Aliases:
+    `find/discover → search`; `call/run/invoke/get → use`; plural/reversed/`_`-`-` tolerated
+    by the resolver. **Skills are rows, not operations** — never one op per skill id.
+22. **Skill id → plain string + dispatch validation.** Unknown/stale/model-hidden id returns
+    a corrective message listing current ids (upstream pattern); retry cap stops loops.
+23. **Resource nouns deferred to M6.** `list resource` / `read resource` / `run script` join
+    the fused tool then; partition into a second `OperationTool` only if the op count
+    outgrows upstream's 5–15 guidance.
+24. **CLI → yes, via `OperationCLIDriver`** (§7.2); same payload as the model path,
+    user-surface visibility rules.
+25. **Shell injection → body only, re-executed per render.** `` !`command` `` runs fresh on
+    every `use skill` / `/command` / CLI render (output then fixed in the transcript);
+    `description`/`metadata` never execute shell (they render at metadata-build/reload time).
+    `disableShellExecution` is set at **registry** construction so every render path honors
+    it — model, user-driven, and CLI alike.
 
 **All open items resolved — the plan is decision-complete.**
 
@@ -310,31 +378,45 @@ session.**
 let registry = try SkillsRegistry(
   roots: [enterpriseURL, userURL, projectURL],   // low → high; full-replace by id
   env: .all,
+  policy: .init(disableShellExecution: false),   // render policy lives with the pipeline (#25)
   watch: true                                    // reload add/remove/edit up the stack
 )
 
-// Layer 4 — builder assembles the SkillsTool + its search-agent session:
-let skillsTool = SkillsTool.builder(registry: registry)
-  .actions([.search, .list, .call])
-  .searchAgent { $0.model(.privateCloudCompute).reasoning(.light).backend(.spotlight) }
-  .constrainIdsToEnum(true)            // dynamic GenerationSchema enum of current ids
-  .build()                             // → (tool: Tool, search: SkillSearchAgent)
+// Layer 4 — three ops over one context, fused into one core Tool:
+let context = SkillsToolContext(
+  registry: registry,
+  searchAgent: SkillSearchAgent(model: .privateCloudCompute,
+                                reasoning: .light,
+                                backend: .spotlight)
+)
+let skillsTool = OperationTool(
+  name: "skills",
+  description: "Search, list, and use skills from the local skill library",
+  context: context,
+  operations: [AnyOperation(SearchSkill.self),   // op: "search skill"
+               AnyOperation(ListSkill.self),     // op: "list skill"
+               AnyOperation(UseSkill.self)]      // op: "use skill"
+)
 
 // Lean root session: one tool + preloaded bodies, NO full catalog inline:
 let root = LanguageModelSession(
-  tools: [skillsTool.tool],
+  tools: [skillsTool],
   instructions: Instructions {
     "…base instructions…"
     registry.preloadedBodies()         // preload: true skills, rendered
   }
 )
 
-// Reload: re-inject metadata into the search agent; refresh preloaded bodies; root tool
-// already dereferences the live registry per call.
-registry.onReload { meta in skillsTool.search.update(metadata: meta) /* + refresh preload */ }
+// Reload: re-inject metadata into the search agent; refresh preloaded bodies; the fused
+// tool's schema is id-free and its ops dereference the live registry per dispatch.
+registry.onReload { meta in context.searchAgent.update(metadata: meta) /* + refresh preload */ }
 
 // User-facing command matching (independent of the session):
 for skill in registry.commandListing() { /* skill.id, .description, .parameters */ }
+
+// Dual-use CLI from the SAME declarations:
+let cli = OperationCLIDriver(tool: skillsTool)
+try await cli.run(CommandLine.arguments)  // skills skill use deploy --arguments production
 ```
 
 ## 11. Phasing
@@ -345,12 +427,17 @@ for skill in registry.commandListing() { /* skill.id, .description, .parameters 
   pipeline scaffold (passes wired, identity transforms).
 - **M3 — `SkillsRegistry`.** agentskills.io + Claude validation, visibility, `partial`,
   `preload`, `commandListing()`, initial + injectable metadata, generic `call`.
-- **M4 — `SkillsTool` + search agent.** `SkillsTool` (search/list/call) on core
-  `FoundationModels.Tool`; `SkillSearchAgent` session; preload injection; reload re-injection.
+- **M4 — Skill operations + search agent.** `SearchSkill`/`ListSkill`/`UseSkill` conforming
+  to `OperationDefinition`; fuse via `OperationTool`; `SkillSearchAgent` session; preload
+  injection; reload re-injection. *(Depends on `FoundationModelsOperations` tasks 2/4/5 —
+  protocol, schema fusion, dispatch/resolver.)*
+- **M4.5 — CLI.** Wire `OperationCLIDriver` over the same ops (§7.2); round-trip payload
+  test against the resolver. *(Depends on upstream task 6.)*
 - **M5 — Full render.** Arguments, shell injection (macOS), Stencil env + `{% include %}`
   partials + cycle detection.
-- **M6 — Lazy resource tools.** `references/`/`assets/`/`scripts/` as on-demand tools gated by
-  `allowed-tools`; macOS sandboxing.
+- **M6 — Lazy resource tools.** `references/`/`assets/`/`scripts/` as new nouns —
+  `list resource` / `read resource` / `run script` — in the fused tool (or a second
+  `OperationTool` per #23), gated by `allowed-tools`; macOS sandboxing.
 - **M7 — Diagnostics polish + docs/examples.** *(Superseded: `AgentRegistry` moved to
   `../FoundationModelsAgents` — see decision #17. Its M1–M2 consume our public Layers 1–2.)*
 
@@ -358,6 +445,7 @@ for skill in registry.commandListing() { /* skill.id, .description, .parameters 
 
 ### Sources
 - agentskills.io specification — https://agentskills.io/specification
+- FoundationModelsOperationTool plan (upstream operation pattern) — https://github.com/swissarmyhammer/FoundationModelsOperationTool
 - FoundationModelsAgents plan (downstream consumer) — ../FoundationModelsAgents/plan.md
 - Claude Code skills & slash-command arguments — https://code.claude.com/docs/en/slash-commands
 - What's new in Foundation Models (WWDC26) — https://developer.apple.com/videos/play/wwdc2026/241/
