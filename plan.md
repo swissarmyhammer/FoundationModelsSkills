@@ -22,7 +22,9 @@ Built on a generic, reusable stacked-folder layer. **Primary target: macOS, on-d
   user-facing `/` command listing — all *views* of one registry. *(new)*
 - **Generic stack underneath, domain validation on top.** The folder-stacking machinery
   (override, render, list, watch) knows nothing about skills, so the **same stack also serves
-  agents**. Skill validation sits a layer above it.
+  agents** — the downstream [`../FoundationModelsAgents`](../FoundationModelsAgents/plan.md)
+  package depends on this one and builds its `AgentRegistry` on these layers. Skill
+  validation sits a layer above it.
 - **macOS-first, on-device.** iOS is a graceful "unavailable" stub.
 
 ## 2. Where "skills" actually live in Apple's stack (correction)
@@ -47,13 +49,13 @@ Four layers, bottom to top. Lower layers are domain-agnostic and reusable.
 │   SkillSearchAgent — a SEPARATE LanguageModelSession over skill metadata    │
 │   preload injection (rendered bodies → root Instructions)                   │
 │   commandListing() — user `/` menu view (separate from the model surface)   │
-├─ Layer 3  SkillsRegistry  /  AgentRegistry  (domain validation + semantics) ┤
+├─ Layer 3  SkillsRegistry  (domain validation + semantics) ──────────────────┤
 │   agentskills.io + Claude validation, visibility, arguments, partial,       │
 │   reload → injectable metadata, generic call(id:arguments:) — built ON L2   │
 ├─ Layer 2  FolderStack  (generic, reusable) ─────────────────────────────────┤
 │   ordered roots; named entries; FULL-REPLACE override by name; render       │
 │   pipeline; list(); entry(name:); file-watch add/remove/reload up the stack │
-│   Generic over an EntryKind (skill, agent, …)                               │
+│   Generic over an EntryKind — dir-shaped (skill) or file-shaped (agent)     │
 ├─ Layer 1  FrontmatterDocument  (generic) ───────────────────────────────────┤
 │   parse one .md → (YAML frontmatter, markdown body); serialize back         │
 └──────────────────────────────────────────────────────────────────────────┘
@@ -65,7 +67,11 @@ Four layers, bottom to top. Lower layers are domain-agnostic and reusable.
   ordered roots (low→high precedence), discovery of named entries, **full-replace override by
   name** up the stack, the **render pipeline**, `list()`/`entry(name:)`, and a **file watcher**
   that applies add/remove/reload across every layer. Generic over an `EntryKind` so it hosts
-  skills *or* agents.
+  skills *or* agents — and the `EntryKind` decides the **entry shape**: **directory-shaped**
+  (`name/SKILL.md`, id = directory name) or **file-shaped** (a flat `*.md` discovered
+  recursively, id from frontmatter `name` — the Claude agents layout).
+  `FrontmatterDocument` and `FolderStack` are **exported public API**, not internal
+  machinery: `../FoundationModelsAgents` imports them for its `AgentRegistry`.
 - **`SkillsRegistry`** (Layer 3, the source of truth) — wraps a `FolderStack<Skill>`; adds
   agentskills.io + Claude validation, the visibility model (§6), argument handling (§5),
   `partial`/include semantics, and **reload → injectable metadata** (§7). Exposes a generic
@@ -262,7 +268,8 @@ session.**
 5. **`partial:` → accept both, top-level canonical.**
 6. **Arguments → Claude-compatible** (`$ARGUMENTS`, `$ARGUMENTS[N]`/`$N` 0-based, `$name`,
    `argument-hint:`).
-7. **Architecture → 4 layers**; generic `FrontmatterDocument` + `FolderStack` reused for agents.
+7. **Architecture → 4 layers**; generic `FrontmatterDocument` + `FolderStack` reused for
+   agents by the downstream `../FoundationModelsAgents` package (see #17, #19).
 8. **Identity → directory name canonical**; agentskills.io `name` required and validated `== id`.
 9. **Visibility → `user-invocable` + `disable-model-invocation` + `partial`**; two listing
    surfaces (command vs model).
@@ -278,13 +285,21 @@ session.**
     session (actions, search model/reasoning/backend, id-enum constraint, shell policy).
 16. **Partials → render standalone** (env + own `$`-tokens; not the parent's arguments).
 17. **Packaging → single SwiftPM target.** Layering (§3) is conceptual — by type, not module
-    — so FoundationModels is a dependency of the whole package and the future `AgentRegistry`
-    lives in the same target.
+    — so FoundationModels is a dependency of the whole package. *(Superseded in part:)*
+    `AgentRegistry` does **not** live in this target — it lives in the downstream
+    `../FoundationModelsAgents` package, which depends on this one. Layers 1–2
+    (`FrontmatterDocument`, `FolderStack`) are therefore **exported public API**, part of
+    this package's contract.
 18. **Tool arg schema → dynamic.** `Tool.parameters: GenerationSchema` is an instance property
     a conformer implements itself (not fixed by a `@Generable Arguments`), so `SkillsTool`
     returns a per-instance schema built from the current id set (`DynamicGenerationSchema`,
     `Arguments` = `GeneratedContent`). Call-time validation backstops between-turn staleness.
     *(Confirm against the shipping WWDC26 SDK.)*
+19. **Entry shapes → `FolderStack` supports both.** A skill is a **directory-shaped** entry
+    (`name/SKILL.md`, id = directory name); a Claude-style agent is a **file-shaped** entry
+    (a flat `*.md` discovered recursively, id from frontmatter `name`). The `EntryKind`
+    decides shape, discovery, and identity — required by `../FoundationModelsAgents`, whose
+    M1–M2 depend on this landing in our M1.
 
 **All open items resolved — the plan is decision-complete.**
 
@@ -324,7 +339,8 @@ for skill in registry.commandListing() { /* skill.id, .description, .parameters 
 
 ## 11. Phasing
 - **M1 — Layers 1–2.** `FrontmatterDocument`; `FolderStack` (discovery, full-replace override,
-  provenance, `list()`/`entry()`). No templating, watch, or FM.
+  provenance, `list()`/`entry()`, **both entry shapes** — directory- and file-shaped, #19),
+  all public. No templating, watch, or FM. *(Unblocks `FoundationModelsAgents` M1–M2.)*
 - **M2 — Watch + render skeleton.** File watcher (add/remove/reload up the stack); render
   pipeline scaffold (passes wired, identity transforms).
 - **M3 — `SkillsRegistry`.** agentskills.io + Claude validation, visibility, `partial`,
@@ -335,12 +351,14 @@ for skill in registry.commandListing() { /* skill.id, .description, .parameters 
   partials + cycle detection.
 - **M6 — Lazy resource tools.** `references/`/`assets/`/`scripts/` as on-demand tools gated by
   `allowed-tools`; macOS sandboxing.
-- **M7 — `AgentRegistry` on the same `FolderStack`** + diagnostics polish + docs/examples.
+- **M7 — Diagnostics polish + docs/examples.** *(Superseded: `AgentRegistry` moved to
+  `../FoundationModelsAgents` — see decision #17. Its M1–M2 consume our public Layers 1–2.)*
 
 ---
 
 ### Sources
 - agentskills.io specification — https://agentskills.io/specification
+- FoundationModelsAgents plan (downstream consumer) — ../FoundationModelsAgents/plan.md
 - Claude Code skills & slash-command arguments — https://code.claude.com/docs/en/slash-commands
 - What's new in Foundation Models (WWDC26) — https://developer.apple.com/videos/play/wwdc2026/241/
 - Build agentic app experiences with Foundation Models (WWDC26) — https://developer.apple.com/videos/play/wwdc2026/242/
