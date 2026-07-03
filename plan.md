@@ -54,7 +54,8 @@ Four layers, bottom to top. Lower layers are domain-agnostic and reusable.
 ┌─ Layer 4  FM adapter (skills) ─────────────────────────────────────────────┐
 │   Skill operations — SearchSkill / ListSkill / UseSkill structs fused by   │
 │   FoundationModelsOperations.OperationTool into ONE core Tool              │
-│   SkillSearchAgent — a SEPARATE LanguageModelSession over skill metadata   │
+│   SkillSearchAgent — MetadataSearcher over skill metadata (#26, separate   │
+│   Router session + rank-fusion retrieval; never the root session)          │
 │   preload injection (rendered bodies → root Instructions)                  │
 │   commandListing() — user `/` menu view (separate from the model surface)  │
 │   OperationCLIDriver — dual-use CLI from the same op declarations          │
@@ -214,19 +215,25 @@ throws** (upstream's return-don't-throw + retry-cap pattern).
   `run script` join the same fused tool (or a second `OperationTool` if the op count grows
   past upstream's 5–15 guidance). Vocabulary deferred to M6. *(decision #23)*
 
-**`SkillSearchAgent` — a separate `LanguageModelSession`.** It is seeded with the registry's
-**skill metadata** (id, description, params; not full bodies) and searches it by intent on
-behalf of the root agent. Benefits: (a) the root session is never clogged with the whole
-catalog; (b) it can run a cheaper model / Private Cloud Compute; (c) it can be backed by
-semantic search (Spotlight RAG) instead of pure LLM matching for large catalogs. Returns
-candidate ids the root then feeds to `use skill`.
+**`SkillSearchAgent` — a thin wrapper over `MetadataSearcher<SkillMetadata>`** from
+[`../FoundationModelsMetadataRegistry`](../FoundationModelsMetadataRegistry/plan.md)
+*(decision #26; supersedes the bespoke search session)*. The registry's **skill metadata**
+(id, description, params; not full bodies — rendered as text blocks) seeds the searcher,
+which layers hybrid ranked retrieval (BM25 + trigram + cosine → RRF) under an LLM
+selection session on a Router model. Benefits: (a) the root session is never clogged with
+the whole catalog; (b) selection runs on a cheaper Router-selected model with
+fork-per-call prefix reuse, and its ids-only output is xgrammar-constrained to the
+current id set; (c) large catalogs are served by `.retrieval` mode (rank fusion, no
+session, no tokens) — superseding the earlier Spotlight-RAG idea. Returns candidate ids
+plus verbatim metadata blocks the root then feeds to `use skill`.
 
 **Assembly.** The old many-knobbed builder (#15) dissolves: `OperationTool` init takes
 `(name:description:context:operations:)`, and the remaining knobs live in three places —
 `SkillsRegistry` construction (render policy, e.g. `disableShellExecution` — it must sit
 where the pipeline runs so the `/command` and CLI paths honor it too, #25),
-`SkillsToolContext` construction (search agent's model/reasoning level, LLM-vs-Spotlight
-backend), and upstream `OperationTool` options (`includesSchemaInInstructions`, retry cap).
+`SkillsToolContext` construction (the `MetadataSearcher` configuration — selection model,
+mode, signal weights, capacity budget), and upstream `OperationTool` options
+(`includesSchemaInInstructions`, retry cap).
 Which actions exist = which operation structs you pass. *(supersedes decision #15)*
 
 **Preload.** Skills with `preload: true` have their **rendered bodies injected into the root
@@ -235,7 +242,8 @@ search/use needed. Use sparingly (every preloaded line is a recurring token cost
 
 **Reload & metadata injection.** The `FolderStack` watcher fires on add/remove/edit up the
 stack → `SkillsRegistry` rebuilds and publishes a **refreshed metadata list** (observable).
-On reload we: (a) **re-inject** the new metadata into the `SkillSearchAgent`; (b) refresh the
+On reload we: (a) forward the refreshed metadata to the searcher's **`update(items:)`**
+(hash-guarded; incremental re-embed; rebuilds the selection prefix + id grammar); (b) refresh the
 **preloaded** bodies in the root; (c) leave the fused tool untouched — its schema is
 id-free and its operations dereference the live registry per dispatch, so hot-reload is
 invisible to the root session. The registry also exposes an **initial** metadata list at
@@ -324,8 +332,9 @@ the same visibility rules as the user surface (it is a user, not a model).
 10. **Parameters → infer from body** when frontmatter is absent; frontmatter refines.
 11. **FM entry point → one fused tool** with ops **`search skill` / `list skill` /
     `use skill`**. *(Restates the old search/list/call actions in operation vocabulary.)*
-12. **Discovery → a separate `SkillSearchAgent` session**, so the root session is not clogged
-    with skill metadata; only a chosen skill's body enters the root.
+12. **Discovery → `SkillSearchAgent`**, so the root session is not clogged with skill
+    metadata; only a chosen skill's body enters the root. *(Amended by #26: no longer a
+    bespoke session — a thin wrapper over `MetadataSearcher<SkillMetadata>`.)*
 13. **Source of truth → `SkillsRegistry`**: reloadable; publishes an initial + injectable
     refreshed metadata list; generic `call(id:arguments:)`.
 14. **Preload → `preload: true`** skills' rendered bodies injected into the root session at
@@ -368,6 +377,16 @@ the same visibility rules as the user surface (it is a user, not a model).
     `description`/`metadata` never execute shell (they render at metadata-build/reload time).
     `disableShellExecution` is set at **registry** construction so every render path honors
     it — model, user-driven, and CLI alike.
+26. **Search → depend on `FoundationModelsMetadataRegistry`.** `SkillSearchAgent` is a thin
+    wrapper over `MetadataSearcher<SkillMetadata>`: hybrid retrieval (BM25 + trigram +
+    cosine → RRF), Router-backed selection session (fork-per-call prefix reuse, ids-only
+    output xgrammar-constrained to the current id enum), verbatim block lookup, and
+    `update(items:)` on registry reload. Consequence: the **search path pulls
+    `FoundationModelsRouter` (macOS 27+) into Skills**; the render/registry layers (1–3)
+    stay on core Apple FoundationModels only. Supersedes the Spotlight-RAG backend idea
+    in #12; note #22's dispatch-side rationale is unchanged (Apple's enum bug is about the
+    *root* session's tool schema — the *search* session runs on Router, where xgrammar
+    enum enforcement is real).
 
 **All open items resolved — the plan is decision-complete.**
 
@@ -385,9 +404,12 @@ let registry = try SkillsRegistry(
 // Layer 4 — three ops over one context, fused into one core Tool:
 let context = SkillsToolContext(
   registry: registry,
-  searchAgent: SkillSearchAgent(model: .privateCloudCompute,
-                                reasoning: .light,
-                                backend: .spotlight)
+  searchAgent: SkillSearchAgent(                 // thin wrapper over MetadataSearcher (#26)
+    searcher: MetadataSearcher(
+      items: registry.metadata().filter(\.isModelVisible),
+      selection: .init(model: profile.flash),    // FoundationModelsRouter
+      embedder: RoutedEmbedderAdapter(profile.embedding),
+      mode: .auto))
 )
 let skillsTool = OperationTool(
   name: "skills",
@@ -407,9 +429,9 @@ let root = LanguageModelSession(
   }
 )
 
-// Reload: re-inject metadata into the search agent; refresh preloaded bodies; the fused
-// tool's schema is id-free and its ops dereference the live registry per dispatch.
-registry.onReload { meta in context.searchAgent.update(metadata: meta) /* + refresh preload */ }
+// Reload: forward metadata to the searcher's update(items:); refresh preloaded bodies;
+// the fused tool's schema is id-free and its ops dereference the live registry per dispatch.
+registry.onReload { meta in context.searchAgent.update(items: meta) /* + refresh preload */ }
 
 // User-facing command matching (independent of the session):
 for skill in registry.commandListing() { /* skill.id, .description, .parameters */ }
@@ -428,9 +450,10 @@ try await cli.run(CommandLine.arguments)  // skills skill use deploy --arguments
 - **M3 — `SkillsRegistry`.** agentskills.io + Claude validation, visibility, `partial`,
   `preload`, `commandListing()`, initial + injectable metadata, generic `call`.
 - **M4 — Skill operations + search agent.** `SearchSkill`/`ListSkill`/`UseSkill` conforming
-  to `OperationDefinition`; fuse via `OperationTool`; `SkillSearchAgent` session; preload
-  injection; reload re-injection. *(Depends on `FoundationModelsOperations` tasks 2/4/5 —
-  protocol, schema fusion, dispatch/resolver.)*
+  to `OperationDefinition`; fuse via `OperationTool`; `SkillSearchAgent` as a
+  `MetadataSearcher` wrapper (#26); preload injection; reload → `update(items:)`.
+  *(Depends on `FoundationModelsOperations` tasks 2/4/5 — protocol, schema fusion,
+  dispatch/resolver — and `FoundationModelsMetadataRegistry` M1–M4.)*
 - **M4.5 — CLI.** Wire `OperationCLIDriver` over the same ops (§7.2); round-trip payload
   test against the resolver. *(Depends on upstream task 6.)*
 - **M5 — Full render.** Arguments, shell injection (macOS), Stencil env + `{% include %}`
@@ -447,6 +470,7 @@ try await cli.run(CommandLine.arguments)  // skills skill use deploy --arguments
 - agentskills.io specification — https://agentskills.io/specification
 - FoundationModelsOperationTool plan (upstream operation pattern) — https://github.com/swissarmyhammer/FoundationModelsOperationTool
 - FoundationModelsAgents plan (downstream consumer) — ../FoundationModelsAgents/plan.md
+- FoundationModelsMetadataRegistry plan (search: retrieval + selection, #26) — ../FoundationModelsMetadataRegistry/plan.md
 - Claude Code skills & slash-command arguments — https://code.claude.com/docs/en/slash-commands
 - What's new in Foundation Models (WWDC26) — https://developer.apple.com/videos/play/wwdc2026/241/
 - Build agentic app experiences with Foundation Models (WWDC26) — https://developer.apple.com/videos/play/wwdc2026/242/
