@@ -441,7 +441,46 @@ let cli = OperationCLIDriver(tool: skillsTool)
 try await cli.run(CommandLine.arguments)  // skills skill use deploy --arguments production
 ```
 
-## 11. Phasing
+## 11. Examples (`./Examples`)
+
+Mirrors upstream `FoundationModelsOperations`' `Examples/NotesTool` pattern: a runnable,
+dual-use demo plus a **fixture skill library that doubles as test data**, so docs and
+tests can't drift.
+
+```
+Examples/
+  skill-library/                    # a three-root stack (enterprise → user → project)
+    enterprise/base-style/SKILL.md      # plain skill — shadowed by the user root below
+    user/base-style/SKILL.md            # the full-replace override that wins (#3)
+    user/header/SKILL.md                # partial: true — an {% include "header" %} target
+    project/commit/SKILL.md             # arguments: + argument-hint: + $0/$ARGUMENTS (§5, §6.1)
+    project/deploy/SKILL.md             # disable-model-invocation: true — user-only /deploy
+    project/git-context/SKILL.md        # preload: true + !`git status` shell injection (#25)
+    project/env-report/SKILL.md         # {{ env.* }} Stencil rendering
+    project/lint/SKILL.md               # user-invocable: false — model-only background
+  skills-demo/                      # one executable target, dual-use
+```
+
+- **`skill-library/`** exercises every §5–§6 feature exactly once — stack override,
+  partial + include, arguments + hint, shell injection, env templating, preload, and
+  both visibility axes. The unit tests load it for golden renders and listing
+  snapshots; the demo loads the same directories, so the documented behavior is the
+  tested behavior.
+- **`skills-demo`** is one binary, three modes (the NotesTool dual-use shape):
+  - **default — CLI** (§7.2) over the library: `skills-demo skill list`,
+    `skills-demo skill search "commit my changes"`,
+    `skills-demo skill use commit --arguments "fix parser"`.
+  - **`--chat`** — a root `LanguageModelSession` with the fused tool + preloaded
+    bodies (gated on model availability); scripted prompts drive the
+    `search skill` → `use skill` round trip end to end.
+  - **`--watch`** — edit a file under `project/` while running and watch the registry
+    reload propagate: searcher `update(items:)`, refreshed preloads, updated `/`
+    listing — live.
+- The example grows with the milestones — fixtures land at M1 (as test data), watch at
+  M2, chat at M4, CLI at M4.5, the full-render fixture skills at M5 — and M7 polishes
+  it into the documented sample.
+
+## 12. Phasing
 - **M1 — Layers 1–2.** `FrontmatterDocument`; `FolderStack` (discovery, full-replace override,
   provenance, `list()`/`entry()`, **both entry shapes** — directory- and file-shaped, #19),
   all public. No templating, watch, or FM. *(Unblocks `FoundationModelsAgents` M1–M2.)*
@@ -461,8 +500,10 @@ try await cli.run(CommandLine.arguments)  // skills skill use deploy --arguments
 - **M6 — Lazy resource tools.** `references/`/`assets/`/`scripts/` as new nouns —
   `list resource` / `read resource` / `run script` — in the fused tool (or a second
   `OperationTool` per #23), gated by `allowed-tools`; macOS sandboxing.
-- **M7 — Diagnostics polish + docs/examples.** *(Superseded: `AgentRegistry` moved to
-  `../FoundationModelsAgents` — see decision #17. Its M1–M2 consume our public Layers 1–2.)*
+- **M7 — Diagnostics polish + docs; finish the §11 `Examples/` demo** (all three
+  `skills-demo` modes against the complete `skill-library/`). *(Superseded:
+  `AgentRegistry` moved to `../FoundationModelsAgents` — see decision #17. Its M1–M2
+  consume our public Layers 1–2.)*
 
 ---
 
