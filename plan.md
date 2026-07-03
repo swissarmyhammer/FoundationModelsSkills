@@ -347,7 +347,11 @@ the same visibility rules as the user surface (it is a user, not a model).
     `AgentRegistry` does **not** live in this target — it lives in the downstream
     `../FoundationModelsAgents` package, which depends on this one. Layers 1–2
     (`FrontmatterDocument`, `FolderStack`) are therefore **exported public API**, part of
-    this package's contract.
+    this package's contract. **Reaffirmed after #26:** the single target stands — the
+    whole package, exported Layers 1–2 included, carries the
+    `FoundationModelsMetadataRegistry` → `FoundationModelsRouter` dependency and its
+    macOS 27+ floor. No lightweight split for downstream consumers;
+    `../FoundationModelsAgents` requires the Router directly anyway.
 18. ~~Tool arg schema → dynamic id enum~~ **Superseded by #22:** the fused schema is
     upstream's flat union (required `op` enum + optional fields); the skill `id` is a plain
     string validated at dispatch. Rationale: hot-reload safety + Apple's enum-enforcement
@@ -381,9 +385,10 @@ the same visibility rules as the user surface (it is a user, not a model).
     wrapper over `MetadataSearcher<SkillMetadata>`: hybrid retrieval (BM25 + trigram +
     cosine → RRF), Router-backed selection session (fork-per-call prefix reuse, ids-only
     output xgrammar-constrained to the current id enum), verbatim block lookup, and
-    `update(items:)` on registry reload. Consequence: the **search path pulls
-    `FoundationModelsRouter` (macOS 27+) into Skills**; the render/registry layers (1–3)
-    stay on core Apple FoundationModels only. Supersedes the Spotlight-RAG backend idea
+    `update(items:)` on registry reload. Consequence: the package depends on
+    `FoundationModelsRouter` (macOS 27+) — accepted **package-wide** (#17; no target
+    split). Layers 1–3 use only core Apple FoundationModels *API*, but they ship in the
+    same target and share the floor. Supersedes the Spotlight-RAG backend idea
     in #12; note #22's dispatch-side rationale is unchanged (Apple's enum bug is about the
     *root* session's tool schema — the *search* session runs on Router, where xgrammar
     enum enforcement is real).
