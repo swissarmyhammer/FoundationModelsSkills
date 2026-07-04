@@ -101,6 +101,32 @@ Four layers, bottom to top. Lower layers are domain-agnostic and reusable.
 - **Claude-style inputs may omit `name`** (a `.claude/commands/foo.md` or a `SKILL.md` without
   `name` defaults to the dir/file name), so `SkillListing.displayName` is optional only for
   those inputs.
+- **`description` is required by the spec** (1–1024 chars, non-empty) — it is the disclosure
+  contract. The remaining spec fields are parsed and carried as data: `license` (free text)
+  and `compatibility` (1–500 chars) land on `SkillListing` with no behavior attached;
+  `allowed-tools` (a **space-separated string**, experimental in the spec) is parsed now and
+  consumed at M6.
+- **Lenient validation** — the posture of the spec's client-implementation guide: name
+  irregularities (≠ directory name, > 64 chars, bad characters) → diagnostic, **load
+  anyway**; unparseable YAML → skip + diagnostic, after a **quoting-fallback retry** for the
+  common cross-client error (an unquoted colon inside `description`). Missing/empty
+  `description` → diagnostic + **excluded from the model surface** (it cannot be disclosed);
+  we deviate from the guide's skip-entirely rule only to keep description-less Claude
+  command files user-invocable. A shadowed id (full-replace winner up the stack) and a
+  `SKILL.md` over the spec's recommended 500 lines each draw an advisory diagnostic.
+  Validation-parity target: the `skills-ref` reference validator.
+- **Extension fields ride `metadata.*` for portability.** Our non-spec fields (`partial`,
+  `preload`, `user-invocable`, `disable-model-invocation`, `arguments`, `argument-hint`) are
+  accepted **both** top-level (the Claude convention — canonical for us, #5) **and** under
+  `metadata:`, the spec's designated home for client-defined properties — so a skill
+  authored for maximum agentskills.io portability keeps its top level pure-spec. Unknown
+  top-level keys never block loading (diagnostic only).
+- **Roots are caller-supplied; recommend the `.agents/skills` convention.** The spec
+  mandates only what's *inside* a skill directory; the client guide's cross-client
+  convention is `<project>/.agents/skills` and `~/.agents/skills` alongside any
+  client-specific directory, with project over user — exactly our ordered-roots +
+  full-replace rule. Discovery skips `.git`/`node_modules` and bounds scan depth. Hosts
+  should consider trust-gating untrusted project roots (§8).
 
 ## 5. Templating & arguments — the render pipeline
 
@@ -163,6 +189,8 @@ struct SkillListing {
   let id: String                  // directory name = the /command
   let displayName: String?        // frontmatter `name`
   let description: String?        // rendered, truncated for the menu
+  let license: String?            // spec `license` — data only (§4)
+  let compatibility: String?      // spec `compatibility` — data only (§4)
   let parameters: [SkillParameter]
   let acceptsTrailingArguments: Bool   // body uses $ARGUMENTS (free-form tail)
 }
@@ -271,6 +299,18 @@ fused tool's schema is the fixed op vocabulary, independent of which skills exis
 **Metadata is shared with an actual `LanguageModelSession` only via the `SkillSearchAgent`** —
 deliberately, so the root stays lean and avoids the all-descriptions-in-context token cost.
 
+**A deliberate divergence from the spec's tier-1 disclosure.** The agentskills.io
+client-implementation guide's default puts a name+description **catalog in context at
+session start** (system prompt or activation-tool description, ~50–100 tokens per skill).
+We replace that standing catalog with on-demand discovery — `search skill` / `list skill`
+are always in the fused tool's schema, so the model still knows skills exist and how to
+find them; it just pays for descriptions only when it asks. Tier 2 (full body on
+activation) and tier 3 (resources on demand, M6) match the guide exactly, as does its
+filtering rule — model-hidden skills are **absent** from search/list results, never
+listed-then-blocked (the `use skill` refusal is only a backstop for ids learned outside
+the catalog). A host that wants guide-standard disclosure can inline `registry.metadata()`
+into its `Instructions` itself. *(decision #27)*
+
 **Two invocation paths put a rendered body into the transcript:**
 - **Model-driven** — the model calls `{op: "search skill", query: …}` → search agent returns
   candidate ids → `{op: "use skill", id: …, arguments: …}` → registry renders → body returned
@@ -313,6 +353,14 @@ the same visibility rules as the user surface (it is a user, not a model).
   a rendered skill can carry that off-device if a session routes to a cloud provider.
   Documented; accepted for the on-device-Mac use case. (The search agent sees only metadata,
   not rendered bodies, which limits exposure during discovery.)
+- **Trust-gate untrusted project roots** (client-guide recommendation): a project-level
+  root from a freshly cloned repo can inject instructions; hosts should load it only for
+  trusted folders. Roots are caller-supplied (§4), so the gate is the host's — we document
+  it and make the diagnostic surface carry provenance so a host can show *where* a skill
+  came from.
+- **Context-compaction note for hosts:** a used skill's rendered body is durable guidance;
+  hosts that summarize or prune transcripts should exempt skill tool outputs (client guide
+  step 5). Out of scope for this package; stated so hosts don't silently degrade skills.
 
 ## 9. Resolved decisions
 1. **Template engine → Stencil** (`{{ }}` + `{% include %}`).
@@ -321,7 +369,9 @@ the same visibility rules as the user surface (it is a user, not a model).
 4. **FM integration → a fused `OperationTool`** from `FoundationModelsOperations` on core
    `FoundationModels.Tool`; no `FoundationModelsUtilities` dependency. *(Supersedes the
    bespoke single `SkillsTool`.)*
-5. **`partial:` → accept both, top-level canonical.**
+5. **`partial:` → accept both, top-level canonical.** *(Generalized by #27 to every
+   extension field: top-level canonical, `metadata.*` accepted as the spec-portable
+   spelling.)*
 6. **Arguments → Claude-compatible** (`$ARGUMENTS`, `$ARGUMENTS[N]`/`$N` 0-based, `$name`,
    `argument-hint:`).
 7. **Architecture → 4 layers**; generic `FrontmatterDocument` + `FolderStack` reused for
@@ -392,6 +442,18 @@ the same visibility rules as the user surface (it is a user, not a model).
     in #12; note #22's dispatch-side rationale is unchanged (Apple's enum bug is about the
     *root* session's tool schema — the *search* session runs on Router, where xgrammar
     enum enforcement is real).
+27. **agentskills.io compliance posture** (§4, §7.1, §8). Full spec field coverage:
+    `name` + `description` required with the spec's exact limits; `license`,
+    `compatibility`, `metadata`, and `allowed-tools` parsed (data until consumed).
+    **Lenient validation** per the spec's client-implementation guide: name
+    irregularities → warn + load; unparseable YAML → skip after a colon-quoting retry;
+    missing/empty `description` → excluded from the model surface (kept user-invocable —
+    our one deliberate softening of the guide's skip rule); shadowing and >500-line
+    advisories; parity target `skills-ref validate`. Extension fields accepted top-level
+    **and** under `metadata.*` (the portable spelling — generalizes #5). One documented
+    divergence: no standing tier-1 catalog in the root session — `search skill` /
+    `list skill` are the disclosure surface, and hosts can inline `registry.metadata()`
+    for guide-standard behavior (§7.1).
 
 **All open items resolved — the plan is decision-complete.**
 
@@ -465,6 +527,8 @@ Examples/
     project/git-context/SKILL.md        # preload: true + !`git status` shell injection (#25)
     project/env-report/SKILL.md         # {{ env.* }} Stencil rendering
     project/lint/SKILL.md               # user-invocable: false — model-only background
+    project/spec-clean/SKILL.md         # pure-spec frontmatter: license + compatibility +
+                                        #   extensions under metadata.* — passes skills-ref (#27)
   skills-demo/                      # one executable target, dual-use
 ```
 
@@ -493,7 +557,8 @@ Examples/
   all public. No templating, watch, or FM. *(Unblocks `FoundationModelsAgents` M1–M2.)*
 - **M2 — Watch + render skeleton.** File watcher (add/remove/reload up the stack); render
   pipeline scaffold (passes wired, identity transforms).
-- **M3 — `SkillsRegistry`.** agentskills.io + Claude validation, visibility, `partial`,
+- **M3 — `SkillsRegistry`.** agentskills.io + Claude validation — full spec field
+  coverage and the lenient rules (#27), `skills-ref` parity check — visibility, `partial`,
   `preload`, `commandListing()`, initial + injectable metadata, generic `call`.
 - **M4 — Skill operations + search agent.** `SearchSkill`/`ListSkill`/`UseSkill` conforming
   to `OperationDefinition`; fuse via `OperationTool`; `SkillSearchAgent` as a
@@ -516,6 +581,8 @@ Examples/
 
 ### Sources
 - agentskills.io specification — https://agentskills.io/specification
+- agentskills.io client-implementation guide (lenient validation, disclosure tiers, `.agents/skills` convention, trust) — https://agentskills.io/client-implementation/adding-skills-support
+- skills-ref reference validator — https://github.com/agentskills/agentskills/tree/main/skills-ref
 - FoundationModelsOperationTool plan (upstream operation pattern) — https://github.com/swissarmyhammer/FoundationModelsOperationTool
 - FoundationModelsAgents plan (downstream consumer) — ../FoundationModelsAgents/plan.md
 - FoundationModelsMetadataRegistry plan (search: retrieval + selection, #26) — ../FoundationModelsMetadataRegistry/plan.md
