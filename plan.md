@@ -450,7 +450,9 @@ try await cli.run(CommandLine.arguments)  // skills skill use deploy --arguments
 
 Mirrors upstream `FoundationModelsOperations`' `Examples/NotesTool` pattern: a runnable,
 dual-use demo plus a **fixture skill library that doubles as test data**, so docs and
-tests can't drift.
+tests can't drift. `skills-demo` is an **executable target in the root `Package.swift`**
+— not a nested example package — so one `swift build` covers library and demo alike
+(matches the Agents plan's §13 convention).
 
 ```
 Examples/
