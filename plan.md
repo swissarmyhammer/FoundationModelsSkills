@@ -562,7 +562,8 @@ Examples/
   `preload`, `commandListing()`, initial + injectable metadata, generic `call`.
 - **M4 — Skill operations + search agent.** `SearchSkill`/`ListSkill`/`UseSkill` conforming
   to `OperationDefinition`; fuse via `OperationTool`; `SkillSearchAgent` as a
-  `MetadataSearcher` wrapper (#26); preload injection; reload → `update(items:)`.
+  `MetadataSearcher` wrapper (#26); preload injection; reload → `update(items:)` — with
+  the **explicit hot-reload test case (§13)** as an acceptance criterion, not a follow-up.
   *(Depends on `FoundationModelsOperations` tasks 2/4/5 — protocol, schema fusion,
   dispatch/resolver — and `FoundationModelsMetadataRegistry` M1–M4.)*
 - **M4.5 — CLI.** Wire `OperationCLIDriver` over the same ops (§7.2); round-trip payload
@@ -576,6 +577,41 @@ Examples/
   `skills-demo` modes against the complete `skill-library/`). *(Superseded:
   `AgentRegistry` moved to `../FoundationModelsAgents` — see decision #17. Its M1–M2
   consume our public Layers 1–2.)*
+
+## 13. Testing
+
+The unit tier is GPU-free: parsing/validation tables (§4's spec limits and lenient
+rules), golden renders and listing snapshots over the §11 fixture library, watcher tests
+against temp directory stacks, and operation dispatch against a stub context.
+
+**Hot reload is an explicit, named test case — not incidental coverage.** Because
+`FoundationModelsMetadataRegistry` is a **shipped sibling dependency** (checked out at
+`../FoundationModelsMetadataRegistry`), the reload tests drive a **real
+`MetadataSearcher`** wired through `SkillSearchAgent` — never a mock of the searcher
+itself, so the contract we depend on is the contract we test. GPU-free comes from the
+sibling's **public seams**: we conform tiny doubles to `TextEmbedding` (a counting fake)
+and `AgentSession` (scripted responses), the same pattern as its own `FakeEmbedder` /
+`ScriptedAgentSession` — which live in its test target and are not importable, so we
+replicate them (~a dozen lines each). The case, end to end over a temp root:
+
+1. **Add** a `SKILL.md` → watcher fires → registry rebuilds → exactly one
+   `update(items:)` reaches the searcher; the new id is **immediately** searchable
+   keyword-only, with the cosine signal catching up asynchronously — observed as
+   `.embedCatchUp(pending:total:)` on the searcher's `onDiagnostic` channel.
+2. **Edit** a body → hash-guarded incremental re-embed: only the changed item re-embeds
+   (a counting `FakeEmbedder` asserts it); a **no-op touch** produces no re-embed at all.
+3. **Remove** a skill → its id disappears from `search skill` / `list skill` results, and
+   a stale `use skill` for it draws the corrective message carrying the current id list
+   (#22).
+4. **Visibility flips on reload** (e.g. adding `disable-model-invocation: true`) →
+   the model-visible subset forwarded to `update(items:)` shrinks accordingly.
+5. **Preload + listing refresh** — `preloadedBodies()` and `commandListing()` both
+   reflect the change; the fused tool's schema is untouched throughout (id-free, §7).
+
+The `--watch` demo mode (§11) is the human-driven twin of this test. A separate gated
+integration case (the Router/MetadataRegistry tiny-model pattern) runs the same
+add/remove burst against a live selection session, asserting the rebuilt candidate set
+after reload.
 
 ---
 
