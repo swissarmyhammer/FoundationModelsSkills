@@ -227,9 +227,24 @@ throws** (upstream's return-don't-throw + retry-cap pattern).
 
 | op | parameters | behavior |
 |---|---|---|
-| `search skill` | `query`, `limit?` | delegates to the **`SkillSearchAgent`** and returns ranked matches (id + description + parsed params). Primary discovery path; keeps the root context lean because the catalog lives in the search agent, not the root. |
-| `list skill` | `filter?` | returns the catalog (full or filtered) on demand, for small sets or explicit enumeration. |
-| `use skill` | `id`, `arguments?` | renders the chosen skill (pipeline §5) and returns its body as tool output. Dereferences the **live registry at dispatch time**. |
+| `search skill` | `query` (req), `limit?` (default 5) | Delegates to the **`SkillSearchAgent`** (`MetadataSearcher`, #26) over the **model-visible** catalog → returns ranked matches — id, rendered description, parsed parameter summary (§6.1) — best first, plus `total` so the model knows to raise `limit`. Primary discovery path: the catalog lives in the search agent, never the root. Empty/blank `query` → corrective message. |
+| `list skill` | `filter?` (case-insensitive substring over id + description) | The model-visible catalog (full or filtered) on demand — same row shape as `search skill`, catalog order, no session, no ranking, no tokens. For small sets or explicit enumeration. A `filter` matching nothing returns an empty list (not an error) with `total: 0`. |
+| `use skill` | `id` (req), `arguments?` (positional strings, §5 quoting) | Dereferences the **live registry at dispatch time** → renders the §5 pipeline with `arguments` → returns the rendered body. Unknown/stale/model-hidden id → corrective message **carrying the current id list** (#22); a missing required argument (§6.1) → corrective message naming it; extra trailing args ride the §5 `ARGUMENTS:` auto-append, never an error. |
+
+**Typed outputs** (upstream `AnyOperation.run` JSON-encodes every `Output: Encodable` —
+the Shelltool pattern; corrective messages stay plain strings per the
+return-don't-throw contract):
+
+```swift
+struct SkillRow: Encodable {          // one catalog row, shared by search + list
+  let id: String                      // the use-skill / /command key
+  let description: String             // rendered (§5 passes 1+3)
+  let parameters: [String]            // §6.1 placeholder summaries, e.g. "<message>", "[env]"
+}
+struct SearchSkillResult: Encodable { let matches: [SkillRow]; let total: Int }
+struct ListSkillResult:   Encodable { let skills:  [SkillRow]; let total: Int }
+struct UseSkillResult:    Encodable { let id: String; let body: String }  // body = §5 render
+```
 
 - **Noun is singular `skill`**; the forgiving resolver tolerates plurals, reversed order
   (`skill list`), and `_`/`-` separators. Verb aliases ride the shared resolver table:
