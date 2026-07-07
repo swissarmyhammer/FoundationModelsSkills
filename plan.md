@@ -254,9 +254,10 @@ struct UseSkillResult:    Encodable { let id: String; let body: String }  // bod
   emit values outside an `anyOf` list anyway. An unknown/stale/model-hidden id returns a
   corrective message carrying the current id list; upstream's retry cap (default 2) stops
   loops. This **supersedes decision #18.** *(decision #22)*
-- **M6 resources are future nouns, not parameters:** `list resource`, `read resource`,
-  `run script` join the same fused tool (or a second `OperationTool` if the op count grows
-  past upstream's 5–15 guidance). Vocabulary deferred to M6. *(decision #23)*
+- **Resource nouns are fully specified in §7.3 and built at M6:** `list resource`,
+  `read resource`, `run script` join the same fused tool — six ops, inside upstream's
+  5–15 guidance; a second `OperationTool` only if the vocabulary grows further.
+  *(decision #23, amended: specified now, built at M6)*
 
 **`SkillSearchAgent` — a thin wrapper over `MetadataSearcher<SkillMetadata>`** from
 [`../FoundationModelsMetadataRegistry`](../FoundationModelsMetadataRegistry/plan.md)
@@ -360,6 +361,64 @@ skills skill use deploy --arguments production
 Help, did-you-mean, and shell completions come from stock ArgumentParser. The CLI respects
 the same visibility rules as the user surface (it is a user, not a model).
 
+### 7.3 Resource operations — the M6 vocabulary, at full fidelity
+
+Skills bundle optional `scripts/`, `references/`, and `assets/` directories — the
+agentskills.io **tier-3** story. Three further ops expose them **lazily**: enumerated on
+demand, read on demand, never eagerly loaded (the client guide's rule). They *build* at
+M6 but are specified here to the same standard as the core three. All three see only the
+**model-visible** catalog and share the §7 corrective/no-throw contract.
+
+| op | parameters | behavior |
+|---|---|---|
+| `list resource` | `id` (req) | Enumerates every regular file under the skill's directory except `SKILL.md` — relative path, kind (`script`/`reference`/`asset` from the top-level folder, else `other`), byte size, executable bit — sorted by path, **capped at 100 rows** with `total` reporting the real count (the client guide's cap rule). Hidden files and symlinks resolving outside the skill are skipped. Unknown/model-hidden `id` → corrective message carrying the current id list (#22). |
+| `read resource` | `id` (req), `path` (req, skill-relative), `start?` (line, default 1), `end?` (default `start`+499) | Returns the file **verbatim** — resources never pass through the §5 pipeline (no `$args`, no shell, no Stencil). At most **500 lines per call**; `totalLines` tells the model to page via `start`/`end`. **Path confinement:** the path, symlinks resolved, must land inside the skill directory — `..`, absolute paths, and escaping symlinks → corrective message. Non-UTF-8 content → corrective message with the byte size (binary assets are for hosts, not transcripts). |
+| `run script` | `id` (req), `path` (req, under `scripts/`), `arguments?` (positional strings), `timeout?` secs (default 60) | Triple gate (§7.3.1) → **exec the file directly** — it must carry the executable bit and a shebang; no interpreter guessing (not executable → corrective naming the fix) — in its **own process group**, cwd = the skill directory, env inherited (parity with §5 shell injection); SIGKILL the group on timeout. Reports status (`completed` / `timed_out` / `failed`), exit code, duration, total captured lines, and the **last-32-line tail** of merged stdout+stderr — the Shelltool result shape. |
+
+**Typed outputs** (same `Output: Encodable` contract as §7):
+
+```swift
+struct ResourceRow: Encodable { let path: String; let kind: String; let bytes: Int; let executable: Bool }
+struct ListResourceResult: Encodable { let id: String; let resources: [ResourceRow]; let total: Int }
+struct ReadResourceResult: Encodable {
+  let id: String; let path: String
+  let content: String               // verbatim slice — never rendered
+  let start: Int; let end: Int; let totalLines: Int
+}
+struct RunScriptResult: Encodable {
+  let id: String; let path: String
+  let status: String                // completed | timed_out | failed
+  let exitCode: Int?; let durationMs: Int
+  let lines: Int                    // total captured (stdout + stderr)
+  let output: [String]              // "{n}: {text}" tail, ≤ 32 entries
+}
+```
+
+#### 7.3.1 Script execution gates & the sandbox posture
+
+`run script` is **triple-gated**, every check at dispatch:
+
+1. **Host policy** — `disableScriptExecution`, set at **registry construction** beside
+   `disableShellExecution` (#25), so the model, `/command`, and CLI paths all honor it.
+2. **Per-skill grant** — the skill's `allowed-tools` must contain a **`Script(<glob>)`**
+   grant matching the requested path (`Script(scripts/*)`; bare `Script` = everything
+   under `scripts/`). The spec marks `allowed-tools` experimental with client-defined
+   tokens, so `Script(...)` is ours to define; a skill without a grant draws a
+   corrective message saying it has not pre-approved script execution.
+   `list resource` / `read resource` are passive reads and **ungated**.
+3. **Trust** — the §8 trusted-root guidance: hosts should not construct a
+   script-enabled registry over an untrusted project root at all.
+
+**Sandbox posture (v1): contain by gates + process control, not by OS sandbox.**
+Scripts run as ordinary child processes with the host's privileges — the same trust
+model as §5 shell injection, stated with §8's honesty. Rationale: `sandbox-exec` is
+deprecated API over a private profile language; an App-Sandboxed host already confines
+its children structurally; a CLI host wanting OS-level confinement can wrap the whole
+process. Documented consequences, not hidden ones: no filesystem-write restriction
+beyond the cwd discipline, no network restriction, full env inheritance (parity with
+body shell — scrubbing scripts while `` !`env` `` runs unscrubbed would be theater).
+Revisit when Apple ships a supported per-process confinement API. *(decision #28)*
+
 ## 8. Platform & security
 - **macOS primary** (on-device): full feature set — args, shell injection, env, scripts.
 - **iOS: graceful "unavailable on platform"** stub; no shell/script attempted.
@@ -436,9 +495,11 @@ the same visibility rules as the user surface (it is a user, not a model).
     by the resolver. **Skills are rows, not operations** — never one op per skill id.
 22. **Skill id → plain string + dispatch validation.** Unknown/stale/model-hidden id returns
     a corrective message listing current ids (upstream pattern); retry cap stops loops.
-23. **Resource nouns deferred to M6.** `list resource` / `read resource` / `run script` join
-    the fused tool then; partition into a second `OperationTool` only if the op count
-    outgrows upstream's 5–15 guidance.
+23. **Resource nouns specified in §7.3, built at M6.** `list resource` / `read resource` /
+    `run script` join the fused tool — six ops, within upstream's 5–15 guidance;
+    partition into a second `OperationTool` only if the vocabulary grows further.
+    *(Amended: originally vocabulary-only; now specified to full fidelity — parameters,
+    typed outputs, correctives, gates — ahead of the M6 build.)*
 24. **CLI → yes, via `OperationCLIDriver`** (§7.2); same payload as the model path,
     user-surface visibility rules.
 25. **Shell injection → body only, re-executed per render.** `` !`command` `` runs fresh on
@@ -469,6 +530,17 @@ the same visibility rules as the user surface (it is a user, not a model).
     divergence: no standing tier-1 catalog in the root session — `search skill` /
     `list skill` are the disclosure surface, and hosts can inline `registry.metadata()`
     for guide-standard behavior (§7.1).
+28. **Script execution → triple gate, no OS sandbox in v1** (§7.3.1). Registry-level
+    `disableScriptExecution` (mirrors #25); per-skill **`Script(<glob>)`** grants in
+    `allowed-tools` (our token — the field is experimental and client-defined); the §8
+    trusted-root guidance. Direct exec of executable+shebang files only (no interpreter
+    guessing), own process group, cwd = skill directory, env inherited (parity with §5
+    shell — scrubbing scripts while `` !`env` `` runs unscrubbed would be theater),
+    default 60 s timeout, Shelltool-shaped result with a 32-line tail. `sandbox-exec`
+    is deprecated over a private profile language, so containment is gates + process
+    control, documented honestly; revisit when Apple ships a supported per-process
+    confinement API. Path confinement (resolved-inside-the-skill-directory) applies to
+    all three resource ops.
 
 **All open items resolved — the plan is decision-complete.**
 
@@ -544,6 +616,8 @@ Examples/
     project/lint/SKILL.md               # user-invocable: false — model-only background
     project/spec-clean/SKILL.md         # pure-spec frontmatter: license + compatibility +
                                         #   extensions under metadata.* — passes skills-ref (#27)
+    project/release-notes/              # §7.3 resource fixtures (M6): scripts/ + references/
+                                        #   + assets/; allowed-tools: "Script(scripts/*)"
   skills-demo/                      # one executable target, dual-use
 ```
 
@@ -585,9 +659,10 @@ Examples/
   test against the resolver. *(Depends on upstream task 6.)*
 - **M5 — Full render.** Arguments, shell injection (macOS), Stencil env + `{% include %}`
   partials + cycle detection.
-- **M6 — Lazy resource tools.** `references/`/`assets/`/`scripts/` as new nouns —
-  `list resource` / `read resource` / `run script` — in the fused tool (or a second
-  `OperationTool` per #23), gated by `allowed-tools`; macOS sandboxing.
+- **M6 — Resource ops.** Build §7.3 as specified: `list resource` / `read resource` /
+  `run script` in the fused tool; path-confinement invariant, `Script(<glob>)` grants,
+  `disableScriptExecution`, direct-exec runner (process group, cwd = skill dir, timeout).
+  *(Vocabulary and semantics already fixed — §7.3, decisions #23/#28.)*
 - **M7 — Diagnostics polish + docs; finish the §11 `Examples/` demo** (all three
   `skills-demo` modes against the complete `skill-library/`). *(Superseded:
   `AgentRegistry` moved to `../FoundationModelsAgents` — see decision #17. Its M1–M2
@@ -597,7 +672,11 @@ Examples/
 
 The unit tier is GPU-free: parsing/validation tables (§4's spec limits and lenient
 rules), golden renders and listing snapshots over the §11 fixture library, watcher tests
-against temp directory stacks, and operation dispatch against a stub context.
+against temp directory stacks, and operation dispatch against a stub context. M6 adds
+the §7.3 cases: **path confinement** (`..`, absolute paths, escaping symlinks — all
+corrective), the **three-gate matrix** for `run script` (policy off / no grant /
+non-matching glob / granted), exec-bit + shebang refusals, timeout → process-group
+SIGKILL, and golden `RunScriptResult` tails against the `release-notes` fixture.
 
 **Hot reload is an explicit, named test case — not incidental coverage.** Because
 `FoundationModelsMetadataRegistry` is a **shipped sibling dependency** (checked out at
