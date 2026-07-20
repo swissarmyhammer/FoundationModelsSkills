@@ -7,8 +7,11 @@ and exposes them to Apple's
 (WWDC26) through **one fused operation tool** — built on the
 [`FoundationModelsOperations`](https://github.com/swissarmyhammer/FoundationModelsOperationTool)
 package (the sah "operation" pattern: `op: "verb noun"` dispatch, forgiving resolver,
-dual-use CLI) — plus a separate listing surface for command/`/`-matching. Built on a
-generic, reusable stacked-folder layer. **Primary target: macOS, on-device.**
+dual-use CLI) — plus a separate listing surface for command/`/`-matching. Skills load
+through a **`.skills` dotfolder stack** from
+[`FoundationModelsExtras`](../FoundationModelsExtras/plan.md) — the family's shared
+substrate (`DotfolderStack`, `FrontmatterDocument`, `TemplateEngine`). **Primary target:
+macOS, on-device.**
 
 ---
 
@@ -27,11 +30,12 @@ generic, reusable stacked-folder layer. **Primary target: macOS, on-device.**
 - **One registry, many consumers.** A reloadable **`SkillsRegistry`** is the source of truth;
   it powers the fused skills tool, the search agent, the preload injection, the
   user-facing `/` command listing, **and the CLI** — all *views* of one registry.
-- **Generic stack underneath, domain validation on top.** The folder-stacking machinery
-  (override, render, list, watch) knows nothing about skills, so the **same stack also serves
-  agents** — the downstream [`../FoundationModelsAgents`](../FoundationModelsAgents/plan.md)
-  package depends on this one and builds its `AgentRegistry` on these layers. Skill
-  validation sits a layer above it.
+- **Shared substrate underneath, domain validation on top.** The generic machinery —
+  layered dotfolder resolution, frontmatter splitting, Stencil templating — is
+  **imported from [`FoundationModelsExtras`](../FoundationModelsExtras/plan.md)**, the
+  family's substrate leaf, not built here *(decision #29)*. The downstream
+  [`../FoundationModelsAgents`](../FoundationModelsAgents/plan.md) package draws on the
+  same substrate directly. Skill discovery, validation, and semantics sit a layer above.
 - **macOS-first, on-device.** iOS is a graceful "unavailable" stub.
 
 ## 2. Where "skills" actually live in Apple's stack (correction)
@@ -48,7 +52,9 @@ generic, reusable stacked-folder layer. **Primary target: macOS, on-device.**
 
 ## 3. Layered architecture
 
-Four layers, bottom to top. Lower layers are domain-agnostic and reusable.
+Four layers, bottom to top. The lower two are **imported from
+[`FoundationModelsExtras`](../FoundationModelsExtras/plan.md)** — the family's substrate
+leaf — not built here *(decision #29)*.
 
 ```
 ┌─ Layer 4  FM adapter (skills) ─────────────────────────────────────────────┐
@@ -59,42 +65,49 @@ Four layers, bottom to top. Lower layers are domain-agnostic and reusable.
 │   preload injection (rendered bodies → root Instructions)                  │
 │   commandListing() — user `/` menu view (separate from the model surface)  │
 │   OperationCLIDriver — dual-use CLI from the same op declarations          │
-├─ Layer 3  SkillsRegistry  (domain validation + semantics) ──────────────────┤
-│   agentskills.io + Claude validation, visibility, arguments, partial,       │
-│   reload → injectable metadata, generic call(id:arguments:) — built ON L2   │
-├─ Layer 2  FolderStack  (generic, reusable) ─────────────────────────────────┤
-│   ordered roots; named entries; FULL-REPLACE override by name; render       │
-│   pipeline; list(); entry(name:); file-watch add/remove/reload up the stack │
-│   Generic over an EntryKind — dir-shaped (skill) or file-shaped (agent)     │
-├─ Layer 1  FrontmatterDocument  (generic) ───────────────────────────────────┤
-│   parse one .md → (YAML frontmatter, markdown body); serialize back         │
+├─ Layer 3  SkillsRegistry  (discovery + domain validation + semantics) ──────┤
+│   dir-shaped discovery over the stack (name/SKILL.md, full-replace by id),  │
+│   Yams frontmatter decode, agentskills.io + Claude validation, visibility,  │
+│   arguments, render pipeline (§5), file watcher, reload → injectable        │
+│   metadata, generic call(id:arguments:) — built ON the Extras substrate     │
+├─ Layers 1–2  FoundationModelsExtras  (imported substrate) ──────────────────┤
+│   DotfolderStack — the .skills layers: defaults < user (XDG) < project;     │
+│   nearest/locate/enumerate/content, source tracking, path-safety checks     │
+│   FrontmatterDocument — textual (frontmatter, body) split; no YAML dep      │
+│   TemplateEngine — Stencil facade: _partials/ includes via DotfolderLoader, │
+│   trusted/untrusted split, context > env > well-known precedence ladder     │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
-- **`FrontmatterDocument`** — pure parse/serialize of a single markdown file into typed
-  frontmatter + body. No domain knowledge.
-- **`FolderStack`** — the "stack of folders of named folders of markdown+frontmatter":
-  ordered roots (low→high precedence), discovery of named entries, **full-replace override by
-  name** up the stack, the **render pipeline**, `list()`/`entry(name:)`, and a **file watcher**
-  that applies add/remove/reload across every layer. Generic over an `EntryKind` so it hosts
-  skills *or* agents — and the `EntryKind` decides the **entry shape**: **directory-shaped**
-  (`name/SKILL.md`, id = directory name) or **file-shaped** (a flat `*.md` discovered
-  recursively, id from frontmatter `name` — the Claude agents layout).
-  `FrontmatterDocument` and `FolderStack` are **exported public API**, not internal
-  machinery: `../FoundationModelsAgents` imports them for its `AgentRegistry`.
-- **`SkillsRegistry`** (Layer 3, the source of truth) — wraps a `FolderStack<Skill>`; adds
-  agentskills.io + Claude validation, the visibility model (§6), argument handling (§5),
-  `partial`/include semantics, and **reload → injectable metadata** (§7). Exposes a generic
-  `call(id:arguments:)`. **Skill validation is strictly above the raw stack.**
+- **`FoundationModelsExtras`** supplies the substrate: **`DotfolderStack`** (layered
+  locations `defaults < user < project` with nearest-wins resolution, per-item source
+  tracking, and path-safety checks — construction does no I/O), **`FrontmatterDocument`**
+  (pure textual frontmatter/body split — YAML decoding is deliberately the consumer's),
+  and **`TemplateEngine`** (the Stencil facade: layered `_partials/` includes, the
+  trusted/untrusted split, the variable-precedence ladder). The old plan built these as
+  exported Layers 1–2; that machinery now lives below the whole family, and
+  `../FoundationModelsAgents` consumes it from Extras directly *(supersedes the export
+  promise in #17/#19)*.
+- **What Extras deliberately does not do, we own in Layer 3:** (a) **directory-shaped
+  discovery** — Extras' `enumerate` lists flat files; skills are `name/SKILL.md`
+  directories, so the registry walks `stack.layers` itself, higher layers shadowing lower
+  by directory name (full-replace, #3), provenance from the layer that won; (b) **YAML
+  decoding** (Yams) over the textual split; (c) the **file watcher** — the stack locates,
+  it never watches; we watch every layer root and rebuild (§7); (d) all **skill
+  semantics** — validation, visibility, arguments, and the render pipeline's
+  `$`-substitution and shell passes (§5).
+- **`SkillsRegistry`** (Layer 3, the source of truth) — wraps the `.skills`
+  `DotfolderStack`; adds discovery, agentskills.io + Claude validation, the visibility
+  model (§6), argument handling (§5), and **reload → injectable metadata** (§7). Exposes a
+  generic `call(id:arguments:)`. **Skill validation is strictly above the raw stack.**
 - **FM adapter** (Layer 4) — the skill operation structs and their fused `OperationTool`,
   the `SkillSearchAgent`, preload injection, the `commandListing()`, and the CLI driver —
   all reading the registry.
 
 ## 4. Identity & naming
 
-- **Directory name = canonical id.** It is the key for stack override, `{% include %}`
-  partials, `/name` command matching, and the `use skill` op's `id` — never the frontmatter
-  `name`.
+- **Directory name = canonical id.** It is the key for stack override, `/name` command
+  matching, and the `use skill` op's `id` — never the frontmatter `name`.
 - **agentskills.io requires `name`, and it must equal the directory name.** Enforced rules:
   1–64 chars, `[a-z0-9-]` only, no leading/trailing hyphen, no consecutive `--`,
   `name == directoryName`.
@@ -115,18 +128,23 @@ Four layers, bottom to top. Lower layers are domain-agnostic and reusable.
   command files user-invocable. A shadowed id (full-replace winner up the stack) and a
   `SKILL.md` over the spec's recommended 500 lines each draw an advisory diagnostic.
   Validation-parity target: the `skills-ref` reference validator.
-- **Extension fields ride `metadata.*` for portability.** Our non-spec fields (`partial`,
-  `preload`, `user-invocable`, `disable-model-invocation`, `arguments`, `argument-hint`) are
+- **Extension fields ride `metadata.*` for portability.** Our non-spec fields (`preload`,
+  `user-invocable`, `disable-model-invocation`, `arguments`, `argument-hint`) are
   accepted **both** top-level (the Claude convention — canonical for us, #5) **and** under
   `metadata:`, the spec's designated home for client-defined properties — so a skill
   authored for maximum agentskills.io portability keeps its top level pure-spec. Unknown
   top-level keys never block loading (diagnostic only).
-- **Roots are caller-supplied; recommend the `.agents/skills` convention.** The spec
-  mandates only what's *inside* a skill directory; the client guide's cross-client
-  convention is `<project>/.agents/skills` and `~/.agents/skills` alongside any
-  client-specific directory, with project over user — exactly our ordered-roots +
-  full-replace rule. Discovery skips `.git`/`node_modules` and bounds scan depth. Hosts
-  should consider trust-gating untrusted project roots (§8).
+- **Skills load through the `.skills` dotfolder stack** *(decision #29)*: Extras'
+  `DotfolderStack(name: "skills", workingDirectory: …)` derives the layers — shipped
+  defaults (optional; the `SKILLS_DEFAULTS_DIR` env var repoints it for dev, no rebuild)
+  < user `$XDG_CONFIG_HOME/skills/` (default `~/.config/skills/`) < project
+  `<cwd>/.skills/` — project over user over defaults, with nearest-wins realizing our
+  full-replace rule and source tracking carrying provenance into diagnostics. The spec
+  mandates only what's *inside* a skill directory, so this is a conforming host
+  convention; a host that wants the client guide's cross-client `.agents/skills` layout
+  builds the stack's `Layer`s explicitly (their init is public). Discovery skips
+  `.git`/`node_modules` and bounds scan depth. The winning layer also picks the render
+  trust mode (§5), and hosts should still trust-gate untrusted project layers (§8).
 
 ## 5. Templating & arguments — the render pipeline
 
@@ -149,35 +167,52 @@ bust). One ordered pipeline, each pass single-shot and **not re-scanned** by lat
    Claude). A `disableShellExecution` policy flag, **set at registry construction** so all
    render paths honor it (model, `/command`, CLI), mirrors Claude's
    `disableSkillShellExecution`. *(decision #25)*
-3. **Stencil** — `{{ env.* }}` (all of `ProcessInfo.environment`) + `{% include "other-skill" %}`
-   partials resolved against the merged registry (including `partial:` skills), rendered
-   recursively with **cycle detection**.
+3. **Stencil via Extras' `TemplateEngine`** — variables resolve through the precedence
+   ladder (explicit context — where skill arguments also land — > environment variables
+   as flat keys, e.g. `{{ HOME }}` > well-known values: `working_directory`, `date`,
+   `hostname`, `dotfolder_name`) + `{% include "header" %}` partials resolved through the
+   stack's layered `_partials/` directories (`DotfolderLoader`, nearest layer wins).
+   Render trust maps from the skill's winning layer — defaults → `.trusted`,
+   user/project → `.untrusted` (tag/filter whitelist; include-depth 8, so unbounded
+   include recursion is impossible by construction; 1 MiB output and 100k-iteration
+   budgets). *(decision #29; amends #2's `{{ env.* }}` spelling)*
 
 Templated: `description`, all `metadata` values, and the body. The **directory-name id stays
 literal**. Argument frontmatter: `arguments:` (named positional list) + `argument-hint:`
 (autocomplete hint), both surfaced in the listing.
 
 **Resolved (re-scanning):** passes are ordered and single-shot; injected shell output is
-**never** re-scanned. **Resolved (partials):** an `{% include %}`d partial renders **standalone**
-through its own pipeline — env + its own `$`-tokens, but **not** the parent's arguments
-(partials are shared, arg-free building blocks). *(decision #16)*
+**never** re-scanned. **Resolved (partials):** partials are **`_partials/*.md` files in
+the stack, not skills** — `{% include %}` renders them inside the parent's Stencil pass
+with Stencil's standard context semantics. Because pass 1 runs on the skill body
+**before** Stencil, `$`-tokens inside a partial file are never argument-substituted, so
+partials stay shared, arg-free building blocks. *(decision #16, amended by #29)*
 
 ## 6. Visibility model & the two listing surfaces
 
-Adopt Claude's two axes, plus our `partial` and `preload`:
+Adopt Claude's two axes, plus our `preload`:
 
 | Field | User `/` menu | Model surface | In context at startup | Notes |
 |---|---|---|---|---|
 | *(default)* | listed | searchable + usable | no (body on use) | both audiences |
 | `disable-model-invocation: true` | listed | hidden | no | user-only command (e.g. `/deploy`) |
 | `user-invocable: false` | hidden | searchable + usable | no | model-only background |
-| `partial: true` *(ours)* | hidden | hidden | no | `{% include %}` target only; never callable |
 | `preload: true` *(ours)* | listed | searchable + usable | **yes** (body injected) | body always-on in Instructions; re-use is redundant; see §7 |
 
 - **`SkillsRegistry.commandListing()`** → `[SkillListing]` for the user `/` menu, carrying
   **structured, parsed parameters** (§6.1). **We produce data only** — autocomplete, fuzzy
   search, and input validation are the UI's job, out of scope here.
-- `partial:` accepts **top-level canonical** else `metadata.partial: "true"`.
+- **Harness delivery channel: Extras' `SlashCommandProviding`** *(decision #29)* — the
+  registry conforms: `commands(workingDirectory:)` derives from `commandListing()` (name,
+  description, `argumentHint` from §6.1), and `commandUpdates` ticks on every reload (§7).
+  Caveat, stated plainly: the `.prompt(template:)` body kind re-renders through the
+  harness's engine, which runs none of §5's passes 1–2 (`$`-arguments, shell injection) —
+  an invocation-aware prompt body is a recorded Extras coordination item; a host that
+  wants full render fidelity calls `registry.call(id:arguments:)` directly (§7.1).
+- `partial: true` is **retired** *(#29)*: shared building blocks are `_partials/*.md`
+  files in the stack — not skill directories, so they are invisible to discovery by
+  construction. Encountering `partial: true` draws a diagnostic and hides the skill from
+  every surface (preserving the old intent).
 - "Model surface" filtering is applied by the operation implementations: `search skill` /
   `list skill` exclude model-hidden skills; `use skill` refuses them with a corrective
   message.
@@ -284,7 +319,8 @@ Which actions exist = which operation structs you pass. *(supersedes decision #1
 session's `Instructions`** at startup, alongside the fused tool — always-on context, no
 search/use needed. Use sparingly (every preloaded line is a recurring token cost).
 
-**Reload & metadata injection.** The `FolderStack` watcher fires on add/remove/edit up the
+**Reload & metadata injection.** The registry's file watcher (over every stack layer
+root — Extras' stack locates, it never watches, #29) fires on add/remove/edit up the
 stack → `SkillsRegistry` rebuilds and publishes a **refreshed metadata list** (observable).
 On reload we: (a) forward the refreshed metadata to the searcher's **`update(items:)`**
 (hash-guarded; incremental re-embed; rebuilds the selection prefix + id grammar); (b) refresh the
@@ -422,37 +458,52 @@ Revisit when Apple ships a supported per-process confinement API. *(decision #28
 ## 8. Platform & security
 - **macOS primary** (on-device): full feature set — args, shell injection, env, scripts.
 - **iOS: graceful "unavailable on platform"** stub; no shell/script attempted.
+- **Untrusted layers render untrusted** *(#29)*: user/project-layer skills take Extras'
+  untrusted Stencil path (tag/filter whitelist; include-depth, output-size, and
+  iteration budgets); only shipped defaults render trusted. This bounds the *template*
+  pass only — shell injection (§5) and scripts (§7.3.1) are separately gated and never
+  granted by Stencil.
 - **No cache concern** — render-once at list/use; fixed in transcript.
 - **Server-side providers see the transcript** — with all env exposed and shell output inlined,
   a rendered skill can carry that off-device if a session routes to a cloud provider.
   Documented; accepted for the on-device-Mac use case. (The search agent sees only metadata,
   not rendered bodies, which limits exposure during discovery.)
-- **Trust-gate untrusted project roots** (client-guide recommendation): a project-level
-  root from a freshly cloned repo can inject instructions; hosts should load it only for
-  trusted folders. Roots are caller-supplied (§4), so the gate is the host's — we document
-  it and make the diagnostic surface carry provenance so a host can show *where* a skill
-  came from.
+- **Trust-gate untrusted project layers** (client-guide recommendation): a project
+  `.skills/` from a freshly cloned repo can inject instructions; hosts should load it only
+  for trusted folders. The stack's `workingDirectory` is caller-supplied (§4), so the gate
+  is the host's — we document it, the Stencil pass already renders such layers untrusted
+  (#29), and the diagnostic surface carries the winning layer's provenance so a host can
+  show *where* a skill came from.
 - **Context-compaction note for hosts:** a used skill's rendered body is durable guidance;
   hosts that summarize or prune transcripts should exempt skill tool outputs (client guide
   step 5). Out of scope for this package; stated so hosts don't silently degrade skills.
 
 ## 9. Resolved decisions
-1. **Template engine → Stencil** (`{{ }}` + `{% include %}`).
-2. **Env → all** of `ProcessInfo.environment` as `{{ env.* }}`.
-3. **Override → full replace** (higher layer shadows lower entirely).
+1. **Template engine → Stencil, via Extras' `TemplateEngine` facade** (`{{ }}` +
+   `{% include %}`; no direct Stencil dependency — the facade owns trust, budgets, and
+   `_partials/` resolution). *(Amended by #29.)*
+2. **Env → all** of `ProcessInfo.environment` — as **flat keys through Extras'
+   precedence ladder** (`{{ HOME }}`; explicit context > env > well-known values), not an
+   `env.*` namespace. *(Amended by #29.)*
+3. **Override → full replace** (higher layer shadows lower entirely) — realized by the
+   stack's layer precedence: nearest wins *(#29)*.
 4. **FM integration → a fused `OperationTool`** from `FoundationModelsOperations` on core
    `FoundationModels.Tool`; no `FoundationModelsUtilities` dependency. *(Supersedes the
    bespoke single `SkillsTool`.)*
-5. **`partial:` → accept both, top-level canonical.** *(Generalized by #27 to every
-   extension field: top-level canonical, `metadata.*` accepted as the spec-portable
-   spelling.)*
+5. ~~`partial:` → accept both, top-level canonical~~ **Superseded by #29:** partials are
+   `_partials/*.md` files in the stack, not skills; `partial: true` frontmatter is
+   retired (diagnostic + hidden from every surface). #27's top-level-canonical rule still
+   governs the remaining extension fields.
 6. **Arguments → Claude-compatible** (`$ARGUMENTS`, `$ARGUMENTS[N]`/`$N` 0-based, `$name`,
    `argument-hint:`).
-7. **Architecture → 4 layers**; generic `FrontmatterDocument` + `FolderStack` reused for
-   agents by the downstream `../FoundationModelsAgents` package (see #17, #19).
+7. **Architecture → 4 layers**; the generic lower two (`DotfolderStack`,
+   `FrontmatterDocument`, `TemplateEngine`) **imported from `FoundationModelsExtras`**
+   rather than built here; `../FoundationModelsAgents` consumes them from Extras directly
+   (see #17, #19, #29).
 8. **Identity → directory name canonical**; agentskills.io `name` required and validated `== id`.
-9. **Visibility → `user-invocable` + `disable-model-invocation` + `partial`**; two listing
-   surfaces (command vs model).
+9. **Visibility → `user-invocable` + `disable-model-invocation`**; two listing
+   surfaces (command vs model). *(The `partial` axis is retired by #29 — partials are
+   `_partials/` files, outside discovery entirely.)*
 10. **Parameters → infer from body** when frontmatter is absent; frontmatter refines.
 11. **FM entry point → one fused tool** with ops **`search skill` / `list skill` /
     `use skill`**. *(Restates the old search/list/call actions in operation vocabulary.)*
@@ -465,26 +516,30 @@ Revisit when Apple ships a supported per-process confinement API. *(decision #28
     startup (and refreshed on reload).
 15. ~~Builder~~ **Superseded by #20:** assembly is `OperationTool` init + `SkillsToolContext`
     construction; action set = the operation structs passed in.
-16. **Partials → render standalone** (env + own `$`-tokens; not the parent's arguments).
+16. **Partials → `_partials/*.md` files, Stencil include semantics** *(amended by #29)*:
+    an included partial renders inside the parent's Stencil pass; `$`-argument
+    substitution (§5 pass 1) runs before Stencil and never reaches partial files, so
+    partials stay shared, arg-free building blocks.
 17. **Packaging → single SwiftPM target.** Layering (§3) is conceptual — by type, not module
     — so FoundationModels is a dependency of the whole package. *(Superseded in part:)*
     `AgentRegistry` does **not** live in this target — it lives in the downstream
-    `../FoundationModelsAgents` package, which depends on this one. Layers 1–2
-    (`FrontmatterDocument`, `FolderStack`) are therefore **exported public API**, part of
-    this package's contract. **Reaffirmed after #26:** the single target stands — the
-    whole package, exported Layers 1–2 included, carries the
-    `FoundationModelsMetadataRegistry` → `FoundationModelsRouter` dependency and its
-    macOS 27+ floor. No lightweight split for downstream consumers;
-    `../FoundationModelsAgents` requires the Router directly anyway.
+    `../FoundationModelsAgents` package. *(Amended by #29:)* this package **exports no
+    generic layers** — the substrate (`DotfolderStack`, `FrontmatterDocument`,
+    `TemplateEngine`) is `FoundationModelsExtras`' contract, and Agents depends on
+    Extras, not on us. **Reaffirmed after #26:** the single target stands — the whole
+    package carries the `FoundationModelsMetadataRegistry` → `FoundationModelsRouter`
+    dependency and its macOS 27+ floor (Extras shares that floor). No lightweight split
+    for downstream consumers; `../FoundationModelsAgents` requires the Router directly
+    anyway.
 18. ~~Tool arg schema → dynamic id enum~~ **Superseded by #22:** the fused schema is
     upstream's flat union (required `op` enum + optional fields); the skill `id` is a plain
     string validated at dispatch. Rationale: hot-reload safety + Apple's enum-enforcement
     bug (forums 812501/811620) means guided id sampling was never guaranteed anyway.
-19. **Entry shapes → `FolderStack` supports both.** A skill is a **directory-shaped** entry
-    (`name/SKILL.md`, id = directory name); a Claude-style agent is a **file-shaped** entry
-    (a flat `*.md` discovered recursively, id from frontmatter `name`). The `EntryKind`
-    decides shape, discovery, and identity — required by `../FoundationModelsAgents`, whose
-    M1–M2 depend on this landing in our M1.
+19. ~~Entry shapes → `FolderStack` supports both~~ **Superseded by #29:** there is no
+    `FolderStack`. **Directory-shaped** discovery (`name/SKILL.md`, id = directory name)
+    is skill-local, built in Layer 3 over `DotfolderStack.layers`; the **file-shaped**
+    flat layout is Extras' `enumerate(_:suffix:)`. `../FoundationModelsAgents` builds its
+    `AgentRegistry` on Extras directly — its M1–M2 no longer depend on our M1.
 20. **Operation pattern → depend on `FoundationModelsOperations`** (SwiftPM). Our three ops
     can hand-conform `OperationDefinition` (upstream's manual path) — the `@Operation` macro
     is optional for so small a vocabulary. We inherit schema fusion, the forgiving resolver,
@@ -541,18 +596,39 @@ Revisit when Apple ships a supported per-process confinement API. *(decision #28
     control, documented honestly; revisit when Apple ships a supported per-process
     confinement API. Path confinement (resolved-inside-the-skill-directory) applies to
     all three resource ops.
+29. **Loading substrate → `FoundationModelsExtras`, via the `.skills` dotfolder stack.**
+    Skills load through `DotfolderStack(name: "skills", workingDirectory: …)` — shipped
+    defaults (optional; `SKILLS_DEFAULTS_DIR` repoints it for dev, no rebuild) < user
+    `$XDG_CONFIG_HOME/skills/` (default `~/.config/skills/`) < project `<cwd>/.skills/` —
+    nearest-wins realizing full-replace (#3), source tracking carrying provenance, path
+    safety built in. `FrontmatterDocument.split` does the textual frontmatter split
+    (YAML decoding stays ours, with Yams, per Extras' no-YAML rule); `TemplateEngine` is
+    the Stencil facade with the layer→trust mapping (defaults trusted; user/project
+    untrusted) and `_partials/` includes. Extras ships **no watcher and no
+    directory-shaped discovery** — both stay in Layer 3 (§3). Hosts wanting the client
+    guide's `.agents/skills` layout construct the stack's `Layer`s explicitly. The §6
+    user surface additionally conforms to Extras' `SlashCommandProviding` (commands from
+    `commandListing()`, `commandUpdates` from reload); `.prompt(template:)`'s inability
+    to run §5 passes 1–2 is a recorded Extras coordination item. Amends #1, #2, #3, #5,
+    #7, #16, #17, #19 in place.
 
 **All open items resolved — the plan is decision-complete.**
 
 ## 10. Public API sketch (illustrative)
 
 ```swift
-// Layers 1–3 — generic stack + reloadable registry:
+// Layers 1–2 from FoundationModelsExtras — the .skills dotfolder stack (#29):
+let stack = DotfolderStack(
+  name: "skills",                                // ~/.config/skills/ + <cwd>/.skills/
+  workingDirectory: cwd,
+  defaultsDirectory: shippedSkillsURL            // optional lowest layer; SKILLS_DEFAULTS_DIR overrides
+)
+
+// Layer 3 — reloadable registry over the stack:
 let registry = try SkillsRegistry(
-  roots: [enterpriseURL, userURL, projectURL],   // low → high; full-replace by id
-  env: .all,
+  stack: stack,                                  // nearest-wins = full-replace by id (#3)
   policy: .init(disableShellExecution: false),   // render policy lives with the pipeline (#25)
-  watch: true                                    // reload add/remove/edit up the stack
+  watch: true                                    // watch every layer root; reload add/remove/edit
 )
 
 // Layer 4 — three ops over one context, fused into one core Tool:
@@ -605,27 +681,29 @@ tests can't drift. `skills-demo` is an **executable target in the root `Package.
 
 ```
 Examples/
-  skill-library/                    # a three-root stack (enterprise → user → project)
-    enterprise/base-style/SKILL.md      # plain skill — shadowed by the user root below
+  skill-library/                    # a three-layer .skills dotfolder stack (#29)
+    defaults/base-style/SKILL.md        # plain skill — shadowed by the user layer below
     user/base-style/SKILL.md            # the full-replace override that wins (#3)
-    user/header/SKILL.md                # partial: true — an {% include "header" %} target
-    project/commit/SKILL.md             # arguments: + argument-hint: + $0/$ARGUMENTS (§5, §6.1)
-    project/deploy/SKILL.md             # disable-model-invocation: true — user-only /deploy
-    project/git-context/SKILL.md        # preload: true + !`git status` shell injection (#25)
-    project/env-report/SKILL.md         # {{ env.* }} Stencil rendering
-    project/lint/SKILL.md               # user-invocable: false — model-only background
-    project/spec-clean/SKILL.md         # pure-spec frontmatter: license + compatibility +
-                                        #   extensions under metadata.* — passes skills-ref (#27)
-    project/release-notes/              # §7.3 resource fixtures (M6): scripts/ + references/
-                                        #   + assets/; allowed-tools: "Script(scripts/*)"
+    user/_partials/header.md            # an {% include "header" %} target — a file, not a skill (#29)
+    project/.skills/commit/SKILL.md     # arguments: + argument-hint: + $0/$ARGUMENTS (§5, §6.1)
+    project/.skills/deploy/SKILL.md     # disable-model-invocation: true — user-only /deploy
+    project/.skills/git-context/SKILL.md  # preload: true + !`git status` shell injection (#25)
+    project/.skills/env-report/SKILL.md   # {{ HOME }} / {{ working_directory }} ladder rendering
+    project/.skills/lint/SKILL.md         # user-invocable: false — model-only background
+    project/.skills/spec-clean/SKILL.md   # pure-spec frontmatter: license + compatibility +
+                                          #   extensions under metadata.* — passes skills-ref (#27)
+    project/.skills/release-notes/        # §7.3 resource fixtures (M6): scripts/ + references/
+                                          #   + assets/; allowed-tools: "Script(scripts/*)"
   skills-demo/                      # one executable target, dual-use
 ```
 
-- **`skill-library/`** exercises every §5–§6 feature exactly once — stack override,
-  partial + include, arguments + hint, shell injection, env templating, preload, and
-  both visibility axes. The unit tests load it for golden renders and listing
-  snapshots; the demo loads the same directories, so the documented behavior is the
-  tested behavior.
+- **`skill-library/`** exercises every §5–§6 feature exactly once — layer override,
+  `_partials/` include, arguments + hint, shell injection, env templating, preload, and
+  both visibility axes. The demo and tests build the stack with explicit
+  `defaultsDirectory`/`userDirectory` fixture URLs (Extras' hermetic seam), so nothing
+  ever reads the real home directory. The unit tests load it for golden renders and
+  listing snapshots; the demo loads the same directories, so the documented behavior is
+  the tested behavior.
 - **`skills-demo`** is one binary, three modes (the NotesTool dual-use shape):
   - **default — CLI** (§7.2) over the library: `skills-demo skill list`,
     `skills-demo skill search "commit my changes"`,
@@ -641,14 +719,17 @@ Examples/
   it into the documented sample.
 
 ## 12. Phasing
-- **M1 — Layers 1–2.** `FrontmatterDocument`; `FolderStack` (discovery, full-replace override,
-  provenance, `list()`/`entry()`, **both entry shapes** — directory- and file-shaped, #19),
-  all public. No templating, watch, or FM. *(Unblocks `FoundationModelsAgents` M1–M2.)*
-- **M2 — Watch + render skeleton.** File watcher (add/remove/reload up the stack); render
-  pipeline scaffold (passes wired, identity transforms).
+- **M1 — Substrate + discovery.** Depend on `FoundationModelsExtras` (#29); build
+  directory-shaped skill discovery over `DotfolderStack.layers` (`name/SKILL.md`,
+  full-replace by directory name, provenance from source tracking); Yams decode over
+  `FrontmatterDocument.split`. No templating, watch, or FM. *(`FoundationModelsAgents`
+  consumes Extras directly and is no longer blocked on us.)*
+- **M2 — Watch + render skeleton.** File watcher over every stack layer root (Extras
+  ships none, #29); render pipeline scaffold (passes wired, identity transforms).
 - **M3 — `SkillsRegistry`.** agentskills.io + Claude validation — full spec field
-  coverage and the lenient rules (#27), `skills-ref` parity check — visibility, `partial`,
-  `preload`, `commandListing()`, initial + injectable metadata, generic `call`.
+  coverage and the lenient rules (#27), `skills-ref` parity check — visibility (including
+  the `partial: true` retirement diagnostic, #29), `preload`, `commandListing()`, initial
+  + injectable metadata, generic `call`.
 - **M4 — Skill operations + search agent.** `SearchSkill`/`ListSkill`/`UseSkill` conforming
   to `OperationDefinition`; fuse via `OperationTool`; `SkillSearchAgent` as a
   `MetadataSearcher` wrapper (#26); preload injection; reload → `update(items:)` — with
@@ -657,22 +738,26 @@ Examples/
   dispatch/resolver — and `FoundationModelsMetadataRegistry` M1–M4.)*
 - **M4.5 — CLI.** Wire `OperationCLIDriver` over the same ops (§7.2); round-trip payload
   test against the resolver. *(Depends on upstream task 6.)*
-- **M5 — Full render.** Arguments, shell injection (macOS), Stencil env + `{% include %}`
-  partials + cycle detection.
+- **M5 — Full render.** Arguments, shell injection (macOS), Extras `TemplateEngine`
+  wiring — the layer→trust mapping, precedence-ladder variables, `_partials/` includes
+  (recursion bounded by the untrusted include-depth budget).
 - **M6 — Resource ops.** Build §7.3 as specified: `list resource` / `read resource` /
   `run script` in the fused tool; path-confinement invariant, `Script(<glob>)` grants,
   `disableScriptExecution`, direct-exec runner (process group, cwd = skill dir, timeout).
   *(Vocabulary and semantics already fixed — §7.3, decisions #23/#28.)*
 - **M7 — Diagnostics polish + docs; finish the §11 `Examples/` demo** (all three
   `skills-demo` modes against the complete `skill-library/`). *(Superseded:
-  `AgentRegistry` moved to `../FoundationModelsAgents` — see decision #17. Its M1–M2
-  consume our public Layers 1–2.)*
+  `AgentRegistry` moved to `../FoundationModelsAgents` — see decision #17; it consumes
+  Extras' substrate directly, #29.)*
 
 ## 13. Testing
 
 The unit tier is GPU-free: parsing/validation tables (§4's spec limits and lenient
-rules), golden renders and listing snapshots over the §11 fixture library, watcher tests
-against temp directory stacks, and operation dispatch against a stub context. M6 adds
+rules), golden renders and listing snapshots over the §11 fixture library — rendered
+through Extras' **real `TemplateEngine`**, never a mock, including a trust case where a
+project-layer skill using a non-whitelisted Stencil tag draws the untrusted-rejection
+diagnostic (#29) — watcher tests against temp directory stacks, and operation dispatch
+against a stub context. M6 adds
 the §7.3 cases: **path confinement** (`..`, absolute paths, escaping symlinks — all
 corrective), the **three-gate matrix** for `run script` (policy off / no grant /
 non-matching glob / granted), exec-bit + shebang refusals, timeout → process-group
@@ -714,6 +799,7 @@ after reload.
 - agentskills.io client-implementation guide (lenient validation, disclosure tiers, `.agents/skills` convention, trust) — https://agentskills.io/client-implementation/adding-skills-support
 - skills-ref reference validator — https://github.com/agentskills/agentskills/tree/main/skills-ref
 - FoundationModelsOperationTool plan (upstream operation pattern) — https://github.com/swissarmyhammer/FoundationModelsOperationTool
+- FoundationModelsExtras plan (substrate: DotfolderStack, TemplateEngine, SlashCommandProviding, #29) — ../FoundationModelsExtras/plan.md
 - FoundationModelsAgents plan (downstream consumer) — ../FoundationModelsAgents/plan.md
 - FoundationModelsMetadataRegistry plan (search: retrieval + selection, #26) — ../FoundationModelsMetadataRegistry/plan.md
 - Claude Code skills & slash-command arguments — https://code.claude.com/docs/en/slash-commands
