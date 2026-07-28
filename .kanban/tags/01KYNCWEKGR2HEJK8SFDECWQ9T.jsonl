@@ -1,0 +1,1 @@
+{"id":"01KYNCWEKG89AX86H1K5H67GJA","timestamp":"2026-07-28T22:17:49.936492Z","op":"create","item_id":"01KYNCWEKGR2HEJK8SFDECWQ9T","forward_patch":"--- original\n+++ modified\n@@ -0,0 +1,2 @@\n+color: 1d76db\n+tag_name: '22'\n","reverse_patch":"--- original\n+++ modified\n@@ -1,2 +0,0 @@\n-color: 1d76db\n-tag_name: '22'\n","transaction_id":null}
