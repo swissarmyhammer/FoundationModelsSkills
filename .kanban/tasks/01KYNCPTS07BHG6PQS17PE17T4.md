@@ -1,5 +1,5 @@
 ---
-position_column: todo
+position_column: doing
 position_ordinal: '80'
 title: Scaffold Package.swift and empty target structure
 ---
