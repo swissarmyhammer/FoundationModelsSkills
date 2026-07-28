@@ -8,7 +8,7 @@ and exposes them to Apple's
 [`FoundationModelsOperations`](https://github.com/swissarmyhammer/FoundationModelsOperationTool)
 package (the sah "operation" pattern: `op: "verb noun"` dispatch, forgiving resolver,
 dual-use CLI) — plus a separate listing surface for command/`/`-matching. Skills load
-through a **`.skills` dotfolder stack** from
+through **host-supplied layer roots** (#29; conventionally `.skills` directories) using
 [`FoundationModelsExtras`](../FoundationModelsExtras/plan.md) — the family's shared
 substrate (`DotfolderStack`, `FrontmatterDocument`, `TemplateEngine`). **Primary target:
 macOS, on-device.**
@@ -71,7 +71,7 @@ leaf — not built here *(decision #29)*.
 │   arguments, render pipeline (§5), file watcher, reload → injectable        │
 │   metadata, generic call(id:arguments:) — built ON the Extras substrate     │
 ├─ Layers 1–2  FoundationModelsExtras  (imported substrate) ──────────────────┤
-│   DotfolderStack — the .skills layers: defaults < user (XDG) < project;     │
+│   DotfolderStack — one way to derive layer roots (host may supply its own); │
 │   nearest/locate/enumerate/content, source tracking, path-safety checks     │
 │   FrontmatterDocument — textual (frontmatter, body) split; no YAML dep      │
 │   TemplateEngine — Stencil facade: _partials/ includes via DotfolderLoader, │
@@ -90,7 +90,7 @@ leaf — not built here *(decision #29)*.
   promise in #17/#19)*.
 - **What Extras deliberately does not do, we own in Layer 3:** (a) **directory-shaped
   discovery** — Extras' `enumerate` lists flat files; skills are `name/SKILL.md`
-  directories, so the registry walks `stack.layers` itself, higher layers shadowing lower
+  directories, so the registry walks its host-supplied roots itself, later shadowing earlier
   by directory name (full-replace, #3), provenance from the layer that won; (b) **YAML
   decoding** (Yams) over the textual split; (c) the **file watcher** — the stack locates,
   it never watches; we watch every layer root and rebuild (§7); (d) all **skill
@@ -134,15 +134,17 @@ leaf — not built here *(decision #29)*.
   `metadata:`, the spec's designated home for client-defined properties — so a skill
   authored for maximum agentskills.io portability keeps its top level pure-spec. Unknown
   top-level keys never block loading (diagnostic only).
-- **Skills load through the `.skills` dotfolder stack** *(decision #29)*: Extras'
-  `DotfolderStack(name: "skills", workingDirectory: …)` derives the layers — shipped
-  defaults (optional; the `SKILLS_DEFAULTS_DIR` env var repoints it for dev, no rebuild)
-  < user `$XDG_CONFIG_HOME/skills/` (default `~/.config/skills/`) < project
-  `<cwd>/.skills/` — project over user over defaults, with nearest-wins realizing our
-  full-replace rule and source tracking carrying provenance into diagnostics. The spec
-  mandates only what's *inside* a skill directory, so this is a conforming host
-  convention; a host that wants the client guide's cross-client `.agents/skills` layout
-  builds the stack's `Layer`s explicitly (their init is public). Discovery skips
+- **Skills load from roots the host supplies** *(decision #29, amended 2026-07-28)*: the
+  registry takes an ordered list of layer roots, lowest precedence first, and names no
+  directory convention of its own. Extras'
+  `DotfolderStack(name: "skills", workingDirectory: …)` is a convenience that derives one
+  such list — shipped defaults (optional; `SKILLS_DEFAULTS_DIR` repoints it for dev, no
+  rebuild) < user `$XDG_CONFIG_HOME/skills/` < project `<cwd>/.skills/` — and hosts that
+  want the client guide's cross-client `.agents/skills` layout, or a bare `~/.skills`
+  (which `DotfolderStack` cannot express), simply pass those roots instead. Precedence is
+  last-root-wins, realizing our full-replace rule, with source tracking carrying
+  provenance into diagnostics. The spec mandates only what's *inside* a skill directory,
+  so every one of these is a conforming host convention. Discovery skips
   `.git`/`node_modules` and bounds scan depth. The winning layer also picks the render
   trust mode (§5), and hosts should still trust-gate untrusted project layers (§8).
 
@@ -537,7 +539,7 @@ Revisit when Apple ships a supported per-process confinement API. *(decision #28
     bug (forums 812501/811620) means guided id sampling was never guaranteed anyway.
 19. ~~Entry shapes → `FolderStack` supports both~~ **Superseded by #29:** there is no
     `FolderStack`. **Directory-shaped** discovery (`name/SKILL.md`, id = directory name)
-    is skill-local, built in Layer 3 over `DotfolderStack.layers`; the **file-shaped**
+    is skill-local, built in Layer 3 over the host-supplied roots (#29); the **file-shaped**
     flat layout is Extras' `enumerate(_:suffix:)`. `../FoundationModelsAgents` builds its
     `AgentRegistry` on Extras directly — its M1–M2 no longer depend on our M1.
 20. **Operation pattern → depend on `FoundationModelsOperations`** (SwiftPM). Our three ops
@@ -596,12 +598,29 @@ Revisit when Apple ships a supported per-process confinement API. *(decision #28
     control, documented honestly; revisit when Apple ships a supported per-process
     confinement API. Path confinement (resolved-inside-the-skill-directory) applies to
     all three resource ops.
-29. **Loading substrate → `FoundationModelsExtras`, via the `.skills` dotfolder stack.**
-    Skills load through `DotfolderStack(name: "skills", workingDirectory: …)` — shipped
-    defaults (optional; `SKILLS_DEFAULTS_DIR` repoints it for dev, no rebuild) < user
-    `$XDG_CONFIG_HOME/skills/` (default `~/.config/skills/`) < project `<cwd>/.skills/` —
-    nearest-wins realizing full-replace (#3), source tracking carrying provenance, path
-    safety built in. `FrontmatterDocument.split` does the textual frontmatter split
+29. **Loading substrate → `FoundationModelsExtras`. The host supplies the roots.**
+    *(Amended 2026-07-28 at `FoundationModelsACPAgent`'s request — see its plan §6.2.1.)*
+    **The registry takes its layer roots as a construction parameter** — an ordered list,
+    lowest precedence first — and holds no opinion about where skills live. It does not
+    name `.skills`, `~`, `.config`, or any dotfolder convention; those are host policy,
+    and a package that hardcodes them cannot serve a host that disagrees.
+
+    `DotfolderStack(name: "skills", workingDirectory: …)` remains a **convenience for
+    hosts that want it**, deriving shipped defaults (optional; `SKILLS_DEFAULTS_DIR`
+    repoints it for dev, no rebuild) < user `$XDG_CONFIG_HOME/skills/` (default
+    `~/.config/skills/`) < project `<cwd>/.skills/`. But it is one way to compute roots,
+    not the interface. Note it **cannot** express a user layer at `~/.skills`, since its
+    user side is always `~/.config/<name>/` — which is precisely why the roots, not the
+    stack, are the parameter.
+
+    `FoundationModelsACPAgent` passes `[~/.skills, <cwd>/.skills]` and owns those
+    literals. Its reasoning is worth recording here because it generalizes: skills are an
+    **ecosystem** artifact, so they are deliberately *not* namespaced per product — a
+    "deploy to staging" skill belongs to the user and the repo, not to whichever agent
+    reads it, and namespacing would force one copy per product.
+
+    Either way: nearest-wins realizing full-replace (#3), source tracking carrying
+    provenance, path safety built in. `FrontmatterDocument.split` does the textual frontmatter split
     (YAML decoding stays ours, with Yams, per Extras' no-YAML rule); `TemplateEngine` is
     the Stencil facade with the layer→trust mapping (defaults trusted; user/project
     untrusted) and `_partials/` includes. Extras ships **no watcher and no
@@ -609,7 +628,9 @@ Revisit when Apple ships a supported per-process confinement API. *(decision #28
     guide's `.agents/skills` layout construct the stack's `Layer`s explicitly. The §6
     user surface additionally conforms to Extras' `SlashCommandProviding` (commands from
     `commandListing()`, `commandUpdates` from reload); `.prompt(template:)`'s inability
-    to run §5 passes 1–2 is a recorded Extras coordination item. Amends #1, #2, #3, #5,
+    to run §5 passes 1–2 is a recorded Extras coordination item — **now filed as Extras
+    `c2pad49`**, asking for a body case that lets a provider render and still take a model
+    turn (`FoundationModelsACPAgent` plan §6.3 has the full analysis). Amends #1, #2, #3, #5,
     #7, #16, #17, #19 in place.
 
 **All open items resolved — the plan is decision-complete.**
@@ -617,7 +638,9 @@ Revisit when Apple ships a supported per-process confinement API. *(decision #28
 ## 10. Public API sketch (illustrative)
 
 ```swift
-// Layers 1–2 from FoundationModelsExtras — the .skills dotfolder stack (#29):
+// Roots are the host's choice (#29). FoundationModelsACPAgent passes:
+//   [homeDirectory/".skills", cwd/".skills"]     // lowest precedence first
+// Hosts that prefer the XDG-shaped stack can derive roots from Extras instead:
 let stack = DotfolderStack(
   name: "skills",                                // ~/.config/skills/ + <cwd>/.skills/
   workingDirectory: cwd,
@@ -720,7 +743,9 @@ Examples/
 
 ## 12. Phasing
 - **M1 — Substrate + discovery.** Depend on `FoundationModelsExtras` (#29); build
-  directory-shaped skill discovery over `DotfolderStack.layers` (`name/SKILL.md`,
+  directory-shaped skill discovery over **the roots the host supplies** (#29 — an
+  ordered list, lowest precedence first; `DotfolderStack.layers` is one way to produce
+  them, not the interface) (`name/SKILL.md`,
   full-replace by directory name, provenance from source tracking); Yams decode over
   `FrontmatterDocument.split`. No templating, watch, or FM. *(`FoundationModelsAgents`
   consumes Extras directly and is no longer blocked on us.)*
