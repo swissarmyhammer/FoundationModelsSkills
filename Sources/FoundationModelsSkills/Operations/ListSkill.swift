@@ -41,9 +41,16 @@ public struct ListSkill: OperationDefinition {
     /// them: an optional `filter`.
     public static let parameterMetadata: [ParamMeta] = [
         ParamMeta(
-            name: "filter", type: .string, required: false,
+            name: filterKey, type: .string, required: false,
             description: "Case-insensitive substring to match against a skill's id or description.")
     ]
+
+    /// The `GeneratedContent` property name for `filter`.
+    ///
+    /// The single source of truth shared by `parameterMetadata`, the
+    /// decoding `init`, and `generatedContent`, so the three can never drift
+    /// out of sync.
+    private static let filterKey = "filter"
 
     /// Decodes a `ListSkill` from a resolved `GeneratedContent` payload.
     ///
@@ -52,14 +59,14 @@ public struct ListSkill: OperationDefinition {
     /// - Throws: Whatever `content.value(_:forProperty:)` throws for a
     ///   mistyped `filter`.
     public init(_ content: GeneratedContent) throws {
-        filter = try content.value(String?.self, forProperty: "filter")
+        filter = try content.value(String?.self, forProperty: Self.filterKey)
     }
 
     /// This operation's parameters re-encoded as `GeneratedContent`, e.g. for
     /// the CLI driver's round trip back to the model-facing payload shape.
     public var generatedContent: GeneratedContent {
         guard let filter else { return GeneratedContent(properties: [:]) }
-        return GeneratedContent(properties: ["filter": filter])
+        return GeneratedContent(properties: [Self.filterKey: filter])
     }
 
     /// Lists the model-visible catalog, filtered by `filter` when present.

@@ -57,11 +57,25 @@ public struct SearchSkill: OperationDefinition {
     /// This operation's parameters, as the resolver and schema fusion need
     /// them: `query` (required) and `limit` (optional).
     public static let parameterMetadata: [ParamMeta] = [
-        ParamMeta(name: "query", type: .string, required: true, description: "The search query."),
+        ParamMeta(name: queryKey, type: .string, required: true, description: "The search query."),
         ParamMeta(
-            name: "limit", type: .integer, required: false,
+            name: limitKey, type: .integer, required: false,
             description: "The maximum number of matches to return. Defaults to 5."),
     ]
+
+    /// The `GeneratedContent` property name for `query`.
+    ///
+    /// The single source of truth shared by `parameterMetadata`, the
+    /// decoding `init`, and `generatedContent`, so the three can never drift
+    /// out of sync.
+    private static let queryKey = "query"
+
+    /// The `GeneratedContent` property name for `limit`.
+    ///
+    /// The single source of truth shared by `parameterMetadata`, the
+    /// decoding `init`, and `generatedContent`, so the three can never drift
+    /// out of sync.
+    private static let limitKey = "limit"
 
     /// The `limit` used when the caller omits one.
     public static let defaultLimit = 5
@@ -73,14 +87,15 @@ public struct SearchSkill: OperationDefinition {
     /// - Throws: Whatever `content.value(_:forProperty:)` throws for a
     ///   missing or mistyped `query`.
     public init(_ content: GeneratedContent) throws {
-        query = try content.value(String.self, forProperty: "query")
-        limit = try content.value(Int?.self, forProperty: "limit")
+        query = try content.value(String.self, forProperty: Self.queryKey)
+        limit = try content.value(Int?.self, forProperty: Self.limitKey)
     }
 
     /// This operation's parameters re-encoded as `GeneratedContent`, e.g. for
     /// the CLI driver's round trip back to the model-facing payload shape.
     public var generatedContent: GeneratedContent {
-        GeneratedContentBuilder.make(requiredKey: "query", requiredValue: query, optionalKey: "limit", optionalValue: limit)
+        GeneratedContentBuilder.make(
+            requiredKey: Self.queryKey, requiredValue: query, optionalKey: Self.limitKey, optionalValue: limit)
     }
 
     /// Searches the model-visible catalog for `query`, or returns a

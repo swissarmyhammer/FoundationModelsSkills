@@ -67,11 +67,25 @@ public struct UseSkill: OperationDefinition {
     /// This operation's parameters, as the resolver and schema fusion need
     /// them: `id` (required) and `arguments` (optional).
     public static let parameterMetadata: [ParamMeta] = [
-        ParamMeta(name: "id", type: .string, required: true, description: "The skill id to use."),
+        ParamMeta(name: idKey, type: .string, required: true, description: "The skill id to use."),
         ParamMeta(
-            name: "arguments", type: .array(of: .string), required: false,
+            name: argumentsKey, type: .array(of: .string), required: false,
             description: "Positional arguments substituted into the rendered body."),
     ]
+
+    /// The `GeneratedContent` property name for `id`.
+    ///
+    /// The single source of truth shared by `parameterMetadata`, the
+    /// decoding `init`, and `generatedContent`, so the three can never drift
+    /// out of sync.
+    private static let idKey = "id"
+
+    /// The `GeneratedContent` property name for `arguments`.
+    ///
+    /// The single source of truth shared by `parameterMetadata`, the
+    /// decoding `init`, and `generatedContent`, so the three can never drift
+    /// out of sync.
+    private static let argumentsKey = "arguments"
 
     /// Decodes a `UseSkill` from a resolved `GeneratedContent` payload.
     ///
@@ -80,15 +94,15 @@ public struct UseSkill: OperationDefinition {
     /// - Throws: Whatever `content.value(_:forProperty:)` throws for a
     ///   missing or mistyped `id`.
     public init(_ content: GeneratedContent) throws {
-        id = try content.value(String.self, forProperty: "id")
-        arguments = try? content.value([String].self, forProperty: "arguments")
+        id = try content.value(String.self, forProperty: Self.idKey)
+        arguments = try? content.value([String].self, forProperty: Self.argumentsKey)
     }
 
     /// This operation's parameters re-encoded as `GeneratedContent`, e.g. for
     /// the CLI driver's round trip back to the model-facing payload shape.
     public var generatedContent: GeneratedContent {
         GeneratedContentBuilder.make(
-            requiredKey: "id", requiredValue: id, optionalKey: "arguments", optionalValue: arguments)
+            requiredKey: Self.idKey, requiredValue: id, optionalKey: Self.argumentsKey, optionalValue: arguments)
     }
 
     /// Renders the skill named by `id` with `arguments`, or returns a
