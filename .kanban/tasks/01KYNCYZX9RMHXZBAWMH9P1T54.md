@@ -13,12 +13,16 @@ comments:
 
     All 265 tests passing (262 prior + 3 new).
   timestamp: 2026-07-29T22:35:19.923468+00:00
+- actor: claude-code
+  id: 01kyr0fc5c9tewapq95nemwtey
+  text: Clean review (task k0mrxmqsl, sha 0d2e736..3148d76) — 0 findings on first pass. Moved to done. All 265 tests passing.
+  timestamp: 2026-07-29T22:38:41.836494+00:00
 depends_on:
 - 01KYNCYH7J947ZW8W7PSPE0VVS
 - 01KYNCY323EQ7RDC8X1HQJNFSJ
 - 01KYNCT6G9K9RYE4PYZKVXSZMZ
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: '9680'
 title: Diagnostics polish, README, and API docs (M7)
 ---
 ## What
