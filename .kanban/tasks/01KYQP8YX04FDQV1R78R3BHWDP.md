@@ -13,8 +13,12 @@ comments:
 
     All 262 tests passing (258 prior + 4 new).
   timestamp: 2026-07-29T22:21:22.218473+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01kyqzwg2d21dw1sx8mbd4edma
+  text: Clean review (task k5tp8u2ye, sha 96169ed..0d2e736) — 0 findings on first pass. Moved to done. All 262 tests passing.
+  timestamp: 2026-07-29T22:28:23.245272+00:00
+position_column: done
+position_ordinal: '9580'
 title: 'Enforce §5 no-re-scan: quarantine substituted args and shell output'
 ---
 ## What
