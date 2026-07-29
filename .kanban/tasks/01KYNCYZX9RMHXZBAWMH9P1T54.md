@@ -14,6 +14,8 @@ The M7 close-out: make the diagnostic surface and documentation match the plan's
 - `README.md` — follow the sibling READMEs' shape (`../FoundationModelsOperationTool/README.md` as the model): what it is, the §10 assembly example (kept compiling — lift from the demo), the op vocabulary table (§7 + §7.3), visibility table (§6), the security posture section stating plainly: shell/scripts run with host privileges, no OS sandbox in v1 (decision #28), trust-gate untrusted project layers, server-side-provider transcript exposure (§8), and the context-compaction host note.
 - Platform posture section (plan §8): macOS primary with the full feature set; iOS = the outcome the scaffold task recorded (graceful stub, or the documented deviation naming the macOS-only dependency) — no shell/script attempted on iOS either way.
 - Doc comments on every public type/member; document the §7.1 four-consumer diagram and the tier-1 divergence (decision #27) on `SkillsRegistry`.
+- **Audit finding — stale scaffold-era docs**: `Render/RenderPipeline.swift:26-30` still says "Neither flag does anything yet: this task's three passes are identity transforms" and `:215-222` documents passes 2/3 as "Identity in this task" — both false since the real passes landed. Rewrite these doc comments to describe the shipped behavior.
+- **Audit finding — fixture rationale**: `Examples/skill-library/project/.skills/git-context/SKILL.md` substitutes a deterministic `` !`echo …` `` for §11's documented `` !`git status` `` with no explanation, unlike every other fixture. Add the explanatory comment (hermetic golden renders are why).
 - Sweep: all `swift build`/`swift test` warnings fixed; `Package.swift` comments name each dependency's role.
 
 ## Acceptance Criteria
@@ -21,6 +23,8 @@ The M7 close-out: make the diagnostic surface and documentation match the plan's
 - [ ] Every public symbol has a doc comment (`swift build -Xswiftc -warnings-as-errors` clean, or a documentation-coverage grep script in the test target)
 - [ ] Security posture section covers all four §8 documented consequences
 - [ ] Platform posture documented: macOS full feature set; iOS unavailable/stubbed, no shell/script attempted
+- [ ] No doc comment describes scaffold-era identity behavior (grep for "identity transform"/"does anything yet" in Sources/ is clean)
+- [ ] `git-context` fixture carries its hermeticity rationale
 
 ## Tests
 - [ ] `Tests/FoundationModelsSkillsTests/DiagnosticsRenderingTests.swift` — provenance presence + rendering snapshot for each diagnostic kind
