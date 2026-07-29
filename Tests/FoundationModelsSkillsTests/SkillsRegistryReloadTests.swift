@@ -46,6 +46,42 @@ struct SkillsRegistryReloadTests {
         #expect(!entry.description.contains("before edit"))
     }
 
+    // MARK: - call(id:arguments:) reflects the post-reload catalog (TOCTOU regression)
+
+    /// Coverage motivated by the round-1 TOCTOU fix in `call(id:arguments:)`
+    /// (plan.md §7, review findings 2026-07-29 07:01): the earlier
+    /// implementation read the catalog once to look up `id` and again to
+    /// build `UnknownSkillError.validIDs`, so a reload racing between those
+    /// two reads could observe two different catalog generations. That fix
+    /// itself is a lock-design property, not something a single-threaded
+    /// test can reproduce (nothing races *during* the `call()` below --
+    /// `onReload` only publishes once `catalogBox.replace(...)` has already
+    /// completed, so the catalog is settled by the time this test reads
+    /// it). What this test *does* prove, and what was previously
+    /// unverified end-to-end: after a completed reload, `call(id:
+    /// arguments:)` reflects the new catalog generation -- it returns the
+    /// *new* body, not a stale one cached from before the rebuild. The
+    /// concurrency stress test below,
+    /// `concurrentReadersNeverObserveAPartialCatalogDuringARebuildBurst()`,
+    /// is what exercises reads racing an in-flight rebuild.
+    @Test func callAfterAReloadReturnsTheNewBodyNotTheStaleOne() async throws {
+        let root = try Self.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try Self.writeSkillFile(id: "callable-skill", in: root, body: "v1")
+
+        let registry = SkillsRegistry(roots: [root], watch: true)
+        let recorder = MetadataUpdateRecorder()
+        let subscription = Self.subscribe(registry, to: recorder)
+        defer { subscription.cancel() }
+
+        try Self.writeSkillFile(id: "callable-skill", in: root, body: "v2")
+        await Self.expectExactlyOnePublication(recorder, since: 0)
+
+        let body = try registry.call(id: "callable-skill")
+        #expect(body.contains("v2"))
+        #expect(!body.contains("v1"))
+    }
+
     // MARK: - Add / remove propagate to metadata() and commandListing()
 
     @Test func addingASkillDirectoryPropagatesToMetadataAndCommandListing() async throws {
@@ -313,6 +349,38 @@ struct SkillsRegistryReloadTests {
         let skillDirectory = directory.appendingPathComponent(id, isDirectory: true)
         try FileManager.default.createDirectory(at: skillDirectory, withIntermediateDirectories: true)
         try Self.skillFileContents(id: id, descriptionSuffix: descriptionSuffix)
+            .write(to: skillDirectory.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
+    }
+
+    /// Builds a minimal but structurally valid `SKILL.md` for `id` with
+    /// `body` as its body text, so a caller can observe a genuinely
+    /// different `call(id:arguments:)` result after an edit (unlike
+    /// `skillFileContents(id:descriptionSuffix:)`, whose body text never
+    /// varies -- only its `description:` does).
+    ///
+    /// - Parameters:
+    ///   - id: The skill id the frontmatter's `name:` field carries.
+    ///   - body: The body text to render back through `call(id:arguments:)`.
+    /// - Returns: The `SKILL.md` file contents.
+    private static func skillFileContents(id: String, body: String) -> String {
+        "---\nname: \(id)\ndescription: reload fixture\n---\n\(body)\n"
+    }
+
+    /// Writes `id/SKILL.md` directly under `directory` with `body` as its
+    /// body text, creating the skill's own subdirectory first if it does
+    /// not already exist.
+    ///
+    /// - Parameters:
+    ///   - id: The skill id -- both the subdirectory name and the
+    ///     frontmatter's `name:` field.
+    ///   - directory: The root to write under.
+    ///   - body: Forwarded to `skillFileContents(id:body:)`.
+    /// - Throws: Whatever `FileManager.createDirectory` or `String.write`
+    ///   throws.
+    private static func writeSkillFile(id: String, in directory: URL, body: String) throws {
+        let skillDirectory = directory.appendingPathComponent(id, isDirectory: true)
+        try FileManager.default.createDirectory(at: skillDirectory, withIntermediateDirectories: true)
+        try Self.skillFileContents(id: id, body: body)
             .write(to: skillDirectory.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
     }
 }

@@ -49,6 +49,26 @@ comments:
 
     All three review-finding checkboxes and all original acceptance-criteria/test checkboxes are now checked off (progress 1.0). Task left in `doing` per /implement's process, ready for /review.
   timestamp: 2026-07-29T12:16:50.605499+00:00
+- actor: claude-code
+  id: 01kypxv8evq9wjwcqn2nsdjjqr
+  text: |-
+    Fixed the 2026-07-29 07:18 review finding: added an explicit regression test proving call(id:arguments:) returns the post-reload body.
+
+    Change (test-only, no production code touched):
+    - Tests/FoundationModelsSkillsTests/SkillsRegistryReloadTests.swift — new test `callAfterAReloadReturnsTheNewBodyNotTheStaleOne()`, placed after the "editing triggers exactly one rebuild" test. It writes a skill file with body "v1", creates a `watch: true` registry, subscribes to `onReload` via the existing `subscribe(_:to:)` helper, rewrites the file with body "v2", waits via the existing `expectExactlyOnePublication(_:since:)` helper, then calls `registry.call(id: "callable-skill")` and asserts the returned body contains "v2" and not "v1" — matching the review finding's exact recipe.
+    - Added two new private static helper overloads distinguished by argument label from the pre-existing ones: `skillFileContents(id:body:)` and `writeSkillFile(id:in:body:)`. The pre-existing `descriptionSuffix`-labeled overloads only vary `description:` (body text is always fixed as "Body text for \(id)."), so a new pair was needed to let the body itself vary between "v1" and "v2".
+
+    Adversarial double-check (via really-done, run twice per its bounded-loop policy):
+    - First pass: REVISE. Legitimate finding — the test's doc comment overclaimed that it "proves the TOCTOU fix end-to-end," when in fact `onReload` only publishes after `catalogBox.replace(...)` has already completed, so nothing races during the `call()` in this test; the real concurrent-race coverage is `concurrentReadersNeverObserveAPartialCatalogDuringARebuildBurst()`. Fixed by rewriting the doc comment to accurately describe what the test does prove (call() reflects the settled post-reload catalog) versus what it doesn't (the race itself), and pointing to the existing stress test for that coverage.
+    - Second pass: PASS, with one trivial nitpick (comment said "stress test above" but that test is actually below in the file — fixed "above" to "below").
+
+    Verification (all run fresh this session, after the final wording fix):
+    - `swift build` — exit 0, clean.
+    - `swift test` — 173/173 passed (up from 172; one new test).
+    - `swift test --sanitize=thread --filter SkillsRegistryReloadTests` — 8/8 passed, zero TSan data-race reports.
+
+    Both review-findings sections are now fully checked off (progress 1.0). Task left in `doing` per /implement's process, ready for /review.
+  timestamp: 2026-07-29T12:33:31.099425+00:00
 depends_on:
 - 01KYNCSXAEKDVR36H387H5TYXR
 - 01KYNCSDX30R4T2NRXP7XRQMM2
@@ -84,3 +104,7 @@ The reloadable half of the registry (plan §7 "Reload & metadata injection"; dec
 - [x] `Sources/FoundationModelsSkills/Registry/SkillsRegistry.swift:364` — The `UnknownSkillError` thrown by `call(id:arguments:)` can have contradictory information: the `id` field reports an unknown skill, but `validIDs` might include that same `id` if the catalog was reloaded between the two reads of `catalog`. This violates the error's contract — a caller seeing the error cannot trust whether the skill is actually invalid. Read the `catalogBox.snapshot` once before the guard statement, then reuse that snapshot for both lookups to ensure the error message is internally consistent.
 - [x] `Sources/FoundationModelsSkills/Registry/SkillsRegistry.swift:468` — @unchecked Sendable requires a documented synchronization invariant — ReloadCoordinator lacks documentation explaining why concurrent access is safe. Add a doc comment explaining the Sendable invariant before the class declaration, e.g.: '@unchecked Sendable: all stored properties are immutable (declared as `let`) and refer to Sendable types, so concurrent access is safe'.
 - [x] `Tests/FoundationModelsSkillsTests/SkillsRegistryReloadTests.swift:118` — While loop nested 4 levels deep (withThrowingTaskGroup → for loop → addTask closure → while) exceeds the 3-level threshold; deep nesting reduces readability of the concurrent reader task logic. Extract the reader task implementation into a separate helper method (e.g., `readerTask(registry:deadline:)`) to reduce nesting and improve readability of the concurrent test setup.
+
+## Review Findings (2026-07-29 07:18)
+
+- [x] `Tests/FoundationModelsSkillsTests/SkillsRegistryReloadTests.swift:39` — The rebuild operation (write) is tested to update metadata() output, but the call() method is never tested post-reload to verify it returns the updated body — the TOCTOU race fix in call() should be covered by an explicit test that writes a skill file, triggers reload, calls the skill, and asserts it returns the new body. Add a test that writes a skill file with body content 'v1', creates a watched registry, rewrites the file with body content 'v2', waits for reload notification, calls the skill, and asserts the returned body contains 'v2' and not 'v1'.
