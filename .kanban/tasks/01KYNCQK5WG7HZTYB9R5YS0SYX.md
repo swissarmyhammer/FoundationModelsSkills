@@ -30,8 +30,8 @@ comments:
   timestamp: 2026-07-29T07:06:19.076936+00:00
 depends_on:
 - 01KYNCQ6ZFGBMZSHBY2W3EN080
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: '8780'
 title: Directory-shaped skill discovery over host-supplied layer roots
 ---
 ## What

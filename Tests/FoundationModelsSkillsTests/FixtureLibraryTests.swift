@@ -41,6 +41,7 @@ private let happyPathFixtures = [
     "user/_partials/header.md",
     "project/.skills/commit/SKILL.md",
     "project/.skills/deploy/SKILL.md",
+    "project/.skills/env-report/SKILL.md",
     "project/.skills/lint/SKILL.md",
     "project/.skills/spec-clean/SKILL.md",
 ]

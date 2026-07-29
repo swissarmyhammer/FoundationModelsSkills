@@ -1,0 +1,347 @@
+import Foundation
+import FoundationModelsExtras
+import FoundationModelsSkills
+import Testing
+
+/// Tests for `StencilPass`, pass 3 of the §5 render pipeline (plan.md §5.3,
+/// decision #29): the explicit-context/environment/well-known precedence
+/// ladder, the root -> `Trust` mapping (default rule + override), `{%
+/// include %}` partial resolution over host-supplied roots (with a
+/// `$`-token inside the included partial staying literal, decision #16),
+/// and the untrusted-rejection diagnostic (plan.md §13's named case) --
+/// all through Extras' real `TemplateEngine`, never a mock.
+struct StencilPassTests {
+    // MARK: - Test helpers
+
+    /// A dummy skill directory and project-root layer, reused by every test
+    /// that does not care about the exact values.
+    private static let defaultSkillDirectory = URL(
+        fileURLWithPath: "/tmp/stencil-pass-tests/skill", isDirectory: true)
+    private static let defaultWinningLayer = DotfolderStack.Layer(
+        source: .project,
+        root: URL(fileURLWithPath: "/tmp/stencil-pass-tests/.skills", isDirectory: true))
+
+    /// Deterministic well-known values so tests never depend on real process
+    /// state (current directory, real date, real hostname) -- mirrors
+    /// `TemplateEngineTests.fixtureWellKnownValues` in
+    /// `FoundationModelsExtras`.
+    private static let fixtureWellKnownValues = StencilPass.WellKnownValues(
+        workingDirectory: "/fixture/cwd", date: "2020-01-01", hostname: "fixture-host")
+
+    /// A minimal body using `{% ifnot %}` -- a real Stencil tag
+    /// `TemplateEngine`'s own doc comment names among the tags
+    /// `Trust.untrusted` rejects, and one not on
+    /// `TemplateEngine.untrustedAllowedTags` -- so it renders under
+    /// `.trusted` and is rejected under `.untrusted`, driving both halves of
+    /// the trust-matrix tests below with one body.
+    private static let nonWhitelistedTagBody = "{% ifnot flag %}no{% endif %}"
+
+    /// Builds a `RenderRequest` with sensible fixed defaults -- callers
+    /// override only the fields the test cares about. Mirrors
+    /// `RenderPipelineTests`/`ArgumentSubstitutionTests`' own helper.
+    private func request(
+        text: String,
+        arguments: [String] = [],
+        argumentNames: [String] = [],
+        winningLayer: DotfolderStack.Layer = StencilPassTests.defaultWinningLayer
+    ) -> RenderRequest {
+        RenderRequest(
+            text: text,
+            arguments: arguments,
+            argumentNames: argumentNames,
+            skillDirectory: Self.defaultSkillDirectory,
+            winningLayer: winningLayer,
+            policy: RenderPolicy())
+    }
+
+    // MARK: - Ladder precedence
+
+    @Test func explicitContextValueBeatsEnvironmentVariableBeatsWellKnownValueForTheSameKey() throws {
+        // All three rungs define "hostname" so the assertion actually
+        // exercises context beating environment (not just context beating
+        // well-known, which a same-key env value could otherwise mask).
+        let pass = StencilPass(
+            environment: ["hostname": "from-env"],
+            wellKnownValues: StencilPass.WellKnownValues(
+                workingDirectory: "/fixture/cwd", date: "2020-01-01", hostname: "from-well-known"))
+
+        let rendered = try pass.render(
+            "{{ hostname }}",
+            request: request(text: "{{ hostname }}", arguments: ["from-context"], argumentNames: ["hostname"]))
+
+        #expect(rendered == "from-context")
+    }
+
+    @Test func environmentVariableBeatsWellKnownValueWhenNothingOverridesTheSameKey() throws {
+        let pass = StencilPass(
+            environment: ["hostname": "from-env"],
+            wellKnownValues: StencilPass.WellKnownValues(
+                workingDirectory: "/fixture/cwd", date: "2020-01-01", hostname: "from-well-known"))
+
+        let rendered = try pass.render("{{ hostname }}", request: request(text: "{{ hostname }}"))
+
+        #expect(rendered == "from-env")
+    }
+
+    @Test func wellKnownValuesArePresentWhenNothingOverridesThem() throws {
+        let pass = StencilPass(wellKnownValues: Self.fixtureWellKnownValues)
+        let text = "{{ working_directory }}|{{ date }}|{{ hostname }}"
+
+        let rendered = try pass.render(text, request: request(text: text))
+
+        #expect(rendered == "/fixture/cwd|2020-01-01|fixture-host")
+    }
+
+    @Test func declaredArgumentNameWithNoSuppliedValueRendersEmptyRatherThanLeakingEnvironment() throws {
+        // The skill declares an argument literally named "HOME" but the
+        // caller supplies no arguments at all. `$name` (pass 1) would
+        // substitute an empty string for this case
+        // (`ArgumentSubstitution`'s own `.named` branch), so `{{ HOME }}`
+        // (this pass) must agree -- never falling through to the real
+        // environment value of the same key, which would otherwise leak a
+        // host secret/path a skill author never intended to expose.
+        let pass = StencilPass(
+            environment: ["HOME": "/Users/leaked"], wellKnownValues: Self.fixtureWellKnownValues)
+
+        let rendered = try pass.render(
+            "{{ HOME }}", request: request(text: "{{ HOME }}", arguments: [], argumentNames: ["HOME"]))
+
+        #expect(rendered == "")
+    }
+
+    @Test func duplicateArgumentNameResolvesToItsFirstOccurrencePositionMatchingPassOne() throws {
+        // `ArgumentSubstitution`'s `.named` branch always resolves `$name`
+        // via `argumentNames.firstIndex(of: name)` -- the *first*
+        // occurrence's position, regardless of where else `name` recurs in
+        // the declared list. `{{ name }}` (this pass) must resolve to the
+        // same position for the two passes to actually "always agree", as
+        // this file's own `namedArguments(for:)` doc comment claims.
+        let pass = StencilPass(wellKnownValues: Self.fixtureWellKnownValues)
+
+        let rendered = try pass.render(
+            "{{ duplicate }}",
+            request: request(
+                text: "{{ duplicate }}", arguments: ["first", "second", "third"],
+                argumentNames: ["duplicate", "other", "duplicate"]))
+
+        #expect(rendered == "first")
+    }
+
+    @Test func environmentFlatKeyRendersAsAPlainVariable() throws {
+        let pass = StencilPass(
+            environment: ["HOME": "/Users/fixture"], wellKnownValues: Self.fixtureWellKnownValues)
+
+        let rendered = try pass.render("{{ HOME }}", request: request(text: "{{ HOME }}"))
+
+        #expect(rendered == "/Users/fixture")
+    }
+
+    // MARK: - Trust default rule
+
+    @Test func defaultsRootRendersTrustedAllowingANonWhitelistedTag() throws {
+        let pass = StencilPass(wellKnownValues: Self.fixtureWellKnownValues)
+        let defaultsLayer = DotfolderStack.Layer(
+            source: .defaults,
+            root: URL(fileURLWithPath: "/tmp/stencil-pass-tests/defaults", isDirectory: true))
+
+        let rendered = try pass.render(
+            Self.nonWhitelistedTagBody,
+            request: request(text: Self.nonWhitelistedTagBody, winningLayer: defaultsLayer))
+
+        #expect(rendered == "no")
+    }
+
+    @Test func projectRootDrawsTheUntrustedRejectionDiagnosticForANonWhitelistedTag() throws {
+        let pass = StencilPass(wellKnownValues: Self.fixtureWellKnownValues)
+
+        do {
+            _ = try pass.render(
+                Self.nonWhitelistedTagBody, request: request(text: Self.nonWhitelistedTagBody))
+            Issue.record("expected TemplateEngineError to be thrown")
+        } catch let error as TemplateEngineError {
+            #expect("\(error)".contains("ifnot"))
+        }
+    }
+
+    @Test func userRootAlsoDefaultsToUntrusted() throws {
+        let pass = StencilPass(wellKnownValues: Self.fixtureWellKnownValues)
+        let userLayer = DotfolderStack.Layer(
+            source: .user, root: URL(fileURLWithPath: "/tmp/stencil-pass-tests/user", isDirectory: true))
+
+        do {
+            _ = try pass.render(
+                Self.nonWhitelistedTagBody, request: request(text: Self.nonWhitelistedTagBody, winningLayer: userLayer))
+            Issue.record("expected TemplateEngineError to be thrown")
+        } catch is TemplateEngineError {
+            // Expected.
+        }
+    }
+
+    // MARK: - Trust override: the root -> Trust mapping is data, per root
+
+    @Test func trustOverrideForcesAProjectRootToRenderTrusted() throws {
+        let projectRoot = URL(fileURLWithPath: "/tmp/stencil-pass-tests/project", isDirectory: true)
+        let pass = StencilPass(
+            trustOverrides: [projectRoot: .trusted], wellKnownValues: Self.fixtureWellKnownValues)
+        let projectLayer = DotfolderStack.Layer(source: .project, root: projectRoot)
+
+        let rendered = try pass.render(
+            Self.nonWhitelistedTagBody,
+            request: request(text: Self.nonWhitelistedTagBody, winningLayer: projectLayer))
+
+        #expect(rendered == "no")
+    }
+
+    @Test func trustOverrideForcesADefaultsRootToRenderUntrusted() throws {
+        let defaultsRoot = URL(fileURLWithPath: "/tmp/stencil-pass-tests/defaults", isDirectory: true)
+        let pass = StencilPass(
+            trustOverrides: [defaultsRoot: .untrusted], wellKnownValues: Self.fixtureWellKnownValues)
+        let defaultsLayer = DotfolderStack.Layer(source: .defaults, root: defaultsRoot)
+
+        do {
+            _ = try pass.render(
+                Self.nonWhitelistedTagBody,
+                request: request(text: Self.nonWhitelistedTagBody, winningLayer: defaultsLayer))
+            Issue.record("expected TemplateEngineError to be thrown")
+        } catch is TemplateEngineError {
+            // Expected.
+        }
+    }
+
+    // MARK: - Partial include, over host-supplied roots, nearest wins
+
+    @Test func includeResolvesFromTheNearestWinningRootAndALiteralDollarTokenInsideStaysLiteral() throws {
+        let fixture = try TempStackFixture()
+        defer { fixture.cleanUp() }
+        fixture.writePartial("from defaults", named: "header.md", in: fixture.defaultsRoot)
+        fixture.writePartial("from user: $0", named: "header.md", in: fixture.userRoot)
+
+        let pass = StencilPass(layers: fixture.layers, wellKnownValues: Self.fixtureWellKnownValues)
+        let text = "{% include \"header\" %}"
+
+        let rendered = try pass.render(
+            text,
+            request: request(
+                text: text, winningLayer: DotfolderStack.Layer(source: .project, root: fixture.projectRoot)))
+
+        // Pass 1 (argument substitution) already ran, on the parent skill's
+        // body, before this pass ever loaded the partial (decision #16) --
+        // so the "$0" written into the partial file itself is never
+        // substituted, even though "$0" is otherwise a recognized pass-1
+        // token.
+        #expect(rendered == "from user: $0")
+    }
+
+    @Test func laterRootShadowsAnEarlierRootsPartialOfTheSameName() throws {
+        let fixture = try TempStackFixture()
+        defer { fixture.cleanUp() }
+        fixture.writePartial("from defaults", named: "header.md", in: fixture.defaultsRoot)
+        fixture.writePartial("from user", named: "header.md", in: fixture.userRoot)
+        fixture.writePartial("from project", named: "header.md", in: fixture.projectRoot)
+
+        let pass = StencilPass(layers: fixture.layers, wellKnownValues: Self.fixtureWellKnownValues)
+        let text = "{% include \"header\" %}"
+
+        let rendered = try pass.render(
+            text,
+            request: request(
+                text: text, winningLayer: DotfolderStack.Layer(source: .project, root: fixture.projectRoot)))
+
+        #expect(rendered == "from project")
+    }
+
+    // MARK: - Golden env-report render over the real fixture library
+
+    @Test func envReportFixtureRendersHomeAndWorkingDirectoryThroughTheLadderAndIncludesTheHeaderPartial() throws {
+        let defaultsRoot = FixtureLibrary.url(relativePath: "defaults")
+        let userRoot = FixtureLibrary.url(relativePath: "user")
+        let projectSkillsRoot = FixtureLibrary.url(relativePath: "project/.skills")
+        let layers = [
+            DotfolderStack.Layer(source: .defaults, root: defaultsRoot),
+            DotfolderStack.Layer(source: .user, root: userRoot),
+            DotfolderStack.Layer(source: .project, root: projectSkillsRoot),
+        ]
+        let pass = StencilPass(
+            layers: layers,
+            environment: ["HOME": "/fixture/home"],
+            wellKnownValues: StencilPass.WellKnownValues(
+                workingDirectory: "/fixture/cwd", date: "2020-01-01", hostname: "fixture-host",
+                dotfolderName: "fixture-dotfolder"))
+
+        let skillURL = FixtureLibrary.url(relativePath: "project/.skills/env-report/SKILL.md")
+        let text = try String(contentsOf: skillURL, encoding: .utf8)
+        guard case .decoded(let skill) = FrontmatterDecoder.decode(text: text) else {
+            Issue.record("expected the env-report fixture to decode cleanly")
+            return
+        }
+
+        let rendered = try pass.render(
+            skill.body,
+            request: request(
+                text: skill.body, winningLayer: DotfolderStack.Layer(source: .project, root: projectSkillsRoot)))
+
+        #expect(rendered.contains("HOME=/fixture/home"))
+        #expect(rendered.contains("WORKING_DIRECTORY=/fixture/cwd"))
+        #expect(rendered.contains("fixture-dotfolder Shared Header"))
+        #expect(rendered.contains("Literal token follows: $0"))
+    }
+
+    // MARK: - Temp-directory fixture for the include tests
+
+    /// A throwaway three-layer directory tree, each layer able to hold its
+    /// own `_partials/header.md`, cleaned up via `cleanUp()` when the test
+    /// ends. Mirrors `FoundationModelsExtras`' own
+    /// `DotfolderLoaderTests.Fixture`.
+    private struct TempStackFixture {
+        /// This fixture's own throwaway root, removed wholesale by `cleanUp()`.
+        let root: URL
+        /// The `.defaults`-sourced layer root.
+        let defaultsRoot: URL
+        /// The `.user`-sourced layer root.
+        let userRoot: URL
+        /// The `.project`-sourced layer root.
+        let projectRoot: URL
+
+        /// `layers`, ready to hand to `StencilPass.init(layers:)`, ordered
+        /// lowest precedence first (defaults < user < project).
+        var layers: [DotfolderStack.Layer] {
+            [
+                DotfolderStack.Layer(source: .defaults, root: defaultsRoot),
+                DotfolderStack.Layer(source: .user, root: userRoot),
+                DotfolderStack.Layer(source: .project, root: projectRoot),
+            ]
+        }
+
+        /// Creates a fresh, empty three-layer directory tree.
+        ///
+        /// - Throws: Whatever `FileManager.createDirectory` throws.
+        init() throws {
+            root = FileManager.default.temporaryDirectory
+                .appendingPathComponent("StencilPassTests-\(UUID().uuidString)", isDirectory: true)
+            defaultsRoot = root.appendingPathComponent("defaults", isDirectory: true)
+            userRoot = root.appendingPathComponent("user", isDirectory: true)
+            projectRoot = root.appendingPathComponent("project", isDirectory: true)
+            for directory in [defaultsRoot, userRoot, projectRoot] {
+                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            }
+        }
+
+        /// Writes `contents` to `_partials/<name>` under `directory`.
+        ///
+        /// - Parameters:
+        ///   - contents: The partial file's text.
+        ///   - name: The partial's file name, e.g. `"header.md"`.
+        ///   - directory: The layer root to write under.
+        func writePartial(_ contents: String, named name: String, in directory: URL) {
+            let fileURL = directory.appendingPathComponent("_partials").appendingPathComponent(name)
+            try? FileManager.default.createDirectory(
+                at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? contents.write(to: fileURL, atomically: true, encoding: .utf8)
+        }
+
+        /// Removes this fixture's entire throwaway directory tree.
+        func cleanUp() {
+            try? FileManager.default.removeItem(at: root)
+        }
+    }
+}

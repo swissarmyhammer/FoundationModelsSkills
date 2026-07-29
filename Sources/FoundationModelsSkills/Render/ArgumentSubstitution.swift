@@ -263,12 +263,16 @@ public struct ArgumentSubstitution: RenderPass {
     /// Quote characters are delimiters, never included in the resulting token; an empty quoted
     /// string (`""`/`''`) produces one empty-string token rather than being dropped, matching
     /// shell behavior. An unterminated quote at the end of `text` is read leniently -- whatever
-    /// was accumulated so far becomes the final token.
+    /// was accumulated so far becomes the final token. Package-visible (not `private`) so
+    /// `StencilPass` can derive the same positional values for pass 3's explicit Stencil context
+    /// (plan.md §5.3's "skill arguments land [in the explicit context] too") -- `$name`/`$N` and
+    /// `{{ name }}` must index identical positions, so both passes share this one tokenizer
+    /// rather than each maintaining its own.
     ///
     /// - Parameter text: The raw, as-typed argument text (already joined across every supplied
     ///   argument -- see `render(_:request:)`).
     /// - Returns: The tokenized positional arguments, in order; empty when `text` is empty.
-    private static func shellStyleTokens(_ text: String) -> [String] {
+    static func shellStyleTokens(_ text: String) -> [String] {
         /// Which quote (if any) the scan is currently inside -- determines how a backslash and
         /// a closing-quote character behave.
         enum QuoteState {
@@ -369,7 +373,12 @@ public struct ArgumentSubstitution: RenderPass {
 extension Array {
     /// Safe subscript that returns `nil` for out-of-range indices, where absence represents
     /// no value supplied, not an error.
-    fileprivate subscript(safe index: Int) -> Element? {
+    ///
+    /// Package-visible (not `private`/`fileprivate`) so `StencilPass` can look up a positional
+    /// argument value the same bounds-checked way this file's own `.named` substitution does,
+    /// keeping `$name` (pass 1) and `{{ name }}` (pass 3) in agreement for a declared name past
+    /// the supplied argument count.
+    subscript(safe index: Int) -> Element? {
         indices.contains(index) ? self[index] : nil
     }
 }

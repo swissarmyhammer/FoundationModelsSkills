@@ -20,7 +20,7 @@ struct SkillDiscoveryTests {
     /// Every id the §11 fixture stack's three layers structurally carry a
     /// `SKILL.md` for, regardless of shadowing.
     private static let expectedFixtureIDs: Set<String> = [
-        "base-style", "commit", "deploy", "git-context", "lint", "spec-clean",
+        "base-style", "commit", "deploy", "env-report", "git-context", "lint", "spec-clean",
     ]
 
     // MARK: - Fixture-root discovery snapshot
