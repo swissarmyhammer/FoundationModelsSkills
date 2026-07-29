@@ -23,28 +23,13 @@ internal enum ScriptGateResult {
 ///    execution.
 /// 3. **Trust posture** -- plan.md §8's guidance that a host should not
 ///    construct a script-enabled registry over an untrusted project root at
-///    all. This is documentation-only: `evaluate(path:allowedTools:
-///    isScriptExecutionDisabled:)` has no way to observe how trustworthy
-///    its own registry's roots are, so there is no third code path here to
-///    enforce it -- a host that needs this guarantee enforces it itself, at
-///    the point it decides which roots to construct a registry over.
+///    all. This is documentation-only: neither `evaluateHostPolicy(
+///    isScriptExecutionDisabled:)` nor `evaluateGrant(path:allowedTools:)`
+///    has any way to observe how trustworthy its own registry's roots are,
+///    so there is no third code path here to enforce it -- a host that
+///    needs this guarantee enforces it itself, at the point it decides
+///    which roots to construct a registry over.
 internal enum ScriptGate {
-    /// Evaluates gates 1 and 2 for `path`.
-    ///
-    /// - Parameters:
-    ///   - path: The skill-relative script path being requested.
-    ///   - allowedTools: The skill's tokenized `allowed-tools:` frontmatter.
-    ///   - isScriptExecutionDisabled: The host policy's kill switch (gate 1).
-    /// - Returns: `.granted` when both gates pass; `.corrective(_:)` naming
-    ///   whichever gate failed first.
-    internal static func evaluate(
-        path: String, allowedTools: [String], isScriptExecutionDisabled: Bool
-    ) -> ScriptGateResult {
-        let hostPolicyResult = Self.evaluateHostPolicy(isScriptExecutionDisabled: isScriptExecutionDisabled)
-        guard case .granted = hostPolicyResult else { return hostPolicyResult }
-        return Self.evaluateGrant(path: path, allowedTools: allowedTools)
-    }
-
     /// Evaluates gate 1 (host policy) alone, independent of any id/path
     /// resolution.
     ///
