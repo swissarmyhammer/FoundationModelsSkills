@@ -6,7 +6,7 @@
 /// scope here -- this type is data only.
 public struct SkillListing: Sendable, Equatable {
     /// The directory name -- the canonical id and the `/command` key (plan.md
-    /// §4). Never the frontmatter `name`.
+    /// §4), never the frontmatter `name`.
     public var id: String
 
     /// The frontmatter `name:` -- optional because Claude-style inputs (a
@@ -32,14 +32,17 @@ public struct SkillListing: Sendable, Equatable {
     public var parameters: [SkillParameter]
 
     /// Whether the skill body references `$ARGUMENTS` -- a meaningful
-    /// free-form tail the UI should prompt for. `true` only on an actual
-    /// `$ARGUMENTS` reference; the §5 auto-append fallback
-    /// (`ARGUMENTS: <value>` when `$ARGUMENTS` is absent) never sets this.
+    /// free-form tail the UI should prompt for.
+    ///
+    /// `true` only on an actual `$ARGUMENTS` reference; the §5 auto-append
+    /// fallback (`ARGUMENTS: <value>` when `$ARGUMENTS` is absent) never sets
+    /// this.
     public var acceptsTrailingArguments: Bool
 
     /// Creates a `SkillListing` by directly assigning every field --
-    /// primarily for tests and callers building a listing row by hand. Use
-    /// `init(id:frontmatter:body:)` or `init(id:decodedSkill:)` to derive
+    /// primarily for tests and callers building a listing row by hand.
+    ///
+    /// Use `init(id:frontmatter:body:)` or `init(id:decodedSkill:)` to derive
     /// `parameters`/`acceptsTrailingArguments` from a skill's decoded
     /// frontmatter and body instead of supplying them directly.
     ///

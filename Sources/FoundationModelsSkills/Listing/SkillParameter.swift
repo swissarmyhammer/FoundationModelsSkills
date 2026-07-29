@@ -2,8 +2,10 @@
 /// frontmatter/body sources by position (plan.md §6.1): `arguments:` (names +
 /// order), `argument-hint:` (placeholders + optionality), and body inference
 /// (`$0`/`$N`/`$ARGUMENTS[N]` scanning) when neither frontmatter source is
-/// present. Produced by `ParameterInference.infer(frontmatter:body:)`,
-/// carried on `SkillListing.parameters`.
+/// present.
+///
+/// Produced by `ParameterInference.infer(frontmatter:body:)`, carried on
+/// `SkillListing.parameters`.
 public struct SkillParameter: Sendable, Equatable {
     /// The parameter's name -- from `arguments:` when present, otherwise the
     /// inner text of an `argument-hint:` token (`<message>` -> `"message"`,
@@ -14,16 +16,19 @@ public struct SkillParameter: Sendable, Equatable {
     /// 0-based position, matching `$0`/`$1`/... and `$ARGUMENTS[N]`.
     public var position: Int
 
-    /// Whether this parameter must be supplied. An `argument-hint:` token of
-    /// `<x>` -> `true`; `[x]` -> `false`. A position with no hint token
-    /// (body-inferred, or a bare/unbracketed hint token, or an
-    /// `arguments:`-only position past the hint's arity) defaults to `true`
-    /// -- the conservative reading when no source explicitly marks it
-    /// optional.
+    /// Whether this parameter must be supplied.
+    ///
+    /// An `argument-hint:` token of `<x>` -> `true`; `[x]` -> `false`. A
+    /// position with no hint token (body-inferred, or a bare/unbracketed hint
+    /// token, or an `arguments:`-only position past the hint's arity)
+    /// defaults to `true` -- the conservative reading when no source
+    /// explicitly marks it optional.
     public var required: Bool
 
     /// Whether this is a trailing variadic parameter -- an `argument-hint:`
-    /// token ending in a trailing `...`. `false` for every other source.
+    /// token ending in a trailing `...`.
+    ///
+    /// `false` for every other source.
     public var variadic: Bool
 
     /// The raw `argument-hint:` token text for display (e.g. `"<message>"`,

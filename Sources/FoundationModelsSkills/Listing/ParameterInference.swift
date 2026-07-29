@@ -86,12 +86,14 @@ public enum ParameterInference {
     // MARK: - arguments: + argument-hint: merge
 
     /// Merges authoritative `arguments:` names/order with `argument-hint:`
-    /// placeholders/optionality by position. A hint token at the same
-    /// position supplies `required`/`variadic`/`placeholder`; a position
-    /// with no matching hint token defaults to `required: true, variadic:
-    /// false, placeholder: nil` -- the same conservative default used
-    /// everywhere else a source is silent. An arity mismatch between the two
-    /// sources draws a diagnostic but never fails the merge.
+    /// placeholders/optionality by position.
+    ///
+    /// A hint token at the same position supplies
+    /// `required`/`variadic`/`placeholder`; a position with no matching hint
+    /// token defaults to `required: true, variadic: false, placeholder: nil`
+    /// -- the same conservative default used everywhere else a source is
+    /// silent. An arity mismatch between the two sources draws a diagnostic
+    /// but never fails the merge.
     ///
     /// - Parameters:
     ///   - names: `arguments:`'s tokenized names, in order.
@@ -119,10 +121,12 @@ public enum ParameterInference {
 
     /// Parses `argument-hint:`'s space-separated token grammar (plan.md
     /// §6.1): `<x>` required, `[x]` optional, a trailing `...` (on either
-    /// bracket form, or on a bare unbracketed token) variadic. A bare token
-    /// with neither bracket defaults to `required: true` -- no source marks
-    /// it optional, so the conservative reading applies (mirrors the default
-    /// this file uses everywhere a source is silent on optionality).
+    /// bracket form, or on a bare unbracketed token) variadic.
+    ///
+    /// A bare token with neither bracket defaults to `required: true` -- no
+    /// source marks it optional, so the conservative reading applies
+    /// (mirrors the default this file uses everywhere a source is silent on
+    /// optionality).
     ///
     /// - Parameter hint: The raw `argument-hint:` string, or `nil`.
     /// - Returns: One `HintToken` per whitespace-separated token, in order;
@@ -179,8 +183,9 @@ public enum ParameterInference {
     /// contiguous from `0` through the highest referenced position (e.g. a
     /// body referencing only `$0` and `$2` synthesizes positions `0`, `1`,
     /// `2`) -- positional substitution depends on every intermediate index
-    /// existing, even one the body never named explicitly. Synthesized
-    /// parameters have no name/placeholder source, so they get a
+    /// existing, even one the body never named explicitly.
+    ///
+    /// Synthesized parameters have no name/placeholder source, so they get a
     /// deterministic `"arg<position>"` name, `required: true`, and
     /// `variadic: false`.
     ///

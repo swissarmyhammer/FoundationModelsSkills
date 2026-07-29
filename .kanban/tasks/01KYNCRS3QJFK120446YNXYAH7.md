@@ -49,6 +49,33 @@ comments:
 
     Both review-finding checkboxes checked off. Progress 100%. Left in `doing` per /implement's contract -- ready for /review.
   timestamp: 2026-07-29T02:57:29.702577+00:00
+- actor: claude-code
+  id: 01kynxf8sc6eh7ceeb1kmxmjby
+  text: |-
+    Addressed the 2026-07-28 21:58 review findings (all three doc-comment two-sentences-no-blank-line violations in SkillListing.swift):
+
+    1. `id` property doc: combined "The directory name -- the canonical id and the `/command` key (plan.md §4). Never the frontmatter `name`." into one sentence: "...the `/command` key (plan.md §4), never the frontmatter `name`."
+    2. `acceptsTrailingArguments` property doc: split into summary sentence + blank `///` + elaboration (the `true` only on... / auto-append fallback sentence).
+    3. First `init(id:displayName:...)` doc: split into summary sentence ("Creates a `SkillListing` by directly assigning every field -- primarily for tests and callers building a listing row by hand.") + blank `///` + elaboration (the "Use `init(id:frontmatter:body:)` or `init(id:decodedSkill:)`..." sentence).
+
+    Proactively swept all doc comments in SkillListing.swift, SkillParameter.swift, and ParameterInference.swift (all new code from this task) for the same pattern rather than waiting for another review round. Found and fixed 6 more instances of the same violation:
+
+    - SkillParameter.swift: type-level doc (two sentences), `required` property doc (three sentences), `variadic` property doc (two sentences).
+    - ParameterInference.swift: `mergeArgumentsWithHint` function doc (three sentences), `parseHint` function doc (two sentences), `inferFromBody` function doc (two sentences).
+
+    All fixes are pure re-flow: first sentence kept as summary, blank `///` inserted, remaining sentence(s) moved to elaboration below -- no wording changed, no code/logic touched.
+
+    Fresh `swift build`: exit 0 (only pre-existing foundationmodelsoperationtool package-identity warnings, unrelated to this change). Fresh `swift test`: 56/56 passed, exit 0.
+
+    Adversarial double-check spawned for sign-off; will report verdict next.
+  timestamp: 2026-07-29T03:07:43.788824+00:00
+- actor: claude-code
+  id: 01kynxn3mz38nc66am6h09r236
+  text: |-
+    Adversarial double-check (round 2, for this fix): PASS. Confirmed all diff hunks are pure `///` re-flows with no logic changes, confirmed no remaining multi-sentence doc-comment summaries anywhere in the three files, and independently re-ran swift build (exit 0) / swift test (56/56 passed, exit 0).
+
+    All three 2026-07-28 21:58 review-finding checkboxes checked off on the task description; progress 100%. Left in `doing` per /implement's contract -- ready for /review.
+  timestamp: 2026-07-29T03:10:55.135860+00:00
 depends_on:
 - 01KYNCR37A3M7MYKAH7T0QREYS
 position_column: doing
@@ -93,3 +120,24 @@ Both findings fixed:
 2. `SkillListing`'s doc comment now has a blank `///` line separating the summary sentence from the "Autocomplete, fuzzy search..." elaboration.
 
 `swift build`: exit 0 (only pre-existing package-identity warnings). `swift test`: 56/56 passed, exit 0. Adversarial double-check: PASS.
+
+## Review Findings (2026-07-28 21:58)
+
+- [x] `Sources/FoundationModelsSkills/Listing/SkillListing.swift:8` — The doc summary for `id` property has two sentences, but the rule requires a single-sentence summary. The summary reads: "The directory name -- the canonical id and the `/command` key (plan.md §4). Never the frontmatter `name`.". Combine into one sentence or move the second sentence to elaboration after a blank `///` line: Either "The directory name -- the canonical id and the `/command` key (plan.md §4), never the frontmatter `name`." or add elaboration after a blank line.
+- [x] `Sources/FoundationModelsSkills/Listing/SkillListing.swift:34` — The doc summary for `acceptsTrailingArguments` property has two sentences (ending at "prompt for." and again at "sets this."), but the rule requires a single-sentence summary. Reduce the summary to one sentence and move additional detail to elaboration after a blank `///` line: Either merge the concept into one statement or structure as summary, blank `///`, then elaboration.
+- [x] `Sources/FoundationModelsSkills/Listing/SkillListing.swift:40` — The doc summary for the first `init(id:displayName:...)` has two sentences in the summary block (before the blank line). The summary reads: "Creates a `SkillListing` by directly assigning every field -- primarily for tests and callers building a listing row by hand. Use `init(id:frontmatter:body:)` or `init(id:decodedSkill:)` to derive...". Either combine the two sentences into one, or restructure: move the "Use" sentence to a separate elaboration paragraph after the blank `///` line, keeping only the first sentence as the summary.
+
+## Fix Notes (2026-07-29, round 2)
+
+All three findings fixed in `SkillListing.swift`:
+1. `id` property doc: combined into one sentence ("...(plan.md §4), never the frontmatter `name`.").
+2. `acceptsTrailingArguments` property doc: split into summary sentence + blank `///` + elaboration.
+3. First `init(id:displayName:...)` doc: split into summary sentence + blank `///` + elaboration (the "Use `init(id:frontmatter:body:)`..." sentence).
+
+Proactively swept `SkillListing.swift`, `SkillParameter.swift`, and `ParameterInference.swift` (all new code from this task) for the same two-sentences-no-blank-line pattern instead of waiting for another review round, and fixed 6 further instances found:
+- `SkillParameter.swift`: type-level doc, `required` property doc, `variadic` property doc.
+- `ParameterInference.swift`: `mergeArgumentsWithHint` function doc, `parseHint` function doc, `inferFromBody` function doc.
+
+All fixes are pure doc re-flows — no wording changed beyond the `id` merge, no code/logic touched.
+
+`swift build`: exit 0 (only pre-existing foundationmodelsoperationtool package-identity warnings). `swift test`: 56/56 passed, exit 0. Adversarial double-check: PASS — confirmed no remaining multi-sentence summary paragraphs in any of the three files, and confirmed build/test green independently.
