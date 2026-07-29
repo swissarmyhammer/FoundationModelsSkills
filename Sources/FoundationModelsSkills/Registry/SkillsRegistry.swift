@@ -732,9 +732,7 @@ public struct SkillsRegistry: Sendable {
         /// atomically so a caller can never observe one paired with the
         /// other's prior or next generation.
         var snapshot: (catalog: [String: CatalogEntry], diagnostics: [SkillDiagnostic]) {
-            lock.lock()
-            defer { lock.unlock() }
-            return (catalog, diagnostics)
+            withLock { (catalog, diagnostics) }
         }
 
         /// Atomically replaces both the catalog and its diagnostics with a
@@ -744,10 +742,24 @@ public struct SkillsRegistry: Sendable {
         ///   - catalog: The rebuilt catalog, keyed by id.
         ///   - diagnostics: The rebuilt catalog's diagnostics.
         func replace(catalog: [String: CatalogEntry], diagnostics: [SkillDiagnostic]) {
+            withLock {
+                self.catalog = catalog
+                self.diagnostics = diagnostics
+            }
+        }
+
+        /// Runs `body` while holding `lock`, releasing it via `defer` before
+        /// returning under any control-flow path, so `snapshot` and
+        /// `replace(catalog:diagnostics:)` share one lock-acquire/release
+        /// point instead of each repeating `lock()`/`defer { unlock() }`
+        /// verbatim.
+        ///
+        /// - Parameter body: The work to run under the lock.
+        /// - Returns: `body`'s result.
+        private func withLock<T>(_ body: () -> T) -> T {
             lock.lock()
             defer { lock.unlock() }
-            self.catalog = catalog
-            self.diagnostics = diagnostics
+            return body()
         }
     }
 

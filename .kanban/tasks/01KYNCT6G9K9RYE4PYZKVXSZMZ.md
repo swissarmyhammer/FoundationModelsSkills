@@ -86,6 +86,36 @@ comments:
 
     Verified green: `swift build` exit 0 (only pre-existing unrelated SwiftPM dependency-identity warnings, no new warnings). `swift test` 185/185 passing, exit 0. Checked off all five Review Findings checkboxes on the task description; confirmed via follow-up `get task` that the description rendered with real line breaks (no backslash-n corruption) and `tags: ["29"]` is intact, `progress: 1.0`. Left the task in `doing` per /implement's process -- /review will pull it into `review`.
   timestamp: 2026-07-29T13:43:26.832978+00:00
+- actor: claude-code
+  id: 01kyq2gdk3b2br9a1q4y1da3b4
+  text: |-
+    Sixth review round: fixed the final open finding in Sources/FoundationModelsSkills/Registry/SkillsRegistry.swift -- CatalogBox.snapshot and CatalogBox.replace(catalog:diagnostics:) each repeated an identical `lock.lock() / defer { lock.unlock() }` pattern around the private NSLock.
+
+    Extracted a shared private `withLock<T>(_ body: () -> T) -> T` helper inside CatalogBox that acquires the lock, runs `body`, and releases via `defer` before returning on any path. Both `snapshot` and `replace` now call it: `snapshot` returns `withLock { (catalog, diagnostics) }`; `replace` runs `withLock { self.catalog = catalog; self.diagnostics = diagnostics }`. No change to lock granularity or the point at which the lock is released -- the critical section boundaries are identical to the pre-refactor code, just factored through one call site instead of two.
+
+    Grepped the whole file for `lock.lock`/`lock.unlock`/`NSLock`/`withLock` -- confirmed these were the only two lock sites in the file before the change, and confirmed no other lock-duplication or concurrency-adjacent duplication remains (ReloadCoordinator holds only immutable `let`s, no lock of its own).
+
+    Verified green:
+    - `swift build`: exit 0 (only pre-existing unrelated SwiftPM dependency-identity warnings, no new warnings).
+    - `swift test`: 185/185 passing, exit 0.
+    - `swift test --sanitize=thread --filter SkillsRegistryReloadTests`: 8/8 passing, exit 0, zero ThreadSanitizer warnings in the output (grepped for "ThreadSanitizer|WARNING|data race|race detected" -- no matches).
+
+    Also found and fixed a recurrence of the description-corruption bug noted in an earlier round's comment: before my `update task` call, `get task` showed the description with literal `\n` (backslash + n) text instead of real line breaks, and `tags` was empty instead of `["29"]`. Rewrote the description via a scratch file with real newlines to avoid re-introducing the corruption, restored `tags: ["29"]`, checked off the final Review Findings box, and confirmed via a follow-up `get task` (and a direct read of `.kanban/tasks/01KYNCT6G9K9RYE4PYZKVXSZMZ.md`) that the description now renders with real line breaks and `tags: ["29"]` is intact. `progress: 1.0`.
+
+    Adversarial double-check (per really-done) spawned; will log its verdict once it returns. Left the task in `doing` per /implement's process -- /review will pull it into `review`.
+  timestamp: 2026-07-29T13:54:58.787800+00:00
+- actor: claude-code
+  id: 01kyq2hhq2qdjegnb171e3eyaf
+  text: |-
+    Adversarial double-check (per really-done) returned PASS, no findings. It independently re-derived the diff via git diff, read the full CatalogBox/ReloadCoordinator region, grepped the whole file for any other lock primitive (NSLock|os_unfair_lock|DispatchQueue|actor |Mutex|synchronized|pthread_mutex -- exactly one hit, CatalogBox's own NSLock), and re-ran build/test/TSan itself rather than trusting my summary:
+    - swift build -> Build complete!, exit 0, only pre-existing unrelated dependency warnings.
+    - swift test -> 185/185 passed.
+    - swift test --sanitize=thread --filter SkillsRegistryReloadTests -> 8/8 passed, no ThreadSanitizer warnings.
+
+    It confirmed: same lock, same critical-section boundaries, same reads/writes under the lock, defer still guarantees release on every path; both snapshot/replace closures are non-throwing so the non-throwing withLock<T>(_ body: () -> T) -> T signature is correct, not a gap; ReloadCoordinator holds no lock of its own (immutable lets only); diff scope is minimal (two hunks, both inside CatalogBox); doc comment matches the file's existing convention (semantics/rationale, cross-references sibling methods by name, no reviewer-process narration).
+
+    Final state: swift build exit 0, swift test 185/185 exit 0, swift test --sanitize=thread --filter SkillsRegistryReloadTests 8/8 exit 0 with zero TSan reports, double-check PASS, the sixth-round Review Findings checkbox checked off, description corruption (literal backslash-n) and dropped tags:["29"] from before this round's edit both repaired and confirmed via get task + direct .md read. Task left in doing column for /review to pick up.
+  timestamp: 2026-07-29T13:55:35.778549+00:00
 depends_on:
 - 01KYNCSXAEKDVR36H387H5TYXR
 - 01KYND89QDD8BYQWGGPJ8Z4J2M
@@ -132,3 +162,7 @@ Harness delivery channel (plan §6, decision #29): conform `SkillsRegistry` to E
 - [x] `Sources/FoundationModelsSkills/Registry/SkillsRegistry.swift:377` — First argument label is omitted, but this is not a value-preserving conversion — omit labels only for conversions, not rendering functions. Label the first parameter: (text: String, entry: CatalogEntry, ...).
 - [x] `Sources/FoundationModelsSkills/Registry/SkillsRegistry.swift:414` — First argument label is omitted, but this is not a value-preserving conversion — omit labels only for conversions, not transformation functions. Label the first parameter: (value: FrontmatterValue, entry: CatalogEntry).
 - [x] `Sources/FoundationModelsSkills/Registry/SkillsRegistry.swift:429` — First argument label is omitted, but this is not a value-preserving conversion — omit labels only for conversions, not formatter functions. Label the first parameter: (parameter: SkillParameter).
+
+## Review Findings (2026-07-29 08:44)
+
+- [x] `Sources/FoundationModelsSkills/Registry/SkillsRegistry.swift:472` — Lock acquisition/release pattern repeats verbatim in two methods: `snapshot` (line 472) and `replace` (line 480). Both contain identical lock logic that could drift if one site forgets to lock/unlock. Extract a shared `withLock<T>(_ block: () -> T) -> T` helper method that handles lock acquisition/release, then both methods call it: `var snapshot: (...) { withLock { (catalog, diagnostics) } }` and `func replace(...) { withLock { self.catalog = catalog; self.diagnostics = diagnostics } }`.
