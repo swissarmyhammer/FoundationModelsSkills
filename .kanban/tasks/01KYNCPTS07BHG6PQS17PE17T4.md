@@ -54,6 +54,22 @@ comments:
 
     Checked off the review finding checkbox. Leaving the task in `doing` per the implement skill's process -- review moves it, implement does not.
   timestamp: 2026-07-29T00:19:11.505971+00:00
+- actor: claude-code
+  id: 01kynmdtn5f2reghhjewnnbqnq
+  text: |-
+    Fixed review finding: extracted the five hardcoded "FoundationModelsSkills" literals in Package.swift (package name, product name in .library, target name in .library's targets array, .target's own name, and the test target's dependency reference) into a single top-level `let packageName = "FoundationModelsSkills"` constant, declared right after `import PackageDescription` (before `commonDependencies`). All five call sites now reference `packageName`.
+
+    One wrinkle: the test target's dependency list was `dependencies: ["FoundationModelsSkills"] + commonDependencies`, relying on Swift's automatic string-literal-to-Target.Dependency conversion. That conversion only applies to literal strings, not to a String variable, so `[packageName]` alone fails to typecheck as `[Target.Dependency]`. Fixed by using the explicit factory: `dependencies: [.byName(name: packageName)] + commonDependencies`, which is semantically identical to what the literal produced (ExpressibleByStringLiteral for Target.Dependency desugars to `.byName(name:condition:)` with `condition: nil`).
+
+    Left untouched, correctly: the test target's own name `"FoundationModelsSkillsTests"` (a different identifier, not one of the five flagged occurrences), the doc-comment prose referencing the `FoundationModelsSkills` namespace enum (a different file's symbol, not a manifest literal), and all other dependency-package-name strings (FoundationModelsExtras, FoundationModelsOperationTool, FoundationModelsMetadataRegistry, Yams).
+
+    Verified:
+    - `swift build` exit 0 after `rm -rf .build Package.resolved` clean rebuild -- only the pre-existing, previously documented benign "Conflicting identity for foundationmodelsoperationtool" warning; no new warnings.
+    - `swift test` exit 0, 1/1 test passing (`moduleAndDependenciesImportCleanly`).
+    - Adversarial double-check agent: PASS -- independently re-read the diff, confirmed scope (only Package.swift touched, all 5 sites correct, nothing unintended changed), reran a clean build and test itself, and confirmed `.byName(name:)` semantics match the original literal.
+
+    Checked off the review finding checkbox. Leaving the task in `doing` per the implement skill's process -- review moves it, implement does not.
+  timestamp: 2026-07-29T00:29:39.365097+00:00
 position_column: doing
 position_ordinal: '80'
 title: Scaffold Package.swift and empty target structure
@@ -83,3 +99,7 @@ Create the SwiftPM package skeleton per plan.md §3/§17 (single target, concept
 ## Review Findings (2026-07-28 19:12)
 
 - [x] `Package.swift:48` — Four product dependencies (FoundationModelsExtras, Operations, FoundationModelsMetadataRegistry, Yams) are hardcoded in both .target and .testTarget, creating duplicate maintenance points. Changes to one list risk drift if the other isn't updated. Factor the 4 common products into a named constant at the top of the targets array: `let commonDependencies = [...]`, then use it in both: `.target(dependencies: commonDependencies)` and `.testTarget(dependencies: ["FoundationModelsSkills"] + commonDependencies)`.
+
+## Review Findings (2026-07-28 19:21)
+
+- [x] `Package.swift:35` — The string "FoundationModelsSkills" is hardcoded 5 times — as the package name (line 35), product name (line 44), target name (line 47), in the targets array (line 44), and in the test target dependencies (line 52). Repeating this literal creates risk of typos and inconsistency if the package/product/target name needs to change; extracting to a single named constant ensures all references stay in sync. Define `let packageName = "FoundationModelsSkills"` at the top level (before the `let package` declaration), then replace each hardcoded occurrence with `packageName`.

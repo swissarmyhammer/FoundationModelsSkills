@@ -3,6 +3,11 @@
 
 import PackageDescription
 
+// Single source of truth for the package/product/target name -- avoids
+// repeating the literal across the package, product, target, and test-target
+// declarations below.
+let packageName = "FoundationModelsSkills"
+
 // Shared product dependencies needed by both the library target and its test
 // target -- factored out so the two lists can't drift out of sync.
 let commonDependencies: [Target.Dependency] = [
@@ -26,7 +31,7 @@ let commonDependencies: [Target.Dependency] = [
 ]
 
 let package = Package(
-    name: "FoundationModelsSkills",
+    name: packageName,
     // macOS 27+, no pre-27 fallback: the strictest floor in this package's own
     // dependency graph. `FoundationModelsMetadataRegistry` depends on
     // `FoundationModelsRouter`, which commits to macOS 27 / FoundationModels v2
@@ -42,7 +47,7 @@ let package = Package(
     products: [
         // The single library product (plan.md decision #17: one SwiftPM
         // target; layering (§3) is conceptual -- by type, not module).
-        .library(name: "FoundationModelsSkills", targets: ["FoundationModelsSkills"]),
+        .library(name: packageName, targets: [packageName]),
     ],
     dependencies: [
         // Layers 1-2 substrate: `DotfolderStack`, `FrontmatterDocument`,
@@ -65,12 +70,12 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "FoundationModelsSkills",
+            name: packageName,
             dependencies: commonDependencies
         ),
         .testTarget(
             name: "FoundationModelsSkillsTests",
-            dependencies: ["FoundationModelsSkills"] + commonDependencies
+            dependencies: [.byName(name: packageName)] + commonDependencies
         ),
     ]
 )
