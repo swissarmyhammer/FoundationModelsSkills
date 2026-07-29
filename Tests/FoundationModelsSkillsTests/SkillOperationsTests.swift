@@ -369,10 +369,13 @@ struct SkillOperationsTests {
 
     // MARK: - The fused tool exposes exactly one core Tool with the flat-union schema
 
-    @Test func fusedToolExposesExactlyTheThreeCanonicalOps() throws {
+    @Test func fusedToolExposesExactlyTheFiveCanonicalOps() throws {
         let tool = try Self.makeFixtureTool()
 
-        #expect(tool.operations.map(\.opString) == ["search skill", "list skill", "use skill"])
+        #expect(
+            tool.operations.map(\.opString) == [
+                "search skill", "list skill", "use skill", "list resource", "read resource",
+            ])
         #expect(tool.name == "skills")
     }
 }

@@ -704,6 +704,17 @@ public struct SkillsRegistry: Sendable {
         catalogBox.snapshot.catalog[id]?.body
     }
 
+    /// The absolute directory `id`'s current catalog entry lives in --
+    /// where the resource operations (plan.md §7.3) enumerate and read
+    /// under.
+    ///
+    /// - Parameter id: The skill id to look up.
+    /// - Returns: The skill's directory, or `nil` when `id` is not
+    ///   currently in the catalog.
+    internal func skillDirectory(id: String) -> URL? {
+        catalogBox.snapshot.catalog[id]?.skillDirectory
+    }
+
     // MARK: - Reload (plan.md §7)
 
     /// The atomically-swappable holder for one catalog generation and its

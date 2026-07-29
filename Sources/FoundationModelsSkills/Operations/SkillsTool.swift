@@ -18,10 +18,10 @@ public enum SkillsTool {
 
     /// Builds the fused `skills` `OperationTool` over `context`.
     ///
-    /// The three operations dispatch through `AnyOperation` against the
-    /// shared `context`, in the order `search` / `list` / `use` -- the order
-    /// the fused schema's `op` enum and any unknown-operation corrective
-    /// list them in.
+    /// The five operations dispatch through `AnyOperation` against the
+    /// shared `context`, in the order `search` / `list` / `use` / `list
+    /// resource` / `read resource` -- the order the fused schema's `op` enum
+    /// and any unknown-operation corrective list them in.
     ///
     /// - Parameter context: The shared context every operation's
     ///   `execute(in:)` runs against.
@@ -41,6 +41,8 @@ public enum SkillsTool {
                 AnyOperation(SearchSkill.self),
                 AnyOperation(ListSkill.self),
                 AnyOperation(UseSkill.self),
+                AnyOperation(ListResource.self),
+                AnyOperation(ReadResource.self),
             ],
             resolver: makeResolver()
         )
@@ -48,14 +50,17 @@ public enum SkillsTool {
 
     /// Builds the forgiving resolver `make(context:)` fuses the tool with.
     ///
-    /// - Returns: A resolver layering `skillVerbAliases` onto the upstream
+    /// - Returns: A resolver layering `verbAliasOverrides` onto the upstream
     ///   defaults.
     private static func makeResolver() -> OperationResolver {
-        OperationResolver(verbAliases: skillVerbAliases)
+        OperationResolver(verbAliases: verbAliasOverrides)
     }
 
-    /// The verb aliases decision #21 asks for: `find`/`discover` → `search`;
-    /// `call`/`run`/`invoke`/`get` → `use`.
+    /// The verb aliases this tool's operation set needs, layered onto
+    /// `OperationResolver.defaultVerbAliases`: decision #21's `find`/
+    /// `discover` → `search` and `call`/`run`/`invoke`/`get` → `use`, plus a
+    /// `"read"` self-mapping override (below) `ReadResource` needs to be
+    /// reachable at all.
     ///
     /// Derived from the operations' own `verb` statics so this table cannot
     /// drift from them (matches the sibling `FileTool`'s
@@ -72,12 +77,23 @@ public enum SkillsTool {
     /// real `run script` op, unless M6 revisits this table. Recorded (and
     /// pinned by `SkillOperationsTests`' `"run skill"` case) so that
     /// collision is caught by a test, not discovered in the field.
-    private static let skillVerbAliases: [String: String] = [
+    ///
+    /// The same unconditional-rewrite behavior is why `"read":
+    /// ReadResource.verb` must be here too: `OperationResolver
+    /// .defaultVerbAliases` already maps `"read"` → `"get"` (a CRUD-verb
+    /// convenience for tools with no `"read"` operation of their own).
+    /// Without this self-mapping override, `ReadResource`'s own literal
+    /// `"read resource"` query would be rewritten to `"get resource"`
+    /// before matching and never reach it, since nothing here is registered
+    /// under verb `"get"` for the `"resource"` noun. Pinned by
+    /// `ResourceOpsTests`.
+    private static let verbAliasOverrides: [String: String] = [
         "find": SearchSkill.verb,
         "discover": SearchSkill.verb,
         "call": UseSkill.verb,
         "run": UseSkill.verb,
         "invoke": UseSkill.verb,
         "get": UseSkill.verb,
+        "read": ReadResource.verb,
     ]
 }

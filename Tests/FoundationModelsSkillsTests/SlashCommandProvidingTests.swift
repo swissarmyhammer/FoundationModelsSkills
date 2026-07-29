@@ -22,7 +22,7 @@ struct SlashCommandProvidingTests {
     /// structural skill except `lint` (`user-invocable: false`, plan.md
     /// §6).
     private static let expectedCommandIDs: Set<String> = [
-        "base-style", "commit", "deploy", "env-report", "git-context", "spec-clean",
+        "base-style", "commit", "deploy", "env-report", "git-context", "release-notes", "spec-clean",
     ]
 
     // MARK: - commands(workingDirectory:) snapshot
