@@ -12,15 +12,20 @@ import Operations
 /// `SKILLS_DEMO_FORCE_UNAVAILABLE` seam, which short-circuits before ever
 /// touching `SystemLanguageModel`.
 enum ChatMode {
-    /// Set to force the unavailable-degradation branch deterministically,
-    /// regardless of this device's real Foundation Models availability --
-    /// the seam `SkillsDemoTests` exercises in CI.
+    /// The environment variable key that forces the unavailable-degradation
+    /// branch.
+    ///
+    /// Set to force that branch deterministically, regardless of this
+    /// device's real Foundation Models availability -- the seam
+    /// `SkillsDemoTests` exercises in CI.
     private static let forceUnavailableEnvKey = "SKILLS_DEMO_FORCE_UNAVAILABLE"
 
-    /// The reason text for an availability shape neither `switch` below
-    /// recognizes -- shared so the two `@unknown default` branches (the
-    /// outer `availability` switch and the inner `reason` switch) can never
-    /// drift on its wording.
+    /// The reason text for an availability shape this package doesn't
+    /// recognize.
+    ///
+    /// Shared by `reasonText(for:)`'s own fallback and the outer
+    /// `availability` switch's `@unknown default` in `run(environment:)`, so
+    /// the two can never drift on its wording.
     private static let unknownReasonText = "unknown reason"
 
     /// One scripted prompt and the op the skills tool is expected to
@@ -68,21 +73,25 @@ enum ChatMode {
         }
     }
 
-    /// The human-readable text for one `SystemLanguageModel.Availability`
-    /// unavailable reason -- a lookup, not a control-flow branch, so the
-    /// case-to-text mapping stays data even though `UnavailableReason`
-    /// itself offers no `Hashable` conformance to key a dictionary with.
+    /// Every recognized `SystemLanguageModel.Availability.UnavailableReason`'s
+    /// human-readable text.
+    ///
+    /// Data, not a switch: `reasonText(for:)` is a plain lookup over this
+    /// table, so a future case only ever needs a new entry here, never a new
+    /// control-flow branch.
+    private static let reasonTexts: [SystemLanguageModel.Availability.UnavailableReason: String] = [
+        .deviceNotEligible: "device not eligible",
+        .appleIntelligenceNotEnabled: "Apple Intelligence not enabled",
+        .modelNotReady: "model not ready",
+    ]
+
+    /// The human-readable text for `reason`.
     ///
     /// - Parameter reason: The reason to look up text for.
-    /// - Returns: The reason's human-readable text, or `unknownReasonText`
-    ///   for a case this package doesn't yet recognize.
+    /// - Returns: `reasonTexts[reason]`, or `unknownReasonText` for a case
+    ///   this package doesn't yet recognize.
     private static func reasonText(for reason: SystemLanguageModel.Availability.UnavailableReason) -> String {
-        switch reason {
-        case .deviceNotEligible: return "device not eligible"
-        case .appleIntelligenceNotEnabled: return "Apple Intelligence not enabled"
-        case .modelNotReady: return "model not ready"
-        @unknown default: return Self.unknownReasonText
-        }
+        reasonTexts[reason] ?? Self.unknownReasonText
     }
 
     /// Prints the clean, deterministic degradation message every unavailable
