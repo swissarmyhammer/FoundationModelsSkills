@@ -1,6 +1,13 @@
 import Foundation
 import FoundationModelsExtras
 
+// Review fix (^8jqwxc5, round 5): `RenderRequest.policy` and
+// `IdentityRenderPass.init` were missing the blank `///` line + elaboration
+// their sibling properties/inits carry -- added both. Also did a fresh
+// line-by-line audit of every other `///` doc comment in this file against
+// the round-4 sweep's checklist (summary sentence, blank separator,
+// elaboration where warranted, `- Throws:`/`- Parameters:`/`- Returns:`
+// coverage); no other violations found.
 // Review fix (^8jqwxc5, round 4): every doc comment in this file was swept
 // for the project's doc-comment convention -- a single-sentence summary
 // line ending in a period, a blank `///` line, then elaboration -- and
@@ -78,7 +85,12 @@ public struct RenderRequest: Sendable {
     /// From `DotfolderStack` -- pass 3's trust mapping (defaults ->
     /// `.trusted`, user/project -> `.untrusted`, plan.md §5, decision #29).
     public var winningLayer: DotfolderStack.Layer
-    /// The render policy every pass must honor (plan.md decisions #25/#28).
+    /// The render policy every pass must honor.
+    ///
+    /// Threaded unchanged to every pass invocation in this render call --
+    /// gates pass 2 (`isShellExecutionDisabled`) and the M6 `run script`
+    /// operation outside this pipeline (`isScriptExecutionDisabled`), per
+    /// plan.md decisions #25/#28.
     public var policy: RenderPolicy
 
     /// Creates a `RenderRequest`.
@@ -139,6 +151,9 @@ public protocol RenderPass: Sendable {
 /// shape, not any pass's real behavior.
 public struct IdentityRenderPass: RenderPass {
     /// Creates an `IdentityRenderPass`.
+    ///
+    /// Takes no configuration -- every instance behaves identically, so the
+    /// pipeline can create as many as it needs without shared state.
     public init() {}
 
     /// Returns `text` unchanged (identity transformation).
