@@ -90,7 +90,18 @@ public struct StencilPass: RenderPass {
         self.wellKnownValues = wellKnownValues ?? .current(layers: layers)
     }
 
-    /// Renders `text` as a Stencil template through Extras' `TemplateEngine`.
+    /// Renders `text`'s `.original` spans as Stencil templates through
+    /// Extras' `TemplateEngine`, leaving every `.quarantined` span untouched.
+    ///
+    /// A `.quarantined` span (an earlier pass's substituted argument value
+    /// or shell output) is never handed to `TemplateEngine` at all, so
+    /// `{{ HOME }}`/`{% include %}` syntax it happens to contain stays
+    /// literal -- plan.md §5's no-re-scan contract, enforced for pass 3 the
+    /// same way pass 2 enforces it for `` !`command` ``. Each `.original`
+    /// span renders as its own independent template; a Stencil construct
+    /// (e.g. `{% if %}...{% endif %}`) cannot legitimately span across a
+    /// quarantined splice, since substituted data must never drive new
+    /// template structure.
     ///
     /// - Parameters:
     ///   - text: The input text to render -- pass 2's output (body renders)
@@ -100,15 +111,19 @@ public struct StencilPass: RenderPass {
     ///     `winningLayer` selects the trust mode, `arguments`/
     ///     `argumentNames` populate the explicit context's declared skill
     ///     arguments.
-    /// - Returns: The rendered text.
+    /// - Returns: `text` with every `.original` span rendered as a Stencil
+    ///   template.
     /// - Throws: `TemplateEngineError.renderingFailed` when Stencil fails to
-    ///   parse or render `text`, or when the resolved `Trust.untrusted`
-    ///   validation rejects it (a disallowed tag/filter, an include-depth
-    ///   bomb, an output-size bomb, or an iteration bomb).
-    public func render(_ text: String, request: RenderRequest) throws -> String {
+    ///   parse or render an `.original` span, or when the resolved
+    ///   `Trust.untrusted` validation rejects it (a disallowed tag/filter,
+    ///   an include-depth bomb, an output-size bomb, or an iteration bomb).
+    public func render(_ text: QuarantinedText, request: RenderRequest) throws -> QuarantinedText {
         let engine = TemplateEngine(partials: Self.partialsStack(layers: layers))
-        return try engine.render(
-            text, context: templateContext(for: request), trust: resolvedTrust(for: request.winningLayer))
+        let context = templateContext(for: request)
+        let trust = resolvedTrust(for: request.winningLayer)
+        return try text.mappingOriginalSpans { spanText in
+            [.original(try engine.render(spanText, context: context, trust: trust))]
+        }
     }
 
     /// Resolves `layer`'s `Trust`: `trustOverrides` first, the default rule

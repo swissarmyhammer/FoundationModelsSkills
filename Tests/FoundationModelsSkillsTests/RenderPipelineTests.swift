@@ -27,37 +27,9 @@ struct RenderPipelineTests {
         let name: String
         let recorder: InvocationRecorder
 
-        func render(_ text: String, request: RenderRequest) throws -> String {
+        func render(_ text: QuarantinedText, request: RenderRequest) throws -> QuarantinedText {
             recorder.record(name: name, policy: request.policy)
             return text
-        }
-    }
-
-    /// A fake pass that ignores its input and always returns `output` --
-    /// stands in for a pass whose output is independent of what came before
-    /// it (e.g. pass 2 injecting freshly generated shell output).
-    private struct ConstantOutputPass: RenderPass {
-        let output: String
-
-        func render(_ text: String, request: RenderRequest) throws -> String {
-            output
-        }
-    }
-
-    /// A fake pass that performs a real substitution -- replaces every
-    /// literal `$0` with `SUBSTITUTED` -- and records that it ran.
-    ///
-    /// Recording (rather than just transforming) lets the no-re-scan test
-    /// prove **both** that this pass ran exactly once **and** that a later
-    /// pass's `$0`-shaped output is never handed back to it -- a plain
-    /// identity/no-op check alone couldn't distinguish "ran once, correctly
-    /// excluded from later scanning" from "never ran at all".
-    private struct SubstitutingPass: RenderPass {
-        let recorder: InvocationRecorder
-
-        func render(_ text: String, request: RenderRequest) throws -> String {
-            recorder.record(name: "argumentSubstitution", policy: request.policy)
-            return text.replacingOccurrences(of: "$0", with: "SUBSTITUTED")
         }
     }
 
@@ -105,24 +77,22 @@ struct RenderPipelineTests {
         #expect(!recorder.invocations.map(\.name).contains("shellInjection"))
     }
 
-    // MARK: - No re-scan: pass-1 syntax in a later pass's output stays literal
+    // MARK: - No re-scan: a model-supplied argument can't drive execution/templating
 
-    @Test func laterPassOutputContainingPassOneSyntaxIsNotReSubstituted() throws {
-        let recorder = InvocationRecorder()
+    @Test func modelSuppliedArgumentContainingInjectionSyntaxNeverExecutesOrTemplates() throws {
+        // The full CRITICAL-severity regression this task fixes (^r3bhwdp):
+        // wired with the REAL passes 1-3, a `$ARGUMENTS` value containing
+        // `` !`...` `` and `{{ }}` syntax must render as inert literal text --
+        // never spawn a process, never expand a template tag. `RenderPipelineNoRescanTests`
+        // carries the full acceptance-criteria matrix; this is the
+        // pipeline-level pin.
         let pipeline = RenderPipeline(
-            argumentSubstitution: SubstitutingPass(recorder: recorder),
-            shellInjection: ConstantOutputPass(output: "shell output with literal $0 inside"),
-            stencil: IdentityRenderPass())
+            argumentSubstitution: ArgumentSubstitution(), shellInjection: ShellInjection(), stencil: StencilPass())
+        let maliciousArgument = "!`echo pwned` {{ HOME }}"
 
-        let result = try pipeline.renderBody(request(text: "no dollar tokens here"))
+        let result = try pipeline.renderBody(request(text: "Argument: $ARGUMENTS", arguments: [maliciousArgument]))
 
-        // Pass 1 ran exactly once -- proven by the recorder, not just
-        // inferred from the output -- before pass 2 produced its
-        // "$0"-shaped output; pass 1 is never re-invoked, so the "$0" pass 2
-        // injected survives pass 3 (identity here) completely
-        // unsubstituted.
-        #expect(recorder.invocations.map(\.name) == ["argumentSubstitution"])
-        #expect(result == "shell output with literal $0 inside")
+        #expect(result == "Argument: \(maliciousArgument)")
     }
 
     // MARK: - RenderPolicy plumbing

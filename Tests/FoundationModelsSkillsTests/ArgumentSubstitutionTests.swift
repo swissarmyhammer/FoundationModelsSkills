@@ -35,7 +35,9 @@ struct ArgumentSubstitutionTests {
         _ text: String, arguments: [String] = [], argumentNames: [String] = []
     ) throws -> String {
         try pass.render(
-            text, request: request(text: text, arguments: arguments, argumentNames: argumentNames))
+            QuarantinedText(original: text),
+            request: request(text: text, arguments: arguments, argumentNames: argumentNames)
+        ).flattened
     }
 
     // MARK: - Every $-token form
@@ -232,7 +234,7 @@ struct ArgumentSubstitutionTests {
 
         let rawArgument = "\"fix the off-by-one bug\""
         let result = try pass.render(
-            skill.body,
+            QuarantinedText(original: skill.body),
             request: RenderRequest(
                 text: skill.body,
                 arguments: [rawArgument],
@@ -240,7 +242,8 @@ struct ArgumentSubstitutionTests {
                 skillDirectory: FixtureLibrary.url(relativePath: "project/.skills/commit"),
                 winningLayer: DotfolderStack.Layer(
                     source: .project, root: FixtureLibrary.url(relativePath: "project/.skills")),
-                policy: RenderPolicy()))
+                policy: RenderPolicy())
+        ).flattened
 
         #expect(
             result.contains(

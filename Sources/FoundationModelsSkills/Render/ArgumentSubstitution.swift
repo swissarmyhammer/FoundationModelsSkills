@@ -38,6 +38,13 @@ public struct ArgumentSubstitution: RenderPass {
     /// Substitutes every recognized `$`-token in `text` per plan.md §5's Claude-compatible
     /// grammar, then appends the `ARGUMENTS: <value>` no-data-loss fallback when warranted.
     ///
+    /// Every substituted value -- a positional/named argument, `$ARGUMENTS`, a resolved special
+    /// variable, or the auto-appended fallback's raw argument text -- lands as its own
+    /// `.quarantined` span, per `QuarantinedText`'s no-re-scan contract: none of it is ever
+    /// scanned again by this pass (within the same call) or by a later pass in the pipeline.
+    /// Only literal, unmatched text -- including an unrecognized `${VAR}`/`$name` token, left
+    /// untouched verbatim -- stays `.original`, eligible for a later pass's own scan.
+    ///
     /// - Parameters:
     ///   - text: The input text to substitute -- the render request's original body/metadata
     ///     text, since this pass always runs first in both `RenderPipeline` pass-sets.
@@ -47,48 +54,79 @@ public struct ArgumentSubstitution: RenderPass {
     ///   `ARGUMENTS: <value>` auto-append when `request.arguments` is non-empty and `text` has
     ///   no bare `$ARGUMENTS` reference (the no-data-loss fallback).
     /// - Throws: Never; this pass performs no I/O and every branch has a defined fallback.
-    public func render(_ text: String, request: RenderRequest) throws -> String {
+    public func render(_ text: QuarantinedText, request: RenderRequest) throws -> QuarantinedText {
         let rawArgumentsText = request.arguments.joined(separator: " ")
         let positionalArguments = Self.shellStyleTokens(rawArgumentsText)
-
-        var output = ""
         var sawBareArgumentsReference = false
+
+        var substituted = text.mappingOriginalSpans { spanText in
+            Self.substitutedSpans(
+                in: spanText, request: request, positionalArguments: positionalArguments,
+                rawArgumentsText: rawArgumentsText, sawBareArgumentsReference: &sawBareArgumentsReference)
+        }
+
+        if !request.arguments.isEmpty, !sawBareArgumentsReference {
+            substituted.spans.append(.original("\n\nARGUMENTS: "))
+            substituted.spans.append(.quarantined(rawArgumentsText))
+        }
+
+        return substituted
+    }
+
+    /// Scans one `.original` span's `text` left to right for every recognized `$`-token,
+    /// building the span list that replaces it.
+    ///
+    /// - Parameters:
+    ///   - text: One `.original` span's text to scan.
+    ///   - request: The render request this pass runs under.
+    ///   - positionalArguments: `request.arguments`, tokenized shell-style.
+    ///   - rawArgumentsText: `request.arguments` joined as typed -- `$ARGUMENTS`'s substitution
+    ///     value.
+    ///   - sawBareArgumentsReference: Set to `true` when a bare `$ARGUMENTS` token is found,
+    ///     across every `.original` span in `text` -- gates `render(_:request:)`'s
+    ///     `ARGUMENTS: <value>` auto-append.
+    /// - Returns: The spans that replace `text`: literal runs as `.original`, every substituted
+    ///   value as its own `.quarantined` span.
+    private static func substitutedSpans(
+        in text: String, request: RenderRequest, positionalArguments: [String], rawArgumentsText: String,
+        sawBareArgumentsReference: inout Bool
+    ) -> [QuarantinedText.Span] {
+        var builder = SpanBuilder()
         var lastEnd = text.startIndex
 
         let fullRange = NSRange(text.startIndex..<text.endIndex, in: text)
         for match in Self.tokenPattern.matches(in: text, range: fullRange) {
             guard let matchRange = Range(match.range, in: text) else { continue }
-            output += text[lastEnd..<matchRange.lowerBound]
+            builder.appendOriginal(text[lastEnd..<matchRange.lowerBound])
             lastEnd = matchRange.upperBound
 
             switch Self.classify(match, in: text) {
             case .escape:
-                output += "$"
+                builder.appendOriginal("$")
             case .specialVariable(let name):
-                output += Self.specialVariables[name]?.resolve(request) ?? String(text[matchRange])
+                if let value = Self.specialVariables[name]?.resolve(request) {
+                    builder.appendQuarantined(value)
+                } else {
+                    builder.appendOriginal(text[matchRange])
+                }
             case .argumentsIndexed(let index), .positional(let index):
                 // `index` is `nil` when the digit run didn't fit `Int` (an implausibly large
                 // literal, but still valid input text) -- treated the same as an out-of-range
                 // index: substitutes empty, never a crash.
-                output += index.flatMap { positionalArguments[safe: $0] } ?? ""
+                builder.appendQuarantined(index.flatMap { positionalArguments[safe: $0] } ?? "")
             case .argumentsBare:
                 sawBareArgumentsReference = true
-                output += rawArgumentsText
+                builder.appendQuarantined(rawArgumentsText)
             case .named(let name):
                 if let position = request.argumentNames.firstIndex(of: name) {
-                    output += positionalArguments[safe: position] ?? ""
+                    builder.appendQuarantined(positionalArguments[safe: position] ?? "")
                 } else {
-                    output += String(text[matchRange])
+                    builder.appendOriginal(text[matchRange])
                 }
             }
         }
-        output += text[lastEnd...]
-
-        if !request.arguments.isEmpty, !sawBareArgumentsReference {
-            output += "\n\nARGUMENTS: \(rawArgumentsText)"
-        }
-
-        return output
+        builder.appendOriginal(text[lastEnd...])
+        return builder.finish()
     }
 
     // MARK: - Token classification

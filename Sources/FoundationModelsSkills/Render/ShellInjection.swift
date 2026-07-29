@@ -49,37 +49,58 @@ public struct ShellInjection: RenderPass {
     /// Executes every recognized `` !`command` ``/fenced ` ```! ` injection in `text`, inlining
     /// each command's merged, trimmed output at its injection site.
     ///
+    /// Scans only `text`'s `.original` spans -- a `.quarantined` span (pass 1's substituted
+    /// argument values, e.g.) is never scanned for `` !`command` ``/fenced injection, satisfying
+    /// plan.md §5's no-re-scan contract: a model-supplied argument containing `` !`echo pwned` ``
+    /// is inserted as inert text, never executed. Each command's own output becomes its own
+    /// `.quarantined` span in turn, so a later pass (Stencil) never re-scans it either.
+    ///
     /// - Parameters:
     ///   - text: The input text to scan -- pass 1's output, since this pass always runs second
     ///     in the body pass-set (`RenderPipeline.renderBody`).
     ///   - request: The render request this pass runs under; `skillDirectory` supplies the
     ///     working directory every command runs in, and `policy.isShellExecutionDisabled` gates
     ///     whether anything runs at all.
-    /// - Returns: `text` with every recognized injection replaced by its command's output (or,
-    ///   under a disabled policy, by `disabledMarker`).
+    /// - Returns: `text` with every recognized injection (found within an `.original` span)
+    ///   replaced by its command's output (or, under a disabled policy, by `disabledMarker`),
+    ///   quarantined.
     /// - Throws: Whatever `Foundation.Process.run()` throws when a command fails to launch (e.g.
     ///   `request.skillDirectory` does not exist).
-    public func render(_ text: String, request: RenderRequest) throws -> String {
-        var output = ""
+    public func render(_ text: QuarantinedText, request: RenderRequest) throws -> QuarantinedText {
+        try text.mappingOriginalSpans { spanText in
+            try Self.injectedSpans(in: spanText, request: request)
+        }
+    }
+
+    /// Scans one `.original` span's `text` left to right for every recognized injection,
+    /// building the span list that replaces it.
+    ///
+    /// - Parameters:
+    ///   - text: One `.original` span's text to scan.
+    ///   - request: The render request this pass runs under.
+    /// - Returns: The spans that replace `text`: literal runs as `.original`, every command's
+    ///   output (or `disabledMarker`) as its own `.quarantined` span.
+    /// - Throws: Whatever `resolvedOutput(forCommand:request:)` throws.
+    private static func injectedSpans(in text: String, request: RenderRequest) throws -> [QuarantinedText.Span] {
+        var builder = SpanBuilder()
         var lastEnd = text.startIndex
         let fullRange = NSRange(text.startIndex..<text.endIndex, in: text)
 
         for match in Self.injectionPattern.matches(in: text, range: fullRange) {
             guard let matchRange = Range(match.range, in: text) else { continue }
-            output += text[lastEnd..<matchRange.lowerBound]
+            builder.appendOriginal(text[lastEnd..<matchRange.lowerBound])
             lastEnd = matchRange.upperBound
 
             switch Self.classify(match, in: text) {
             case .inline(let prefix, let command):
-                output += prefix
-                output += try Self.resolvedOutput(forCommand: command, request: request)
+                builder.appendOriginal(prefix)
+                builder.appendQuarantined(try Self.resolvedOutput(forCommand: command, request: request))
             case .fenced(let command):
-                output += try Self.resolvedOutput(forCommand: command, request: request)
+                builder.appendQuarantined(try Self.resolvedOutput(forCommand: command, request: request))
             }
         }
-        output += text[lastEnd...]
-
-        return output
+        builder.appendOriginal(text[lastEnd...])
+        return builder.finish()
     }
 
     // MARK: - Injection classification

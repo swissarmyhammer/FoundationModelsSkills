@@ -11,13 +11,17 @@ comments:
 
     Discovered along the way: WatchMode's SIGTERM handler must be @MainActor (Swift 6 strict concurrency flags a plain nonisolated static var DispatchSourceSignal as unsafe global mutable state) — fixed by isolating the whole enum to @MainActor.
   timestamp: 2026-07-29T21:41:12.967171+00:00
+- actor: claude-code
+  id: 01kyqyvt4mwvtn0zqhj56cgrsc
+  text: 'Clean review (task ktsuf81pa, sha b8e754c..96169ed) — 0 findings after 5 iterations. Moved to done. Final commits: 2c77ebf (implementation), e5f80fe (dedupe literal), 62a7902 (missing Returns doc), b8e754c (extract reasonText(for:) helper), 96169ed (dictionary-backed lookup + doc-comment summary fixes). All 258 tests passing throughout.'
+  timestamp: 2026-07-29T22:10:32.212175+00:00
 depends_on:
 - 01KYNCX7H8EQBNT1XES7D0DBG3
 - 01KYNCV471YM5S7MVZMHXM25QJ
 - 01KYNCVGQNCFM67RHYYC88BZ6F
 - 01KYNCWVSV6MH31BMHGG6C46AJ
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: '9480'
 title: 'skills-demo executable: CLI, --chat, --watch modes'
 ---
 ## What

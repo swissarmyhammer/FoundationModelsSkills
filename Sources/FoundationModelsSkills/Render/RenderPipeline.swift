@@ -146,26 +146,29 @@ public struct RenderRequest: Sendable {
 ///
 /// A single-shot text transform over a render request (plan.md §5).
 /// `RenderPipeline` invokes each pass at most once per `render` call, in a
-/// fixed order, feeding it the previous pass's output. No pass is ever
-/// re-invoked within one render, and a pass's own output is never handed
-/// back to it or to an earlier pass -- conforming types must not attempt to
-/// re-scan text they, or an earlier pass, already produced.
+/// fixed order, feeding it the previous pass's output. Operates on
+/// `QuarantinedText`, not a plain `String`, so the no-re-scan contract is
+/// structural rather than a convention each pass must remember: a
+/// conforming pass scans and substitutes only within `.original` spans (via
+/// `QuarantinedText.mappingOriginalSpans(_:)`), marking anything it splices
+/// in as `.quarantined` so no later pass -- in this call or any other --
+/// ever scans text it, or an earlier pass, already produced.
 public protocol RenderPass: Sendable {
     /// Transforms `text` for `request`.
     ///
     /// - Parameters:
-    ///   - text: The input text -- the render request's original `text` for
-    ///     the first pass in a pass-set, or the previous pass's output for
-    ///     every pass after it.
+    ///   - text: The input text -- the render request's original `text`,
+    ///     wrapped as a single `.original` span, for the first pass in a
+    ///     pass-set; the previous pass's output for every pass after it.
     ///   - request: The render request this pass runs under, including the
     ///     `RenderPolicy` every side-effecting pass must honor.
     /// - Returns: The transformed text, passed unchanged to the next pass in
-    ///   the set (or returned as the pipeline's final result, for the set's
-    ///   last pass).
+    ///   the set (or flattened into the pipeline's final result, for the
+    ///   set's last pass).
     /// - Throws: Any error a conforming pass raises while transforming
     ///   `text`; see each conforming type for the specific errors it can
     ///   throw.
-    func render(_ text: String, request: RenderRequest) throws -> String
+    func render(_ text: QuarantinedText, request: RenderRequest) throws -> QuarantinedText
 }
 
 /// A pass that returns its input unchanged.
@@ -190,7 +193,7 @@ public struct IdentityRenderPass: RenderPass {
     /// - Returns: `text`, unchanged.
     /// - Throws: Never; this pass performs an identity transformation and
     ///   never fails.
-    public func render(_ text: String, request: RenderRequest) throws -> String {
+    public func render(_ text: QuarantinedText, request: RenderRequest) throws -> QuarantinedText {
         text
     }
 }
@@ -275,21 +278,25 @@ public struct RenderPipeline: Sendable {
 
     /// Runs `passes` once each, in order.
     ///
-    /// Threads each pass's output text into the next as input -- the
+    /// Threads each pass's output through to the next as input -- the
     /// shared, single-shot execution engine both `renderBody` and
-    /// `renderMetadata` build on.
+    /// `renderMetadata` build on. Starts from `request.text` wrapped as a
+    /// single `.original` `QuarantinedText` span, and flattens the last
+    /// pass's output back to a plain `String` only once every pass has run,
+    /// so a `.quarantined` span any pass produces stays invisible to every
+    /// later pass in `passes` (plan.md §5's no-re-scan contract).
     ///
     /// - Parameters:
     ///   - passes: The ordered pass-set to run, exactly once each.
     ///   - request: The render request; only `request.text` is superseded
     ///     between passes, by each pass's returned output.
-    /// - Returns: The last pass's output.
+    /// - Returns: The last pass's output, flattened.
     /// - Throws: Any error thrown by a pass in `passes`.
     private func run(passes: [any RenderPass], request: RenderRequest) throws -> String {
-        var text = request.text
+        var text = QuarantinedText(original: request.text)
         for pass in passes {
             text = try pass.render(text, request: request)
         }
-        return text
+        return text.flattened
     }
 }

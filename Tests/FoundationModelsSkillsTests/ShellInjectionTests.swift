@@ -54,6 +54,12 @@ struct ShellInjectionTests {
             policy: policy)
     }
 
+    /// Runs `pass.render` over `text`, wrapping/flattening `QuarantinedText` so every call site
+    /// below can pass/receive plain `String`s.
+    private func render(_ text: String, request: RenderRequest) throws -> String {
+        try pass.render(QuarantinedText(original: text), request: request).flattened
+    }
+
     // MARK: - Recognition grammar
 
     @Test(
@@ -86,7 +92,7 @@ struct ShellInjectionTests {
         ])
     func recognitionGrammarMatchesExpectedForm(name: String, body: String, expected: String) throws {
         let workingDirectory = try makeTempDirectory()
-        let result = try pass.render(body, request: request(text: body, workingDirectory: workingDirectory))
+        let result = try render(body, request: request(text: body, workingDirectory: workingDirectory))
         #expect(result == expected, "\(name)")
     }
 
@@ -94,7 +100,7 @@ struct ShellInjectionTests {
 
     @Test func executesInlineCommandAndInlinesItsOutput() throws {
         let workingDirectory = try makeTempDirectory()
-        let result = try pass.render(
+        let result = try render(
             "!`printf hello`", request: request(text: "!`printf hello`", workingDirectory: workingDirectory))
         #expect(result == "hello")
     }
@@ -102,7 +108,7 @@ struct ShellInjectionTests {
     @Test func mergesStdoutAndStderrIntoOneInlinedOutput() throws {
         let workingDirectory = try makeTempDirectory()
         let body = "!`echo out; echo err 1>&2`"
-        let result = try pass.render(body, request: request(text: body, workingDirectory: workingDirectory))
+        let result = try render(body, request: request(text: body, workingDirectory: workingDirectory))
         #expect(result.contains("out"))
         #expect(result.contains("err"))
     }
@@ -110,7 +116,7 @@ struct ShellInjectionTests {
     @Test func runsWithTheSkillDirectoryAsItsWorkingDirectory() throws {
         let workingDirectory = try makeTempDirectory()
         let body = "!`pwd`"
-        let result = try pass.render(body, request: request(text: body, workingDirectory: workingDirectory))
+        let result = try render(body, request: request(text: body, workingDirectory: workingDirectory))
         #expect(result == workingDirectory.path)
     }
 
@@ -120,7 +126,7 @@ struct ShellInjectionTests {
 
         let workingDirectory = try makeTempDirectory()
         let body = "!`echo $SHELL_INJECTION_TESTS_ENV_VAR`"
-        let result = try pass.render(body, request: request(text: body, workingDirectory: workingDirectory))
+        let result = try render(body, request: request(text: body, workingDirectory: workingDirectory))
         #expect(result == "hello-env")
     }
 
@@ -131,7 +137,7 @@ struct ShellInjectionTests {
         let probeFile = workingDirectory.appendingPathComponent("sideeffect.txt")
         let body = "!`touch sideeffect.txt`"
 
-        let result = try pass.render(
+        let result = try render(
             body,
             request: request(
                 text: body, workingDirectory: workingDirectory,
@@ -149,8 +155,8 @@ struct ShellInjectionTests {
         let body = "!`echo tick >> counter.txt`"
         let renderRequest = request(text: body, workingDirectory: workingDirectory)
 
-        _ = try pass.render(body, request: renderRequest)
-        _ = try pass.render(body, request: renderRequest)
+        _ = try render(body, request: renderRequest)
+        _ = try render(body, request: renderRequest)
 
         let counterContents = try String(contentsOf: counterFile, encoding: .utf8)
         let tickCount = counterContents.split(separator: "\n").count
@@ -180,7 +186,8 @@ struct ShellInjectionTests {
         // own regex or through `ArgumentSubstitution` -- so it can carry `$0`, another
         // `` !`command` ``, and `{{ HOME }}` verbatim with no quoting gymnastics at all. If either
         // pass re-scanned pass 2's injected output, one of these three would be transformed;
-        // none is.
+        // none is. Wired with the REAL `StencilPass`, not `IdentityRenderPass` -- an identity
+        // pass 3 can never disprove re-scanning, since it never interprets `{{ }}` either way.
         let workingDirectory = try makeTempDirectory()
         let sentinel = "$0 !`echo hi` {{ HOME }}"
         try sentinel.write(
@@ -193,7 +200,7 @@ struct ShellInjectionTests {
             """
         let pipeline = RenderPipeline(
             argumentSubstitution: ArgumentSubstitution(), shellInjection: ShellInjection(),
-            stencil: IdentityRenderPass())
+            stencil: StencilPass())
         var renderRequest = request(text: body, workingDirectory: workingDirectory)
         renderRequest.arguments = ["real-value"]
 
@@ -203,7 +210,8 @@ struct ShellInjectionTests {
         #expect(result.contains("Argument zero is: real-value"))
         // ...but the sentinel text pass 2 spliced in afterward stays byte-for-byte literal:
         // its own `$0` was never handed back to pass 1, its own `` !`echo hi` `` was never
-        // handed back to this pass, and its own `{{ HOME }}` was never handed to pass 3.
+        // handed back to this pass, and its own `{{ HOME }}` was never handed to the REAL pass
+        // 3 -- if it had been, this would read the host's actual `$HOME` value instead.
         #expect(result.contains("Shell says: \(sentinel)"))
     }
 

@@ -54,6 +54,12 @@ struct StencilPassTests {
             policy: RenderPolicy())
     }
 
+    /// Runs `pass.render` over `text`, wrapping/flattening `QuarantinedText` so every call site
+    /// below can pass/receive plain `String`s.
+    private func render(_ text: String, using pass: StencilPass, request: RenderRequest) throws -> String {
+        try pass.render(QuarantinedText(original: text), request: request).flattened
+    }
+
     // MARK: - Ladder precedence
 
     @Test func explicitContextValueBeatsEnvironmentVariableBeatsWellKnownValueForTheSameKey() throws {
@@ -65,8 +71,8 @@ struct StencilPassTests {
             wellKnownValues: StencilPass.WellKnownValues(
                 workingDirectory: "/fixture/cwd", date: "2020-01-01", hostname: "from-well-known"))
 
-        let rendered = try pass.render(
-            "{{ hostname }}",
+        let rendered = try render(
+            "{{ hostname }}", using: pass,
             request: request(text: "{{ hostname }}", arguments: ["from-context"], argumentNames: ["hostname"]))
 
         #expect(rendered == "from-context")
@@ -78,7 +84,7 @@ struct StencilPassTests {
             wellKnownValues: StencilPass.WellKnownValues(
                 workingDirectory: "/fixture/cwd", date: "2020-01-01", hostname: "from-well-known"))
 
-        let rendered = try pass.render("{{ hostname }}", request: request(text: "{{ hostname }}"))
+        let rendered = try render("{{ hostname }}", using: pass, request: request(text: "{{ hostname }}"))
 
         #expect(rendered == "from-env")
     }
@@ -87,7 +93,7 @@ struct StencilPassTests {
         let pass = StencilPass(wellKnownValues: Self.fixtureWellKnownValues)
         let text = "{{ working_directory }}|{{ date }}|{{ hostname }}"
 
-        let rendered = try pass.render(text, request: request(text: text))
+        let rendered = try render(text, using: pass, request: request(text: text))
 
         #expect(rendered == "/fixture/cwd|2020-01-01|fixture-host")
     }
@@ -103,8 +109,8 @@ struct StencilPassTests {
         let pass = StencilPass(
             environment: ["HOME": "/Users/leaked"], wellKnownValues: Self.fixtureWellKnownValues)
 
-        let rendered = try pass.render(
-            "{{ HOME }}", request: request(text: "{{ HOME }}", arguments: [], argumentNames: ["HOME"]))
+        let rendered = try render(
+            "{{ HOME }}", using: pass, request: request(text: "{{ HOME }}", arguments: [], argumentNames: ["HOME"]))
 
         #expect(rendered == "")
     }
@@ -118,8 +124,8 @@ struct StencilPassTests {
         // this file's own `namedArguments(for:)` doc comment claims.
         let pass = StencilPass(wellKnownValues: Self.fixtureWellKnownValues)
 
-        let rendered = try pass.render(
-            "{{ duplicate }}",
+        let rendered = try render(
+            "{{ duplicate }}", using: pass,
             request: request(
                 text: "{{ duplicate }}", arguments: ["first", "second", "third"],
                 argumentNames: ["duplicate", "other", "duplicate"]))
@@ -131,7 +137,7 @@ struct StencilPassTests {
         let pass = StencilPass(
             environment: ["HOME": "/Users/fixture"], wellKnownValues: Self.fixtureWellKnownValues)
 
-        let rendered = try pass.render("{{ HOME }}", request: request(text: "{{ HOME }}"))
+        let rendered = try render("{{ HOME }}", using: pass, request: request(text: "{{ HOME }}"))
 
         #expect(rendered == "/Users/fixture")
     }
@@ -144,8 +150,8 @@ struct StencilPassTests {
             source: .defaults,
             root: URL(fileURLWithPath: "/tmp/stencil-pass-tests/defaults", isDirectory: true))
 
-        let rendered = try pass.render(
-            Self.nonWhitelistedTagBody,
+        let rendered = try render(
+            Self.nonWhitelistedTagBody, using: pass,
             request: request(text: Self.nonWhitelistedTagBody, winningLayer: defaultsLayer))
 
         #expect(rendered == "no")
@@ -155,8 +161,8 @@ struct StencilPassTests {
         let pass = StencilPass(wellKnownValues: Self.fixtureWellKnownValues)
 
         do {
-            _ = try pass.render(
-                Self.nonWhitelistedTagBody, request: request(text: Self.nonWhitelistedTagBody))
+            _ = try render(
+                Self.nonWhitelistedTagBody, using: pass, request: request(text: Self.nonWhitelistedTagBody))
             Issue.record("expected TemplateEngineError to be thrown")
         } catch let error as TemplateEngineError {
             #expect("\(error)".contains("ifnot"))
@@ -169,8 +175,9 @@ struct StencilPassTests {
             source: .user, root: URL(fileURLWithPath: "/tmp/stencil-pass-tests/user", isDirectory: true))
 
         do {
-            _ = try pass.render(
-                Self.nonWhitelistedTagBody, request: request(text: Self.nonWhitelistedTagBody, winningLayer: userLayer))
+            _ = try render(
+                Self.nonWhitelistedTagBody, using: pass,
+                request: request(text: Self.nonWhitelistedTagBody, winningLayer: userLayer))
             Issue.record("expected TemplateEngineError to be thrown")
         } catch is TemplateEngineError {
             // Expected.
@@ -185,8 +192,8 @@ struct StencilPassTests {
             trustOverrides: [projectRoot: .trusted], wellKnownValues: Self.fixtureWellKnownValues)
         let projectLayer = DotfolderStack.Layer(source: .project, root: projectRoot)
 
-        let rendered = try pass.render(
-            Self.nonWhitelistedTagBody,
+        let rendered = try render(
+            Self.nonWhitelistedTagBody, using: pass,
             request: request(text: Self.nonWhitelistedTagBody, winningLayer: projectLayer))
 
         #expect(rendered == "no")
@@ -199,8 +206,8 @@ struct StencilPassTests {
         let defaultsLayer = DotfolderStack.Layer(source: .defaults, root: defaultsRoot)
 
         do {
-            _ = try pass.render(
-                Self.nonWhitelistedTagBody,
+            _ = try render(
+                Self.nonWhitelistedTagBody, using: pass,
                 request: request(text: Self.nonWhitelistedTagBody, winningLayer: defaultsLayer))
             Issue.record("expected TemplateEngineError to be thrown")
         } catch is TemplateEngineError {
@@ -219,8 +226,8 @@ struct StencilPassTests {
         let pass = StencilPass(layers: fixture.layers, wellKnownValues: Self.fixtureWellKnownValues)
         let text = "{% include \"header\" %}"
 
-        let rendered = try pass.render(
-            text,
+        let rendered = try render(
+            text, using: pass,
             request: request(
                 text: text, winningLayer: DotfolderStack.Layer(source: .project, root: fixture.projectRoot)))
 
@@ -242,8 +249,8 @@ struct StencilPassTests {
         let pass = StencilPass(layers: fixture.layers, wellKnownValues: Self.fixtureWellKnownValues)
         let text = "{% include \"header\" %}"
 
-        let rendered = try pass.render(
-            text,
+        let rendered = try render(
+            text, using: pass,
             request: request(
                 text: text, winningLayer: DotfolderStack.Layer(source: .project, root: fixture.projectRoot)))
 
@@ -275,8 +282,8 @@ struct StencilPassTests {
             return
         }
 
-        let rendered = try pass.render(
-            skill.body,
+        let rendered = try render(
+            skill.body, using: pass,
             request: request(
                 text: skill.body, winningLayer: DotfolderStack.Layer(source: .project, root: projectSkillsRoot)))
 
