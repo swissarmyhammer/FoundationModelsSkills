@@ -79,6 +79,45 @@ struct SkillOperationsTests {
         #expect(message.contains("query"))
     }
 
+    @Test func searchSkillNeverLeaksAModelHiddenSkillSeededDirectlyIntoTheSearcher() async throws {
+        // Seeds the searcher directly (bypassing `SkillSearchAgent.update(
+        // items:)`'s own filtering, ^49at4v3), so this exercises
+        // `SearchSkill.execute`'s own `context.visibilityPredicate` filter
+        // as the last line of defense.
+        let hidden = SkillMetadata(id: "hidden-tool", description: "A hidden diagnostic tool.", isModelVisible: false)
+        let visible = SkillMetadata(id: "visible-tool", description: "A visible diagnostic tool.", isModelVisible: true)
+        let registry = SkillsRegistry(roots: [Self.projectSkillsRoot])
+        let searcher = MetadataSearcher(items: [hidden, visible])
+        let context = SkillsToolContext(registry: registry, searchAgent: SkillSearchAgent(searcher: searcher))
+
+        let output = try await SearchSkill(query: "diagnostic tool", limit: nil).execute(in: context)
+
+        guard case .success(let result) = output else {
+            Issue.record("expected a result outcome, got \(output)")
+            return
+        }
+        #expect(!result.matches.contains { $0.id == "hidden-tool" })
+        #expect(result.matches.contains { $0.id == "visible-tool" })
+    }
+
+    @Test func searchSkillReportsTheRealTotalBeforeTheLimitCap() async throws {
+        let items = (1...5).map { index in
+            SkillMetadata(id: "widget-\(index)", description: "Handles widget tasks.", isModelVisible: true)
+        }
+        let registry = SkillsRegistry(roots: [Self.projectSkillsRoot])
+        let searcher = MetadataSearcher(items: items)
+        let context = SkillsToolContext(registry: registry, searchAgent: SkillSearchAgent(searcher: searcher))
+
+        let output = try await SearchSkill(query: "widget", limit: 2).execute(in: context)
+
+        guard case .success(let result) = output else {
+            Issue.record("expected a result outcome, got \(output)")
+            return
+        }
+        #expect(result.matches.count == 2)
+        #expect(result.total == 5)
+    }
+
     @Test func listSkillWithANoMatchFilterReturnsAnEmptyListNotACorrective() async throws {
         let output = try await ListSkill(filter: "no-such-skill-exists").execute(in: Self.makeFixtureContext())
 

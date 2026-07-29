@@ -50,15 +50,16 @@ public struct SearchSkillResult: Encodable, Sendable, Equatable {
     /// The ranked matches, best first, capped at the requested `limit`.
     public let matches: [SkillRow]
 
-    /// The number of matches returned -- lets the model know to raise
-    /// `limit` when it wants to see more.
+    /// The real number of matches found, before the `limit` cap -- lets the
+    /// model know to raise `limit` when it wants to see more. Can exceed
+    /// `matches.count`.
     public let total: Int
 
     /// Creates a `SearchSkillResult` by directly assigning every field.
     ///
     /// - Parameters:
     ///   - matches: The ranked matches, best first.
-    ///   - total: The number of matches returned.
+    ///   - total: The real number of matches found, before the `limit` cap.
     public init(matches: [SkillRow], total: Int) {
         self.matches = matches
         self.total = total

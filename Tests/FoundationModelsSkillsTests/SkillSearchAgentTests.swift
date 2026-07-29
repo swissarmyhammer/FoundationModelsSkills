@@ -84,6 +84,44 @@ struct SkillSearchAgentTests {
         #expect(matches.first?.id == "alpha")
     }
 
+    // MARK: - Surface-aware `update(items:)` (^49at4v3)
+
+    @Test func aUserSurfaceAgentKeepsDeployAndDropsLintAfterUpdate() async throws {
+        // `deploy` is model-hidden (`disable-model-invocation: true`) but
+        // user-invocable; `lint` is the reverse (`user-invocable: false`,
+        // fully model-visible). A user-surface agent's `update(items:)`
+        // must therefore keep `deploy` and drop `lint` -- the opposite of
+        // the default model-surface filter.
+        let deploy = SkillMetadata(id: "deploy", description: "Deploys the app.", isModelVisible: false)
+        let lint = SkillMetadata(id: "lint", description: "Lints the code.", isModelVisible: true)
+        let searcher = MetadataSearcher(items: [SkillMetadata]())
+        let userVisibleIDs: Set<String> = ["deploy"]
+        let agent = SkillSearchAgent(searcher: searcher, visibilityPredicate: { userVisibleIDs.contains($0.id) })
+
+        await agent.update(items: [deploy, lint])
+
+        let deployMatches = try await agent.search(query: "deploy", limit: 10)
+        #expect(deployMatches.map(\.id) == ["deploy"])
+        let lintMatches = try await agent.search(query: "lint", limit: 10)
+        #expect(lintMatches.isEmpty)
+    }
+
+    @Test func aModelSurfaceAgentKeepsLintAndDropsDeployAfterUpdate() async throws {
+        // The default filter (no `visibilityPredicate` supplied) is the
+        // model surface -- the mirror image of the user-surface case above.
+        let deploy = SkillMetadata(id: "deploy", description: "Deploys the app.", isModelVisible: false)
+        let lint = SkillMetadata(id: "lint", description: "Lints the code.", isModelVisible: true)
+        let searcher = MetadataSearcher(items: [SkillMetadata]())
+        let agent = SkillSearchAgent(searcher: searcher)
+
+        await agent.update(items: [deploy, lint])
+
+        let lintMatches = try await agent.search(query: "lint", limit: 10)
+        #expect(lintMatches.map(\.id) == ["lint"])
+        let deployMatches = try await agent.search(query: "deploy", limit: 10)
+        #expect(deployMatches.isEmpty)
+    }
+
     // MARK: - `update(items:)` round trip
 
     @Test func updateItemsMakesANewIdSearchableAndDropsARemovedIdWhileFilteringModelHidden() async throws {

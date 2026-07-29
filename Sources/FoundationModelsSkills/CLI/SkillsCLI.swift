@@ -42,11 +42,12 @@ public enum SkillsCLI {
     /// - Returns: The CLI-facing context.
     private static func makeContext(registry: SkillsRegistry) -> SkillsToolContext {
         let userVisibleIDs = Set(registry.commandListing().map(\.id))
-        let searcher = MetadataSearcher(items: registry.metadata().filter { userVisibleIDs.contains($0.id) })
+        let isUserVisible: @Sendable (SkillMetadata) -> Bool = { userVisibleIDs.contains($0.id) }
+        let searcher = MetadataSearcher(items: registry.metadata().filter(isUserVisible))
         return SkillsToolContext(
             registry: registry,
-            searchAgent: SkillSearchAgent(searcher: searcher),
-            visibilityPredicate: { userVisibleIDs.contains($0.id) }
+            searchAgent: SkillSearchAgent(searcher: searcher, visibilityPredicate: isUserVisible),
+            visibilityPredicate: isUserVisible
         )
     }
 }

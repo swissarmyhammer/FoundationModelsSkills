@@ -11,8 +11,8 @@ import Operations
 /// array.
 public typealias SearchSkillOutput = CorrectiveOutcome<SearchSkillResult>
 
-/// Searches the model-visible skill catalog by query, ranked best match
-/// first (plan.md §7, decision #26).
+/// Searches the calling context's visible skill catalog by query, ranked
+/// best match first (plan.md §7, decision #26).
 ///
 /// Delegates to the shared `SkillSearchAgent`; a blank or whitespace-only
 /// `query` returns a corrective message instead of searching, since the
@@ -98,10 +98,11 @@ public struct SearchSkill: OperationDefinition {
             requiredKey: Self.queryKey, requiredValue: query, optionalKey: Self.limitKey, optionalValue: limit)
     }
 
-    /// Searches the model-visible catalog for `query`, or returns a
+    /// Searches `context`'s visible catalog for `query`, or returns a
     /// corrective for blank input.
     ///
-    /// - Parameter context: The shared context supplying the search agent.
+    /// - Parameter context: The shared context supplying the search agent
+    ///   and which entries `context.visibilityPredicate` accepts.
     /// - Returns: `.success(_:)` carrying the ranked results on success, or
     ///   `.corrective(_:)` when `query` is blank.
     /// - Throws: Nothing recoverable; the signature carries `throws` to
@@ -115,12 +116,31 @@ public struct SearchSkill: OperationDefinition {
         }
 
         let resolvedLimit = limit ?? Self.defaultLimit
-        let matches = try await context.searchAgent.search(query: query, limit: resolvedLimit)
-        let rows = matches.map(SkillRow.init(metadata:))
-        return .success(SearchSkillResult(matches: rows, total: rows.count))
+        // Search with a generous, effectively-unbounded limit rather than
+        // `resolvedLimit` -- `SkillSearchAgent.search` (via `HybridRanker.
+        // topMatches`) only ever returns genuine matches, never zero-score
+        // padding, so this recovers the real match count before the
+        // `limit` cap, not merely the number of rows displayed. Deriving
+        // the bound from `context.registry` instead would be wrong: the
+        // registry and the search agent's own catalog are independently
+        // configurable (`SkillsToolContext`'s own doc comment), so nothing
+        // guarantees they're the same size.
+        let allMatches = try await context.searchAgent
+            .search(query: query, limit: Self.unboundedSearchLimit)
+            .filter(context.visibilityPredicate)
+        let rows = allMatches.prefix(resolvedLimit).map(SkillRow.init(metadata:))
+        return .success(SearchSkillResult(matches: Array(rows), total: allMatches.count))
     }
 
     /// The corrective message returned for a blank or whitespace-only
     /// `query`.
     private static let blankQueryMessage = "The `query` parameter must not be blank."
+
+    /// The limit passed to `SkillSearchAgent.search` to recover every
+    /// genuine match, not just `resolvedLimit`'s display cap.
+    ///
+    /// Far beyond any realistic skill catalog's size, so this is
+    /// effectively "no cap" without risking `Int.max`-scale arithmetic in
+    /// the underlying ranker.
+    private static let unboundedSearchLimit = 10_000
 }
