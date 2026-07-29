@@ -23,6 +23,18 @@ public struct DecodedSkill: Sendable, Equatable {
     /// Diagnostic-worthy notes accumulated while decoding.
     public var notes: [String]
 
+    /// Creates a decoded skill from its already-decoded frontmatter, its
+    /// render-pipeline body, and any diagnostic-worthy notes accumulated
+    /// while decoding.
+    ///
+    /// - Parameters:
+    ///   - frontmatter: The decoded frontmatter fields.
+    ///   - body: The render-pipeline body -- everything after the closing
+    ///     frontmatter fence (or the whole text, when there was no
+    ///     frontmatter block).
+    ///   - notes: Diagnostic-worthy notes, combining `SkillFrontmatter`'s own
+    ///     top-level/`metadata.*` conflict notes with `FrontmatterDecoder`'s
+    ///     quoting-fallback-retry note, when one fired.
     public init(frontmatter: SkillFrontmatter, body: String, notes: [String]) {
         self.frontmatter = frontmatter
         self.body = body

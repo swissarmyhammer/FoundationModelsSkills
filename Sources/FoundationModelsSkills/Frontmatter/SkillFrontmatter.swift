@@ -66,8 +66,12 @@ extension FrontmatterValue {
     /// The space-separated tokens of this value: `.string` splits on
     /// whitespace; `.array` takes each `.string` element verbatim (order
     /// preserved, non-string elements skipped); anything else tokenizes to
-    /// empty. Shared by `allowed-tools:` and `arguments:`, both of which
-    /// accept the same two spellings (plan.md §4).
+    /// empty. Used by `arguments:`, which accepts both a space-separated
+    /// string and a YAML list (plan.md §4/§5). `allowed-tools:` does **not**
+    /// use this helper -- the spec keeps it a space-separated string only
+    /// (plan.md §4), so `allowedToolsRaw` decodes as a plain `String` and
+    /// `allowedTools` tokenizes it directly rather than through
+    /// `FrontmatterValue`.
     var spaceSeparatedOrListTokens: [String] {
         switch self {
         case .string(let raw):
@@ -168,6 +172,18 @@ public struct SkillFrontmatter: Sendable, Equatable {
         argumentsRaw?.spaceSeparatedOrListTokens ?? []
     }
 
+    /// Creates a `SkillFrontmatter` by directly assigning every field --
+    /// primarily for tests and callers building a frontmatter value by hand
+    /// (e.g. `FrontmatterDecoder`'s no-frontmatter-block default). Every
+    /// parameter defaults to its "absent" value (`nil`, `[:]`, or `[]`), so
+    /// callers only need to specify the fields they care about.
+    ///
+    /// This initializer does **not** perform the top-level/`metadata.*`
+    /// conflict resolution that `init(from:)` does when decoding YAML --
+    /// each extension-field parameter (`preload`, `userInvocable`,
+    /// `disableModelInvocation`, `argumentsRaw`, `argumentHint`, `partial`)
+    /// is stored exactly as given, with no reconciliation against
+    /// `metadata`.
     public init(
         name: String? = nil,
         description: String? = nil,
@@ -247,6 +263,19 @@ extension SkillFrontmatter: Decodable {
         return topLevel
     }
 
+    /// Decodes `SkillFrontmatter` from a YAML mapping (via Yams' `Decoder`).
+    ///
+    /// Spec fields (`name`, `description`, `license`, `compatibility`,
+    /// `allowed-tools`, `metadata`) decode straight from their top-level
+    /// keys. Extension fields (`preload`, `user-invocable`,
+    /// `disable-model-invocation`, `arguments`, `argument-hint`, `partial`)
+    /// are read from **both** their top-level spelling and their
+    /// `metadata.*` spelling, then reconciled by
+    /// `resolvedExtensionField(_:topLevel:metadataValue:notes:)`: the
+    /// top-level value wins when both are present, and a conflict note is
+    /// appended to `notes`. Any top-level key this decoder does not
+    /// recognize is collected into `unknownTopLevelKeys` rather than
+    /// failing the decode.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: AnyCodingKey.self)
 
@@ -264,19 +293,21 @@ extension SkillFrontmatter: Decodable {
                 [String: FrontmatterValue].self, forKey: AnyCodingKey(stringValue: "metadata"))
             ?? [:]
 
-        let topLevelPreload = try container.decodeIfPresent(
-            Bool.self, forKey: AnyCodingKey(stringValue: ExtensionKey.preload.rawValue))
-        let topLevelUserInvocable = try container.decodeIfPresent(
-            Bool.self, forKey: AnyCodingKey(stringValue: ExtensionKey.userInvocable.rawValue))
-        let topLevelDisableModelInvocation = try container.decodeIfPresent(
-            Bool.self,
-            forKey: AnyCodingKey(stringValue: ExtensionKey.disableModelInvocation.rawValue))
+        // Local helper (rather than a `private` method) so it can close over
+        // `container` -- the four extension boolean fields differ only by
+        // which `ExtensionKey` they look up.
+        func decodeBoolExtensionField(_ key: ExtensionKey) throws -> Bool? {
+            try container.decodeIfPresent(Bool.self, forKey: AnyCodingKey(stringValue: key.rawValue))
+        }
+
+        let topLevelPreload = try decodeBoolExtensionField(.preload)
+        let topLevelUserInvocable = try decodeBoolExtensionField(.userInvocable)
+        let topLevelDisableModelInvocation = try decodeBoolExtensionField(.disableModelInvocation)
         let topLevelArguments = try container.decodeIfPresent(
             FrontmatterValue.self, forKey: AnyCodingKey(stringValue: ExtensionKey.arguments.rawValue))
         let topLevelArgumentHint = try container.decodeIfPresent(
             String.self, forKey: AnyCodingKey(stringValue: ExtensionKey.argumentHint.rawValue))
-        let topLevelPartial = try container.decodeIfPresent(
-            Bool.self, forKey: AnyCodingKey(stringValue: ExtensionKey.partial.rawValue))
+        let topLevelPartial = try decodeBoolExtensionField(.partial)
 
         var notes: [String] = []
         preload = Self.resolvedExtensionField(
