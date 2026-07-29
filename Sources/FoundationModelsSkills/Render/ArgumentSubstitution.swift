@@ -1,0 +1,324 @@
+import Foundation
+
+/// Pass 1 of the §5 render pipeline: Claude-compatible argument and special-variable
+/// substitution.
+///
+/// Resolves every `$`-token plan.md §5 defines -- `$ARGUMENTS`, `$ARGUMENTS[N]`, `$N` (0-based
+/// positional), `$name` (declared via the skill's `arguments:` frontmatter, threaded through
+/// `RenderRequest.argumentNames`), and `${SKILL_DIR}` (plus any future special variable added
+/// to `specialVariables`) -- in one left-to-right scan over the *original* input text. The scan
+/// never re-examines its own substituted output, satisfying `RenderPass`'s single-shot
+/// contract: a supplied argument value that itself contains `$1`-shaped text is inserted
+/// verbatim, never re-evaluated. `\$` escapes a literal `$`, consuming only the backslash --
+/// the text that follows is copied through untouched, never evaluated as a token.
+///
+/// A `$name` or `${VAR}` token this pass does not recognize -- not a declared argument name,
+/// not a known special variable -- is left untouched, verbatim. This is how a bare
+/// `$HOME`-style environment reference survives pass 1 for pass 3's `{{ env.* }}` templating
+/// (plan.md §5) to pick up later, and it means an unrecognized token is never mistaken for
+/// "missing".
+///
+/// A recognized-but-unsupplied reference -- a positional index or a declared name past the
+/// argument count actually supplied -- substitutes to an empty string. This pass raises no
+/// diagnostic for that case: plan.md §5 assigns corrective messaging (from the §6.1 `required`
+/// flags) to the ops layer built on top of this pipeline, not to the pass itself.
+///
+/// `$ARGUMENTS`'s positional siblings (`$ARGUMENTS[N]`/`$N`) are derived by tokenizing all
+/// supplied arguments -- joined with a single space to reconstruct "as typed" -- through a
+/// small shell-style tokenizer (`Self.shellStyleTokens`) that understands double/single quotes
+/// and backslash escapes, so a caller-supplied multi-word argument (e.g. a quoted commit
+/// message) splits the way a shell would, not on every whitespace character.
+public struct ArgumentSubstitution: RenderPass {
+    /// Creates an `ArgumentSubstitution` pass.
+    ///
+    /// Takes no configuration -- every instance behaves identically, driven entirely by the
+    /// `RenderRequest` each `render(_:request:)` call receives.
+    public init() {}
+
+    /// Substitutes every recognized `$`-token in `text` per plan.md §5's Claude-compatible
+    /// grammar, then appends the `ARGUMENTS: <value>` no-data-loss fallback when warranted.
+    ///
+    /// - Parameters:
+    ///   - text: The input text to substitute -- the render request's original body/metadata
+    ///     text, since this pass always runs first in both `RenderPipeline` pass-sets.
+    ///   - request: The render request this pass runs under; `arguments`, `argumentNames`, and
+    ///     `skillDirectory` supply this pass's substitution values.
+    /// - Returns: `text` with every recognized `$`-token substituted, plus the
+    ///   `ARGUMENTS: <value>` auto-append when `request.arguments` is non-empty and `text` has
+    ///   no bare `$ARGUMENTS` reference (the no-data-loss fallback).
+    /// - Throws: Never; this pass performs no I/O and every branch has a defined fallback.
+    public func render(_ text: String, request: RenderRequest) throws -> String {
+        let rawArgumentsText = request.arguments.joined(separator: " ")
+        let positionalArguments = Self.shellStyleTokens(rawArgumentsText)
+
+        var output = ""
+        var sawBareArgumentsReference = false
+        var lastEnd = text.startIndex
+
+        let fullRange = NSRange(text.startIndex..<text.endIndex, in: text)
+        for match in Self.tokenPattern.matches(in: text, range: fullRange) {
+            guard let matchRange = Range(match.range, in: text) else { continue }
+            output += text[lastEnd..<matchRange.lowerBound]
+            lastEnd = matchRange.upperBound
+
+            switch Self.classify(match, in: text) {
+            case .escape:
+                output += "$"
+            case .specialVariable(let name):
+                output += Self.specialVariables[name]?.resolve(request) ?? String(text[matchRange])
+            case .argumentsIndexed(let index), .positional(let index):
+                // `index` is `nil` when the digit run didn't fit `Int` (an implausibly large
+                // literal, but still valid input text) -- treated the same as an out-of-range
+                // index: substitutes empty, never a crash.
+                output += index.flatMap { positionalArguments[safe: $0] } ?? ""
+            case .argumentsBare:
+                sawBareArgumentsReference = true
+                output += rawArgumentsText
+            case .named(let name):
+                if let position = request.argumentNames.firstIndex(of: name) {
+                    output += positionalArguments[safe: position] ?? ""
+                } else {
+                    output += String(text[matchRange])
+                }
+            }
+        }
+        output += text[lastEnd...]
+
+        if !request.arguments.isEmpty, !sawBareArgumentsReference {
+            output += "\n\nARGUMENTS: \(rawArgumentsText)"
+        }
+
+        return output
+    }
+
+    // MARK: - Token classification
+
+    /// One recognized `$`-token category, discriminated from a `tokenPattern` match by
+    /// `classify(_:in:)`.
+    ///
+    /// Mirrors the token forms plan.md §5 defines one-for-one; `render(_:request:)` switches
+    /// over this type to decide each match's substitution, so every case here corresponds to
+    /// exactly one branch there.
+    private enum TokenKind {
+        /// `\$` -- a literal `$`, no substitution.
+        ///
+        /// The backslash is consumed; nothing after it is treated as part of the token.
+        case escape
+        /// `${NAME}` -- a special variable, looked up in `specialVariables`.
+        ///
+        /// An unrecognized name is left untouched by the caller, not by this case itself --
+        /// `render(_:request:)` falls back to the original matched text when the lookup misses.
+        case specialVariable(name: String)
+        /// `$ARGUMENTS[N]` -- 0-based positional, indexing `positionalArguments`.
+        ///
+        /// `index` is `nil` when `N`'s digit run is too large to fit `Int` -- still a
+        /// well-formed token (the grammar has no digit-count limit), just an implausibly large
+        /// literal; treated the same as an out-of-range index (substitutes empty), never a
+        /// parse failure.
+        case argumentsIndexed(index: Int?)
+        /// `$ARGUMENTS` -- all arguments, joined as typed.
+        ///
+        /// Also marks `sawBareArgumentsReference` in `render(_:request:)`, which gates the
+        /// `ARGUMENTS: <value>` auto-append.
+        case argumentsBare
+        /// `$N` -- 0-based positional, indexing `positionalArguments`.
+        ///
+        /// `index` is `nil` under the same too-large-for-`Int` condition as
+        /// `argumentsIndexed`.
+        case positional(index: Int?)
+        /// `$name` -- a declared `arguments:` name, resolved through `RenderRequest.argumentNames`.
+        ///
+        /// An undeclared name is left untouched by the caller, the same fallback
+        /// `specialVariable` uses.
+        case named(name: String)
+    }
+
+    /// Classifies one `tokenPattern` match into a `TokenKind` by checking each alternative's
+    /// named capture group *range* -- not whether its text happens to parse -- in the
+    /// grammar's own precedence order (escape, `${VAR}`, `$ARGUMENTS[N]`, bare `$ARGUMENTS`,
+    /// `$N`, `$name`). Exactly one alternative's range is ever populated for a given match,
+    /// since `tokenPattern`'s alternatives are mutually exclusive by construction; checking the
+    /// range first (rather than gating on `Int(digits) != nil`) means an implausibly large
+    /// digit run for `$ARGUMENTS[N]`/`$N` still classifies correctly, carrying `index: nil`,
+    /// instead of falling through to an alternative that never actually matched.
+    ///
+    /// - Parameters:
+    ///   - match: One match produced by `tokenPattern` against `text`.
+    ///   - text: The text `match` was matched against, needed to extract named-group substrings.
+    /// - Returns: The token kind `match` represents.
+    private static func classify(_ match: NSTextCheckingResult, in text: String) -> TokenKind {
+        if match.range(withName: "escape").location != NSNotFound {
+            return .escape
+        }
+        if let name = groupText(match, name: "specialVar", in: text) {
+            return .specialVariable(name: name)
+        }
+        if match.range(withName: "argumentsIndex").location != NSNotFound {
+            let digits = groupText(match, name: "argumentsIndex", in: text) ?? ""
+            return .argumentsIndexed(index: Int(digits))
+        }
+        if match.range(withName: "argumentsBare").location != NSNotFound {
+            return .argumentsBare
+        }
+        if match.range(withName: "position").location != NSNotFound {
+            let digits = groupText(match, name: "position", in: text) ?? ""
+            return .positional(index: Int(digits))
+        }
+        if let name = groupText(match, name: "namedArg", in: text) {
+            return .named(name: name)
+        }
+        preconditionFailure("ArgumentSubstitution.tokenPattern matched but no known alternative captured.")
+    }
+
+    /// Extracts one named capture group's substring from `match`, or `nil` when that
+    /// alternative did not participate in the match.
+    ///
+    /// - Parameters:
+    ///   - match: The match to inspect.
+    ///   - name: The named capture group in `tokenPattern`.
+    ///   - text: The text `match` was matched against.
+    /// - Returns: The captured substring, or `nil` when `name`'s range is `NSNotFound`.
+    private static func groupText(_ match: NSTextCheckingResult, name: String, in text: String) -> String? {
+        let range = match.range(withName: name)
+        guard range.location != NSNotFound, let swiftRange = Range(range, in: text) else { return nil }
+        return String(text[swiftRange])
+    }
+
+    /// The single-pass `$`-token grammar (plan.md §5).
+    ///
+    /// Six alternatives -- escape, `${VAR}`, `$ARGUMENTS[N]`, bare `$ARGUMENTS`, `$N`, then
+    /// `$name` -- tried in this order via alternation, so `$ARGUMENTS`'s reserved spelling is
+    /// never captured by the generic `$name` alternative, and `$ARGUMENTS[N]` is never captured
+    /// by the bare `$ARGUMENTS` alternative.
+    private static let tokenPattern = try! NSRegularExpression(
+        pattern:
+            #"(?<escape>\\\$)|\$\{(?<specialVar>[A-Za-z_][A-Za-z0-9_]*)\}|\$ARGUMENTS\[(?<argumentsIndex>\d+)\]|(?<argumentsBare>\$ARGUMENTS)\b|\$(?<position>\d+)\b|\$(?<namedArg>[A-Za-z_][A-Za-z0-9_]*)\b"#
+    )
+
+    // MARK: - Special variables
+
+    /// One `${NAME}` special variable pass 1 resolves.
+    ///
+    /// A single table drives every `${...}` lookup -- plan.md §5's "leave room for more special
+    /// vars behind one table" -- so adding a future variable (e.g. an analog of Claude's
+    /// `${CLAUDE_PROJECT_DIR}`) is one new table entry, never a new branch in `render(_:request:)`.
+    private struct SpecialVariable {
+        /// This variable's bare name, as it appears inside `${...}` (no braces, case-sensitive).
+        ///
+        /// Used as `specialVariables`'s dictionary key.
+        let name: String
+        /// Resolves this variable's value for one render request.
+        ///
+        /// Takes the whole `RenderRequest`, not just `skillDirectory`, so a future entry can
+        /// read any other field it needs without changing this type's shape.
+        let resolve: @Sendable (RenderRequest) -> String
+    }
+
+    /// This pass's special-variable table, keyed by `SpecialVariable.name` for lookup.
+    ///
+    /// Currently just `${SKILL_DIR}` (plan.md §5's analog of Claude's `${CLAUDE_SKILL_DIR}`); a
+    /// `${...}` token whose name is not a key here is left untouched, verbatim.
+    private static let specialVariables: [String: SpecialVariable] = Dictionary(
+        uniqueKeysWithValues: [
+            SpecialVariable(name: "SKILL_DIR") { request in request.skillDirectory.path }
+        ].map { ($0.name, $0) })
+
+    // MARK: - Shell-style argument tokenizer
+
+    /// Splits `text` into positional argument tokens using shell-style quoting: double quotes
+    /// group whitespace-containing tokens (backslash escapes `"`, `\`, `` ` ``, and `$` inside
+    /// them), single quotes group tokens with no escape processing at all, and a backslash
+    /// outside any quote escapes the single character that follows it (including whitespace, so
+    /// it does not split the token).
+    ///
+    /// Quote characters are delimiters, never included in the resulting token; an empty quoted
+    /// string (`""`/`''`) produces one empty-string token rather than being dropped, matching
+    /// shell behavior. An unterminated quote at the end of `text` is read leniently -- whatever
+    /// was accumulated so far becomes the final token.
+    ///
+    /// - Parameter text: The raw, as-typed argument text (already joined across every supplied
+    ///   argument -- see `render(_:request:)`).
+    /// - Returns: The tokenized positional arguments, in order; empty when `text` is empty.
+    private static func shellStyleTokens(_ text: String) -> [String] {
+        /// Which quote (if any) the scan is currently inside -- determines how a backslash and
+        /// a closing-quote character behave.
+        enum QuoteState {
+            case none
+            case single
+            case double
+        }
+
+        /// Characters a backslash escapes when scanning inside a double-quoted span --
+        /// anything else, the backslash is copied through literally alongside its next
+        /// character (POSIX `dquote` escaping is narrower than the unquoted case).
+        let doubleQuoteEscapable: Set<Character> = ["\"", "\\", "$", "`"]
+
+        var tokens: [String] = []
+        var current = ""
+        var hasCurrentToken = false
+        var quote: QuoteState = .none
+
+        let characters = Array(text)
+        var index = 0
+        while index < characters.count {
+            let character = characters[index]
+            switch quote {
+            case .none:
+                if character.isWhitespace {
+                    if hasCurrentToken {
+                        tokens.append(current)
+                        current = ""
+                        hasCurrentToken = false
+                    }
+                } else if character == "\"" {
+                    quote = .double
+                    hasCurrentToken = true
+                } else if character == "'" {
+                    quote = .single
+                    hasCurrentToken = true
+                } else if character == "\\" {
+                    hasCurrentToken = true
+                    if index + 1 < characters.count {
+                        index += 1
+                        current.append(characters[index])
+                    }
+                } else {
+                    hasCurrentToken = true
+                    current.append(character)
+                }
+            case .double:
+                if character == "\"" {
+                    quote = .none
+                } else if character == "\\", index + 1 < characters.count,
+                    doubleQuoteEscapable.contains(characters[index + 1])
+                {
+                    index += 1
+                    current.append(characters[index])
+                } else {
+                    current.append(character)
+                }
+            case .single:
+                if character == "'" {
+                    quote = .none
+                } else {
+                    current.append(character)
+                }
+            }
+            index += 1
+        }
+        if hasCurrentToken {
+            tokens.append(current)
+        }
+        return tokens
+    }
+}
+
+extension Array {
+    /// Returns the element at `index`, or `nil` when `index` is out of bounds.
+    ///
+    /// Used by `ArgumentSubstitution` for positional lookups, where an out-of-range index is
+    /// the ordinary "no value supplied" case, not a programmer error.
+    fileprivate subscript(safe index: Int) -> Element? {
+        indices.contains(index) ? self[index] : nil
+    }
+}

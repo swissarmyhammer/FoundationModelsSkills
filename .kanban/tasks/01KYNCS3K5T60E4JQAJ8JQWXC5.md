@@ -102,8 +102,8 @@ comments:
   timestamp: 2026-07-29T04:26:31.981881+00:00
 depends_on:
 - 01KYNCR37A3M7MYKAH7T0QREYS
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: '8480'
 title: Render pipeline skeleton (ordered passes, identity transforms)
 ---
 ## What

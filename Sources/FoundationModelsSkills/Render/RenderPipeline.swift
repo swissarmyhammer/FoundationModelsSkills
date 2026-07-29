@@ -57,8 +57,9 @@ public struct RenderPolicy: Sendable, Equatable {
 /// One render invocation's inputs.
 ///
 /// Carries the text to render, the arguments supplied at call time, the
-/// skill's own directory, the dotfolder layer that won the skill, and the
-/// policy every pass must honor (plan.md §5). Not mutated by
+/// skill's `arguments:` frontmatter names, the skill's own directory, the
+/// dotfolder layer that won the skill, and the policy every pass must honor
+/// (plan.md §5). Not mutated by
 /// `RenderPipeline` during a render call -- each pass receives the same
 /// `RenderRequest` and returns transformed text rather than writing back
 /// into the request; only the pipeline's local working text is rebound
@@ -75,6 +76,26 @@ public struct RenderRequest: Sendable {
     /// Empty for a `description`/`metadata.*` render, which carries no
     /// per-call arguments.
     public var arguments: [String]
+    /// The skill's `arguments:` frontmatter names, in declared order.
+    ///
+    /// Pass 1's name->position table for `$name` substitution (plan.md §5:
+    /// "`$name` -- named arg from the `arguments:` frontmatter"). Position
+    /// `i` in this array corresponds to position `i` of the shell-tokenized
+    /// positional arguments that `$i`/`$ARGUMENTS[i]` also index (all of
+    /// `arguments` joined as typed, then split by `ArgumentSubstitution`'s
+    /// own shell-style tokenizer) -- **not** necessarily index `i` of
+    /// `arguments` itself, since an `arguments` element containing
+    /// unprotected whitespace re-splits into more than one position on
+    /// retokenization. A caller building `arguments` element-by-element
+    /// (rather than typing one raw command line) should quote any
+    /// multi-word value it supplies, the same discipline `$N`/`$ARGUMENTS[N]`
+    /// already require. Deliberately **not** `argument-hint:`- or
+    /// body-inferred names (`SkillParameter`'s broader §6.1 merge) --
+    /// `$name` resolves only against the authoritative `arguments:` list, so
+    /// a `$word` that isn't a declared argument name (e.g. `$HOME`) is left
+    /// untouched rather than misread as a reference. Empty for a
+    /// `description`/`metadata.*` render, like `arguments`.
+    public var argumentNames: [String]
     /// The skill's own directory.
     ///
     /// Used as `${SKILL_DIR}` (pass 1) and the shell injection working
@@ -99,18 +120,22 @@ public struct RenderRequest: Sendable {
     ///   - text: The text to render.
     ///   - arguments: The arguments supplied at call time, in order.
     ///     Defaults to empty.
+    ///   - argumentNames: The skill's `arguments:` frontmatter names, in
+    ///     declared order. Defaults to empty.
     ///   - skillDirectory: The skill's own directory.
     ///   - winningLayer: The dotfolder layer that won this skill.
     ///   - policy: The render policy every pass must honor.
     public init(
         text: String,
         arguments: [String] = [],
+        argumentNames: [String] = [],
         skillDirectory: URL,
         winningLayer: DotfolderStack.Layer,
         policy: RenderPolicy
     ) {
         self.text = text
         self.arguments = arguments
+        self.argumentNames = argumentNames
         self.skillDirectory = skillDirectory
         self.winningLayer = winningLayer
         self.policy = policy
@@ -183,7 +208,9 @@ public struct IdentityRenderPass: RenderPass {
 public struct RenderPipeline: Sendable {
     /// Pass 1: argument + variable substitution (plan.md §5.1).
     ///
-    /// Identity in this task.
+    /// Typically an `ArgumentSubstitution` instance once the pipeline is
+    /// fully wired (`SkillsRegistry`, a later task); `IdentityRenderPass`
+    /// remains available as a scaffold/testing default (`RenderPipeline.identity`).
     public var argumentSubstitution: any RenderPass
     /// Pass 2: shell injection, body renders only (plan.md §5.2, decision #25).
     ///
