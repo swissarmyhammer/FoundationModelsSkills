@@ -1,4 +1,16 @@
 ---
+comments:
+- actor: claude-code
+  id: 01kyr1ww7dfn36f7q963vn6ctv
+  text: |-
+    Implemented and checkpointed at 2b8d55b:
+    - Made `SkillsRegistry.init(layers:policy:watch:)` public (was private) — the sanctioned way for a host to trust-label a bare root `.defaults`, since `init(roots:)` tags every root `.project` and the defaults-trusted mapping was otherwise unreachable.
+    - Removed `StencilPass.trustOverrides` entirely (field, init param, doc comments) — redundant with the above and unauthorized by plan.md #29. Verified via grep it was only referenced in `StencilPass.swift` and its own two tests.
+    - Fixed `WellKnownValues.projectDotfolderName(in:)` to use `.last(where:)` instead of `.first(where:)` so the highest-precedence `.project` layer wins (matters for `init(roots:)`, which tags every root `.project`).
+    - Replaced the two broken `trustOverrideForces...` tests in `StencilPassTests.swift` with: a `SkillsRegistry.init(layers:)` end-to-end trust-matrix test (defaults root renders trusted, others don't), an `init(roots:)` all-untrusted regression test, a `WellKnownValues.current(layers:)` unit test proving highest-precedence derivation, and an end-to-end `{{ dotfolder_name }}` derivation test over real layers.
+    - Full suite green: 270/270 tests passing.
+    - Scoped review (`review sha HEAD~1..HEAD`) is running in the background (task kidnscjzm) — awaiting result before moving to done.
+  timestamp: 2026-07-29T23:03:32.845111+00:00
 position_column: doing
 position_ordinal: '80'
 title: Fix trust mapping and dotfolder_name for roots-constructed registries

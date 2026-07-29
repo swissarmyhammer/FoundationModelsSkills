@@ -403,8 +403,7 @@ struct StencilPassTests {
         ///
         /// - Throws: Whatever `FileManager.createDirectory` throws.
         init() throws {
-            root = FileManager.default.temporaryDirectory
-                .appendingPathComponent("StencilPassTests-\(UUID().uuidString)", isDirectory: true)
+            root = try StencilPassTests.makeTempDirectory()
             defaultsRoot = root.appendingPathComponent("defaults", isDirectory: true)
             userRoot = root.appendingPathComponent("user", isDirectory: true)
             projectRoot = root.appendingPathComponent("project", isDirectory: true)
