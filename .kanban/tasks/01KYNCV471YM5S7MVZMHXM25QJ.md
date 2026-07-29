@@ -28,8 +28,8 @@ comments:
   timestamp: 2026-07-29T06:37:18.965641+00:00
 depends_on:
 - 01KYNCTMRAN6DEBBJGV5GE1MNN
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: '8680'
 title: 'Render pass 2: shell injection (macOS, body-only)'
 ---
 ## What
