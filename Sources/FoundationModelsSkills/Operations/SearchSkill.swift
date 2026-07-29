@@ -60,7 +60,7 @@ public struct SearchSkill: OperationDefinition {
         ParamMeta(name: queryKey, type: .string, required: true, description: "The search query."),
         ParamMeta(
             name: limitKey, type: .integer, required: false,
-            description: "The maximum number of matches to return. Defaults to 5."),
+            description: "The maximum number of matches to return. Defaults to \(defaultLimit)."),
     ]
 
     /// The `GeneratedContent` property name for `query`.
