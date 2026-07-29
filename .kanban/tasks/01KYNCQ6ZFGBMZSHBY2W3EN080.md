@@ -20,6 +20,28 @@ comments:
 
     Final state: `swift test` 11/11 pass, exit 0, no new warnings; `swift build` clean. Leaving task in `doing` for `/review` per the implement workflow (implement does not move tasks to review).
   timestamp: 2026-07-29T01:06:16.472159+00:00
+- actor: claude-code
+  id: 01kynq6fcrhvzf4p59vtb6c02h
+  text: |-
+    Addressed both review findings.
+
+    1. `Tests/FoundationModelsSkillsTests/FixtureLibrary.swift` `url(_:thisFile:)`: added a `precondition` before appending `relativePath` to the resolved root -- splits on `/` (omitting empty subsequences) and traps if any component is `".."`, or if the raw string starts with `"/"` or `"~"`. Closes the path-traversal/absolute-path hole the finding described, while every existing fixture path (e.g. `project/.skills/commit/SKILL.md`, `user/_partials/header.md`) still resolves normally. Updated the function's doc comment to note the constraint.
+
+    2. `Tests/FoundationModelsSkillsTests/FixtureLibraryTests.swift`: split the `SkillFrontmatter` doc comment so the "Test-local -- the real decode type lands with `SkillsRegistry` in a later task." elaboration sits after a blank `///` line instead of being crammed onto the same line as the summary's last sentence, per Swift doc-comment convention.
+
+    Verified: `swift build` exit 0 (only pre-existing unrelated SwiftPM dependency-identity warnings, no new warnings). `swift test` 11/11 pass, exit 0, no warnings. Spawned the `double-check` adversarial reviewer per really-done; awaiting its verdict before finalizing.
+  timestamp: 2026-07-29T01:18:04.184917+00:00
+- actor: claude-code
+  id: 01kynqgfy8k684tgvdm4nc8xxx
+  text: |-
+    double-check adversarial review: PASS. Independently traced the precondition against traversal (`../../etc/passwd`), absolute (`/etc/passwd`), and home-relative (`~/x`) inputs -- all correctly trap -- confirmed every real fixture path used by the existing tests still resolves unchanged, confirmed the doc-comment split matches Swift convention with no content lost, and independently re-ran `swift build` (exit 0, only the two pre-existing unrelated `foundationmodelsoperationtool` identity-conflict warnings) and `swift test` (11/11 pass, exit 0).
+
+    Checked off both review-finding checkboxes via `update task` (full-body replace, since this store uses replace-not-merge semantics). Follow-up `get task` confirms the description is intact otherwise (both checkboxes now `[x]`, no other content changed) and the update did not touch anything else.
+
+    Tag-hazard note: investigated the "verify tags 27/3 intact" instruction before acting on it. Tags `27` and `3` were created in this repo's kanban store at the same instant as this task (suggesting they were meant for it), but neither this task's `.md`/`.jsonl` history nor tags `27`'s/`3`'s own `.jsonl` history contains any assignment event linking them to this task -- `tags` has read `[]` since before I touched anything, including in the very first `get task` I ran this session. This looks like a pre-existing gap from task creation (possibly conflated with sibling task `01KYNCPTS07BHG6PQS17PE17T4`, which genuinely does carry tags `26`/`29`), not something dropped by a review-cycle `update task` call. I did not fabricate a `27`/`3` assignment that has no evidence of ever existing -- left `tags: []` as found, and passed `tags: []` explicitly on my `update task` call so the omission couldn't be misread as an implicit wipe. Flagging for the user/orchestrator to decide whether `27`/`3` should be assigned now.
+
+    Final state: `swift build` exit 0 (no new warnings), `swift test` 11/11 pass exit 0. Both review-finding checkboxes are `[x]`. Leaving task in `doing` for `/review` per the implement workflow.
+  timestamp: 2026-07-29T01:23:32.424188+00:00
 depends_on:
 - 01KYNCPTS07BHG6PQS17PE17T4
 position_column: doing
@@ -51,3 +73,8 @@ Also add invalid/edge fixtures for the lenient-validation tests in a sibling fol
 
 ## Workflow
 - Use `/tdd` — write failing tests first, then implement to make them pass.
+
+## Review Findings (2026-07-28 20:10)
+
+- [x] `Tests/FoundationModelsSkillsTests/FixtureLibrary.swift:56` — Path traversal: the `url()` function accepts a `relativePath` parameter and appends it directly without validating for `..` sequences or absolute paths. Calling `FixtureLibrary.url("../../etc/passwd")` would construct a URL that resolves outside the intended `Examples/skill-library` directory when passed to file operations. Validate `relativePath` to reject path traversal sequences.
+- [x] `Tests/FoundationModelsSkillsTests/FixtureLibraryTests.swift:14` — Doc comment contains two sentences without a blank `///` separator; the rule requires elaboration to follow a summary after a blank line. Add a blank `///` line between the summary and the second sentence.

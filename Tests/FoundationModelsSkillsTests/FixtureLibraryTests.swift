@@ -7,8 +7,10 @@ import Yams
 /// exercise (plan.md §4-§6, §11): the agentskills.io-spec fields (`name`,
 /// `description`, `license`, `compatibility`) plus this package's
 /// Claude-compatible extensions (`arguments`, `argument-hint`,
-/// `disable-model-invocation`, `user-invocable`, `metadata`). Test-local --
-/// the real decode type lands with `SkillsRegistry` in a later task.
+/// `disable-model-invocation`, `user-invocable`, `metadata`).
+///
+/// Test-local -- the real decode type lands with `SkillsRegistry` in a later
+/// task.
 private struct SkillFrontmatter: Decodable {
     let name: String?
     let description: String?

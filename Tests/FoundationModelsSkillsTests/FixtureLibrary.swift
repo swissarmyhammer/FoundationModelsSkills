@@ -47,11 +47,24 @@ enum FixtureLibrary {
     /// Resolves `relativePath` (e.g. `"defaults/base-style/SKILL.md"`)
     /// against `root(thisFile:)`.
     ///
+    /// `relativePath` must be a genuinely relative path with no `..`
+    /// components and no `/` or `~` prefix, since this is test-support code
+    /// that builds filesystem paths from caller-supplied strings -- rejecting
+    /// traversal keeps every resolved fixture URL under `root(thisFile:)`.
+    ///
     /// - Parameters:
-    ///   - relativePath: A path relative to `Examples/skill-library`.
+    ///   - relativePath: A path relative to `Examples/skill-library`, with no
+    ///     `..` traversal and no leading `/` or `~`.
     ///   - thisFile: Forwarded to `root(thisFile:)`.
     /// - Returns: The resolved fixture URL.
     static func url(_ relativePath: String, thisFile: String = #filePath) -> URL {
-        root(thisFile: thisFile).appendingPathComponent(relativePath)
+        let components = relativePath.split(separator: "/", omittingEmptySubsequences: true)
+        precondition(
+            !relativePath.hasPrefix("/") && !relativePath.hasPrefix("~")
+                && !components.contains(".."),
+            "FixtureLibrary.url: relativePath must not be absolute or contain \"..\" "
+                + "traversal, got \"\(relativePath)\""
+        )
+        return root(thisFile: thisFile).appendingPathComponent(relativePath)
     }
 }
