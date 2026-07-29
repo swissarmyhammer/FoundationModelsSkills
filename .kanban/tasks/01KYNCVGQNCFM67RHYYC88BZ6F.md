@@ -43,8 +43,8 @@ comments:
   timestamp: 2026-07-29T08:01:02.680176+00:00
 depends_on:
 - 01KYNCTMRAN6DEBBJGV5GE1MNN
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: '8880'
 title: 'Render pass 3: TemplateEngine wiring (trust, ladder, partials)'
 ---
 ## What
