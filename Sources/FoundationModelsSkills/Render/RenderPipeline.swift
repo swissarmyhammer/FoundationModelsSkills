@@ -1,19 +1,25 @@
 import Foundation
 import FoundationModelsExtras
 
+// Review fix (^8jqwxc5, round 4): every doc comment in this file was swept
+// for the project's doc-comment convention -- a single-sentence summary
+// line ending in a period, a blank `///` line, then elaboration -- and
+// every throws-declaring function/method now carries a `- Throws:`
+// section. Not just the flagged lines: the whole file, so a round 5
+// doesn't surface stragglers.
 // Review fix (^8jqwxc5): both flags were originally named
 // `disableShellExecution`/`disableScriptExecution`, which reads as an
 // imperative rather than a state assertion. Renamed to
 // `isShellExecutionDisabled`/`isScriptExecutionDisabled` to follow the
 // boolean assertion naming pattern.
-/// Policy flags that gate side-effecting render-pipeline passes, set once at
-/// `SkillsRegistry` construction so every render path -- model-driven `use
-/// skill`, user-driven `/command`, and the CLI -- honors the same policy
-/// (plan.md decisions #25/#28).
+/// Policy flags that gate side-effecting render-pipeline passes.
 ///
-/// Neither flag does anything yet: this task's three passes are identity
-/// transforms. `ShellInjection` (pass 2) reads `isShellExecutionDisabled`
-/// once it lands; `isScriptExecutionDisabled` is read by the M6 `run script`
+/// Set once at `SkillsRegistry` construction so every render path --
+/// model-driven `use skill`, user-driven `/command`, and the CLI -- honors
+/// the same policy (plan.md decisions #25/#28). Neither flag does anything
+/// yet: this task's three passes are identity transforms.
+/// `ShellInjection` (pass 2) reads `isShellExecutionDisabled` once it
+/// lands; `isScriptExecutionDisabled` is read by the M6 `run script`
 /// resource operation, outside this pipeline entirely.
 public struct RenderPolicy: Sendable, Equatable {
     /// Asserts `` !`command` ``/fenced shell injection (pass 2) is disabled.
@@ -41,18 +47,20 @@ public struct RenderPolicy: Sendable, Equatable {
     }
 }
 
-/// One render invocation's inputs: the text to render, the arguments
-/// supplied at call time, the skill's own directory, the dotfolder layer
-/// that won the skill, and the policy every pass must honor (plan.md §5).
+/// One render invocation's inputs.
 ///
-/// Not mutated by `RenderPipeline` during a render call -- each pass
-/// receives the same `RenderRequest` and returns transformed text rather
-/// than writing back into the request; only the pipeline's local working
-/// text is rebound between passes.
+/// Carries the text to render, the arguments supplied at call time, the
+/// skill's own directory, the dotfolder layer that won the skill, and the
+/// policy every pass must honor (plan.md §5). Not mutated by
+/// `RenderPipeline` during a render call -- each pass receives the same
+/// `RenderRequest` and returns transformed text rather than writing back
+/// into the request; only the pipeline's local working text is rebound
+/// between passes.
 public struct RenderRequest: Sendable {
-    /// The text to render -- a skill body, or one `description`/
-    /// `metadata.*` value (plan.md §5's "Templated: description, all
-    /// metadata values, and the body").
+    /// The text to render.
+    ///
+    /// A skill body, or one `description`/`metadata.*` value (plan.md §5's
+    /// "Templated: description, all metadata values, and the body").
     public var text: String
     /// The arguments supplied to `use skill`/`/command`/the CLI, in order.
     ///
@@ -60,12 +68,15 @@ public struct RenderRequest: Sendable {
     /// Empty for a `description`/`metadata.*` render, which carries no
     /// per-call arguments.
     public var arguments: [String]
-    /// The skill's own directory -- `${SKILL_DIR}` (pass 1) and the shell
-    /// injection working directory (pass 2, body renders only).
+    /// The skill's own directory.
+    ///
+    /// Used as `${SKILL_DIR}` (pass 1) and the shell injection working
+    /// directory (pass 2, body renders only).
     public var skillDirectory: URL
-    /// The dotfolder layer that won this skill, from `DotfolderStack` --
-    /// pass 3's trust mapping (defaults -> `.trusted`, user/project ->
-    /// `.untrusted`, plan.md §5, decision #29).
+    /// The dotfolder layer that won this skill.
+    ///
+    /// From `DotfolderStack` -- pass 3's trust mapping (defaults ->
+    /// `.trusted`, user/project -> `.untrusted`, plan.md §5, decision #29).
     public var winningLayer: DotfolderStack.Layer
     /// The render policy every pass must honor (plan.md decisions #25/#28).
     public var policy: RenderPolicy
@@ -94,9 +105,9 @@ public struct RenderRequest: Sendable {
     }
 }
 
-/// One render-pipeline pass: a single-shot text transform over a render
-/// request (plan.md §5).
+/// One render-pipeline pass.
 ///
+/// A single-shot text transform over a render request (plan.md §5).
 /// `RenderPipeline` invokes each pass at most once per `render` call, in a
 /// fixed order, feeding it the previous pass's output. No pass is ever
 /// re-invoked within one render, and a pass's own output is never handed
@@ -114,6 +125,9 @@ public protocol RenderPass: Sendable {
     /// - Returns: The transformed text, passed unchanged to the next pass in
     ///   the set (or returned as the pipeline's final result, for the set's
     ///   last pass).
+    /// - Throws: Any error a conforming pass raises while transforming
+    ///   `text`; see each conforming type for the specific errors it can
+    ///   throw.
     func render(_ text: String, request: RenderRequest) throws -> String
 }
 
@@ -134,28 +148,29 @@ public struct IdentityRenderPass: RenderPass {
     ///   - request: The render request this pass runs under. Ignored -- an
     ///     identity pass has no side effects to gate.
     /// - Returns: `text`, unchanged.
+    /// - Throws: Never; this pass performs an identity transformation and
+    ///   never fails.
     public func render(_ text: String, request: RenderRequest) throws -> String {
         text
     }
 }
 
-/// The §5 render pipeline: three ordered, single-shot passes -- argument
-/// substitution, shell injection, Stencil -- assembled into the two pass-sets
-/// plan.md §5 defines (decision #25).
+/// The §5 render pipeline: three ordered, single-shot passes.
 ///
-/// `renderBody` runs all three passes; `renderMetadata` runs only passes 1
-/// and 3, since shell execution must never fire while building
-/// `description`/`metadata.*` values (a watcher-driven reload path, not a
-/// per-call one). Both methods run their pass-set exactly once, in order,
-/// threading each pass's output into the next -- the single-shot,
-/// no-re-scan contract `RenderPass` documents.
+/// Argument substitution, shell injection, and Stencil, assembled into the
+/// two pass-sets plan.md §5 defines (decision #25). `renderBody` runs all
+/// three passes; `renderMetadata` runs only passes 1 and 3, since shell
+/// execution must never fire while building `description`/`metadata.*`
+/// values (a watcher-driven reload path, not a per-call one). Both methods
+/// run their pass-set exactly once, in order, threading each pass's output
+/// into the next -- the single-shot, no-re-scan contract `RenderPass`
+/// documents.
 public struct RenderPipeline: Sendable {
     /// Pass 1: argument + variable substitution (plan.md §5.1).
     ///
     /// Identity in this task.
     public var argumentSubstitution: any RenderPass
-    /// Pass 2: shell injection, body renders only (plan.md §5.2, decision
-    /// #25).
+    /// Pass 2: shell injection, body renders only (plan.md §5.2, decision #25).
     ///
     /// Identity in this task.
     public var shellInjection: any RenderPass
@@ -176,11 +191,10 @@ public struct RenderPipeline: Sendable {
         self.stencil = stencil
     }
 
-    /// A pipeline wired with `IdentityRenderPass` for all three §5 passes --
-    /// this task's scaffold default.
+    /// A pipeline wired with `IdentityRenderPass` for all three §5 passes.
     ///
-    /// `SkillsRegistry` (a later task) swaps each pass out for its real
-    /// implementation as it lands.
+    /// This task's scaffold default. `SkillsRegistry` (a later task) swaps
+    /// each pass out for its real implementation as it lands.
     public static var identity: RenderPipeline {
         RenderPipeline(
             argumentSubstitution: IdentityRenderPass(),
@@ -188,12 +202,15 @@ public struct RenderPipeline: Sendable {
             stencil: IdentityRenderPass())
     }
 
-    /// Renders a skill **body**: passes 1, 2, then 3, in that fixed order
-    /// (plan.md §5).
+    /// Renders a skill body.
+    ///
+    /// Runs passes 1, 2, then 3, in that fixed order (plan.md §5).
     ///
     /// - Parameter request: The render request; `request.text` is the
     ///   body's source text.
     /// - Returns: The fully rendered body.
+    /// - Throws: Any error thrown by a render pass in the pipeline (passes
+    ///   1, 2, and 3).
     public func renderBody(_ request: RenderRequest) throws -> String {
         try run(passes: [argumentSubstitution, shellInjection, stencil], request: request)
     }
@@ -208,19 +225,24 @@ public struct RenderPipeline: Sendable {
     /// - Parameter request: The render request; `request.text` is the
     ///   `description`/`metadata.*` value's source text.
     /// - Returns: The fully rendered value.
+    /// - Throws: Any error thrown by a render pass in the pipeline (passes
+    ///   1 and 3).
     public func renderMetadata(_ request: RenderRequest) throws -> String {
         try run(passes: [argumentSubstitution, stencil], request: request)
     }
 
-    /// Runs `passes` once each, in order, threading each pass's output text
-    /// into the next as input -- the shared, single-shot execution engine
-    /// both `renderBody` and `renderMetadata` build on.
+    /// Runs `passes` once each, in order.
+    ///
+    /// Threads each pass's output text into the next as input -- the
+    /// shared, single-shot execution engine both `renderBody` and
+    /// `renderMetadata` build on.
     ///
     /// - Parameters:
     ///   - passes: The ordered pass-set to run, exactly once each.
     ///   - request: The render request; only `request.text` is superseded
     ///     between passes, by each pass's returned output.
     /// - Returns: The last pass's output.
+    /// - Throws: Any error thrown by a pass in `passes`.
     private func run(passes: [any RenderPass], request: RenderRequest) throws -> String {
         var text = request.text
         for pass in passes {

@@ -70,6 +70,21 @@ comments:
 
     Task is green and left in `doing` for `/review` to pick up, per /implement's process.
   timestamp: 2026-07-29T03:56:59.629814+00:00
+- actor: claude-code
+  id: 01kyp166ams5e2xws8rsy5y1es
+  text: |-
+    Round 4 fix: broke the review cycle by doing a complete pass over EVERY doc comment in Sources/FoundationModelsSkills/Render/RenderPipeline.swift, not just the 14 flagged lines.
+
+    - Every `///` summary line is now exactly one sentence ending in a period, on its own first line, followed by a blank `///` separator before any elaboration. Fixed on: RenderPolicy, RenderRequest, RenderRequest.text, RenderRequest.skillDirectory, RenderRequest.winningLayer, the RenderPass protocol, RenderPipeline, RenderPipeline.shellInjection, RenderPipeline.identity, RenderPipeline.renderBody. (RenderRequest.arguments, RenderRequest.policy, RenderPass.render, IdentityRenderPass, IdentityRenderPass.init, IdentityRenderPass.render, RenderPipeline.argumentSubstitution, RenderPipeline.stencil, RenderPipeline.init, RenderPipeline.renderMetadata were already compliant -- left as-is.)
+    - Added a `- Throws:` section to every throwing method/protocol requirement with a `///` doc comment: `RenderPass.render` (protocol requirement), `IdentityRenderPass.render` (documents it never throws), `RenderPipeline.renderBody`, `RenderPipeline.renderMetadata`, and the private `RenderPipeline.run(passes:request:)` helper (also throws, also had a doc comment, not one of the 14 flagged findings but fixed proactively per the full-file-sweep instruction).
+    - `- Parameters:`/`- Parameter:`, `- Returns:`, `- Throws:` ordering kept consistent with the file's established convention (matches the sibling FoundationModelsRouter package's own doc-comment style).
+    - Added a round-4 header comment recording the sweep, above the existing round-1 rename comment.
+    - No code/logic changed -- verified via `git diff` filtered to non-comment lines (zero matches).
+
+    Verification: `swift build` exit 0 (only the pre-existing unrelated foundationmodelsoperationtool package-identity warning). `swift test` 63/63 passed, exit 0. Adversarial double-check (via really-done) returned PASS on the first pass -- verified all 5 throwing declarations have `- Throws:`, verified every summary line, verified no orphaned doc comments, verified no accidental code changes, and independently re-ran build/test.
+
+    All 14 items in the "Review Findings (2026-07-28 22:58)" checklist are now checked off. Task left in `doing` per /implement's process -- ready for /review.
+  timestamp: 2026-07-29T04:12:40.660368+00:00
 depends_on:
 - 01KYNCR37A3M7MYKAH7T0QREYS
 position_column: doing
@@ -107,3 +122,20 @@ The M2 render scaffold (plan §5): wire the three-pass pipeline shape with ident
 ## Review Findings (2026-07-28 22:47)
 
 - [x] `Sources/FoundationModelsSkills/Render/RenderPipeline.swift:127` — Public method IdentityRenderPass.render lacks a documentation comment despite being a public function. All public APIs require documentation for IDE integration, documentation generation, and developer experience. Add a /// documentation comment above the method. Example: `/// Returns `text` unchanged (identity transformation).`.
+
+## Review Findings (2026-07-28 22:58)
+
+- [x] `Sources/FoundationModelsSkills/Render/RenderPipeline.swift:9` — The first line of the documentation comment does not end in a period. The rule requires 'The first line is a single-sentence summary ending in a period.'. Rewrite the summary to fit on one line and end with a period, e.g., `/// Policy flags that gate side-effecting render-pipeline passes.` then elaborate after a blank line.
+- [x] `Sources/FoundationModelsSkills/Render/RenderPipeline.swift:44` — The first line of the documentation comment does not end in a period. The rule requires 'The first line is a single-sentence summary ending in a period.'. Rewrite the summary to fit on one line and end with a period, e.g., `/// One render invocation's inputs.` then elaborate after a blank line.
+- [x] `Sources/FoundationModelsSkills/Render/RenderPipeline.swift:53` — The first line of the documentation comment does not end in a period. The rule requires 'The first line is a single-sentence summary ending in a period.'. Rewrite the summary to fit on one line and end with a period, e.g., `/// The text to render.` then elaborate after a blank line.
+- [x] `Sources/FoundationModelsSkills/Render/RenderPipeline.swift:63` — The first line of the documentation comment does not end in a period. The rule requires 'The first line is a single-sentence summary ending in a period.'. Rewrite the summary to fit on one line and end with a period, e.g., `/// The skill's own directory.` then elaborate after a blank line.
+- [x] `Sources/FoundationModelsSkills/Render/RenderPipeline.swift:65` — The first line of the documentation comment does not end in a period. The rule requires 'The first line is a single-sentence summary ending in a period.'. Rewrite the summary to fit on one line and end with a period, e.g., `/// The dotfolder layer that won this skill.` then elaborate after a blank line.
+- [x] `Sources/FoundationModelsSkills/Render/RenderPipeline.swift:96` — The first line of the documentation comment does not end in a period. The rule requires 'The first line is a single-sentence summary ending in a period.'. Rewrite the summary to fit on one line and end with a period, e.g., `/// One render-pipeline pass.` then elaborate after a blank line.
+- [x] `Sources/FoundationModelsSkills/Render/RenderPipeline.swift:116` — The method declares `throws` but the documentation lacks a `- Throws:` section. The rule states `- Throws:` appears iff the function throws. Add `- Throws:` documentation, e.g., `/// - Throws: Any error a render pass may raise.` or `/// - Throws: See conforming implementations for specific error types.`.
+- [x] `Sources/FoundationModelsSkills/Render/RenderPipeline.swift:136` — The method declares `throws` but the documentation lacks a `- Throws:` section. The rule states `- Throws:` appears iff the function throws. Add `- Throws:` documentation. Since identity passes never throw, clarify: `/// - Throws: Never; this pass performs an identity transformation and does not fail.`.
+- [x] `Sources/FoundationModelsSkills/Render/RenderPipeline.swift:141` — The first line of the documentation comment does not end in a period. The rule requires 'The first line is a single-sentence summary ending in a period.'. Rewrite the summary to fit on one line and end with a period, e.g., `/// The render pipeline with three ordered passes.` then elaborate after a blank line.
+- [x] `Sources/FoundationModelsSkills/Render/RenderPipeline.swift:156` — The first line of the documentation comment does not end in a period. The rule requires 'The first line is a single-sentence summary ending in a period.'. Rewrite the summary to fit on one line and end with a period, e.g., `/// Pass 2: shell injection for body renders.` then elaborate after a blank line.
+- [x] `Sources/FoundationModelsSkills/Render/RenderPipeline.swift:178` — The first line of the documentation comment does not end in a period. The rule requires 'The first line is a single-sentence summary ending in a period.'. Rewrite the summary to fit on one line and end with a period, e.g., `/// A pipeline wired with identity passes.` then elaborate after a blank line.
+- [x] `Sources/FoundationModelsSkills/Render/RenderPipeline.swift:190` — The first line of the documentation comment does not end in a period. The rule requires 'The first line is a single-sentence summary ending in a period.'. Rewrite the summary to fit on one line and end with a period, e.g., `/// Renders a skill body.` then elaborate after a blank line.
+- [x] `Sources/FoundationModelsSkills/Render/RenderPipeline.swift:196` — The method declares `throws` but the documentation lacks a `- Throws:` section. The rule states `- Throws:` appears iff the function throws. Add `- Throws:` documentation, e.g., `/// - Throws: Any error thrown by a render pass in the pipeline.`.
+- [x] `Sources/FoundationModelsSkills/Render/RenderPipeline.swift:210` — The method declares `throws` but the documentation lacks a `- Throws:` section. The rule states `- Throws:` appears iff the function throws. Add `- Throws:` documentation, e.g., `/// - Throws: Any error thrown by a render pass (passes 1 and 3).`.
