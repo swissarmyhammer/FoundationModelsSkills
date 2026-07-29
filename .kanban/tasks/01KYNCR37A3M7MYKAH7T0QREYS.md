@@ -33,8 +33,8 @@ comments:
   timestamp: 2026-07-29T02:23:27.447889+00:00
 depends_on:
 - 01KYNCQ6ZFGBMZSHBY2W3EN080
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: '8280'
 title: Frontmatter model + Yams decode with quoting-fallback retry
 ---
 ## What
