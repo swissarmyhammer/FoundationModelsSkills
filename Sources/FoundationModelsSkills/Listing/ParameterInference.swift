@@ -134,6 +134,22 @@ public enum ParameterInference {
         }
     }
 
+    /// One bracket form `argument-hint:` tokens may use, and the optionality
+    /// it signals -- data for `parseHintToken`'s single lookup, rather than
+    /// one hand-written branch per bracket type.
+    private struct BracketPattern {
+        let open: Character
+        let close: Character
+        let required: Bool
+    }
+
+    /// `<x>` required, `[x]` optional -- plan.md §6.1's `argument-hint:`
+    /// grammar.
+    private static let bracketPatterns = [
+        BracketPattern(open: "<", close: ">", required: true),
+        BracketPattern(open: "[", close: "]", required: false),
+    ]
+
     /// Parses one `argument-hint:` token (e.g. `"<message>"`, `"[env]"`,
     /// `"files..."`) into a `HintToken`.
     private static func parseHintToken(_ token: String) -> HintToken {
@@ -143,11 +159,11 @@ public enum ParameterInference {
 
         let required: Bool
         let name: String
-        if stripped.count >= 2, stripped.hasPrefix("<"), stripped.hasSuffix(">") {
-            required = true
-            name = String(stripped.dropFirst().dropLast())
-        } else if stripped.count >= 2, stripped.hasPrefix("["), stripped.hasSuffix("]") {
-            required = false
+        if stripped.count >= 2,
+            let bracket = bracketPatterns.first(
+                where: { stripped.first == $0.open && stripped.last == $0.close })
+        {
+            required = bracket.required
             name = String(stripped.dropFirst().dropLast())
         } else {
             required = true

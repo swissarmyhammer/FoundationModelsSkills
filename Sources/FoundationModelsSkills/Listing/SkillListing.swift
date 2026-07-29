@@ -1,6 +1,7 @@
 /// One row of the `SkillsRegistry.commandListing()` user `/` menu surface
 /// (plan.md §6.1) -- structured, parsed parameters (via `ParameterInference`)
 /// rather than the raw frontmatter strings `SkillFrontmatter` carries.
+///
 /// Autocomplete, fuzzy search, and input validation are the UI's job, out of
 /// scope here -- this type is data only.
 public struct SkillListing: Sendable, Equatable {

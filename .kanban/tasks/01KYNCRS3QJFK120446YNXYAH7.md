@@ -30,6 +30,25 @@ comments:
 
     Task is green and complete, left in doing for /review per the implement skill's contract.
   timestamp: 2026-07-29T02:42:08.089079+00:00
+- actor: claude-code
+  id: 01kynwn3mym0pvez0y6bg994a7
+  text: |-
+    Addressed both review findings:
+
+    1. ParameterInference.swift parseHintToken -- replaced the if/else-if chain over bracket types with a table-driven lookup: added a private `BracketPattern` struct (`open: Character, close: Character, required: Bool`) and a static `bracketPatterns` array (`<...>` required, `[...]` optional), matched via `.first(where:)` in a single code path. Bare-token fallback (`required = true`) unchanged. Variadic `...` stripping unchanged.
+    2. SkillListing.swift -- inserted a blank `///` line between the type's summary sentence ("...rather than the raw frontmatter strings `SkillFrontmatter` carries.") and the elaboration ("Autocomplete, fuzzy search, ...").
+
+    Fresh `swift build`: exit 0, only pre-existing foundationmodelsoperationtool package-identity warnings. Fresh `swift test`: 56/56 passed, exit 0.
+
+    Adversarial double-check spawned for sign-off; will report verdict next.
+  timestamp: 2026-07-29T02:53:26.558401+00:00
+- actor: claude-code
+  id: 01kynwwh3695qpp55nxnrfgkbp
+  text: |-
+    Adversarial double-check (round 1): PASS. Traced both changes by hand against the old logic, confirmed the existing degenerate-bracket test (hintParsesDegenerateEmptyBracketAndTooShortTokensWithoutCrashing) still covers the refactored parseHintToken correctly, scanned both files for other un-separated doc-comment elaborations (none found), and re-ran swift build/swift test fresh (exit 0 / 56 passed). One informational-only note about a pre-existing unrelated mlx-swift_Cmlx.bundle build warning, not introduced by these edits.
+
+    Both review-finding checkboxes checked off. Progress 100%. Left in `doing` per /implement's contract -- ready for /review.
+  timestamp: 2026-07-29T02:57:29.702577+00:00
 depends_on:
 - 01KYNCR37A3M7MYKAH7T0QREYS
 position_column: doing
@@ -61,3 +80,16 @@ Build the structured parameter model and listing row from plan §6.1.
 
 ## Workflow
 - Use `/tdd` — write failing tests first, then implement to make them pass.
+
+## Review Findings (2026-07-28 21:45)
+
+- [x] `Sources/FoundationModelsSkills/Listing/ParameterInference.swift:130` — The parseHintToken function uses an if/else-if chain over a known set of bracket types (angle brackets and square brackets) whose arms differ only in constants: the bracket characters and the 'required' flag. Both branches perform identical extraction logic. This should be table-driven to avoid hand-maintained parallel code paths. Define bracket patterns as data—e.g., struct BracketPattern { let open: Character, close: Character, required: Bool } with data [("<", ">", true), ("[", "]", false)]—and iterate through them in a single code path to find the match and set required accordingly. Keep the bare-token else case as the fallback.
+- [x] `Sources/FoundationModelsSkills/Listing/SkillListing.swift:4` — The first sentence ends on line 3 with a period, but additional elaboration on lines 4–5 ('Autocomplete, fuzzy search...') follows without a separating blank line. The rule requires 'any elaboration follows after a blank /// line'. Insert a blank `///` line after line 3 to separate the main description from the elaboration: place a `///` on its own line before the 'Autocomplete' sentence begins.
+
+## Fix Notes (2026-07-29)
+
+Both findings fixed:
+1. `parseHintToken` now uses a private `BracketPattern` struct (`open`, `close`, `required`) and a static `bracketPatterns` array (`<...>` required, `[...]` optional), looked up via `.first(where:)` in one code path; bare-token fallback unchanged.
+2. `SkillListing`'s doc comment now has a blank `///` line separating the summary sentence from the "Autocomplete, fuzzy search..." elaboration.
+
+`swift build`: exit 0 (only pre-existing package-identity warnings). `swift test`: 56/56 passed, exit 0. Adversarial double-check: PASS.
