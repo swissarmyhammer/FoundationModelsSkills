@@ -119,8 +119,8 @@ comments:
 depends_on:
 - 01KYNCSXAEKDVR36H387H5TYXR
 - 01KYND89QDD8BYQWGGPJ8Z4J2M
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: 8d80
 title: SlashCommandProviding conformance for the user surface
 ---
 ## What
