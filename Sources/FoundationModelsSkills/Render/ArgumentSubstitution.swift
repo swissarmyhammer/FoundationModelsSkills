@@ -134,7 +134,7 @@ public struct ArgumentSubstitution: RenderPass {
     }
 
     /// The named capture group names `tokenPattern`'s regex string and `classify(_:in:)`'s
-    /// `range(withName:)`/`groupText` lookups share.
+    /// `range(withName:)`/`NamedCaptureGroup.text(from:name:in:)` lookups share.
     ///
     /// Defined once here so the group names embedded in the regex pattern and the strings used
     /// to look those groups back up can never drift out of sync.
@@ -173,7 +173,7 @@ public struct ArgumentSubstitution: RenderPass {
         /// see `TokenKind.argumentsIndexed`'s doc comment -- so `makeKind` always receives
         /// a value, `nil` included, and the caller never needs its own fallback.
         func digitGroupTokenKind(groupName: String, makeKind: (Int?) -> TokenKind) -> TokenKind {
-            let digits = groupText(match, name: groupName, in: text) ?? ""
+            let digits = NamedCaptureGroup.text(from: match, name: groupName, in: text) ?? ""
             return makeKind(Int(digits))
         }
 
@@ -188,7 +188,7 @@ public struct ArgumentSubstitution: RenderPass {
         /// `groupName`'s range before calling, so the `?? ""` fallback is defensive and never
         /// reached in practice.
         func nameGroupTokenKind(groupName: String, makeKind: (String) -> TokenKind) -> TokenKind {
-            let name = groupText(match, name: groupName, in: text) ?? ""
+            let name = NamedCaptureGroup.text(from: match, name: groupName, in: text) ?? ""
             return makeKind(name)
         }
 
@@ -211,20 +211,6 @@ public struct ArgumentSubstitution: RenderPass {
             return nameGroupTokenKind(groupName: GroupName.namedArg) { .named(name: $0) }
         }
         preconditionFailure("ArgumentSubstitution.tokenPattern matched but no known alternative captured.")
-    }
-
-    /// Extracts one named capture group's substring from `match`, or `nil` when that
-    /// alternative did not participate in the match.
-    ///
-    /// - Parameters:
-    ///   - match: The match to inspect.
-    ///   - name: The named capture group in `tokenPattern`.
-    ///   - text: The text `match` was matched against.
-    /// - Returns: The captured substring, or `nil` when `name`'s range is `NSNotFound`.
-    private static func groupText(_ match: NSTextCheckingResult, name: String, in text: String) -> String? {
-        let range = match.range(withName: name)
-        guard range.location != NSNotFound, let swiftRange = Range(range, in: text) else { return nil }
-        return String(text[swiftRange])
     }
 
     /// The single-pass `$`-token grammar (plan.md §5).

@@ -93,8 +93,8 @@ comments:
 depends_on:
 - 01KYNCS3K5T60E4JQAJ8JQWXC5
 - 01KYNCRS3QJFK120446YNXYAH7
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: '8580'
 title: 'Render pass 1: argument + variable substitution'
 ---
 ## What
