@@ -30,12 +30,15 @@ public struct RenderPolicy: Sendable, Equatable {
     /// Asserts `` !`command` ``/fenced shell injection (pass 2) is disabled.
     ///
     /// When `true`, the pass substitutes an inert marker instead of running
-    /// anything (plan.md decision #25).
-    public var isShellExecutionDisabled: Bool
+    /// anything (plan.md decision #25). Immutable: a `RenderPolicy` is a
+    /// construction-time invariant, never mutated after `SkillsRegistry`
+    /// captures it.
+    public let isShellExecutionDisabled: Bool
     /// Asserts the M6 `run script` resource operation is disabled.
     ///
     /// Enforced downstream, not by this pipeline (plan.md decision #28).
-    public var isScriptExecutionDisabled: Bool
+    /// Immutable for the same reason as `isShellExecutionDisabled`.
+    public let isScriptExecutionDisabled: Bool
 
     /// Creates a `RenderPolicy`.
     ///

@@ -171,6 +171,19 @@ struct SkillsRegistryTests {
         #expect(!preloaded.contains("on branch main, working tree clean"))
     }
 
+    @Test func shellExecutionDisabledPolicyAppliesToCallIDArguments() throws {
+        // §25 coverage gap (^zbv0t4j): the disable flag was previously only
+        // proven on the preload path -- `call(id:arguments:)` is the exact
+        // same path `use skill` and the CLI's `skill use` dispatch through.
+        let registry = SkillsRegistry(
+            roots: Self.fixtureRoots, policy: RenderPolicy(isShellExecutionDisabled: true))
+
+        let body = try registry.call(id: "git-context")
+
+        #expect(body.contains(ShellInjection.disabledMarker))
+        #expect(!body.contains("on branch main, working tree clean"))
+    }
+
     // MARK: - call(id:arguments:) plumbing
 
     @Test func callCommitSubstitutesSuppliedArgumentsIntoTheRenderedBody() throws {

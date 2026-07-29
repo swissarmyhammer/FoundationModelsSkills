@@ -40,13 +40,38 @@ internal enum ScriptGate {
     internal static func evaluate(
         path: String, allowedTools: [String], isScriptExecutionDisabled: Bool
     ) -> ScriptGateResult {
-        guard !isScriptExecutionDisabled else {
-            return .corrective(Self.hostPolicyDisabledMessage)
-        }
-        guard Self.isGranted(allowedTools: allowedTools, path: path) else {
-            return .corrective(Self.noGrantMessage(path: path))
-        }
-        return .granted
+        let hostPolicyResult = Self.evaluateHostPolicy(isScriptExecutionDisabled: isScriptExecutionDisabled)
+        guard case .granted = hostPolicyResult else { return hostPolicyResult }
+        return Self.evaluateGrant(path: path, allowedTools: allowedTools)
+    }
+
+    /// Evaluates gate 1 (host policy) alone, independent of any id/path
+    /// resolution.
+    ///
+    /// Callable before `RunScript.execute(in:)` ever looks up the requested
+    /// id or resolves its path, so a script-disabled registry returns the
+    /// identical corrective for any path -- valid, bogus, or
+    /// confinement-escaping alike -- rather than leaking a path-shaped
+    /// corrective ahead of the policy check (plan.md §7.3.1: "triple-gated,
+    /// every check at dispatch").
+    ///
+    /// - Parameter isScriptExecutionDisabled: The host policy's kill switch.
+    /// - Returns: `.granted` when script execution is enabled;
+    ///   `.corrective(_:)` naming the host policy when it is not.
+    internal static func evaluateHostPolicy(isScriptExecutionDisabled: Bool) -> ScriptGateResult {
+        isScriptExecutionDisabled ? .corrective(Self.hostPolicyDisabledMessage) : .granted
+    }
+
+    /// Evaluates gate 2 (per-skill grant) alone.
+    ///
+    /// - Parameters:
+    ///   - path: The skill-relative script path being requested.
+    ///   - allowedTools: The skill's tokenized `allowed-tools:` frontmatter.
+    /// - Returns: `.granted` when `path` is covered by a grant;
+    ///   `.corrective(_:)` naming the missing grant otherwise.
+    internal static func evaluateGrant(path: String, allowedTools: [String]) -> ScriptGateResult {
+        Self.isGranted(allowedTools: allowedTools, path: path)
+            ? .granted : .corrective(Self.noGrantMessage(path: path))
     }
 
     /// The corrective message for gate 1: script execution disabled at the

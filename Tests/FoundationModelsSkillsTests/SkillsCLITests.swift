@@ -55,6 +55,21 @@ struct SkillsCLITests {
         #expect(result.output.contains("fix parser"))
     }
 
+    @Test func useVerbHonorsShellExecutionDisabledPolicy() async throws {
+        // §25 coverage gap (^zbv0t4j): the disable flag was previously never
+        // proven on the CLI path -- `skill use` dispatches through the exact
+        // same `call(id:arguments:)` render call the model surface uses.
+        let registry = SkillsRegistry(
+            roots: [Self.projectSkillsRoot], policy: RenderPolicy(isShellExecutionDisabled: true))
+        let driver = try SkillsCLI.makeDriver(registry: registry)
+
+        let result = await driver.run(arguments: ["skill", "use", "--id", "git-context"])
+
+        #expect(result.exitCode == 0)
+        #expect(result.output.contains(ShellInjection.disabledMarker))
+        #expect(!result.output.contains("on branch main, working tree clean"))
+    }
+
     // MARK: - Visibility matrix (plan.md §6)
 
     @Test func listVerbIncludesDeployWhichIsHiddenFromTheModelSurface() async throws {

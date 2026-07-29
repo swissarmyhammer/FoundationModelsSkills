@@ -123,11 +123,20 @@ public struct SkillsRegistry: Sendable {
     /// The layer roots this registry was constructed over, lowest
     /// precedence first -- exactly as given to `init(roots:policy:watch:)`,
     /// or derived from a `DotfolderStack` by `init(stack:policy:watch:)`.
-    public var roots: [URL]
+    ///
+    /// A construction-time invariant (plan.md decisions #25/#28): fixed for
+    /// this registry's lifetime, so no holder can silently repoint it at a
+    /// different set of roots after the catalog and every render pass
+    /// (`StencilPass`'s partials stack) have already captured it.
+    public let roots: [URL]
 
     /// The render policy every render call this registry makes honors
     /// (plan.md decisions #25/#28).
-    public var policy: RenderPolicy
+    ///
+    /// A construction-time invariant: fixed for this registry's lifetime, so
+    /// a script/shell-disabled registry can never be re-enabled by a holder
+    /// after construction.
+    public let policy: RenderPolicy
 
     /// Every diagnostic `SkillValidator` raised while building this
     /// registry's current catalog generation, each carrying the winning

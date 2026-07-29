@@ -124,15 +124,28 @@ public struct RunScript: OperationDefinition {
 
     /// Runs `path` under `id`'s directory, or returns a corrective message.
     ///
+    /// Evaluates gate 1 (host policy) first, before any id lookup or path
+    /// resolution (plan.md §7.3.1: "triple-gated, every check at dispatch"):
+    /// a script-disabled registry returns the identical policy corrective
+    /// for any `path` -- valid, unknown-id, or confinement-escaping alike --
+    /// never a path-shaped corrective ahead of the policy check.
+    ///
     /// - Parameter context: The shared context supplying the model-visible
     ///   registry.
     /// - Returns: `.success(_:)` carrying the process's outcome;
-    ///   `.corrective(_:)` for an unusable id, a confinement/scripts-prefix
-    ///   violation, a gate refusal, or a missing executable bit/shebang.
+    ///   `.corrective(_:)` for a disabled host policy, an unusable id, a
+    ///   confinement/scripts-prefix violation, a gate refusal, or a missing
+    ///   executable bit/shebang.
     /// - Throws: Nothing; the signature carries `throws` to satisfy the
     ///   `OperationDefinition` protocol requirement.
     public func execute(in context: SkillsToolContext) async throws -> RunScriptOutput {
-        await ResourceIDLookup.withResolvedDirectory(id: id, context: context) { skillDirectory in
+        let hostPolicyResult = ScriptGate.evaluateHostPolicy(
+            isScriptExecutionDisabled: context.registry.policy.isScriptExecutionDisabled)
+        if case .corrective(let message) = hostPolicyResult {
+            return .corrective(message)
+        }
+
+        return await ResourceIDLookup.withResolvedDirectory(id: id, context: context) { skillDirectory in
             guard path.hasPrefix(scriptsDirectoryPrefix) else {
                 return .corrective(Self.notUnderScriptsMessage(path: path))
             }
@@ -141,10 +154,7 @@ public struct RunScript: OperationDefinition {
             }
 
             let allowedTools = context.registry.allowedTools(id: id) ?? []
-            let gateResult = ScriptGate.evaluate(
-                path: path, allowedTools: allowedTools,
-                isScriptExecutionDisabled: context.registry.policy.isScriptExecutionDisabled)
-            if case .corrective(let message) = gateResult {
+            if case .corrective(let message) = ScriptGate.evaluateGrant(path: path, allowedTools: allowedTools) {
                 return .corrective(message)
             }
 

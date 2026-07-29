@@ -55,6 +55,28 @@ struct RunScriptTests {
         #expect(message.contains("disabled"))
     }
 
+    // MARK: - Policy-first ordering (^zbv0t4j): gate 1 precedes id lookup/path resolution
+
+    @Test(
+        "with scripts disabled, ANY path (valid, unknown id, escaping) draws the identical policy corrective",
+        arguments: [
+            (name: "a valid id and path", id: "release-notes", path: "scripts/build.sh"),
+            (name: "an unknown id", id: "does-not-exist", path: "scripts/build.sh"),
+            (name: "a path not under scripts/", id: "release-notes", path: "references/changelog.md"),
+            (name: "a path confinement escape", id: "release-notes", path: "../../etc/passwd"),
+        ])
+    func hostPolicyGateFiresBeforeAnyIDOrPathResolution(name: String, id: String, path: String) async throws {
+        let context = Self.makeContext(policy: RenderPolicy(isScriptExecutionDisabled: true))
+
+        let output = try await RunScript(id: id, path: path).execute(in: context)
+
+        guard case .corrective(let message) = output else {
+            Issue.record("expected a corrective outcome, got \(output)")
+            return
+        }
+        #expect(message == "Script execution is disabled for this registry.", "\(name)")
+    }
+
     @Test func runScriptRefusesWithNoGrantAtAll() async throws {
         let root = try HotReloadTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
