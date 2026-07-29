@@ -1,8 +1,8 @@
 ---
 depends_on:
 - 01KYNCWEKBW84J06EDGSNBWVQT
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: '9280'
 title: 'Resource ops: list resource + read resource (§7.3)'
 ---
 ## What
