@@ -17,6 +17,12 @@ enum ChatMode {
     /// the seam `SkillsDemoTests` exercises in CI.
     private static let forceUnavailableEnvKey = "SKILLS_DEMO_FORCE_UNAVAILABLE"
 
+    /// The reason text for an availability shape neither `switch` below
+    /// recognizes -- shared so the two `@unknown default` branches (the
+    /// outer `availability` switch and the inner `reason` switch) can never
+    /// drift on its wording.
+    private static let unknownReasonText = "unknown reason"
+
     /// One scripted prompt and the op the skills tool is expected to
     /// dispatch in response.
     private struct ScriptedPrompt: Sendable {
@@ -61,11 +67,11 @@ enum ChatMode {
             case .deviceNotEligible: reasonText = "device not eligible"
             case .appleIntelligenceNotEnabled: reasonText = "Apple Intelligence not enabled"
             case .modelNotReady: reasonText = "model not ready"
-            @unknown default: reasonText = "unknown reason"
+            @unknown default: reasonText = Self.unknownReasonText
             }
             Self.printUnavailable(reasonText: reasonText)
         @unknown default:
-            Self.printUnavailable(reasonText: "unknown reason")
+            Self.printUnavailable(reasonText: Self.unknownReasonText)
         }
     }
 
