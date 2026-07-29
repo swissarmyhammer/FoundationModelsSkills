@@ -69,6 +69,23 @@ comments:
 
     Final state: swift build exit 0 (only pre-existing unrelated SwiftPM dependency-identity warnings), swift test 185/185 passing exit 0, double-check PASS, both review-finding checkboxes checked off, task left in doing column for /review to pick up.
   timestamp: 2026-07-29T13:30:44.972615+00:00
+- actor: claude-code
+  id: 01kyq1v9vgt2ssv3dyb1ep4x43
+  text: |-
+    Fourth review round: fixed all five open findings in Sources/FoundationModelsSkills/Registry/SkillsRegistry.swift — unlabeled first parameters on non-value-preserving functions. Re-located each flagged function by matching the finding's target signature text against the current file (line numbers in the finding text were stale from earlier rounds, per the task instructions):
+
+    - `validate(_ discovered:diagnostics:)` (private static, validation) -> `validate(discovered:diagnostics:)`. Call site updated: `Self.validate(discovered: discovered, diagnostics: &diagnostics)` in `buildCatalog(layers:)`.
+    - `renderedMetadataText(_ text:entry:)` (rendering) -> `renderedMetadataText(text:entry:)`. Three call sites updated (in `renderedMetadataValue`, `metadata()`, `listing(for:)`).
+    - `renderedFallback(_ text:entry:argumentNames:using:)` (rendering) -> `renderedFallback(text:entry:argumentNames:using:)`. Two call sites updated (in `renderedMetadataText`, `renderedBody(for:)`).
+    - `renderedMetadataValue(_ value:entry:)` (transformation) -> `renderedMetadataValue(value:entry:)`. Three call sites updated (in `renderedMetadataFields`, and the `.array`/`.dictionary` recursive cases of itself).
+    - `parameterSummary(_ parameter:)` (formatter, internal static) -> `parameterSummary(parameter:)`. No call-site changes needed at the two `.map(Self.parameterSummary)` / `.map(SkillsRegistry.parameterSummary)` unapplied-function-reference sites in SkillsRegistry.swift and SkillsRegistry+SlashCommands.swift -- Swift argument labels aren't part of an unapplied function value's call syntax, so these compile unchanged.
+
+    Grepped the whole repo (Sources/ and Tests/) for each function name; all call sites were confined to SkillsRegistry.swift itself (all five are `private`/`internal`, never called from Tests/ directly). Updated doc-comment cross-references that named the old `(_:entry:)`/`(_:)` signatures in backticks to the new labeled forms, in SkillsRegistry.swift, SkillsRegistry+SlashCommands.swift, and Tests/FoundationModelsSkillsTests/SkillsRegistryTests.swift (a doc-comment-only reference, no code change).
+
+    Final careful pass over every function in the file (grepped `func \w+\(` and manually reviewed each signature) found no further unlabeled-first-parameter issues -- every remaining function either already carries an explicit label (`sortedCatalogEntries(where:)`, `untrustedLayers(for:)`, `listing(for:)`, `renderedBody(for:)`, `renderRequest(text:entry:...)`, the two public/private `init`s, `CatalogEntry.init`, `ResolvedVisibility.init`, `CatalogBox`/`ReloadCoordinator` members) or has zero parameters.
+
+    Verified green: `swift build` exit 0 (only pre-existing unrelated SwiftPM dependency-identity warnings, no new warnings). `swift test` 185/185 passing, exit 0. Checked off all five Review Findings checkboxes on the task description; confirmed via follow-up `get task` that the description rendered with real line breaks (no backslash-n corruption) and `tags: ["29"]` is intact, `progress: 1.0`. Left the task in `doing` per /implement's process -- /review will pull it into `review`.
+  timestamp: 2026-07-29T13:43:26.832978+00:00
 depends_on:
 - 01KYNCSXAEKDVR36H387H5TYXR
 - 01KYND89QDD8BYQWGGPJ8Z4J2M
@@ -107,3 +124,11 @@ Harness delivery channel (plan §6, decision #29): conform `SkillsRegistry` to E
 
 - [x] `Sources/FoundationModelsSkills/Registry/SkillsRegistry.swift:502` — renderedBody and renderedMetadataText contain nearly identical try-catch-fallback patterns: both construct a RenderRequest with common parameters (skillDirectory, winningLayer, policy), call a pipeline render method, and return the result with ?? fallback to original text. Extract a shared helper function parameterized by: (1) the pipeline render method to call (via closure or enum), (2) optional argumentNames for RenderRequest, and (3) the text to render. This eliminates the duplicated error-handling structure and common RenderRequest setup.
 - [x] `Sources/FoundationModelsSkills/Registry/SkillsRegistry.swift:539` — call(id:arguments:) and renderedBody both construct nearly identical RenderRequest objects with the same core parameters (text: entry.body, argumentNames, skillDirectory, winningLayer, policy), differing only by the presence of arguments in call(). Both then call pipeline.renderBody(request). Extract RenderRequest construction into a helper function parameterized by whether arguments should be included, allowing call() and renderedBody() to share request setup logic while maintaining their intentionally different error-handling strategies.
+
+## Review Findings (2026-07-29 08:32)
+
+- [x] `Sources/FoundationModelsSkills/Registry/SkillsRegistry.swift:233` — First argument label is omitted, but this is not a value-preserving conversion — omit labels only for conversions, not validation functions. Label the first parameter: (discovered: DiscoveredSkill, diagnostics: inout [SkillDiagnostic]).
+- [x] `Sources/FoundationModelsSkills/Registry/SkillsRegistry.swift:364` — First argument label is omitted, but this is not a value-preserving conversion — omit labels only for conversions like Int64(x), not transformation functions. Label the first parameter: (text: String, entry: CatalogEntry).
+- [x] `Sources/FoundationModelsSkills/Registry/SkillsRegistry.swift:377` — First argument label is omitted, but this is not a value-preserving conversion — omit labels only for conversions, not rendering functions. Label the first parameter: (text: String, entry: CatalogEntry, ...).
+- [x] `Sources/FoundationModelsSkills/Registry/SkillsRegistry.swift:414` — First argument label is omitted, but this is not a value-preserving conversion — omit labels only for conversions, not transformation functions. Label the first parameter: (value: FrontmatterValue, entry: CatalogEntry).
+- [x] `Sources/FoundationModelsSkills/Registry/SkillsRegistry.swift:429` — First argument label is omitted, but this is not a value-preserving conversion — omit labels only for conversions, not formatter functions. Label the first parameter: (parameter: SkillParameter).

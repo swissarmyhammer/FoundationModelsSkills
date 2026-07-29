@@ -405,7 +405,7 @@ public struct SkillsRegistry: Sendable {
         var diagnostics: [SkillDiagnostic] = []
 
         for discovered in SkillDiscovery(roots: layers.map(\.root)).discover() {
-            guard let validated = Self.validate(discovered, diagnostics: &diagnostics), !validated.isHidden else {
+            guard let validated = Self.validate(discovered: discovered, diagnostics: &diagnostics), !validated.isHidden else {
                 continue
             }
             catalog[discovered.id] = CatalogEntry(
@@ -426,7 +426,7 @@ public struct SkillsRegistry: Sendable {
     ///   (`SkillValidator`'s own `.skipped` outcome) or an unreadable
     ///   `SKILL.md`.
     private static func validate(
-        _ discovered: DiscoveredSkill, diagnostics: inout [SkillDiagnostic]
+        discovered: DiscoveredSkill, diagnostics: inout [SkillDiagnostic]
     ) -> ValidatedSkill? {
         do {
             let text = try String(contentsOf: discovered.skillFileURL, encoding: .utf8)
@@ -487,7 +487,7 @@ public struct SkillsRegistry: Sendable {
     ///   - render: The `RenderPipeline` method to render `text` through.
     /// - Returns: The rendered text, or `text` unchanged on render failure.
     private func renderedFallback(
-        _ text: String, entry: CatalogEntry, argumentNames: [String] = [],
+        text: String, entry: CatalogEntry, argumentNames: [String] = [],
         using render: (RenderRequest) throws -> String
     ) -> String {
         let request = renderRequest(text: text, entry: entry, argumentNames: argumentNames)
@@ -509,25 +509,25 @@ public struct SkillsRegistry: Sendable {
     ///   - entry: The catalog entry `text` belongs to, supplying the render
     ///     request's directory and winning layer.
     /// - Returns: The rendered text, or `text` unchanged on render failure.
-    private func renderedMetadataText(_ text: String, entry: CatalogEntry) -> String {
-        renderedFallback(text, entry: entry, using: pipeline.renderMetadata)
+    private func renderedMetadataText(text: String, entry: CatalogEntry) -> String {
+        renderedFallback(text: text, entry: entry, using: pipeline.renderMetadata)
     }
 
     /// Renders every entry in `entry.frontmatter.metadata` via
-    /// `renderedMetadataValue(_:entry:)`, so a string scalar nested at any
-    /// depth (e.g. an element of a `metadata.tags:` list) renders too, not
-    /// just a top-level scalar.
+    /// `renderedMetadataValue(value:entry:)`, so a string scalar nested at
+    /// any depth (e.g. an element of a `metadata.tags:` list) renders too,
+    /// not just a top-level scalar.
     ///
     /// - Parameter entry: The catalog entry whose `metadata.*` entries to
     ///   render.
     /// - Returns: `entry.frontmatter.metadata` with every string scalar,
     ///   at any depth, rendered.
     private func renderedMetadataFields(entry: CatalogEntry) -> [String: FrontmatterValue] {
-        entry.frontmatter.metadata.mapValues { renderedMetadataValue($0, entry: entry) }
+        entry.frontmatter.metadata.mapValues { renderedMetadataValue(value: $0, entry: entry) }
     }
 
     /// Renders one `FrontmatterValue`: a `.string` renders through
-    /// `renderedMetadataText(_:entry:)`; `.array`/`.dictionary` recurse
+    /// `renderedMetadataText(text:entry:)`; `.array`/`.dictionary` recurse
     /// into every element/value; every other shape (bool, number, null)
     /// passes through unchanged, since only a string scalar is meaningful
     /// Stencil/`$`-substitution input.
@@ -536,14 +536,14 @@ public struct SkillsRegistry: Sendable {
     ///   - value: The value to render.
     ///   - entry: The catalog entry `value` belongs to.
     /// - Returns: `value` with every nested string scalar rendered.
-    private func renderedMetadataValue(_ value: FrontmatterValue, entry: CatalogEntry) -> FrontmatterValue {
+    private func renderedMetadataValue(value: FrontmatterValue, entry: CatalogEntry) -> FrontmatterValue {
         switch value {
         case .string(let raw):
-            return .string(renderedMetadataText(raw, entry: entry))
+            return .string(renderedMetadataText(text: raw, entry: entry))
         case .array(let items):
-            return .array(items.map { renderedMetadataValue($0, entry: entry) })
+            return .array(items.map { renderedMetadataValue(value: $0, entry: entry) })
         case .dictionary(let mapping):
-            return .dictionary(mapping.mapValues { renderedMetadataValue($0, entry: entry) })
+            return .dictionary(mapping.mapValues { renderedMetadataValue(value: $0, entry: entry) })
         case .int, .double, .bool, .null:
             return value
         }
@@ -568,7 +568,7 @@ public struct SkillsRegistry: Sendable {
     ///
     /// - Parameter parameter: The parameter to summarize.
     /// - Returns: The placeholder summary text.
-    internal static func parameterSummary(_ parameter: SkillParameter) -> String {
+    internal static func parameterSummary(parameter: SkillParameter) -> String {
         if let placeholder = parameter.placeholder { return placeholder }
         let name = parameter.variadic ? "\(parameter.name)..." : parameter.name
         return parameter.required ? "<\(name)>" : "[\(name)]"
@@ -592,7 +592,7 @@ public struct SkillsRegistry: Sendable {
             .map { entry in
                 SkillMetadata(
                     id: entry.id,
-                    description: renderedMetadataText(entry.frontmatter.description ?? "", entry: entry),
+                    description: renderedMetadataText(text: entry.frontmatter.description ?? "", entry: entry),
                     metadata: renderedMetadataFields(entry: entry),
                     parameters: parameterSummaries(entry: entry),
                     isModelVisible: entry.isModelVisible)
@@ -624,7 +624,7 @@ public struct SkillsRegistry: Sendable {
     private func listing(for entry: CatalogEntry) -> SkillListing {
         var listing = SkillListing(id: entry.id, frontmatter: entry.frontmatter, body: entry.body)
         if let description = entry.frontmatter.description {
-            listing.description = renderedMetadataText(description, entry: entry)
+            listing.description = renderedMetadataText(text: description, entry: entry)
         }
         return listing
     }
@@ -651,15 +651,15 @@ public struct SkillsRegistry: Sendable {
 
     /// Renders `entry`'s body through all three §5 passes, falling back to
     /// the unrendered body if rendering fails -- the same lenient posture
-    /// `renderedMetadataText(_:entry:)` uses, since `preloadedBodies()` is
-    /// not declared `throws` either.
+    /// `renderedMetadataText(text:entry:)` uses, since `preloadedBodies()`
+    /// is not declared `throws` either.
     ///
     /// - Parameter entry: The catalog entry whose body to render.
     /// - Returns: The rendered body, or the unrendered body on render
     ///   failure.
     private func renderedBody(for entry: CatalogEntry) -> String {
         renderedFallback(
-            entry.body, entry: entry, argumentNames: entry.frontmatter.arguments, using: pipeline.renderBody)
+            text: entry.body, entry: entry, argumentNames: entry.frontmatter.arguments, using: pipeline.renderBody)
     }
 
     // MARK: - call(id:arguments:)

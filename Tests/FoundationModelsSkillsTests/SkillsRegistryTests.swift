@@ -311,7 +311,7 @@ struct SkillsRegistryTests {
     /// empty filter whitelist genuinely rejects -- unlike
     /// `writeMetadataTemplatingSkill(in:)`'s inert shell-injection syntax,
     /// this is a syntactically valid template that fails to render, proving
-    /// `renderedMetadataText(_:entry:)`'s `try?` fallback path is reached
+    /// `renderedMetadataText(text:entry:)`'s `try?` fallback path is reached
     /// by an actual failure, not merely syntax Stencil never recognized in
     /// the first place.
     ///

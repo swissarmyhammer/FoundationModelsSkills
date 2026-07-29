@@ -85,7 +85,7 @@ extension SkillsRegistry: SlashCommandProviding {
     }
 
     /// The `SlashCommand.argumentHint` text for `parameters`: each
-    /// parameter's placeholder summary (`parameterSummary(_:)`), in
+    /// parameter's placeholder summary (`parameterSummary(parameter:)`), in
     /// position order, space-joined.
     ///
     /// - Parameter parameters: The listing row's parsed parameters (plan.md
