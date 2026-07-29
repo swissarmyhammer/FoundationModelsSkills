@@ -72,8 +72,8 @@ comments:
 depends_on:
 - 01KYNCSXAEKDVR36H387H5TYXR
 - 01KYNCSDX30R4T2NRXP7XRQMM2
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: 8c80
 title: 'SkillsRegistry reload: watcher wiring, atomic swap, onReload'
 ---
 ## What

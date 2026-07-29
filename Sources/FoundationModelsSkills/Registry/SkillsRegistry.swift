@@ -521,7 +521,7 @@ public struct SkillsRegistry: Sendable {
     ///
     /// - Parameter parameter: The parameter to summarize.
     /// - Returns: The placeholder summary text.
-    private static func parameterSummary(_ parameter: SkillParameter) -> String {
+    static func parameterSummary(_ parameter: SkillParameter) -> String {
         if let placeholder = parameter.placeholder { return placeholder }
         let name = parameter.variadic ? "\(parameter.name)..." : parameter.name
         return parameter.required ? "<\(name)>" : "[\(name)]"
@@ -645,6 +645,19 @@ public struct SkillsRegistry: Sendable {
             text: entry.body, arguments: arguments, argumentNames: entry.frontmatter.arguments,
             skillDirectory: entry.skillDirectory, winningLayer: entry.winningLayer, policy: policy)
         return try pipeline.renderBody(request)
+    }
+
+    /// The unrendered body text of `id`'s current catalog entry.
+    ///
+    /// None of the §5 render passes have run on this text -- it is exactly
+    /// the `SKILL.md` body as read from disk, `$`-argument placeholders,
+    /// shell-injection syntax, and Stencil tags all still present verbatim.
+    ///
+    /// - Parameter id: The skill id to look up.
+    /// - Returns: The raw body text, or `nil` when `id` is not currently in
+    ///   the catalog.
+    func rawBody(id: String) -> String? {
+        catalogBox.snapshot.catalog[id]?.body
     }
 
     // MARK: - Reload (plan.md §7)
