@@ -133,10 +133,29 @@ public struct ArgumentSubstitution: RenderPass {
         case named(name: String)
     }
 
+    /// The named capture group names `tokenPattern`'s regex string and `classify(_:in:)`'s
+    /// `range(withName:)`/`groupText` lookups share.
+    ///
+    /// Defined once here so the group names embedded in the regex pattern and the strings used
+    /// to look those groups back up can never drift out of sync -- review found three of these
+    /// (`escape`, `argumentsIndex`, `position`) duplicated as bare string literals between
+    /// `tokenPattern` and `classify(_:in:)`; all six alternatives are collected here on the same
+    /// principle.
+    private enum GroupName {
+        static let escape = "escape"
+        static let specialVar = "specialVar"
+        static let argumentsIndex = "argumentsIndex"
+        static let argumentsBare = "argumentsBare"
+        static let position = "position"
+        static let namedArg = "namedArg"
+    }
+
     /// Classifies one `tokenPattern` match into a `TokenKind` by checking each alternative's
     /// named capture group *range* -- not whether its text happens to parse -- in the
     /// grammar's own precedence order (escape, `${VAR}`, `$ARGUMENTS[N]`, bare `$ARGUMENTS`,
-    /// `$N`, `$name`). Exactly one alternative's range is ever populated for a given match,
+    /// `$N`, `$name`).
+    ///
+    /// Exactly one alternative's range is ever populated for a given match,
     /// since `tokenPattern`'s alternatives are mutually exclusive by construction; checking the
     /// range first (rather than gating on `Int(digits) != nil`) means an implausibly large
     /// digit run for `$ARGUMENTS[N]`/`$N` still classifies correctly, carrying `index: nil`,
@@ -161,22 +180,22 @@ public struct ArgumentSubstitution: RenderPass {
             return makeKind(Int(digits))
         }
 
-        if match.range(withName: "escape").location != NSNotFound {
+        if match.range(withName: GroupName.escape).location != NSNotFound {
             return .escape
         }
-        if let name = groupText(match, name: "specialVar", in: text) {
+        if let name = groupText(match, name: GroupName.specialVar, in: text) {
             return .specialVariable(name: name)
         }
-        if match.range(withName: "argumentsIndex").location != NSNotFound {
-            return digitGroupTokenKind(groupName: "argumentsIndex") { .argumentsIndexed(index: $0) }
+        if match.range(withName: GroupName.argumentsIndex).location != NSNotFound {
+            return digitGroupTokenKind(groupName: GroupName.argumentsIndex) { .argumentsIndexed(index: $0) }
         }
-        if match.range(withName: "argumentsBare").location != NSNotFound {
+        if match.range(withName: GroupName.argumentsBare).location != NSNotFound {
             return .argumentsBare
         }
-        if match.range(withName: "position").location != NSNotFound {
-            return digitGroupTokenKind(groupName: "position") { .positional(index: $0) }
+        if match.range(withName: GroupName.position).location != NSNotFound {
+            return digitGroupTokenKind(groupName: GroupName.position) { .positional(index: $0) }
         }
-        if let name = groupText(match, name: "namedArg", in: text) {
+        if let name = groupText(match, name: GroupName.namedArg, in: text) {
             return .named(name: name)
         }
         preconditionFailure("ArgumentSubstitution.tokenPattern matched but no known alternative captured.")
@@ -204,7 +223,7 @@ public struct ArgumentSubstitution: RenderPass {
     /// by the bare `$ARGUMENTS` alternative.
     private static let tokenPattern = try! NSRegularExpression(
         pattern:
-            #"(?<escape>\\\$)|\$\{(?<specialVar>[A-Za-z_][A-Za-z0-9_]*)\}|\$ARGUMENTS\[(?<argumentsIndex>\d+)\]|(?<argumentsBare>\$ARGUMENTS)\b|\$(?<position>\d+)\b|\$(?<namedArg>[A-Za-z_][A-Za-z0-9_]*)\b"#
+            #"(?<\#(GroupName.escape)>\\\$)|\$\{(?<\#(GroupName.specialVar)>[A-Za-z_][A-Za-z0-9_]*)\}|\$ARGUMENTS\[(?<\#(GroupName.argumentsIndex)>\d+)\]|(?<\#(GroupName.argumentsBare)>\$ARGUMENTS)\b|\$(?<\#(GroupName.position)>\d+)\b|\$(?<\#(GroupName.namedArg)>[A-Za-z_][A-Za-z0-9_]*)\b"#
     )
 
     // MARK: - Special variables
