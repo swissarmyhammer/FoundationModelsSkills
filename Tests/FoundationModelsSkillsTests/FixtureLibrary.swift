@@ -57,7 +57,7 @@ enum FixtureLibrary {
     ///     `..` traversal and no leading `/` or `~`.
     ///   - thisFile: Forwarded to `root(thisFile:)`.
     /// - Returns: The resolved fixture URL.
-    static func url(_ relativePath: String, thisFile: String = #filePath) -> URL {
+    static func url(relativePath: String, thisFile: String = #filePath) -> URL {
         let components = relativePath.split(separator: "/", omittingEmptySubsequences: true)
         precondition(
             !relativePath.hasPrefix("/") && !relativePath.hasPrefix("~")

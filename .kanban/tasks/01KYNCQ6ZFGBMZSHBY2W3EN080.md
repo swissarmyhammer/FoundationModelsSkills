@@ -42,6 +42,21 @@ comments:
 
     Final state: `swift build` exit 0 (no new warnings), `swift test` 11/11 pass exit 0. Both review-finding checkboxes are `[x]`. Leaving task in `doing` for `/review` per the implement workflow.
   timestamp: 2026-07-29T01:23:32.424188+00:00
+- actor: claude-code
+  id: 01kynr7wz29an9tdynxp94fdka
+  text: |-
+    Addressed the newest review finding (2026-07-28 20:25).
+
+    `Tests/FoundationModelsSkillsTests/FixtureLibrary.swift`: changed `static func url(_ relativePath: String, thisFile: String = #filePath) -> URL` to `static func url(relativePath: String, thisFile: String = #filePath) -> URL` — gave the first parameter an explicit external label matching its internal name and the existing doc comment, per the fluent-usage rule (a factory method is not a value-preserving conversion, so omitting the label isn't justified).
+
+    Updated all four call sites in `Tests/FoundationModelsSkillsTests/FixtureLibraryTests.swift` (grepped the whole repo first to confirm these were the only callers) from positional `FixtureLibrary.url(relativePath)` to labeled `FixtureLibrary.url(relativePath: relativePath)`: in `loadFrontmatter(_:)`, `loadBody(_:)`, `fixtureLibraryResolvesHappyPathFixture(_:)`, and `fixtureLibraryResolvesBrokenFixture(_:)`.
+
+    Verified: `swift build` exit 0 (only the two pre-existing unrelated `foundationmodelsoperationtool` dependency-identity warnings, no new warnings). `swift test` (both filtered to this target and full suite) 11/11 pass, exit 0, no warnings.
+
+    Checked off both items under "Review Findings (2026-07-28 20:25)" via `update task`. Follow-up `get task` confirms tags (`27`, `3`) and description (real newlines, all four Review Findings items now `[x]`, progress 1.0) are intact.
+
+    Leaving task in `doing` for `/review` per the implement workflow.
+  timestamp: 2026-07-29T01:36:19.426838+00:00
 depends_on:
 - 01KYNCPTS07BHG6PQS17PE17T4
 position_column: doing
@@ -78,3 +93,8 @@ Also add invalid/edge fixtures for the lenient-validation tests in a sibling fol
 
 - [x] `Tests/FoundationModelsSkillsTests/FixtureLibrary.swift:56` — Path traversal: the `url()` function accepts a `relativePath` parameter and appends it directly without validating for `..` sequences or absolute paths. Calling `FixtureLibrary.url("../../etc/passwd")` would construct a URL that resolves outside the intended `Examples/skill-library` directory when passed to file operations. Validate `relativePath` to reject path traversal sequences.
 - [x] `Tests/FoundationModelsSkillsTests/FixtureLibraryTests.swift:14` — Doc comment contains two sentences without a blank `///` separator; the rule requires elaboration to follow a summary after a blank line. Add a blank `///` line between the summary and the second sentence.
+
+## Review Findings (2026-07-28 20:25)
+
+- [x] `Tests/FoundationModelsSkillsTests/FixtureLibrary.swift:57` — The documentation names the first parameter as `relativePath:` but the function signature on line 61 declares it as `_ relativePath` (unnamed). The documentation rule requires: 'Documented names must match the signature.'. Update the function signature to label the first parameter to match the documentation: `static func url(relativePath: String, thisFile: String = #filePath) -> URL {`.
+- [x] `Tests/FoundationModelsSkillsTests/FixtureLibrary.swift:61` — The `url(_:)` function unlabels its first parameter without justification. Per the fluent-usage rule, the first argument label should be omitted only for value-preserving conversions (e.g. `Int64(someUInt32)`). A factory method like `url()` is not a value-preserving conversion, so its first parameter should be labeled to clarify intent at the call site. Label the first parameter: `static func url(relativePath: String, thisFile: String = #filePath) -> URL {`. This also aligns with the documentation on line 57, which already documents the parameter as `- relativePath:`.

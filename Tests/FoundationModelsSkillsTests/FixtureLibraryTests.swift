@@ -34,7 +34,7 @@ private struct SkillFrontmatter: Decodable {
 /// `relativePath`, using `FrontmatterDocument.split` for the textual split
 /// (plan.md §4/§29: YAML decoding stays ours, Extras only splits text).
 private func loadFrontmatter(_ relativePath: String) throws -> SkillFrontmatter {
-    let text = try String(contentsOf: FixtureLibrary.url(relativePath), encoding: .utf8)
+    let text = try String(contentsOf: FixtureLibrary.url(relativePath: relativePath), encoding: .utf8)
     let frontmatterText = try #require(FrontmatterDocument.split(text: text).frontmatter)
     return try YAMLDecoder().decode(SkillFrontmatter.self, from: frontmatterText)
 }
@@ -42,7 +42,7 @@ private func loadFrontmatter(_ relativePath: String) throws -> SkillFrontmatter 
 /// Reads the render-pipeline body (post frontmatter split) of the fixture at
 /// `relativePath`.
 private func loadBody(_ relativePath: String) throws -> String {
-    let text = try String(contentsOf: FixtureLibrary.url(relativePath), encoding: .utf8)
+    let text = try String(contentsOf: FixtureLibrary.url(relativePath: relativePath), encoding: .utf8)
     return FrontmatterDocument.split(text: text).body
 }
 
@@ -88,12 +88,12 @@ private let brokenFixtures = [
 
 @Test(arguments: happyPathFixtures)
 func fixtureLibraryResolvesHappyPathFixture(_ relativePath: String) {
-    #expect(FileManager.default.fileExists(atPath: FixtureLibrary.url(relativePath).path))
+    #expect(FileManager.default.fileExists(atPath: FixtureLibrary.url(relativePath: relativePath).path))
 }
 
 @Test(arguments: brokenFixtures)
 func fixtureLibraryResolvesBrokenFixture(_ relativePath: String) {
-    #expect(FileManager.default.fileExists(atPath: FixtureLibrary.url(relativePath).path))
+    #expect(FileManager.default.fileExists(atPath: FixtureLibrary.url(relativePath: relativePath).path))
 }
 
 @Test func defaultsBaseStyleIsAPlainValidSkill() throws {
