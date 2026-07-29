@@ -45,7 +45,8 @@ public struct ReadResource: OperationDefinition {
     ///   - id: The skill id owning the resource.
     ///   - path: The resource's path, relative to the skill directory.
     ///   - start: The first line to return; `nil` defaults to `1`.
-    ///   - end: The last line to return; `nil` defaults to `start + 499`.
+    ///   - end: The last line to return; `nil` defaults to `start +
+    ///     maxLinesPerCall - 1`.
     public init(id: String, path: String, start: Int? = nil, end: Int? = nil) {
         self.id = id
         self.path = path
@@ -75,7 +76,8 @@ public struct ReadResource: OperationDefinition {
             description: "The first line to return (1-based). Defaults to 1."),
         ParamMeta(
             name: endKey, type: .integer, required: false,
-            description: "The last line to return. Defaults to start + 499, capped at \(Self.maxLinesPerCall) lines per call."
+            description:
+                "The last line to return. Defaults to start + \(Self.maxLinesPerCall - 1), capped at \(Self.maxLinesPerCall) lines per call."
         ),
     ]
 
@@ -107,10 +109,9 @@ public struct ReadResource: OperationDefinition {
     /// This operation's parameters re-encoded as `GeneratedContent`, e.g. for
     /// the CLI driver's round trip back to the model-facing payload shape.
     public var generatedContent: GeneratedContent {
-        var properties: [(String, any ConvertibleToGeneratedContent)] = [(Self.idKey, id), (Self.pathKey, path)]
-        if let start { properties.append((Self.startKey, start)) }
-        if let end { properties.append((Self.endKey, end)) }
-        return GeneratedContent(properties: properties, uniquingKeysWith: { _, new in new })
+        GeneratedContentBuilder.make(
+            required: [(Self.idKey, id), (Self.pathKey, path)],
+            optional: [(Self.startKey, start), (Self.endKey, end)])
     }
 
     /// The maximum number of lines a successful read returns per call.
@@ -126,25 +127,19 @@ public struct ReadResource: OperationDefinition {
     /// - Throws: Nothing; the signature carries `throws` to satisfy the
     ///   `OperationDefinition` protocol requirement.
     public func execute(in context: SkillsToolContext) async throws -> ReadResourceOutput {
-        let skillDirectory: URL
-        switch ResourceIDLookup.resolve(id: id, context: context) {
-        case .corrective(let message):
-            return .corrective(message)
-        case .success(let resolvedDirectory):
-            skillDirectory = resolvedDirectory
-        }
+        await ResourceIDLookup.withResolvedDirectory(id: id, context: context) { skillDirectory in
+            guard let resolved = PathConfinement.resolvedURL(relativePath: path, in: skillDirectory) else {
+                return .corrective(PathConfinement.deniedMessage(path: path))
+            }
+            guard let data = try? Data(contentsOf: resolved) else {
+                return .corrective(Self.unreadableMessage(path: path))
+            }
+            guard let text = String(data: data, encoding: .utf8) else {
+                return .corrective(Self.nonUTF8Message(path: path, byteSize: data.count))
+            }
 
-        guard let resolved = PathConfinement.resolvedURL(relativePath: path, in: skillDirectory) else {
-            return .corrective(PathConfinement.deniedMessage(path: path))
+            return .success(Self.slice(text: text, id: id, path: path, start: start, end: end))
         }
-        guard let data = try? Data(contentsOf: resolved) else {
-            return .corrective(Self.unreadableMessage(path: path))
-        }
-        guard let text = String(data: data, encoding: .utf8) else {
-            return .corrective(Self.nonUTF8Message(path: path, byteSize: data.count))
-        }
-
-        return .success(Self.slice(text: text, id: id, path: path, start: start, end: end))
     }
 
     /// Slices `text` to the requested (or defaulted) `start`/`end` line
@@ -155,7 +150,8 @@ public struct ReadResource: OperationDefinition {
     ///   - id: The resource's owning skill id, carried into the result.
     ///   - path: The resource's path, carried into the result.
     ///   - start: The requested first line, or `nil` for `1`.
-    ///   - end: The requested last line, or `nil` for `start + 499`.
+    ///   - end: The requested last line, or `nil` for `start +
+    ///     maxLinesPerCall - 1`.
     /// - Returns: The sliced result.
     private static func slice(text: String, id: String, path: String, start: Int?, end: Int?) -> ReadResourceResult {
         let lines = text.splitIntoLines

@@ -59,7 +59,7 @@ internal enum ScriptGate {
     /// - Returns: The corrective message.
     private static func noGrantMessage(path: String) -> String {
         "This skill has not pre-approved script execution for `\(path)`. "
-            + "Add an `allowed-tools: \"Script(scripts/*)\"` grant (or a narrower glob covering this path) "
+            + "Add an `allowed-tools: \"Script(\(scriptsDirectoryPrefix)*)\"` grant (or a narrower glob covering this path) "
             + "to its SKILL.md frontmatter."
     }
 

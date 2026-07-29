@@ -62,6 +62,33 @@ internal enum GeneratedContentBuilder {
         }
         return GeneratedContent(properties: [requiredKey: requiredValue, optionalKey: optionalValue])
     }
+
+    /// Builds a payload from any number of required properties plus any
+    /// number of optional ones, omitting each optional key whose value is
+    /// `nil`.
+    ///
+    /// The shared round-trip encoding shape `ReadResource.generatedContent`
+    /// (`id`/`path` required, `start`/`end` optional) and
+    /// `RunScript.generatedContent` (`id`/`path` required,
+    /// `arguments`/`timeout` optional) both need, despite differing in how
+    /// many required/optional slots they fill -- generic over the whole
+    /// property list rather than a fixed one-required/one-optional shape.
+    ///
+    /// - Parameters:
+    ///   - required: Always-present `(name, value)` pairs.
+    ///   - optional: Possibly-absent `(name, value)` pairs; a `nil` value
+    ///     omits that key entirely.
+    /// - Returns: The assembled payload.
+    internal static func make(
+        required: [(String, any ConvertibleToGeneratedContent)],
+        optional: [(String, (any ConvertibleToGeneratedContent)?)]
+    ) -> GeneratedContent {
+        var properties = required
+        for (key, value) in optional {
+            if let value { properties.append((key, value)) }
+        }
+        return GeneratedContent(properties: properties, uniquingKeysWith: { _, new in new })
+    }
 }
 
 /// One operation's outcome: either a successful `Encodable` result or a

@@ -76,7 +76,7 @@ public struct RunScript: OperationDefinition {
         ParamMeta(name: idKey, type: .string, required: true, description: "The skill id owning the script."),
         ParamMeta(
             name: pathKey, type: .string, required: true,
-            description: "The script's path, relative to the skill directory, under scripts/."),
+            description: "The script's path, relative to the skill directory, under \(scriptsDirectoryPrefix)."),
         ParamMeta(
             name: argumentsKey, type: .array(of: .string), required: false,
             description: "Positional arguments to pass to the script."),
@@ -114,10 +114,9 @@ public struct RunScript: OperationDefinition {
     /// This operation's parameters re-encoded as `GeneratedContent`, e.g. for
     /// the CLI driver's round trip back to the model-facing payload shape.
     public var generatedContent: GeneratedContent {
-        var properties: [(String, any ConvertibleToGeneratedContent)] = [(Self.idKey, id), (Self.pathKey, path)]
-        if let arguments { properties.append((Self.argumentsKey, arguments)) }
-        if let timeout { properties.append((Self.timeoutKey, timeout)) }
-        return GeneratedContent(properties: properties, uniquingKeysWith: { _, new in new })
+        GeneratedContentBuilder.make(
+            required: [(Self.idKey, id), (Self.pathKey, path)],
+            optional: [(Self.argumentsKey, arguments), (Self.timeoutKey, timeout)])
     }
 
     /// The `timeout` used when the caller omits one.
@@ -133,51 +132,45 @@ public struct RunScript: OperationDefinition {
     /// - Throws: Nothing; the signature carries `throws` to satisfy the
     ///   `OperationDefinition` protocol requirement.
     public func execute(in context: SkillsToolContext) async throws -> RunScriptOutput {
-        let skillDirectory: URL
-        switch ResourceIDLookup.resolve(id: id, context: context) {
-        case .corrective(let message):
-            return .corrective(message)
-        case .success(let resolvedDirectory):
-            skillDirectory = resolvedDirectory
-        }
+        await ResourceIDLookup.withResolvedDirectory(id: id, context: context) { skillDirectory in
+            guard path.hasPrefix(scriptsDirectoryPrefix) else {
+                return .corrective(Self.notUnderScriptsMessage(path: path))
+            }
+            guard let resolved = PathConfinement.resolvedURL(relativePath: path, in: skillDirectory) else {
+                return .corrective(PathConfinement.deniedMessage(path: path))
+            }
 
-        guard path.hasPrefix(scriptsDirectoryPrefix) else {
-            return .corrective(Self.notUnderScriptsMessage(path: path))
-        }
-        guard let resolved = PathConfinement.resolvedURL(relativePath: path, in: skillDirectory) else {
-            return .corrective(PathConfinement.deniedMessage(path: path))
-        }
+            let allowedTools = context.registry.allowedTools(id: id) ?? []
+            let gateResult = ScriptGate.evaluate(
+                path: path, allowedTools: allowedTools,
+                isScriptExecutionDisabled: context.registry.policy.isScriptExecutionDisabled)
+            if case .corrective(let message) = gateResult {
+                return .corrective(message)
+            }
 
-        let allowedTools = context.registry.allowedTools(id: id) ?? []
-        let gateResult = ScriptGate.evaluate(
-            path: path, allowedTools: allowedTools, isScriptExecutionDisabled: context.registry.policy.isScriptExecutionDisabled
-        )
-        if case .corrective(let message) = gateResult {
-            return .corrective(message)
+            if let issue = Self.executabilityIssue(path: path, at: resolved) {
+                return .corrective(issue)
+            }
+
+            let outcome = await ScriptProcessRunner.run(
+                executableURL: resolved, arguments: arguments ?? [], workingDirectory: skillDirectory,
+                timeout: TimeInterval(timeout ?? Self.defaultTimeoutSeconds))
+
+            return .success(
+                RunScriptResult(
+                    id: id, path: path, status: outcome.status.rawValue, exitCode: outcome.exitCode.map(Int.init),
+                    durationMs: outcome.durationMs, lines: outcome.lines, output: outcome.output))
         }
-
-        if let issue = Self.executabilityIssue(path: path, at: resolved) {
-            return .corrective(issue)
-        }
-
-        let outcome = await ScriptProcessRunner.run(
-            executableURL: resolved, arguments: arguments ?? [], workingDirectory: skillDirectory,
-            timeout: TimeInterval(timeout ?? Self.defaultTimeoutSeconds))
-
-        return .success(
-            RunScriptResult(
-                id: id, path: path, status: outcome.status.rawValue, exitCode: outcome.exitCode.map(Int.init),
-                durationMs: outcome.durationMs, lines: outcome.lines, output: outcome.output))
     }
 
     // MARK: - "must be under scripts/" corrective
 
-    /// The corrective message for a `path` not under `scripts/`.
+    /// The corrective message for a `path` not under `scriptsDirectoryPrefix`.
     ///
     /// - Parameter path: The path that was rejected.
     /// - Returns: The corrective message.
     private static func notUnderScriptsMessage(path: String) -> String {
-        "The path `\(path)` is not runnable: `run script` only executes files under `scripts/`."
+        "The path `\(path)` is not runnable: `run script` only executes files under `\(scriptsDirectoryPrefix)`."
     }
 
     // MARK: - Direct-exec eligibility (executable bit + shebang)

@@ -25,8 +25,8 @@ extension StringProtocol {
 }
 
 /// Shared "resolve `id` against the model-visible catalog" lookup and
-/// corrective-message logic for `ListResource` and `ReadResource` (plan.md
-/// §7.3, decision #22).
+/// corrective-message logic for `ListResource`, `ReadResource`, and
+/// `RunScript` (plan.md §7.3, decision #22).
 ///
 /// Resource operations see only the model-visible catalog, unlike
 /// `UseSkill`'s surface-dependent `context.visibilityPredicate` -- plan.md
@@ -67,6 +67,29 @@ internal enum ResourceIDLookup {
             return .corrective(Self.unusableIDMessage(id: id, context: context))
         }
         return .success(skillDirectory)
+    }
+
+    /// Resolves `id`, then runs `whenGranted` with the resolved directory --
+    /// the single place `ListResource`, `ReadResource`, and `RunScript`
+    /// share this "resolve, then continue" shape, so none of the three
+    /// repeats `resolve(id:context:)`'s switch as its own inline guard.
+    ///
+    /// - Parameters:
+    ///   - id: The skill id to resolve.
+    ///   - context: The shared context supplying the registry.
+    ///   - whenGranted: Runs with the resolved directory once `id` resolves;
+    ///     never runs at all when it doesn't.
+    /// - Returns: `whenGranted`'s result, or the corrective message for an
+    ///   id that didn't resolve.
+    internal static func withResolvedDirectory<Success: Encodable & Sendable & Equatable>(
+        id: String, context: SkillsToolContext, whenGranted: (URL) async -> CorrectiveOutcome<Success>
+    ) async -> CorrectiveOutcome<Success> {
+        switch Self.resolve(id: id, context: context) {
+        case .corrective(let message):
+            return .corrective(message)
+        case .success(let skillDirectory):
+            return await whenGranted(skillDirectory)
+        }
     }
 
     /// The corrective message for an id that is unknown, stale, or

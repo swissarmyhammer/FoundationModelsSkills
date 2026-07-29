@@ -192,16 +192,11 @@ internal enum ScriptProcessRunner {
     /// - Returns: The exit code for a normal exit, or `nil` when `pid`
     ///   terminated by signal or `waitpid` itself failed.
     private static func waitBlocking(pid: pid_t) async -> Int32? {
-        await withCheckedContinuation { continuation in
-            DispatchQueue.global(qos: .utility).async {
-                var status: Int32 = 0
-                let waited = waitpid(pid, &status, 0)
-                guard waited == pid, (status & 0x7f) == 0 else {
-                    continuation.resume(returning: nil)
-                    return
-                }
-                continuation.resume(returning: (status >> 8) & 0xff)
-            }
+        await Self.runOnGlobalQueue {
+            var status: Int32 = 0
+            let waited = waitpid(pid, &status, 0)
+            guard waited == pid, (status & 0x7f) == 0 else { return nil }
+            return (status >> 8) & 0xff
         }
     }
 
@@ -212,9 +207,20 @@ internal enum ScriptProcessRunner {
     /// - Parameter handle: The pipe read end to drain.
     /// - Returns: Every byte read.
     private static func readAllBlocking(from handle: FileHandle) async -> Data {
+        await Self.runOnGlobalQueue { handle.readDataToEndOfFile() }
+    }
+
+    /// Runs a blocking `work` closure on the global utility-QoS dispatch
+    /// queue, bridging it to `async` -- the single place `waitBlocking` and
+    /// `readAllBlocking` share this `withCheckedContinuation` wiring, so
+    /// neither repeats it as its own inline continuation.
+    ///
+    /// - Parameter work: The blocking work to run off the cooperative pool.
+    /// - Returns: `work`'s result.
+    private static func runOnGlobalQueue<T: Sendable>(_ work: @escaping @Sendable () -> T) async -> T {
         await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .utility).async {
-                continuation.resume(returning: handle.readDataToEndOfFile())
+                continuation.resume(returning: work())
             }
         }
     }

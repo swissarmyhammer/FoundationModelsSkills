@@ -98,10 +98,7 @@ public struct ListResource: OperationDefinition {
     /// - Throws: Nothing; the signature carries `throws` to satisfy the
     ///   `OperationDefinition` protocol requirement.
     public func execute(in context: SkillsToolContext) async throws -> ListResourceOutput {
-        switch ResourceIDLookup.resolve(id: id, context: context) {
-        case .corrective(let message):
-            return .corrective(message)
-        case .success(let skillDirectory):
+        await ResourceIDLookup.withResolvedDirectory(id: id, context: context) { skillDirectory in
             let rows = Self.resourceRows(in: skillDirectory).sorted { $0.path < $1.path }
             return .success(ListResourceResult(id: id, resources: Array(rows.prefix(Self.rowCap)), total: rows.count))
         }
