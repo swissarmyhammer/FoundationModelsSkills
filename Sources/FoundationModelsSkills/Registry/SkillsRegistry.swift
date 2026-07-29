@@ -93,23 +93,36 @@ public struct UnknownSkillError: Error, Sendable, Equatable {
     }
 }
 
-/// The Layer-3 source of truth's static half: composes discovery, decoding,
-/// validation, and the render pipeline into one catalog built once at
-/// construction (plan.md §3, §6, §7.1; decisions #13/#25/#28/#29).
+/// The Layer-3 source of truth: composes discovery, decoding, validation,
+/// and the render pipeline into a catalog, built once at construction and
+/// optionally kept fresh thereafter (plan.md §3, §6, §7, §7.1; decisions
+/// #13/#25/#28/#29).
 ///
-/// Reload -- watching every root and rebuilding the catalog on change -- is
-/// a separate follow-up type; this one builds its catalog exactly once, at
-/// `init`, and never again. `SkillsRegistry` holds no opinion about where
-/// skills live: `roots` is entirely the caller's choice, ordered from
-/// lowest to highest precedence, the same contract `SkillDiscovery` and
-/// `SkillWatcher` already follow (decision #29, amended). A skill
-/// `SkillValidator` hides entirely (the retired `partial: true` flag) never
-/// enters the catalog at all -- every method below only ever sees the
-/// skills that survived validation un-hidden.
+/// `SkillsRegistry` holds no opinion about where skills live: `roots` is
+/// entirely the caller's choice, ordered from lowest to highest precedence,
+/// the same contract `SkillDiscovery` and `SkillWatcher` already follow
+/// (decision #29, amended). A skill `SkillValidator` hides entirely (the
+/// retired `partial: true` flag) never enters the catalog at all -- every
+/// method below only ever sees the skills that survived validation
+/// un-hidden.
+///
+/// With `watch: false` (the default), the catalog never changes after
+/// `init` returns. With `watch: true`, a `SkillWatcher` observes every
+/// layer root and rebuilds the catalog on its coalesced signal; the rebuild
+/// swaps in a whole new catalog atomically, so `metadata()`,
+/// `commandListing()`, `preloadedBodies()`, `call(id:arguments:)`, and
+/// `diagnostics` always read one complete generation of the catalog, never
+/// a partially-rebuilt one, regardless of how many readers query
+/// concurrently with a rebuild. `onReload` publishes the refreshed
+/// `[SkillMetadata]` once per rebuild -- the seam a future
+/// `SkillSearchAgent`'s `update(items:)` and preload refresh hang off
+/// (plan.md §7.1). The watcher this registry wires is owned by it: every
+/// copy of a `watch: true` registry shares one underlying watcher, stopped
+/// (and `onReload` finished) once the last copy is deinitialized.
 public struct SkillsRegistry: Sendable {
     /// The layer roots this registry was constructed over, lowest
-    /// precedence first -- exactly as given to `init(roots:policy:)`, or
-    /// derived from a `DotfolderStack` by `init(stack:policy:)`.
+    /// precedence first -- exactly as given to `init(roots:policy:watch:)`,
+    /// or derived from a `DotfolderStack` by `init(stack:policy:watch:)`.
     public var roots: [URL]
 
     /// The render policy every render call this registry makes honors
@@ -117,14 +130,54 @@ public struct SkillsRegistry: Sendable {
     public var policy: RenderPolicy
 
     /// Every diagnostic `SkillValidator` raised while building this
-    /// registry's catalog, each carrying the winning root's provenance.
-    public var diagnostics: [SkillDiagnostic]
+    /// registry's current catalog generation, each carrying the winning
+    /// root's provenance.
+    ///
+    /// Reflects the same catalog generation `metadata()`,
+    /// `commandListing()`, and `preloadedBodies()` currently read --
+    /// refreshed after every watcher-driven rebuild, same as they are.
+    public var diagnostics: [SkillDiagnostic] {
+        catalogBox.snapshot.diagnostics
+    }
+
+    /// Pushed publications of this registry's refreshed metadata list, one
+    /// per watcher-driven rebuild (plan.md §7's reload seam; §7.1's future
+    /// `SkillSearchAgent.update(items:)` and preload-refresh consumers hang
+    /// off this).
+    ///
+    /// Each element is the full, current `metadata()` list -- not an
+    /// incremental diff, the same full-catalog contract `metadata()` itself
+    /// carries. `nil` when this registry was constructed with `watch:
+    /// false`, since a registry that never reloads has nothing to publish;
+    /// finishes once this registry (and every copy sharing its watcher) is
+    /// deinitialized.
+    public let onReload: AsyncStream<[SkillMetadata]>?
 
     /// This registry's render pipeline, wired to the real passes 1-3.
     private let pipeline: RenderPipeline
 
-    /// Every skill that survived validation un-hidden, keyed by id.
-    private let catalog: [String: CatalogEntry]
+    /// The atomically-swappable holder for this registry's current catalog
+    /// generation and its diagnostics.
+    ///
+    /// Every copy of a given `SkillsRegistry` shares the same `CatalogBox`
+    /// instance, so a rebuild triggered through one copy's watcher is
+    /// immediately visible to every other copy.
+    private let catalogBox: CatalogBox
+
+    /// Owns the `SkillWatcher` and `onReload` continuation for a `watch:
+    /// true` registry; `nil` for `watch: false`.
+    ///
+    /// Retained purely for its lifetime: `ReloadCoordinator.deinit` stops
+    /// the watcher and finishes `onReload`, so keeping this field alive for
+    /// as long as any copy of the registry exists is what makes the
+    /// watcher's lifecycle "owned by the registry" a real guarantee rather
+    /// than a comment.
+    private let reloadCoordinator: ReloadCoordinator?
+
+    /// This registry's current catalog generation, keyed by id.
+    private var catalog: [String: CatalogEntry] {
+        catalogBox.snapshot.catalog
+    }
 
     /// This registry's catalog entries matching `predicate`, sorted by id.
     ///
@@ -160,8 +213,11 @@ public struct SkillsRegistry: Sendable {
     ///     earlier root's copy of the same id.
     ///   - policy: The render policy every render call this registry makes
     ///     honors. Defaults to the permissive `RenderPolicy()`.
-    public init(roots: [URL], policy: RenderPolicy = RenderPolicy()) {
-        self.init(layers: Self.untrustedLayers(for: roots), policy: policy)
+    ///   - watch: Whether to watch every root and rebuild the catalog on
+    ///     change (plan.md §7). Defaults to `false` -- a static catalog,
+    ///     matching this initializer's prior behavior.
+    public init(roots: [URL], policy: RenderPolicy = RenderPolicy(), watch: Bool = false) {
+        self.init(layers: Self.untrustedLayers(for: roots), policy: policy, watch: watch)
     }
 
     /// Creates a `SkillsRegistry` over a `DotfolderStack`'s own layers,
@@ -179,30 +235,73 @@ public struct SkillsRegistry: Sendable {
     ///   - stack: The dotfolder stack to build the catalog over.
     ///   - policy: The render policy every render call this registry makes
     ///     honors. Defaults to the permissive `RenderPolicy()`.
-    public init(stack: DotfolderStack, policy: RenderPolicy = RenderPolicy()) {
-        self.init(layers: stack.layers, policy: policy)
+    ///   - watch: Whether to watch every layer root and rebuild the catalog
+    ///     on change (plan.md §7). Defaults to `false` -- a static catalog,
+    ///     matching this initializer's prior behavior.
+    public init(stack: DotfolderStack, policy: RenderPolicy = RenderPolicy(), watch: Bool = false) {
+        self.init(layers: stack.layers, policy: policy, watch: watch)
     }
 
-    /// Builds a `SkillsRegistry` from its already-resolved layers, shared
-    /// by both public initializers so `init(roots:policy:)`'s synthesized,
-    /// uniformly untrusted layers and `init(stack:policy:)`'s real,
-    /// per-layer-trusted ones flow through exactly one construction path.
+    /// Builds a `SkillsRegistry` from its already-resolved layers, shared by
+    /// both public initializers so `init(roots:policy:watch:)`'s
+    /// synthesized, uniformly untrusted layers and
+    /// `init(stack:policy:watch:)`'s real, per-layer-trusted ones flow
+    /// through exactly one construction path.
     ///
     /// - Parameters:
     ///   - layers: The layers to build the catalog over, lowest precedence
     ///     first.
     ///   - policy: The render policy every render call this registry makes
     ///     honors.
-    private init(layers: [DotfolderStack.Layer], policy: RenderPolicy) {
+    ///   - watch: Whether to watch every layer root and rebuild the catalog
+    ///     on change.
+    private init(layers: [DotfolderStack.Layer], policy: RenderPolicy, watch: Bool) {
         roots = layers.map(\.root)
         self.policy = policy
 
         let built = Self.buildCatalog(layers: layers)
-        catalog = built.catalog
-        diagnostics = built.diagnostics
+        catalogBox = CatalogBox(catalog: built.catalog, diagnostics: built.diagnostics)
         pipeline = RenderPipeline(
             argumentSubstitution: ArgumentSubstitution(), shellInjection: ShellInjection(),
             stencil: StencilPass(layers: layers))
+
+        guard watch else {
+            onReload = nil
+            reloadCoordinator = nil
+            return
+        }
+
+        let (stream, continuation) = AsyncStream<[SkillMetadata]>.makeStream()
+        onReload = stream
+        // A read-only view sharing this registry's own `catalogBox`, given
+        // to `ReloadCoordinator` so it can recompute `metadata()` after
+        // every rebuild through the exact same rendering path every other
+        // reader uses, without duplicating any of it.
+        let reader = SkillsRegistry(catalogBox: catalogBox, pipeline: pipeline, policy: policy, roots: roots)
+        let coordinator = ReloadCoordinator(
+            layers: layers, catalogBox: catalogBox, reader: reader, continuation: continuation)
+        coordinator.start()
+        reloadCoordinator = coordinator
+    }
+
+    /// Builds a read-only view of an existing registry's live catalog, with
+    /// reload disabled -- `ReloadCoordinator`'s own vantage point for
+    /// recomputing `metadata()` after a rebuild via the registry's real
+    /// rendering path, rather than a duplicate of it.
+    ///
+    /// - Parameters:
+    ///   - catalogBox: The catalog holder to share with the registry this
+    ///     view was built from.
+    ///   - pipeline: The render pipeline to share.
+    ///   - policy: The render policy to share.
+    ///   - roots: The layer roots to share.
+    private init(catalogBox: CatalogBox, pipeline: RenderPipeline, policy: RenderPolicy, roots: [URL]) {
+        self.roots = roots
+        self.policy = policy
+        self.catalogBox = catalogBox
+        self.pipeline = pipeline
+        onReload = nil
+        reloadCoordinator = nil
     }
 
     /// Wraps every root in a `DotfolderStack.Layer` under Stencil's
@@ -540,5 +639,108 @@ public struct SkillsRegistry: Sendable {
             text: entry.body, arguments: arguments, argumentNames: entry.frontmatter.arguments,
             skillDirectory: entry.skillDirectory, winningLayer: entry.winningLayer, policy: policy)
         return try pipeline.renderBody(request)
+    }
+
+    // MARK: - Reload (plan.md §7)
+
+    /// The atomically-swappable holder for one catalog generation and its
+    /// diagnostics, shared by every copy of a `SkillsRegistry`.
+    ///
+    /// `@unchecked Sendable`: both stored properties are only ever read or
+    /// replaced while holding `lock`, and `snapshot`/`replace(catalog:diagnostics:)`
+    /// are its only access points -- no caller ever reaches `catalog` or
+    /// `diagnostics` without going through the lock.
+    private final class CatalogBox: @unchecked Sendable {
+        private let lock = NSLock()
+        private var catalog: [String: CatalogEntry]
+        private var diagnostics: [SkillDiagnostic]
+
+        /// Creates a `CatalogBox` holding one initial catalog generation.
+        ///
+        /// - Parameters:
+        ///   - catalog: The initial catalog, keyed by id.
+        ///   - diagnostics: The initial catalog's diagnostics.
+        init(catalog: [String: CatalogEntry], diagnostics: [SkillDiagnostic]) {
+            self.catalog = catalog
+            self.diagnostics = diagnostics
+        }
+
+        /// The current catalog and its diagnostics, read together
+        /// atomically so a caller can never observe one paired with the
+        /// other's prior or next generation.
+        var snapshot: (catalog: [String: CatalogEntry], diagnostics: [SkillDiagnostic]) {
+            lock.lock()
+            defer { lock.unlock() }
+            return (catalog, diagnostics)
+        }
+
+        /// Atomically replaces both the catalog and its diagnostics with a
+        /// freshly-rebuilt generation.
+        ///
+        /// - Parameters:
+        ///   - catalog: The rebuilt catalog, keyed by id.
+        ///   - diagnostics: The rebuilt catalog's diagnostics.
+        func replace(catalog: [String: CatalogEntry], diagnostics: [SkillDiagnostic]) {
+            lock.lock()
+            defer { lock.unlock() }
+            self.catalog = catalog
+            self.diagnostics = diagnostics
+        }
+    }
+
+    /// Owns the `SkillWatcher` and `onReload` continuation for a `watch:
+    /// true` registry: rebuilds `catalogBox` on every coalesced watcher
+    /// signal and publishes the refreshed metadata list.
+    ///
+    /// A `final class` rather than a value type since its lifetime -- when
+    /// the watcher starts and, more importantly, when it stops -- is what
+    /// `SkillsRegistry` needs to own; a struct has no `deinit` to hang that
+    /// stop on.
+    private final class ReloadCoordinator: @unchecked Sendable {
+        private let watcher: SkillWatcher
+        private let continuation: AsyncStream<[SkillMetadata]>.Continuation
+
+        /// Creates a `ReloadCoordinator` and wires (but does not yet start)
+        /// its watcher.
+        ///
+        /// The watcher's `onChange` closure captures `layers`, `catalogBox`,
+        /// `reader`, and `continuation` directly rather than `self`, so
+        /// wiring it up here creates no retain cycle between this
+        /// coordinator and its own watcher.
+        ///
+        /// - Parameters:
+        ///   - layers: The layer roots to watch and to rebuild the catalog
+        ///     from on every coalesced signal.
+        ///   - catalogBox: The catalog holder to atomically replace on
+        ///     every rebuild.
+        ///   - reader: A read-only registry view sharing `catalogBox`, used
+        ///     to recompute `metadata()` after each rebuild via the real
+        ///     rendering path.
+        ///   - continuation: The `onReload` continuation to publish the
+        ///     refreshed metadata list to after every rebuild.
+        init(
+            layers: [DotfolderStack.Layer], catalogBox: CatalogBox, reader: SkillsRegistry,
+            continuation: AsyncStream<[SkillMetadata]>.Continuation
+        ) {
+            self.continuation = continuation
+            watcher = SkillWatcher(roots: layers.map(\.root)) {
+                let rebuilt = SkillsRegistry.buildCatalog(layers: layers)
+                catalogBox.replace(catalog: rebuilt.catalog, diagnostics: rebuilt.diagnostics)
+                continuation.yield(reader.metadata())
+            }
+        }
+
+        /// Starts the underlying watcher.
+        func start() {
+            watcher.start()
+        }
+
+        /// Stops the underlying watcher and finishes `onReload`, so no
+        /// further rebuilds or publications happen once every copy of the
+        /// owning registry has gone out of scope.
+        deinit {
+            watcher.stop()
+            continuation.finish()
+        }
     }
 }

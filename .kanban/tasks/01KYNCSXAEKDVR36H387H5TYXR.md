@@ -40,8 +40,8 @@ depends_on:
 - 01KYNCRETZJCE9AH8HVZXZSG3Y
 - 01KYNCRS3QJFK120446YNXYAH7
 - 01KYNCS3K5T60E4JQAJ8JQWXC5
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: 8b80
 title: 'SkillsRegistry static core: build, visibility, call, listing'
 ---
 ## What
@@ -57,15 +57,19 @@ The Layer-3 source of truth, static half (plan §3, §6, §7.1; decisions #13/#2
   - `diagnostics` — the validator output with winning-root provenance.
 
 ## Acceptance Criteria
-- [ ] Fixture-root registry: visibility table proven for all four §6 rows (default/`deploy`/`lint`; cover `preload` with a temp-dir skill)
-- [ ] `call("commit", arguments:)` plumbing: the supplied arguments reach the pipeline's `RenderRequest` (recording fake pass asserts them) and the body string returns; unknown id throws the ids-carrying error (full `$0` substitution is proven later by the pass-1 task)
-- [ ] A fixture frontmatter `metadata.*` value containing `{{ working_directory }}` renders through pass 3, and one containing `` !`echo x` `` stays inert (pass 2 never runs at metadata-build time)
-- [ ] `commandListing()` and `metadata()` disagree exactly on the two visibility-split fixtures (`deploy`, `lint`)
-- [ ] No `.skills`/`.config`/`~` literal appears in registry source (greppable) — roots come from the caller only
+- [x] Fixture-root registry: visibility table proven for all four §6 rows (default/`deploy`/`lint`; cover `preload` with a temp-dir skill)
+- [x] `call("commit", arguments:)` plumbing: the supplied arguments reach the pipeline's `RenderRequest` (recording fake pass asserts them) and the body string returns; unknown id throws the ids-carrying error (full `$0` substitution is proven later by the pass-1 task)
+- [x] A fixture frontmatter `metadata.*` value containing `{{ working_directory }}` renders through pass 3, and one containing `` !`echo x` `` stays inert (pass 2 never runs at metadata-build time)
+- [x] `commandListing()` and `metadata()` disagree exactly on the two visibility-split fixtures (`deploy`, `lint`)
+- [x] No `.skills`/`.config`/`~` literal appears in registry source (greppable) — roots come from the caller only
 
 ## Tests
-- [ ] `Tests/FoundationModelsSkillsTests/SkillsRegistryTests.swift` — construction snapshot over fixture roots; visibility matrix; call-plumbing + unknown-id error; metadata.* templating cases; no-convention-literal grep check
-- [ ] `swift test` — exit 0
+- [x] `Tests/FoundationModelsSkillsTests/SkillsRegistryTests.swift` — construction snapshot over fixture roots; visibility matrix; call-plumbing + unknown-id error; metadata.* templating cases; no-convention-literal grep check
+- [x] `swift test` — exit 0
 
 ## Workflow
 - Use `/tdd` — write failing tests first, then implement to make them pass.
+
+## Review Findings (2026-07-29 06:30)
+
+Clean — `review sha HEAD~1..HEAD` returned zero findings (14 checks attempted, 0 confirmed, 0 refuted).
