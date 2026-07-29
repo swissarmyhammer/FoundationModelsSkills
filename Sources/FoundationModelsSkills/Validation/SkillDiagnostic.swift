@@ -78,3 +78,15 @@ public struct SkillDiagnostic: Sendable, Equatable {
         self.message = message
     }
 }
+
+extension SkillDiagnostic: CustomStringConvertible {
+    /// A single-line rendering: severity, skill id, provenance root, and
+    /// message.
+    ///
+    /// The one consistent format every diagnostic surface (CLI, demo,
+    /// host-written logging) renders through, e.g.
+    /// `"[warning] deploy (/repo/.skills): description exceeds 1024 characters."`
+    public var description: String {
+        "[\(severity.rawValue)] \(skillID) (\(provenance.root.path)): \(message)"
+    }
+}

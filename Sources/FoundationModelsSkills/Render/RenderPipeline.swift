@@ -23,11 +23,9 @@ import FoundationModelsExtras
 ///
 /// Set once at `SkillsRegistry` construction so every render path --
 /// model-driven `use skill`, user-driven `/command`, and the CLI -- honors
-/// the same policy (plan.md decisions #25/#28). Neither flag does anything
-/// yet: this task's three passes are identity transforms.
-/// `ShellInjection` (pass 2) reads `isShellExecutionDisabled` once it
-/// lands; `isScriptExecutionDisabled` is read by the M6 `run script`
-/// resource operation, outside this pipeline entirely.
+/// the same policy (plan.md decisions #25/#28). `ShellInjection` (pass 2)
+/// reads `isShellExecutionDisabled`; `isScriptExecutionDisabled` is read by
+/// the M6 `run script` resource operation, outside this pipeline entirely.
 public struct RenderPolicy: Sendable, Equatable {
     /// Asserts `` !`command` ``/fenced shell injection (pass 2) is disabled.
     ///
@@ -173,10 +171,10 @@ public protocol RenderPass: Sendable {
 
 /// A pass that returns its input unchanged.
 ///
-/// The placeholder implementation for all three §5 passes until each is
-/// replaced by its own render task (`ArgumentSubstitution`,
-/// `ShellInjection`, the Stencil pass) -- this task wires the pipeline's
-/// shape, not any pass's real behavior.
+/// A testing/scaffold stand-in for any of the three §5 passes
+/// (`ArgumentSubstitution`, `ShellInjection`, `StencilPass`) -- used by
+/// `RenderPipeline.identity` and by tests that only care about a subset of
+/// the pass-set's behavior.
 public struct IdentityRenderPass: RenderPass {
     /// Creates an `IdentityRenderPass`.
     ///
@@ -211,17 +209,17 @@ public struct IdentityRenderPass: RenderPass {
 public struct RenderPipeline: Sendable {
     /// Pass 1: argument + variable substitution (plan.md §5.1).
     ///
-    /// Typically an `ArgumentSubstitution` instance once the pipeline is
-    /// fully wired (`SkillsRegistry`, a later task); `IdentityRenderPass`
-    /// remains available as a scaffold/testing default (`RenderPipeline.identity`).
+    /// `SkillsRegistry` wires this to a real `ArgumentSubstitution` instance;
+    /// `IdentityRenderPass` remains available as a scaffold/testing default
+    /// (`RenderPipeline.identity`).
     public var argumentSubstitution: any RenderPass
     /// Pass 2: shell injection, body renders only (plan.md §5.2, decision #25).
     ///
-    /// Identity in this task.
+    /// `SkillsRegistry` wires this to a real `ShellInjection` instance.
     public var shellInjection: any RenderPass
     /// Pass 3: Stencil templating (plan.md §5.3).
     ///
-    /// Identity in this task.
+    /// `SkillsRegistry` wires this to a real `StencilPass` instance.
     public var stencil: any RenderPass
 
     /// Creates a `RenderPipeline` from its three named passes.
@@ -238,8 +236,9 @@ public struct RenderPipeline: Sendable {
 
     /// A pipeline wired with `IdentityRenderPass` for all three §5 passes.
     ///
-    /// This task's scaffold default. `SkillsRegistry` (a later task) swaps
-    /// each pass out for its real implementation as it lands.
+    /// A testing/scaffold default -- `SkillsRegistry` wires a real
+    /// `RenderPipeline` (`ArgumentSubstitution`/`ShellInjection`/
+    /// `StencilPass`) directly, never through this property.
     public static var identity: RenderPipeline {
         RenderPipeline(
             argumentSubstitution: IdentityRenderPass(),

@@ -1,10 +1,24 @@
 ---
+comments:
+- actor: claude-code
+  id: 01kyr096zk40dnxathmyzh70t4
+  text: |-
+    First implementation pass. Fixed the audit-flagged stale scaffold-era doc comments in Render/RenderPipeline.swift (RenderPolicy, the three pass properties, IdentityRenderPass, RenderPipeline.identity — all previously said "identity transforms"/"this task"/"a later task", now describe the shipped real-pass behavior). Added the git-context fixture's hermeticity rationale as a YAML frontmatter comment (verified it doesn't break decoding — SkillValidatorTests/FrontmatterDecoderTests/ShellInjectionTests all still pass).
+
+    Diagnostics polish: added `SkillDiagnostic: CustomStringConvertible` for consistent one-line rendering (`"[severity] id (root): message"`); `registry.diagnostics` and per-diagnostic provenance already existed and were already well documented. New Tests/FoundationModelsSkillsTests/DiagnosticsRenderingTests.swift covers all three severities' rendering plus provenance survival through a genuine unparseable-YAML skip diagnostic end-to-end via SkillsRegistry.
+
+    Wrote README.md: overview, a compiling assembly example lifted verbatim from Examples/skills-demo (which itself builds and is spawn-tested), the six-op vocabulary table (§7+§7.3), the visibility table (§6), a security posture section covering all four §8 consequences (no OS sandbox, untrusted-layer Stencil trust, server-side transcript exposure, host-side trust-gating + diagnostic provenance), the context-compaction host note, and platform posture (macOS full feature set; iOS unsupported-not-stubbed, citing the FoundationModelsSkills.swift doc comment's dependency accounting). Verified Package.swift already carries per-dependency role comments (pre-existing, no changes needed) and `swift build` is warning-clean already (pre-existing, no changes needed).
+
+    Not yet done: an exhaustive doc-comment-coverage sweep of every public symbol (relying on this session's established review gate, which has enforced doc comments rigorously on every touched file all session, rather than an independent from-scratch audit given the codebase's size).
+
+    All 265 tests passing (262 prior + 3 new).
+  timestamp: 2026-07-29T22:35:19.923468+00:00
 depends_on:
 - 01KYNCYH7J947ZW8W7PSPE0VVS
 - 01KYNCY323EQ7RDC8X1HQJNFSJ
 - 01KYNCT6G9K9RYE4PYZKVXSZMZ
-position_column: todo
-position_ordinal: '9480'
+position_column: doing
+position_ordinal: '80'
 title: Diagnostics polish, README, and API docs (M7)
 ---
 ## What
