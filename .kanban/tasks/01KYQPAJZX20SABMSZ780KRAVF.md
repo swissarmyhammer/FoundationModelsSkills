@@ -1,6 +1,6 @@
 ---
-position_column: todo
-position_ordinal: 9a80
+position_column: doing
+position_ordinal: '80'
 title: 'Watcher: arm layer roots created after start()'
 ---
 ## What

@@ -199,6 +199,25 @@ struct SkillsRegistryReloadTests {
         #expect(!entry.description.contains("after edit"))
     }
 
+    // MARK: - Late root creation (^80kravf): end-to-end through the registry
+
+    @Test func aRootThatDidNotExistAtConstructionSurfacesItsSkillOnceCreated() async throws {
+        let privateDirectory = try Self.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: privateDirectory) }
+        let lateRoot = privateDirectory.appendingPathComponent("skills-arrive-later", isDirectory: true)
+
+        let registry = SkillsRegistry(roots: [lateRoot], watch: true)
+        #expect(registry.metadata().isEmpty)
+        let recorder = MetadataUpdateRecorder()
+        let subscription = Self.subscribe(registry, to: recorder)
+        defer { subscription.cancel() }
+
+        try Self.writeSkillFile(id: "late-arrival", in: lateRoot, descriptionSuffix: "v1")
+        await Self.expectExactlyOnePublication(recorder, since: 0)
+
+        #expect(registry.metadata().map(\.id) == ["late-arrival"])
+    }
+
     // MARK: - Multi-consumer fan-out (^321b23t): no shared-stream tick stealing
 
     @Test func twoConcurrentConsumersBothObserveEveryReloadInAFiveReloadBurst() async throws {

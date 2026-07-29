@@ -11,9 +11,12 @@ import Foundation
 /// *what* changed or what to do about it: the caller (a registry's reload
 /// task) is expected to re-run its own discovery from scratch on every
 /// `onChange` call rather than infer anything from watcher internals. A
-/// root that does not exist when `start()` runs is skipped without error; a
-/// root created after `start()` is not picked up, since the set of watched
-/// roots is fixed for the watcher's lifetime -- restart to observe it.
+/// root that does not exist when `start()` runs is armed rather than
+/// skipped: its nearest existing ancestor directory is watched instead, so
+/// the root's later creation (or a delete-then-recreate cycle) still fires
+/// `onChange` -- the rebuild every `flush()` performs re-resolves each
+/// root's existence from scratch, escalating from an ancestor-only watch to
+/// the real recursive one the moment the root actually appears.
 ///
 /// Implemented over one `DispatchSource.makeFileSystemObjectSource` per
 /// watched directory and file rather than FSEvents, and rebuilt from
@@ -51,8 +54,9 @@ public final class SkillWatcher: @unchecked Sendable {
     /// - Parameters:
     ///   - roots: The layer roots to watch, in whatever order the host
     ///     supplied them -- this type names no directory convention of its
-    ///     own. A root that does not exist on disk when `start()` runs is
-    ///     skipped without error.
+    ///     own. A root that does not exist on disk when `start()` runs has
+    ///     its nearest existing ancestor directory armed instead, so the
+    ///     root's later creation is still observed.
     ///   - debounceInterval: How long the tree must go quiet before a burst
     ///     of events collapses into one `onChange` call. Defaults to
     ///     200ms.
@@ -85,7 +89,7 @@ public final class SkillWatcher: @unchecked Sendable {
             // clears it first, but this keeps `start()` correct even if
             // that pairing is ever violated elsewhere).
             self.cancelAllWatchedSources()
-            self.watchExistingRoots()
+            self.armRoots()
         }
     }
 
@@ -141,13 +145,38 @@ public final class SkillWatcher: @unchecked Sendable {
 
     // MARK: - Watch tree construction
 
-    /// Watches every root in `roots` that currently exists on disk.
+    /// Arms every root in `roots`: an existing one gets the real recursive
+    /// watch; a missing one gets its nearest existing ancestor directory
+    /// watched instead, so the root's later creation still fires
+    /// `onChange` (the next `flush()` re-runs this and escalates to the
+    /// real watch once the root exists).
     ///
     /// Always called on `queue`.
-    private func watchExistingRoots() {
-        for root in roots where FileManager.default.fileExists(atPath: root.path) {
-            watchTree(at: root)
+    private func armRoots() {
+        for root in roots {
+            if FileManager.default.fileExists(atPath: root.path) {
+                watchTree(at: root)
+            } else if let ancestor = Self.nearestExistingAncestor(of: root), watchedSources[ancestor.path] == nil {
+                watchEntry(at: ancestor, eventMask: [.write, .delete, .rename])
+            }
         }
+    }
+
+    /// The nearest existing ancestor directory of `url`, walking up
+    /// `deletingLastPathComponent()` until one exists on disk.
+    ///
+    /// - Parameter url: The (possibly nonexistent) path to find an existing
+    ///   ancestor for.
+    /// - Returns: The nearest existing ancestor, or `nil` when even the
+    ///   volume root doesn't exist (practically unreachable).
+    private static func nearestExistingAncestor(of url: URL) -> URL? {
+        var candidate = url.deletingLastPathComponent()
+        while !FileManager.default.fileExists(atPath: candidate.path) {
+            let parent = candidate.deletingLastPathComponent()
+            guard parent.path != candidate.path else { return nil }
+            candidate = parent
+        }
+        return candidate
     }
 
     /// Recursively opens a `DispatchSource` for `directory` and every entry
@@ -236,7 +265,7 @@ public final class SkillWatcher: @unchecked Sendable {
         onChange()
         guard isWatching else { return }
         cancelAllWatchedSources()
-        watchExistingRoots()
+        armRoots()
     }
 
     // MARK: - Directory listing

@@ -117,8 +117,15 @@ struct SkillWatcherTests {
     // MARK: - Nonexistent root
 
     @Test func nonexistentRootInTheListIsSkippedWithoutError() async throws {
-        let bogusRoot = FileManager.default.temporaryDirectory
-            .appendingPathComponent("does-not-exist-\(UUID().uuidString)", isDirectory: true)
+        // `bogusRoot`'s parent must be a private directory this test owns,
+        // not the shared system temp root directly -- arming (^80kravf)
+        // watches the nonexistent root's nearest EXISTING ancestor, and the
+        // shared temp root sees constant, unrelated activity from every
+        // other test's own `makeTempDirectory()` call, which would make the
+        // "exactly one signal" assertion below flaky.
+        let privateDirectory = try Self.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: privateDirectory) }
+        let bogusRoot = privateDirectory.appendingPathComponent("does-not-exist", isDirectory: true)
         let realRoot = try Self.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: realRoot) }
 
@@ -130,6 +137,46 @@ struct SkillWatcherTests {
 
         try Self.writeSkillFile(id: "still-works", in: realRoot)
         _ = await Self.expectExactlyOneSignal(recorder, since: 0)
+    }
+
+    // MARK: - Late root creation (^80kravf): armed via nearest existing ancestor
+
+    @Test func creatingARootThatDidNotExistAtStartIsDetected() async throws {
+        let privateDirectory = try Self.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: privateDirectory) }
+        let lateRoot = privateDirectory.appendingPathComponent("skills-arrive-later", isDirectory: true)
+
+        let (onChange, recorder) = Self.makeSignalRecorder()
+        let watcher = SkillWatcher(roots: [lateRoot], debounceInterval: Self.testDebounceInterval, onChange: onChange)
+        watcher.start()
+        defer { watcher.stop() }
+
+        try Self.writeSkillFile(id: "arrived-skill", in: lateRoot)
+        _ = await Self.expectExactlyOneSignal(recorder, since: 0)
+    }
+
+    @Test func deletingAndRecreatingARootKeepsEventsFlowing() async throws {
+        let privateDirectory = try Self.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: privateDirectory) }
+        let root = privateDirectory.appendingPathComponent("comes-and-goes", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+
+        let (onChange, recorder) = Self.makeSignalRecorder()
+        let watcher = SkillWatcher(roots: [root], debounceInterval: Self.testDebounceInterval, onChange: onChange)
+        watcher.start()
+        defer { watcher.stop() }
+
+        try Self.writeSkillFile(id: "before-delete", in: root)
+        let afterFirstCreate = await Self.expectExactlyOneSignal(recorder, since: 0)
+
+        try FileManager.default.removeItem(at: root)
+        let afterDelete = await Self.expectExactlyOneSignal(recorder, since: afterFirstCreate)
+
+        // The root is gone -- `flush()`'s rebuild must have fallen back to
+        // arming `privateDirectory` (the now-nearest existing ancestor), not
+        // silently stopped watching anything at all.
+        try Self.writeSkillFile(id: "after-recreate", in: root)
+        _ = await Self.expectExactlyOneSignal(recorder, since: afterDelete)
     }
 
     // MARK: - Stop prevents further callbacks
