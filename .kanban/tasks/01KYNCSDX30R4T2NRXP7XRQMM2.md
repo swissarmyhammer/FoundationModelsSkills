@@ -28,8 +28,8 @@ comments:
   timestamp: 2026-07-29T09:41:48.529040+00:00
 depends_on:
 - 01KYNCQK5WG7HZTYB9R5YS0SYX
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: 8a80
 title: File watcher over every stack layer root
 ---
 ## What
