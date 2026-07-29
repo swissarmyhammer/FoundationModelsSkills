@@ -268,19 +268,21 @@ struct SkillOperationsTests {
         #expect(json.contains("\"matches\""))
     }
 
-    @Test func runSkillAliasesToUseSkill() async throws {
-        // Pinned per decision #21 / the task's acceptance criteria: before
-        // M6 adds a `run script` operation to this same fused tool, "run
-        // skill" must resolve to `use skill`. (M6 will need to revisit the
-        // blanket "run" -> "use" verb alias in `SkillsTool.skillVerbAliases`,
-        // since the shipped resolver applies an alias unconditionally --
-        // see that table's doc comment.)
+    @Test func resolverDoesNotAcceptRunSkillNowThatRunIsClaimedByRunScript() async throws {
+        // M6's `RunScript` claims the `"run"` verb outright (`run script`),
+        // so the decision #21 `"run"` -> `use` alias was dropped from
+        // `SkillsTool.verbAliasOverrides` (see that table's doc comment):
+        // keeping it would have rewritten a literal `"run script"` query to
+        // `"use script"`, which doesn't exist, before it ever reached
+        // `RunScript`. `"run skill"` therefore no longer resolves to `use
+        // skill` -- pinned here so a future resolver/alias change that
+        // reintroduces the collision is caught by a test.
         let tool = try Self.makeFixtureTool()
         let arguments = GeneratedContent(properties: ["op": "run skill", "id": "commit", "arguments": ["fix parser"]])
 
         let json = try await tool.call(arguments: arguments)
 
-        #expect(json.contains("\"body\""))
+        #expect(json.contains("Unknown operation"))
     }
 
     @Test func callSkillAliasesToUseSkill() async throws {
@@ -369,12 +371,12 @@ struct SkillOperationsTests {
 
     // MARK: - The fused tool exposes exactly one core Tool with the flat-union schema
 
-    @Test func fusedToolExposesExactlyTheFiveCanonicalOps() throws {
+    @Test func fusedToolExposesExactlyTheSixCanonicalOps() throws {
         let tool = try Self.makeFixtureTool()
 
         #expect(
             tool.operations.map(\.opString) == [
-                "search skill", "list skill", "use skill", "list resource", "read resource",
+                "search skill", "list skill", "use skill", "list resource", "read resource", "run script",
             ])
         #expect(tool.name == "skills")
     }

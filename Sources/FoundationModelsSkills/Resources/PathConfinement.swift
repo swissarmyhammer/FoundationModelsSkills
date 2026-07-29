@@ -56,4 +56,15 @@ internal enum PathConfinement {
         let candidatePath = candidate.path
         return candidatePath == rootPath || candidatePath.hasPrefix(rootPath + "/")
     }
+
+    /// The corrective message for a `path` that `resolvedURL(relativePath:in:)`
+    /// rejected -- shared by every resource operation that enforces
+    /// confinement (`ReadResource`, `RunScript`), so they can never drift on
+    /// its wording.
+    ///
+    /// - Parameter path: The path that was rejected.
+    /// - Returns: The corrective message.
+    internal static func deniedMessage(path: String) -> String {
+        "The path `\(path)` is not accessible: it must resolve to a location inside the skill directory."
+    }
 }

@@ -18,10 +18,10 @@ public enum SkillsTool {
 
     /// Builds the fused `skills` `OperationTool` over `context`.
     ///
-    /// The five operations dispatch through `AnyOperation` against the
+    /// The six operations dispatch through `AnyOperation` against the
     /// shared `context`, in the order `search` / `list` / `use` / `list
-    /// resource` / `read resource` -- the order the fused schema's `op` enum
-    /// and any unknown-operation corrective list them in.
+    /// resource` / `read resource` / `run script` -- the order the fused
+    /// schema's `op` enum and any unknown-operation corrective list them in.
     ///
     /// - Parameter context: The shared context every operation's
     ///   `execute(in:)` runs against.
@@ -43,6 +43,7 @@ public enum SkillsTool {
                 AnyOperation(UseSkill.self),
                 AnyOperation(ListResource.self),
                 AnyOperation(ReadResource.self),
+                AnyOperation(RunScript.self),
             ],
             resolver: makeResolver()
         )
@@ -58,7 +59,7 @@ public enum SkillsTool {
 
     /// The verb aliases this tool's operation set needs, layered onto
     /// `OperationResolver.defaultVerbAliases`: decision #21's `find`/
-    /// `discover` → `search` and `call`/`run`/`invoke`/`get` → `use`, plus a
+    /// `discover` → `search` and `call`/`invoke`/`get` → `use`, plus a
     /// `"read"` self-mapping override (below) `ReadResource` needs to be
     /// reachable at all.
     ///
@@ -69,29 +70,32 @@ public enum SkillsTool {
     /// `OperationResolver.matchOpString` applies a verb alias
     /// unconditionally once one exists for a query's verb token -- it never
     /// falls back to trying the literal, unaliased verb against a
-    /// same-spelled real operation. That makes this `"run": UseSkill.verb`
-    /// entry a known forward tension with plan.md §7.3's future `run
-    /// script` operation (M6, joining this same fused tool): once `run
-    /// script` exists, a bare `run script` query would resolve here first
-    /// (rewritten to `use script`, which doesn't exist) rather than to the
-    /// real `run script` op, unless M6 revisits this table. Recorded (and
-    /// pinned by `SkillOperationsTests`' `"run skill"` case) so that
-    /// collision is caught by a test, not discovered in the field.
+    /// same-spelled real operation. Decision #21 originally listed `run` as
+    /// a fourth `use` synonym alongside `call`/`invoke`/`get`, and this
+    /// table carried a `"run": UseSkill.verb` entry through M4/M5 with a
+    /// documented forward-tension warning about the M6 `run script`
+    /// operation this exact unconditional-rewrite behavior would collide
+    /// with. M6 (`RunScript`) has now landed, and the collision is real: a
+    /// `"run": UseSkill.verb` entry would rewrite a literal `"run script"`
+    /// query to `"use script"` (which doesn't exist) before it ever reaches
+    /// `RunScript`. Resolved by dropping the `"run"` → `use` alias entirely
+    /// -- `"run skill"` no longer resolves (pinned by
+    /// `SkillOperationsTests`' `resolverDoesNotAcceptRunSkillNowThatRunIsClaimedByRunScript`
+    /// case), while `call`/`invoke`/`get` remain as non-colliding `use`
+    /// synonyms.
     ///
     /// The same unconditional-rewrite behavior is why `"read":
-    /// ReadResource.verb` must be here too: `OperationResolver
-    /// .defaultVerbAliases` already maps `"read"` → `"get"` (a CRUD-verb
-    /// convenience for tools with no `"read"` operation of their own).
-    /// Without this self-mapping override, `ReadResource`'s own literal
-    /// `"read resource"` query would be rewritten to `"get resource"`
-    /// before matching and never reach it, since nothing here is registered
-    /// under verb `"get"` for the `"resource"` noun. Pinned by
-    /// `ResourceOpsTests`.
+    /// ReadResource.verb` is here: `OperationResolver.defaultVerbAliases`
+    /// already maps `"read"` → `"get"` (a CRUD-verb convenience for tools
+    /// with no `"read"` operation of their own). Without this self-mapping
+    /// override, `ReadResource`'s own literal `"read resource"` query would
+    /// be rewritten to `"get resource"` before matching and never reach it,
+    /// since nothing here is registered under verb `"get"` for the
+    /// `"resource"` noun. Pinned by `ResourceOpsTests`.
     private static let verbAliasOverrides: [String: String] = [
         "find": SearchSkill.verb,
         "discover": SearchSkill.verb,
         "call": UseSkill.verb,
-        "run": UseSkill.verb,
         "invoke": UseSkill.verb,
         "get": UseSkill.verb,
         "read": ReadResource.verb,

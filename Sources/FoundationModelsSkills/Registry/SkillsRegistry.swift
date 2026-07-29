@@ -715,6 +715,16 @@ public struct SkillsRegistry: Sendable {
         catalogBox.snapshot.catalog[id]?.skillDirectory
     }
 
+    /// `id`'s current catalog entry's tokenized `allowed-tools:` frontmatter
+    /// -- the `run script` operation's grant source (plan.md §7.3.1).
+    ///
+    /// - Parameter id: The skill id to look up.
+    /// - Returns: The skill's tokenized `allowed-tools:` grants, or `nil`
+    ///   when `id` is not currently in the catalog.
+    internal func allowedTools(id: String) -> [String]? {
+        catalogBox.snapshot.catalog[id]?.frontmatter.allowedTools
+    }
+
     // MARK: - Reload (plan.md §7)
 
     /// The atomically-swappable holder for one catalog generation and its

@@ -4,6 +4,26 @@ import Foundation
 /// act on.
 internal let resourceOperationNoun = "resource"
 
+/// The directory `RunScript` and `ScriptGate`'s bare-`Script` grant both
+/// confine execution to.
+internal let scriptsDirectoryPrefix = "scripts/"
+
+extension StringProtocol {
+    /// This text split into lines by `\n`, without counting a final
+    /// trailing newline as an extra, phantom empty line.
+    ///
+    /// Shared by `ReadResource` (over a decoded `String`) and
+    /// `ScriptProcessRunner` (over captured process output), so the two
+    /// can never drift on what counts as a line.
+    internal var splitIntoLines: [SubSequence] {
+        var lines = split(separator: "\n", omittingEmptySubsequences: false)
+        if lines.last?.isEmpty == true {
+            lines.removeLast()
+        }
+        return lines
+    }
+}
+
 /// Shared "resolve `id` against the model-visible catalog" lookup and
 /// corrective-message logic for `ListResource` and `ReadResource` (plan.md
 /// §7.3, decision #22).

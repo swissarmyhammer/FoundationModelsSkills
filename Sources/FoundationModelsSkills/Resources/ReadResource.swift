@@ -135,7 +135,7 @@ public struct ReadResource: OperationDefinition {
         }
 
         guard let resolved = PathConfinement.resolvedURL(relativePath: path, in: skillDirectory) else {
-            return .corrective(Self.confinementMessage(path: path))
+            return .corrective(PathConfinement.deniedMessage(path: path))
         }
         guard let data = try? Data(contentsOf: resolved) else {
             return .corrective(Self.unreadableMessage(path: path))
@@ -158,7 +158,7 @@ public struct ReadResource: OperationDefinition {
     ///   - end: The requested last line, or `nil` for `start + 499`.
     /// - Returns: The sliced result.
     private static func slice(text: String, id: String, path: String, start: Int?, end: Int?) -> ReadResourceResult {
-        let lines = Self.lines(of: text)
+        let lines = text.splitIntoLines
         let resolvedStart = max(start ?? 1, 1)
         let maxAllowedEnd = resolvedStart + Self.maxLinesPerCall - 1
         let requestedEnd = end ?? maxAllowedEnd
@@ -172,27 +172,6 @@ public struct ReadResource: OperationDefinition {
         let content = lines[(resolvedStart - 1)..<resolvedEnd].joined(separator: "\n")
         return ReadResourceResult(
             id: id, path: path, content: content, start: resolvedStart, end: resolvedEnd, totalLines: lines.count)
-    }
-
-    /// Splits `text` into lines, without counting a final trailing newline
-    /// as an extra, phantom empty line.
-    ///
-    /// - Parameter text: The text to split.
-    /// - Returns: `text`'s lines, in order.
-    private static func lines(of text: String) -> [String] {
-        var lines = text.components(separatedBy: "\n")
-        if lines.last == "" {
-            lines.removeLast()
-        }
-        return lines
-    }
-
-    /// The corrective message for a `path` that failed confinement.
-    ///
-    /// - Parameter path: The path that was rejected.
-    /// - Returns: The corrective message.
-    private static func confinementMessage(path: String) -> String {
-        "The path `\(path)` is not accessible: it must resolve to a location inside the skill directory."
     }
 
     /// The corrective message for a confined `path` that could not be read.
