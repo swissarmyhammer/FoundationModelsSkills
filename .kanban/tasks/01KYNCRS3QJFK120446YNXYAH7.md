@@ -78,8 +78,8 @@ comments:
   timestamp: 2026-07-29T03:10:55.135860+00:00
 depends_on:
 - 01KYNCR37A3M7MYKAH7T0QREYS
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: '8380'
 title: Parsed parameter model + SkillListing (§6.1)
 ---
 ## What
