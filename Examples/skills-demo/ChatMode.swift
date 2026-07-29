@@ -62,16 +62,26 @@ enum ChatMode {
         case .available:
             await runValidation()
         case .unavailable(let reason):
-            let reasonText: String
-            switch reason {
-            case .deviceNotEligible: reasonText = "device not eligible"
-            case .appleIntelligenceNotEnabled: reasonText = "Apple Intelligence not enabled"
-            case .modelNotReady: reasonText = "model not ready"
-            @unknown default: reasonText = Self.unknownReasonText
-            }
-            Self.printUnavailable(reasonText: reasonText)
+            Self.printUnavailable(reasonText: Self.reasonText(for: reason))
         @unknown default:
             Self.printUnavailable(reasonText: Self.unknownReasonText)
+        }
+    }
+
+    /// The human-readable text for one `SystemLanguageModel.Availability`
+    /// unavailable reason -- a lookup, not a control-flow branch, so the
+    /// case-to-text mapping stays data even though `UnavailableReason`
+    /// itself offers no `Hashable` conformance to key a dictionary with.
+    ///
+    /// - Parameter reason: The reason to look up text for.
+    /// - Returns: The reason's human-readable text, or `unknownReasonText`
+    ///   for a case this package doesn't yet recognize.
+    private static func reasonText(for reason: SystemLanguageModel.Availability.UnavailableReason) -> String {
+        switch reason {
+        case .deviceNotEligible: return "device not eligible"
+        case .appleIntelligenceNotEnabled: return "Apple Intelligence not enabled"
+        case .modelNotReady: return "model not ready"
+        @unknown default: return Self.unknownReasonText
         }
     }
 
