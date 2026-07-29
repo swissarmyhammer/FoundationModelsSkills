@@ -127,6 +127,13 @@ public struct IdentityRenderPass: RenderPass {
     /// Creates an `IdentityRenderPass`.
     public init() {}
 
+    /// Returns `text` unchanged (identity transformation).
+    ///
+    /// - Parameters:
+    ///   - text: The input text; returned unchanged.
+    ///   - request: The render request this pass runs under. Ignored -- an
+    ///     identity pass has no side effects to gate.
+    /// - Returns: `text`, unchanged.
     public func render(_ text: String, request: RenderRequest) throws -> String {
         text
     }
