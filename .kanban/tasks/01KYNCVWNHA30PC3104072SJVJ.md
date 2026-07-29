@@ -32,8 +32,8 @@ comments:
   timestamp: 2026-07-29T14:21:30.311263+00:00
 depends_on:
 - 01KYNCSXAEKDVR36H387H5TYXR
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: '8e80'
 title: SkillMetadata + SkillSearchAgent over MetadataSearcher
 ---
 ## What
