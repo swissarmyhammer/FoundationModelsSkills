@@ -3,6 +3,28 @@
 
 import PackageDescription
 
+// Shared product dependencies needed by both the library target and its test
+// target -- factored out so the two lists can't drift out of sync.
+let commonDependencies: [Target.Dependency] = [
+    .product(name: "FoundationModelsExtras", package: "FoundationModelsExtras"),
+    // Despite `FoundationModelsOperationTool`'s own manifest
+    // declaring its package identity as `FoundationModelsOperations`
+    // (its `Package(name:)`), a *path* dependency's identity is
+    // resolved by SwiftPM from the directory name, not the
+    // manifest's declared name -- confirmed empirically: `package:
+    // "FoundationModelsOperations"` fails to resolve with "unknown
+    // package", listing `FoundationModelsOperationTool` as the
+    // valid identity for this path. This is the opposite of this
+    // family's existing *remote* git dependencies on the same
+    // package (e.g. FoundationModelsShelltool,
+    // FoundationModelsFileTool), which also key off
+    // `FoundationModelsOperationTool` -- there, because that is
+    // the URL's last path component.
+    .product(name: "Operations", package: "FoundationModelsOperationTool"),
+    .product(name: "FoundationModelsMetadataRegistry", package: "FoundationModelsMetadataRegistry"),
+    .product(name: "Yams", package: "Yams"),
+]
+
 let package = Package(
     name: "FoundationModelsSkills",
     // macOS 27+, no pre-27 fallback: the strictest floor in this package's own
@@ -44,35 +66,11 @@ let package = Package(
     targets: [
         .target(
             name: "FoundationModelsSkills",
-            dependencies: [
-                .product(name: "FoundationModelsExtras", package: "FoundationModelsExtras"),
-                // Despite `FoundationModelsOperationTool`'s own manifest
-                // declaring its package identity as `FoundationModelsOperations`
-                // (its `Package(name:)`), a *path* dependency's identity is
-                // resolved by SwiftPM from the directory name, not the
-                // manifest's declared name -- confirmed empirically: `package:
-                // "FoundationModelsOperations"` fails to resolve with "unknown
-                // package", listing `FoundationModelsOperationTool` as the
-                // valid identity for this path. This is the opposite of this
-                // family's existing *remote* git dependencies on the same
-                // package (e.g. FoundationModelsShelltool,
-                // FoundationModelsFileTool), which also key off
-                // `FoundationModelsOperationTool` -- there, because that is
-                // the URL's last path component.
-                .product(name: "Operations", package: "FoundationModelsOperationTool"),
-                .product(name: "FoundationModelsMetadataRegistry", package: "FoundationModelsMetadataRegistry"),
-                .product(name: "Yams", package: "Yams"),
-            ]
+            dependencies: commonDependencies
         ),
         .testTarget(
             name: "FoundationModelsSkillsTests",
-            dependencies: [
-                "FoundationModelsSkills",
-                .product(name: "FoundationModelsExtras", package: "FoundationModelsExtras"),
-                .product(name: "Operations", package: "FoundationModelsOperationTool"),
-                .product(name: "FoundationModelsMetadataRegistry", package: "FoundationModelsMetadataRegistry"),
-                .product(name: "Yams", package: "Yams"),
-            ]
+            dependencies: ["FoundationModelsSkills"] + commonDependencies
         ),
     ]
 )

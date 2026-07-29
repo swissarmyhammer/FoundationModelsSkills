@@ -41,6 +41,19 @@ comments:
 
     All acceptance criteria and test checkboxes marked done. Leaving the task in `doing` for `/review` per the implement skill's process (implement does not move tasks to review).
   timestamp: 2026-07-29T00:08:59.900464+00:00
+- actor: claude-code
+  id: 01kynktngh5v5tcxks3h7ne326
+  text: |-
+    Fixed review finding: factored the four product dependencies (FoundationModelsExtras, Operations, FoundationModelsMetadataRegistry, Yams) out of the duplicated .target/.testTarget lists in Package.swift into a single top-level `let commonDependencies: [Target.Dependency] = [...]` constant, declared right after `import PackageDescription`. The existing explanatory doc comment on the Operations dependency (path-dependency identity resolution) was preserved verbatim on that entry. `.target` now uses `dependencies: commonDependencies`; `.testTarget` uses `dependencies: ["FoundationModelsSkills"] + commonDependencies`. No change to the resolved dependency graph, platforms, or products -- pure dedup.
+
+    Verified:
+    - `swift build` exit 0 (only the pre-existing, previously documented benign "Conflicting identity for foundationmodelsoperationtool" warning; no new warnings).
+    - `swift test` exit 0, 1/1 test passing (`moduleAndDependenciesImportCleanly`).
+    - Clean-checkout repeat (`rm -rf .build Package.resolved && swift build && swift test`): both green.
+    - Adversarial double-check agent: PASS -- independently reran the diff, build, and test and confirmed the fix matches the finding's intent with no scope creep (only Package.swift touched).
+
+    Checked off the review finding checkbox. Leaving the task in `doing` per the implement skill's process -- review moves it, implement does not.
+  timestamp: 2026-07-29T00:19:11.505971+00:00
 position_column: doing
 position_ordinal: '80'
 title: Scaffold Package.swift and empty target structure
@@ -66,3 +79,7 @@ Create the SwiftPM package skeleton per plan.md §3/§17 (single target, concept
 
 ## Workflow
 - Use `/tdd` — write failing tests first, then implement to make them pass.
+
+## Review Findings (2026-07-28 19:12)
+
+- [x] `Package.swift:48` — Four product dependencies (FoundationModelsExtras, Operations, FoundationModelsMetadataRegistry, Yams) are hardcoded in both .target and .testTarget, creating duplicate maintenance points. Changes to one list risk drift if the other isn't updated. Factor the 4 common products into a named constant at the top of the targets array: `let commonDependencies = [...]`, then use it in both: `.target(dependencies: commonDependencies)` and `.testTarget(dependencies: ["FoundationModelsSkills"] + commonDependencies)`.
