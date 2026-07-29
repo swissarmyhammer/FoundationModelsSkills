@@ -108,7 +108,8 @@ public struct UseSkill: OperationDefinition {
     /// Renders the skill named by `id` with `arguments`, or returns a
     /// corrective message.
     ///
-    /// - Parameter context: The shared context supplying the live registry.
+    /// - Parameter context: The shared context supplying the live registry
+    ///   and which entries `context.visibilityPredicate` accepts.
     /// - Returns: `.success(_:)` carrying the rendered body on success;
     ///   `.corrective(_:)` for an unusable id or a missing required
     ///   argument.
@@ -119,8 +120,9 @@ public struct UseSkill: OperationDefinition {
     ///   the host app must handle, not a corrective one.
     public func execute(in context: SkillsToolContext) async throws -> UseSkillOutput {
         let catalog = context.registry.metadata()
-        guard let entry = catalog.first(where: { $0.id == id }), entry.isModelVisible else {
-            return .corrective(Self.unusableIDMessage(id: id, catalog: catalog))
+        guard let entry = catalog.first(where: { $0.id == id }), context.visibilityPredicate(entry) else {
+            return .corrective(
+                Self.unusableIDMessage(id: id, catalog: catalog, visibilityPredicate: context.visibilityPredicate))
         }
 
         let supplied = arguments ?? []
@@ -137,27 +139,33 @@ public struct UseSkill: OperationDefinition {
             // The live catalog changed between the lookup above and this
             // call (a race with a hot reload) -- report it the same way as
             // an id that was already unusable at lookup time.
-            return .corrective(Self.unusableIDMessage(id: id, catalog: catalog))
+            return .corrective(
+                Self.unusableIDMessage(id: id, catalog: catalog, visibilityPredicate: context.visibilityPredicate))
         }
     }
 
-    // MARK: - Unusable id (unknown, stale, or model-hidden)
+    // MARK: - Unusable id (unknown, stale, or not visible on this surface)
 
-    /// The corrective message for an id that is unknown, stale, or currently
-    /// model-hidden, carrying the current model-visible id list (decision
-    /// #22).
+    /// The corrective message for an id that is unknown, stale, or not
+    /// visible on the calling context's surface, carrying the current
+    /// usable id list (decision #22).
     ///
     /// - Parameters:
     ///   - id: The id that could not be used.
-    ///   - catalog: The full catalog snapshot to derive the current
-    ///     model-visible id list from.
+    ///   - catalog: The full catalog snapshot to derive the current usable
+    ///     id list from.
+    ///   - visibilityPredicate: Which catalog entries count as usable on the
+    ///     calling context's surface.
     /// - Returns: The corrective message.
-    private static func unusableIDMessage(id: String, catalog: [SkillMetadata]) -> String {
-        let validIDs = catalog.filter(\.isModelVisible).map(\.id).sorted()
+    private static func unusableIDMessage(
+        id: String, catalog: [SkillMetadata], visibilityPredicate: (SkillMetadata) -> Bool
+    ) -> String {
+        let prefix = "The skill id `\(id)` is not currently usable"
+        let validIDs = catalog.filter(visibilityPredicate).map(\.id).sorted()
         guard !validIDs.isEmpty else {
-            return "The skill id `\(id)` is not currently usable, and no skills are currently usable."
+            return "\(prefix), and no skills are currently usable."
         }
-        return "The skill id `\(id)` is not currently usable. Currently usable ids: \(validIDs.joined(separator: ", "))."
+        return "\(prefix). Currently usable ids: \(validIDs.joined(separator: ", "))."
     }
 
     // MARK: - Missing required argument (plan.md §6.1)

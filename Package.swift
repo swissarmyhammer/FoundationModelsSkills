@@ -9,8 +9,8 @@ import PackageDescription
 let packageName = "FoundationModelsSkills"
 let testTargetName = packageName + "Tests"
 
-// Shared product dependencies needed by both the library target and its test
-// target -- factored out so the two lists can't drift out of sync.
+/// Shared product dependencies needed by both the library target and its test
+/// target -- factored out so the two lists can't drift out of sync.
 let commonDependencies: [Target.Dependency] = [
     .product(name: "FoundationModelsExtras", package: "FoundationModelsExtras"),
     // Despite `FoundationModelsOperationTool`'s own manifest
@@ -27,6 +27,9 @@ let commonDependencies: [Target.Dependency] = [
     // `FoundationModelsOperationTool` -- there, because that is
     // the URL's last path component.
     .product(name: "Operations", package: "FoundationModelsOperationTool"),
+    // Dual-use CLI driver (plan.md §7.2): assembles the same fused
+    // `OperationTool` into an ArgumentParser command tree for `SkillsCLI`.
+    .product(name: "OperationsCLI", package: "FoundationModelsOperationTool"),
     .product(name: "FoundationModelsMetadataRegistry", package: "FoundationModelsMetadataRegistry"),
     .product(name: "Yams", package: "Yams"),
 ]
@@ -65,9 +68,8 @@ let package = Package(
         // here).
         .package(path: "../FoundationModelsExtras"),
         // FM tool fusion: `OperationTool`/`@Operation` macro machinery
-        // (decision #20). Only the `Operations` product is needed by this
-        // task; `OperationsCLI` joins once the CLI driver task lands (plan.md
-        // §7.2).
+        // (decision #20) plus `OperationCLIDriver` for the dual-use CLI
+        // (plan.md §7.2).
         .package(path: "../FoundationModelsOperationTool"),
         // `SkillSearchAgent`'s hybrid retrieval (BM25 + trigram + cosine ->
         // RRF) and Router-backed selection session, via

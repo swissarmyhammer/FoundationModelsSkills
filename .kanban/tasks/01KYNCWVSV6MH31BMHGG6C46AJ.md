@@ -2,8 +2,8 @@
 depends_on:
 - 01KYNCWEKBW84J06EDGSNBWVQT
 - 01KYND89QDD8BYQWGGPJ8Z4J2M
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: '9080'
 title: Hot-reload end-to-end test case (§13, named)
 ---
 ## What

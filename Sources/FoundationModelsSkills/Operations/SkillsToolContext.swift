@@ -23,17 +23,35 @@ public struct SkillsToolContext: Sendable {
     /// The search agent `SearchSkill` delegates to.
     public let searchAgent: SkillSearchAgent
 
-    /// Creates a `SkillsToolContext` bundling a registry and its search
-    /// agent.
+    /// The catalog-entry predicate `ListSkill` and `UseSkill` gate on:
+    /// which surface this context presents.
+    ///
+    /// Defaults to `SkillMetadata.isModelVisible` -- the model-facing
+    /// surface every existing caller of this `init` already got before this
+    /// property existed. `SkillsCLI` supplies a different predicate (`id`
+    /// membership in `registry.commandListing()`) to present the
+    /// user-facing surface instead (plan.md §7.2's "Dual-use CLI").
+    public let visibilityPredicate: @Sendable (SkillMetadata) -> Bool
+
+    /// Creates a `SkillsToolContext` bundling a registry, its search agent,
+    /// and which surface's visibility rules `ListSkill`/`UseSkill` enforce.
     ///
     /// - Parameters:
     ///   - registry: The registry every operation dereferences at dispatch
     ///     time.
     ///   - searchAgent: The search agent `SearchSkill` delegates to,
-    ///     typically wrapping a `MetadataSearcher` seeded from
-    ///     `registry.metadata()`'s model-visible subset.
-    public init(registry: SkillsRegistry, searchAgent: SkillSearchAgent) {
+    ///     typically wrapping a `MetadataSearcher` seeded from the same
+    ///     subset `visibilityPredicate` accepts.
+    ///   - visibilityPredicate: Which catalog entries `ListSkill` and
+    ///     `UseSkill` treat as usable. Defaults to
+    ///     `SkillMetadata.isModelVisible`, the model-facing surface.
+    public init(
+        registry: SkillsRegistry,
+        searchAgent: SkillSearchAgent,
+        visibilityPredicate: @escaping @Sendable (SkillMetadata) -> Bool = { $0.isModelVisible }
+    ) {
         self.registry = registry
         self.searchAgent = searchAgent
+        self.visibilityPredicate = visibilityPredicate
     }
 }

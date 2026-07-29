@@ -2,11 +2,15 @@ import Foundation
 import FoundationModels
 import Operations
 
-/// Lists the model-visible skill catalog, optionally filtered (plan.md §7).
+/// Lists the calling context's visible skill catalog, optionally filtered
+/// (plan.md §7).
 ///
 /// Never fails correctively: a `filter` matching nothing returns an empty
 /// `skills` array with `total: 0`, not an error. Reads the live registry's
-/// rendered metadata directly -- no session, no ranking, no tokens.
+/// rendered metadata directly -- no session, no ranking, no tokens. Which
+/// entries count as visible is `context.visibilityPredicate`'s call, not
+/// this operation's -- model dispatch and `SkillsCLI` supply different
+/// predicates over the same registry (plan.md §7.2).
 public struct ListSkill: OperationDefinition {
     /// The shared context this operation dispatches against.
     public typealias Context = SkillsToolContext
@@ -69,15 +73,16 @@ public struct ListSkill: OperationDefinition {
         return GeneratedContent(properties: [Self.filterKey: filter])
     }
 
-    /// Lists the model-visible catalog, filtered by `filter` when present.
+    /// Lists `context`'s visible catalog, filtered by `filter` when present.
     ///
-    /// - Parameter context: The shared context supplying the registry.
+    /// - Parameter context: The shared context supplying the registry and
+    ///   which entries `context.visibilityPredicate` accepts.
     /// - Returns: The matching rows in catalog order, with `total` reporting
     ///   their count.
     /// - Throws: Nothing; the signature carries `throws` to satisfy the
     ///   `OperationDefinition` protocol requirement.
     public func execute(in context: SkillsToolContext) async throws -> ListSkillResult {
-        let visible = context.registry.metadata().filter(\.isModelVisible)
+        let visible = context.registry.metadata().filter(context.visibilityPredicate)
         let rows = Self.matching(visible, where: filter).map(SkillRow.init(metadata:))
         return ListSkillResult(skills: rows, total: rows.count)
     }
@@ -86,7 +91,8 @@ public struct ListSkill: OperationDefinition {
     /// `filter`, case-insensitively.
     ///
     /// - Parameters:
-    ///   - catalog: The model-visible catalog entries to filter.
+    ///   - catalog: The catalog entries to filter, already narrowed to
+    ///     `context.visibilityPredicate`'s subset.
     ///   - filter: A case-insensitive substring, or `nil`/blank for no
     ///     filtering.
     /// - Returns: `catalog` unchanged when `filter` is `nil` or blank;
