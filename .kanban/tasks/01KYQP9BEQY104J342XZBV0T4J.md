@@ -9,10 +9,14 @@ comments:
 
     Tests: RunScriptTests.swift gets a 4-case parameterized policy-first-ordering test (valid id/path, unknown id, non-scripts/ path, confinement escape — all assert the exact same "disabled" message). SkillsRegistryTests.swift gets a call(id:arguments:)-path shell-disable test (previously only proven via preloadedBodies()). SkillsCLITests.swift gets a CLI skill-use-path shell-disable test. All 268 tests passing (265 prior + 3 new).
   timestamp: 2026-07-29T22:43:44.052723+00:00
+- actor: claude-code
+  id: 01kyr18cyzr33y818z0zk98x8q
+  text: Clean review (task k41ogpwcn, sha 2a73ed7..795a63f) — 0 findings after fixing the dead-code removal flagged in the prior round. Moved to done. All 268 tests passing.
+  timestamp: 2026-07-29T22:52:21.855021+00:00
 depends_on:
 - 01KYQP8YX04FDQV1R78R3BHWDP
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: '9780'
 title: Make RenderPolicy and roots construction-time invariants (#25/#28)
 ---
 ## What
