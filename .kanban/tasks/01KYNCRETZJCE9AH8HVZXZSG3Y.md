@@ -31,8 +31,8 @@ comments:
 depends_on:
 - 01KYNCQK5WG7HZTYB9R5YS0SYX
 - 01KYNCR37A3M7MYKAH7T0QREYS
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: '8980'
 title: Lenient validation + diagnostics (skills-ref parity)
 ---
 ## What

@@ -1,8 +1,35 @@
 ---
+comments:
+- actor: claude-code
+  id: 01kypk2v7fgagy513qemgqgy4x
+  text: |-
+    Implemented via TDD. Tests written first in Tests/FoundationModelsSkillsTests/SkillWatcherTests.swift (9 tests), confirmed RED (SkillWatcher didn't exist), then implemented Sources/FoundationModelsSkills/Registry/SkillWatcher.swift to GREEN.
+
+    Design decision: DispatchSource over FSEvents (documented per task instructions).
+
+    This sibling monorepo already has a proven FSEvents-based recursive watcher (FoundationModelsCodeContext's Watcher.swift/WatcherTests.swift), but its own tests document that FSEvents delivery is intermittent and slow in this family's sandboxed test environment -- its real-FSEvents integration test is gated behind a runtime deliverability probe (fsEventsAreDeliverable()) specifically because a single write can race stream registration and be lost forever here.
+
+    Given that precedent, SkillWatcher.swift uses one DispatchSource.makeFileSystemObjectSource (opened with O_EVTONLY) per currently-known directory and file across all watched roots, all scheduled on a single private serial DispatchQueue -- kqueue is a kernel-local VFS primitive with no system daemon in the delivery path, so it lands reliably where FSEvents does not in this sandbox. This satisfies genuine recursion (not the "non-recursive per-root" fallback the task described as an alternative) by watching every directory AND every file under each root, then tearing down and rebuilding the entire watch tree from current disk state immediately after each coalesced callback fires -- this is what lets newly created/removed entries (including deeply nested ones, e.g. a brand-new skill-id/ subdirectory or a _partials/ file) get watched (or un-watched) going forward, without needing incremental diffing logic.
+
+    Dead end avoided during test-writing: initially used AsyncStream<Void>.makeStream() + a task-group race (consume-vs-timeout) to await callbacks in tests. This worked for single-wait tests but failed on any test that called the wait helper a second time against the same stream (e.g. edit-after-create, second write after a directory creation) -- abandoning an AsyncStream iterator early (an early `return`, or `group.cancelAll()` cancelling the losing race task) silently finishes the stream for good, so a second independent wait against the same AsyncStream instance observed it as already-finished rather than continuing to deliver later signals. Replaced with a simple actor-based counter (SignalRecorder) polled with a bounded loop (10ms granularity) -- correct and non-flaky across repeated waits in one test.
+
+    Verification: swift test -> 149 tests / 10 suites, exit 0. SkillWatcherTests (9 tests) run 5 times in a row with zero flakiness. Local review engine (mcp review working) ran clean after one round-trip (added a doc comment on deinit it flagged). Self-review pass applied for the five review categories called out for this project (doc-comment blank-line convention, nesting depth, near-duplicate blocks, boolean-as-assertion naming, no caller/history references in doc comments) before handoff.
+  timestamp: 2026-07-29T09:25:25.359938+00:00
+- actor: claude-code
+  id: 01kypm0vbh30k8pn8m8j908qrn
+  text: |-
+    Adversarial double-check (really-done's advisory gate) found a real bug on the first pass: flush() didn't re-check isWatching after onChange() returned, so a reentrant stop() called from inside the onChange callback got silently undone -- flush() would still call cancelAllWatchedSources() (no-op, already empty) then watchExistingRoots(), reopening fresh file descriptors/DispatchSources even though the watcher had just been told to stop. Since GCD keeps a resumed-but-never-cancelled DispatchSource alive independent of Swift ARC, this was a genuine indefinite fd leak on every reentrant-stop-from-callback cycle.
+
+    Fixed with a second `guard isWatching else { return }` in flush() immediately after onChange() returns, before the rebuild runs; also added a defensive cancelAllWatchedSources() in start() (belt-and-suspenders). Added an internal (non-public) `watchedSourceCountForTesting` accessor, reached via `@testable import` in the test file only, so the regression test (`stoppingFromWithinOnChangeLeavesTheWatcherGenuinelyStoppedAndRestartable`) can assert the leak count directly (0) rather than inferring it indirectly from callback timing -- black-box signal-count assertions alone cannot distinguish the buggy and fixed behavior here (verified: a callback-timing-only test passes identically both ways). Manually confirmed real TDD red/green: reverted the fix, watched the new test fail with `watchedSourceCountForTesting == 3` (root + skill-dir + SKILL.md, exactly the leaked entries), reapplied the fix, watched it pass.
+
+    Second double-check pass on the fix returned PASS: confirmed the fix is correct for the synchronous reentrant case (the only case that occurs today, since `stop()` is always called either from the test's own thread or reentrantly from within `onChange` on `queue`), confirmed the `WatcherBox` test helper's `@unchecked Sendable` write-once-before-any-read reasoning holds (backed by `queue.sync`'s real memory-synchronization edge, not just temporal ordering), and confirmed the `@testable import` is file-scoped and doesn't affect any other test file in the target.
+
+    Final state: swift test -> 150 tests / 10 suites, exit 0, run fresh multiple times with zero flakiness. Local review engine (mcp review working) clean. Leaving task in `doing` per /implement's process -- ready for /review.
+  timestamp: 2026-07-29T09:41:48.529040+00:00
 depends_on:
 - 01KYNCQK5WG7HZTYB9R5YS0SYX
-position_column: todo
-position_ordinal: '8780'
+position_column: doing
+position_ordinal: '80'
 title: File watcher over every stack layer root
 ---
 ## What
@@ -13,14 +40,14 @@ The M2 watcher (plan §7, decision #29 as amended): Extras' machinery locates, i
 - No registry logic here — the watcher only reports "something changed"; the registry reload task owns rebuild.
 
 ## Acceptance Criteria
-- [ ] Creating, editing, and deleting a `SKILL.md` under a watched temp root each produce exactly one coalesced callback within the debounce window
-- [ ] Events under an ignored dir (`.git/`) still coalesce safely (no crash; rebuild is cheap and discovery re-filters)
-- [ ] A nonexistent root in the list is skipped without error
-- [ ] Stop prevents further callbacks
+- [x] Creating, editing, and deleting a `SKILL.md` under a watched temp root each produce exactly one coalesced callback within the debounce window
+- [x] Events under an ignored dir (`.git/`) still coalesce safely (no crash; rebuild is cheap and discovery re-filters)
+- [x] A nonexistent root in the list is skipped without error
+- [x] Stop prevents further callbacks
 
 ## Tests
-- [ ] `Tests/FoundationModelsSkillsTests/SkillWatcherTests.swift` — temp-directory add/edit/remove with expectation-based waits; burst-coalescing case; nonexistent-root case; stop case
-- [ ] `swift test` — exit 0
+- [x] `Tests/FoundationModelsSkillsTests/SkillWatcherTests.swift` — temp-directory add/edit/remove with expectation-based waits; burst-coalescing case; nonexistent-root case; stop case
+- [x] `swift test` — exit 0
 
 ## Workflow
 - Use `/tdd` — write failing tests first, then implement to make them pass.
