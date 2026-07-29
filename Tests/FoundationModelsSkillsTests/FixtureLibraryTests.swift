@@ -1,49 +1,36 @@
 import Foundation
-import FoundationModelsExtras
+import FoundationModelsSkills
 import Testing
-import Yams
 
-/// Coding-key-mapped view over the frontmatter fields this slice's fixtures
-/// exercise (plan.md §4-§6, §11): the agentskills.io-spec fields (`name`,
-/// `description`, `license`, `compatibility`) plus this package's
-/// Claude-compatible extensions (`arguments`, `argument-hint`,
-/// `disable-model-invocation`, `user-invocable`, `metadata`).
-///
-/// Test-local -- the real decode type lands with `SkillsRegistry` in a later
-/// task.
-private struct SkillFrontmatter: Decodable {
-    let name: String?
-    let description: String?
-    let arguments: [String]?
-    let argumentHint: String?
-    let disableModelInvocation: Bool?
-    let userInvocable: Bool?
-    let license: String?
-    let compatibility: String?
-    let metadata: [String: Bool]?
-
-    enum CodingKeys: String, CodingKey {
-        case name, description, arguments, license, compatibility, metadata
-        case argumentHint = "argument-hint"
-        case disableModelInvocation = "disable-model-invocation"
-        case userInvocable = "user-invocable"
+/// Decodes the fixture at `relativePath` via the production
+/// `FrontmatterDecoder`, unwrapping the `.decoded` case -- every fixture
+/// exercised below is expected to decode cleanly. (The `broken/` fixtures'
+/// lenient-validation behavior -- retry success/failure, skip diagnostics --
+/// is covered by `FrontmatterDecoderTests`, not here; this file only proves
+/// the fixture library resolves the right files and that a few representative
+/// happy-path fixtures carry the fields their names promise.)
+private func loadDecodedSkill(_ relativePath: String) throws -> DecodedSkill {
+    let text = try String(contentsOf: FixtureLibrary.url(relativePath: relativePath), encoding: .utf8)
+    guard case .decoded(let skill) = FrontmatterDecoder.decode(text: text) else {
+        Issue.record("expected \(relativePath) to decode cleanly")
+        throw LoadFixtureFailure.notDecoded
     }
+    return skill
 }
 
-/// Reads and Yams-decodes the frontmatter block of the fixture at
-/// `relativePath`, using `FrontmatterDocument.split` for the textual split
-/// (plan.md §4/§29: YAML decoding stays ours, Extras only splits text).
+private enum LoadFixtureFailure: Error {
+    case notDecoded
+}
+
+/// Reads and decodes the frontmatter block of the fixture at `relativePath`.
 private func loadFrontmatter(_ relativePath: String) throws -> SkillFrontmatter {
-    let text = try String(contentsOf: FixtureLibrary.url(relativePath: relativePath), encoding: .utf8)
-    let frontmatterText = try #require(FrontmatterDocument.split(text: text).frontmatter)
-    return try YAMLDecoder().decode(SkillFrontmatter.self, from: frontmatterText)
+    try loadDecodedSkill(relativePath).frontmatter
 }
 
 /// Reads the render-pipeline body (post frontmatter split) of the fixture at
 /// `relativePath`.
 private func loadBody(_ relativePath: String) throws -> String {
-    let text = try String(contentsOf: FixtureLibrary.url(relativePath: relativePath), encoding: .utf8)
-    return FrontmatterDocument.split(text: text).body
+    try loadDecodedSkill(relativePath).body
 }
 
 /// The three-layer stack's happy-path fixtures (plan.md §11): every §5/§6
@@ -142,12 +129,19 @@ func fixtureLibraryResolvesBrokenFixture(_ relativePath: String) {
     #expect(frontmatter.name == "spec-clean")
     #expect(frontmatter.license != nil)
     #expect(frontmatter.compatibility != nil)
-    #expect(frontmatter.metadata?.isEmpty == false)
+    #expect(frontmatter.metadata.isEmpty == false)
 
-    // Pure-spec at the top level (decision #27): none of our extension
-    // fields appear there directly -- they ride under `metadata.*` instead.
-    #expect(frontmatter.arguments == nil)
+    // Pure-spec at the top level (decision #27): this fixture's own
+    // extension fields live only under `metadata.*` -- `disable-model-invocation`
+    // and `preload` -- and still resolve onto `SkillFrontmatter`'s canonical
+    // properties via the metadata fallback (no top-level value to conflict
+    // with, so no note is recorded either).
+    #expect(frontmatter.disableModelInvocation == false)
+    #expect(frontmatter.preload == false)
+    #expect(frontmatter.notes.isEmpty)
+
+    // Extension fields this fixture's metadata never sets stay absent.
+    #expect(frontmatter.arguments.isEmpty)
     #expect(frontmatter.argumentHint == nil)
-    #expect(frontmatter.disableModelInvocation == nil)
     #expect(frontmatter.userInvocable == nil)
 }

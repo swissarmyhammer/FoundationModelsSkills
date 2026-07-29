@@ -59,8 +59,8 @@ comments:
   timestamp: 2026-07-29T01:36:19.426838+00:00
 depends_on:
 - 01KYNCPTS07BHG6PQS17PE17T4
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: '8180'
 title: Build the Examples/skill-library fixture stack (M1 slice)
 ---
 ## What
