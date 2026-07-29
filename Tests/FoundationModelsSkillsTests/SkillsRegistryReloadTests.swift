@@ -199,6 +199,104 @@ struct SkillsRegistryReloadTests {
         #expect(!entry.description.contains("after edit"))
     }
 
+    // MARK: - Multi-consumer fan-out (^321b23t): no shared-stream tick stealing
+
+    @Test func twoConcurrentConsumersBothObserveEveryReloadInAFiveReloadBurst() async throws {
+        let root = try Self.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try Self.writeSkillFile(id: "burst-skill", in: root, descriptionSuffix: "v0")
+
+        let registry = SkillsRegistry(roots: [root], watch: true)
+        let onReloadTally = EventTally()
+        let onReloadSubscription = Task {
+            guard let stream = registry.onReload else { return }
+            for await _ in stream { await onReloadTally.record() }
+        }
+        defer { onReloadSubscription.cancel() }
+
+        let commandUpdatesTally = EventTally()
+        let commandUpdatesSubscription = Task {
+            guard let stream = registry.commandUpdates else { return }
+            for await _ in stream { await commandUpdatesTally.record() }
+        }
+        defer { commandUpdatesSubscription.cancel() }
+
+        for iteration in 1...5 {
+            try Self.writeSkillFile(id: "burst-skill", in: root, descriptionSuffix: "v\(iteration)")
+            await Self.expectCount(onReloadTally, atLeast: iteration, timeout: Self.expectedSignalTimeout)
+        }
+        // A settling window so a coalesced extra tick (there shouldn't be
+        // one) would still show up before the final tally read.
+        try await Task.sleep(for: Self.noFurtherSignalWindow)
+
+        let onReloadCount = await onReloadTally.count
+        let commandUpdatesCount = await commandUpdatesTally.count
+        #expect(onReloadCount == 5, "onReload observed \(onReloadCount) of 5 reloads")
+        #expect(commandUpdatesCount == 5, "commandUpdates observed \(commandUpdatesCount) of 5 reloads")
+    }
+
+    @Test func aLateCommandUpdatesSubscriberReceivesSubsequentTicks() async throws {
+        let root = try Self.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try Self.writeSkillFile(id: "late-subscriber-skill", in: root, descriptionSuffix: "v0")
+
+        let registry = SkillsRegistry(roots: [root], watch: true)
+        let earlyTally = EventTally()
+        let earlySubscription = Task {
+            guard let stream = registry.commandUpdates else { return }
+            for await _ in stream { await earlyTally.record() }
+        }
+        defer { earlySubscription.cancel() }
+
+        try Self.writeSkillFile(id: "late-subscriber-skill", in: root, descriptionSuffix: "v1")
+        await Self.expectCount(earlyTally, atLeast: 1, timeout: Self.expectedSignalTimeout)
+
+        // A fresh subscription, registered only now -- after the first
+        // reload already happened -- must still observe every reload from
+        // this point forward, independent of `earlySubscription`.
+        let lateTally = EventTally()
+        let lateSubscription = Task {
+            guard let stream = registry.commandUpdates else { return }
+            for await _ in stream { await lateTally.record() }
+        }
+        defer { lateSubscription.cancel() }
+
+        try Self.writeSkillFile(id: "late-subscriber-skill", in: root, descriptionSuffix: "v2")
+        await Self.expectCount(lateTally, atLeast: 1, timeout: Self.expectedSignalTimeout)
+        await Self.expectCount(earlyTally, atLeast: 2, timeout: Self.expectedSignalTimeout)
+
+        let lateCount = await lateTally.count
+        #expect(lateCount == 1)
+    }
+
+    @Test func everySubscriberFinishesCleanlyOnRegistryDeinitNoLeakedContinuations() async throws {
+        let root = try Self.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try Self.writeSkillFile(id: "deinit-fanout-skill", in: root, descriptionSuffix: "v0")
+
+        var registry: SkillsRegistry? = SkillsRegistry(roots: [root], watch: true)
+        let onReloadStream = try #require(registry?.onReload)
+        let commandUpdatesStream = try #require(registry?.commandUpdates)
+        registry = nil
+
+        let onReloadFinished = FinishTracker()
+        let onReloadSubscription = Task {
+            for await _ in onReloadStream {}
+            await onReloadFinished.markFinished()
+        }
+        defer { onReloadSubscription.cancel() }
+
+        let commandUpdatesFinished = FinishTracker()
+        let commandUpdatesSubscription = Task {
+            for await _ in commandUpdatesStream {}
+            await commandUpdatesFinished.markFinished()
+        }
+        defer { commandUpdatesSubscription.cancel() }
+
+        await Self.expectFinishes(onReloadFinished, timeout: Self.expectedSignalTimeout)
+        await Self.expectFinishes(commandUpdatesFinished, timeout: Self.expectedSignalTimeout)
+    }
+
     // MARK: - Watcher lifecycle owned by the registry
 
     @Test func deinitStopsTheWatcherAndDeliversNoFurtherOnReloadPublicationsAfterward() async throws {
@@ -220,6 +318,66 @@ struct SkillsRegistryReloadTests {
         try await Task.sleep(for: Self.noFurtherSignalWindow)
 
         #expect(await recorder.publications.isEmpty)
+    }
+
+    // MARK: - Multi-consumer fan-out test helpers
+
+    /// Counts how many events a subscription has observed, independent of
+    /// their payload -- the multi-consumer tests only care about counts,
+    /// unlike `MetadataUpdateRecorder`, which also needs each publication's
+    /// content.
+    private actor EventTally {
+        private(set) var count = 0
+
+        /// Records one more observed event.
+        func record() {
+            count += 1
+        }
+    }
+
+    /// Polls `tally`'s count until it reaches `target` or `timeout` elapses,
+    /// then asserts it reached `target`.
+    ///
+    /// - Parameters:
+    ///   - tally: The tally to poll.
+    ///   - target: The count to wait for.
+    ///   - timeout: How long to keep polling before giving up.
+    private static func expectCount(_ tally: EventTally, atLeast target: Int, timeout: Duration) async {
+        let deadline = ContinuousClock.now.advanced(by: timeout)
+        var current = await tally.count
+        while current < target, ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(10))
+            current = await tally.count
+        }
+        #expect(current >= target, "expected at least \(target) events, observed \(current)")
+    }
+
+    /// Marks whether a subscription's `for await` loop has exited -- proof
+    /// its stream finished (rather than merely going quiet), for the
+    /// deinit/no-leaked-continuations tests.
+    private actor FinishTracker {
+        private(set) var isFinished = false
+
+        /// Marks this tracker finished.
+        func markFinished() {
+            isFinished = true
+        }
+    }
+
+    /// Polls `tracker` until it's marked finished or `timeout` elapses, then
+    /// asserts it finished.
+    ///
+    /// - Parameters:
+    ///   - tracker: The tracker to poll.
+    ///   - timeout: How long to keep polling before giving up.
+    private static func expectFinishes(_ tracker: FinishTracker, timeout: Duration) async {
+        let deadline = ContinuousClock.now.advanced(by: timeout)
+        var finished = await tracker.isFinished
+        while !finished, ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(10))
+            finished = await tracker.isFinished
+        }
+        #expect(finished, "subscriber stream did not finish within \(timeout)")
     }
 
     // MARK: - Test helpers

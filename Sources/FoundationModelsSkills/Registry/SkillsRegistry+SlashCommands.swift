@@ -38,20 +38,27 @@ extension SkillsRegistry: SlashCommandProviding {
 
     /// Republishes this registry's full command set after every
     /// watcher-driven catalog rebuild, bridged from `onReload` (plan.md
-    /// §7).
+    /// §7, §7.1).
     ///
     /// `nil` when this registry was constructed with `watch: false`, same
-    /// as `onReload` itself. Accessing this property starts a fresh
-    /// bridging subscription over the same underlying `onReload` stream
-    /// each time -- mirroring `onReload`'s own single-subscriber contract,
-    /// a caller should read `commandUpdates` once and retain the returned
-    /// stream rather than accessing this property repeatedly.
+    /// as `onReload` itself. Accessing this property registers a fresh
+    /// subscription over `onReload` -- itself now a multicast-safe fresh
+    /// subscription per access (`ReloadBroadcaster`) -- so this property can
+    /// be accessed any number of times, or alongside `onReload` itself,
+    /// with every subscriber observing every publication in full; none
+    /// steals another's elements.
     public var commandUpdates: AsyncStream<[SlashCommand]>? {
         guard let onReload else { return nil }
         let (stream, continuation) = AsyncStream<[SlashCommand]>.makeStream()
+        // Captures `detachedReader`, never `self`/`self.slashCommands`:
+        // `self` is a value-type copy that would carry its own strong
+        // reference to `reloadCoordinator`, keeping this registry's watcher
+        // (and `onReload` itself) alive for as long as this task runs --
+        // undermining "the watcher's lifecycle is owned by the registry."
+        let reader = detachedReader
         let bridge = Task {
             for await _ in onReload {
-                continuation.yield(slashCommands())
+                continuation.yield(reader.slashCommands())
             }
             continuation.finish()
         }

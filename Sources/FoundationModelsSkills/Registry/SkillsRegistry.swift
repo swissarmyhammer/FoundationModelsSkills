@@ -149,18 +149,24 @@ public struct SkillsRegistry: Sendable {
         catalogBox.snapshot.diagnostics
     }
 
-    /// Pushed publications of this registry's refreshed metadata list, one
-    /// per watcher-driven rebuild (plan.md §7's reload seam; §7.1's future
-    /// `SkillSearchAgent.update(items:)` and preload-refresh consumers hang
-    /// off this).
+    /// A fresh subscription to this registry's refreshed metadata list, one
+    /// publication per watcher-driven rebuild (plan.md §7's reload seam,
+    /// §7.1's "one registry, four simultaneous consumers"; `commandUpdates`
+    /// is another).
     ///
+    /// Each access registers an independent subscriber stream against the
+    /// shared `ReloadCoordinator`, so any number of concurrent readers --
+    /// this property accessed twice, or alongside `commandUpdates` -- each
+    /// observe every publication in full; none steals another's elements.
     /// Each element is the full, current `metadata()` list -- not an
     /// incremental diff, the same full-catalog contract `metadata()` itself
     /// carries. `nil` when this registry was constructed with `watch:
     /// false`, since a registry that never reloads has nothing to publish;
-    /// finishes once this registry (and every copy sharing its watcher) is
-    /// deinitialized.
-    public let onReload: AsyncStream<[SkillMetadata]>?
+    /// every subscription finishes once this registry (and every copy
+    /// sharing its watcher) is deinitialized.
+    public var onReload: AsyncStream<[SkillMetadata]>? {
+        reloadCoordinator?.subscribe()
+    }
 
     /// This registry's render pipeline, wired to the real passes 1-3.
     private let pipeline: RenderPipeline
@@ -282,20 +288,16 @@ public struct SkillsRegistry: Sendable {
             stencil: StencilPass(layers: layers))
 
         guard watch else {
-            onReload = nil
             reloadCoordinator = nil
             return
         }
 
-        let (stream, continuation) = AsyncStream<[SkillMetadata]>.makeStream()
-        onReload = stream
         // A read-only view sharing this registry's own `catalogBox`, given
         // to `ReloadCoordinator` so it can recompute `metadata()` after
         // every rebuild through the exact same rendering path every other
         // reader uses, without duplicating any of it.
         let reader = SkillsRegistry(catalogBox: catalogBox, pipeline: pipeline, policy: policy, roots: roots)
-        let coordinator = ReloadCoordinator(
-            layers: layers, catalogBox: catalogBox, reader: reader, continuation: continuation)
+        let coordinator = ReloadCoordinator(layers: layers, catalogBox: catalogBox, reader: reader)
         coordinator.start()
         reloadCoordinator = coordinator
     }
@@ -316,7 +318,6 @@ public struct SkillsRegistry: Sendable {
         self.policy = policy
         self.catalogBox = catalogBox
         self.pipeline = pipeline
-        onReload = nil
         reloadCoordinator = nil
     }
 
@@ -741,6 +742,25 @@ public struct SkillsRegistry: Sendable {
         catalogBox.snapshot.catalog[id]?.frontmatter.allowedTools
     }
 
+    /// A read-only view of this registry sharing its live `catalogBox`, but
+    /// with reload disabled (`reloadCoordinator == nil`).
+    ///
+    /// A background task (e.g. `commandUpdates`'s bridging `Task`) that
+    /// needs to recompute `metadata()`/`commandListing()` fresh on every
+    /// reload tick must capture *this*, never `self`, inside its closure:
+    /// `SkillsRegistry` is a value type, so capturing `self` there would
+    /// capture a whole copy of it -- including a strong reference to this
+    /// registry's own `reloadCoordinator` class instance, keeping its
+    /// watcher (and the `AsyncStream` the task loops over) alive for as
+    /// long as the task runs, defeating "the watcher's lifecycle is owned
+    /// by the registry, stopped once every copy is deinitialized."
+    /// `detachedReader` still reflects every live rebuild (it shares the
+    /// same `catalogBox`), it simply never itself keeps the coordinator
+    /// alive.
+    internal var detachedReader: SkillsRegistry {
+        SkillsRegistry(catalogBox: catalogBox, pipeline: pipeline, policy: policy, roots: roots)
+    }
+
     // MARK: - Reload (plan.md §7)
 
     /// The atomically-swappable holder for one catalog generation and its
@@ -800,9 +820,9 @@ public struct SkillsRegistry: Sendable {
         }
     }
 
-    /// Owns the `SkillWatcher` and `onReload` continuation for a `watch:
-    /// true` registry: rebuilds `catalogBox` on every coalesced watcher
-    /// signal and publishes the refreshed metadata list.
+    /// Owns the `SkillWatcher` and `ReloadBroadcaster` for a `watch: true`
+    /// registry: rebuilds `catalogBox` on every coalesced watcher signal and
+    /// publishes the refreshed metadata list to every current subscriber.
     ///
     /// A `final class` rather than a value type since its lifetime -- when
     /// the watcher starts and, more importantly, when it stops -- is what
@@ -810,27 +830,27 @@ public struct SkillsRegistry: Sendable {
     /// stop on.
     ///
     /// `@unchecked Sendable`: both stored properties (`watcher`,
-    /// `continuation`) are immutable `let`s referring to types that are
+    /// `broadcaster`) are immutable `let`s referring to types that are
     /// themselves safe under concurrent use -- `SkillWatcher` is
     /// `@unchecked Sendable` and serializes its own mutable state on a
-    /// private queue, and `AsyncStream.Continuation` is documented safe to
-    /// call from multiple threads concurrently. This class itself declares
-    /// no other stored state: the watcher's `onChange` closure wired up in
-    /// `init` captures `layers`/`catalogBox`/`reader`/`continuation`
-    /// directly rather than `self`, so no `ReloadCoordinator` instance
-    /// property is ever read or written outside of `init`/`start()`/`deinit`,
-    /// none of which race with each other (`start()` and `deinit` are only
-    /// ever called from the owning `SkillsRegistry`'s single construction
-    /// and deinitialization points).
+    /// private queue, and `ReloadBroadcaster` locks its own mutable state.
+    /// This class itself declares no other stored state: the watcher's
+    /// `onChange` closure wired up in `init` captures
+    /// `layers`/`catalogBox`/`reader`/`broadcaster` directly rather than
+    /// `self`, so no `ReloadCoordinator` instance property is ever read or
+    /// written outside of `init`/`start()`/`subscribe()`/`deinit`, none of
+    /// which race with each other (`start()` and `deinit` are only ever
+    /// called from the owning `SkillsRegistry`'s single construction and
+    /// deinitialization points).
     private final class ReloadCoordinator: @unchecked Sendable {
         private let watcher: SkillWatcher
-        private let continuation: AsyncStream<[SkillMetadata]>.Continuation
+        private let broadcaster: ReloadBroadcaster
 
         /// Creates a `ReloadCoordinator` and wires (but does not yet start)
         /// its watcher.
         ///
         /// The watcher's `onChange` closure captures `layers`, `catalogBox`,
-        /// `reader`, and `continuation` directly rather than `self`, so
+        /// `reader`, and `broadcaster` directly rather than `self`, so
         /// wiring it up here creates no retain cycle between this
         /// coordinator and its own watcher.
         ///
@@ -842,17 +862,13 @@ public struct SkillsRegistry: Sendable {
         ///   - reader: A read-only registry view sharing `catalogBox`, used
         ///     to recompute `metadata()` after each rebuild via the real
         ///     rendering path.
-        ///   - continuation: The `onReload` continuation to publish the
-        ///     refreshed metadata list to after every rebuild.
-        init(
-            layers: [DotfolderStack.Layer], catalogBox: CatalogBox, reader: SkillsRegistry,
-            continuation: AsyncStream<[SkillMetadata]>.Continuation
-        ) {
-            self.continuation = continuation
+        init(layers: [DotfolderStack.Layer], catalogBox: CatalogBox, reader: SkillsRegistry) {
+            let broadcaster = ReloadBroadcaster()
+            self.broadcaster = broadcaster
             watcher = SkillWatcher(roots: layers.map(\.root)) {
                 let rebuilt = SkillsRegistry.buildCatalog(layers: layers)
                 catalogBox.replace(catalog: rebuilt.catalog, diagnostics: rebuilt.diagnostics)
-                continuation.yield(reader.metadata())
+                broadcaster.publish(reader.metadata())
             }
         }
 
@@ -861,12 +877,104 @@ public struct SkillsRegistry: Sendable {
             watcher.start()
         }
 
-        /// Stops the underlying watcher and finishes `onReload`, so no
-        /// further rebuilds or publications happen once every copy of the
-        /// owning registry has gone out of scope.
+        /// Registers a fresh subscriber stream against this coordinator's
+        /// broadcaster.
+        ///
+        /// - Returns: A stream receiving every publication from this point
+        ///   forward, independent of any other subscriber.
+        func subscribe() -> AsyncStream<[SkillMetadata]> {
+            broadcaster.subscribe()
+        }
+
+        /// Stops the underlying watcher and finishes every current and
+        /// future subscriber, so no further rebuilds or publications happen
+        /// once every copy of the owning registry has gone out of scope.
         deinit {
             watcher.stop()
-            continuation.finish()
+            broadcaster.finishAll()
+        }
+    }
+
+    /// Broadcasts each rebuild's refreshed metadata list to every currently
+    /// registered subscriber (plan.md §7.1 "one registry, four simultaneous
+    /// consumers").
+    ///
+    /// A single shared `AsyncStream` cannot serve this: two concurrent `for
+    /// await` loops over the same stream *split* its elements between them
+    /// rather than each observing every one, since they compete for the
+    /// same underlying buffer. This type sidesteps that entirely -- each
+    /// `subscribe()` call registers its own independent continuation, and
+    /// `publish(_:)` yields to every one of them, so a fresh subscription
+    /// (`onReload`/`commandUpdates`, accessed once or many times) never
+    /// steals another's elements.
+    ///
+    /// `@unchecked Sendable`: `continuations`/`nextID` are only ever read or
+    /// mutated while holding `lock`.
+    private final class ReloadBroadcaster: @unchecked Sendable {
+        private let lock = NSLock()
+        private var continuations: [Int: AsyncStream<[SkillMetadata]>.Continuation] = [:]
+        private var nextID = 0
+
+        /// Registers a fresh subscriber stream, capturing every publication
+        /// from this point forward.
+        ///
+        /// - Returns: The subscriber's stream. Finishes on its own
+        ///   `onTermination` (the caller cancels/drops it) or when
+        ///   `finishAll()` runs.
+        func subscribe() -> AsyncStream<[SkillMetadata]> {
+            let (stream, continuation) = AsyncStream<[SkillMetadata]>.makeStream()
+            let id = withLock {
+                let id = nextID
+                nextID += 1
+                continuations[id] = continuation
+                return id
+            }
+            continuation.onTermination = { [weak self] _ in self?.unsubscribe(id: id) }
+            return stream
+        }
+
+        /// Publishes `metadata` to every currently registered subscriber.
+        ///
+        /// - Parameter metadata: The refreshed metadata list to publish.
+        func publish(_ metadata: [SkillMetadata]) {
+            let subscribers = withLock { Array(continuations.values) }
+            for continuation in subscribers {
+                continuation.yield(metadata)
+            }
+        }
+
+        /// Finishes every currently registered subscriber and stops
+        /// accepting new publications -- called once, from
+        /// `ReloadCoordinator.deinit`.
+        func finishAll() {
+            let subscribers = withLock {
+                defer { continuations.removeAll() }
+                return Array(continuations.values)
+            }
+            for continuation in subscribers {
+                continuation.finish()
+            }
+        }
+
+        /// Removes subscriber `id`'s continuation once its stream
+        /// terminates, so a cancelled/dropped subscriber's slot doesn't
+        /// linger forever.
+        ///
+        /// - Parameter id: The subscriber id to remove.
+        private func unsubscribe(id: Int) {
+            withLock { _ = continuations.removeValue(forKey: id) }
+        }
+
+        /// Runs `body` while holding `lock`, releasing it via `defer`
+        /// before returning under any control-flow path -- mirrors
+        /// `CatalogBox.withLock(_:)`.
+        ///
+        /// - Parameter body: The work to run under the lock.
+        /// - Returns: `body`'s result.
+        private func withLock<T>(_ body: () -> T) -> T {
+            lock.lock()
+            defer { lock.unlock() }
+            return body()
         }
     }
 }
