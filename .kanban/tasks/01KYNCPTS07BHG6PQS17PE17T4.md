@@ -87,6 +87,18 @@ comments:
   id: 01kynmzj2rt7q1g2xpeaxybaj3
   text: 'Correction: my first `update task` call to check off the finding used literal `\n` in the description parameter instead of actual newline characters, which corrupted the description (real newlines became literal backslash-n text) and, separately, wiped the `tags` array to empty despite passing `["26","29"]` in the same call. Caught it immediately via a follow-up `get task` and re-issued `update task` with real embedded newlines and the tags array again -- verified the description now round-trips with proper newlines, `tags: ["26","29"]` and `filter_tags` are restored, and progress is 1.0 (all boxes checked). Recording this here since prior agents already flagged `update task`''s replace-not-merge semantics as a hazard -- confirming: always pass real newlines (not escaped `\n` text) and always re-pass the full tags array on every `update task` call, then verify with `get task` immediately after.'
   timestamp: 2026-07-29T00:39:20.408363+00:00
+- actor: claude-code
+  id: 01kynngdaw46wcerhb5tgbn0m2
+  text: |-
+    Fixed review finding (2026-07-28 19:40): added `let testTargetName = packageName + "Tests"` immediately after `let packageName = "FoundationModelsSkills"` in Package.swift, and changed `.testTarget(name: "FoundationModelsSkillsTests", ...)` to `.testTarget(name: testTargetName, ...)`. Confirmed via grep that no literal occurrence of "FoundationModelsSkillsTests" remains anywhere in Package.swift.
+
+    Verified:
+    - Clean rebuild (`rm -rf .build Package.resolved && swift build`) — exit 0, only the pre-existing documented benign "Conflicting identity for foundationmodelsoperationtool" warning (plus an unrelated pre-existing mlx-swift bundle-copy warning noted by the double-check agent, also pre-existing infrastructure noise, not introduced by this change).
+    - `swift test` — exit 0, 1/1 test passing (`moduleAndDependenciesImportCleanly`).
+    - Adversarial double-check agent: PASS — independently confirmed the diff is scoped to exactly two hunks in Package.swift (the new constant line and the name: swap), nothing else in the file touched, and independently reran clean build + test green.
+
+    Checked off the review finding checkbox. Description and tags (`26`, `29`) verified intact via follow-up `get task` after the update. Leaving the task in `doing` per the implement skill's process — review moves it, implement does not.
+  timestamp: 2026-07-29T00:48:32.604309+00:00
 position_column: doing
 position_ordinal: '80'
 title: Scaffold Package.swift and empty target structure
@@ -124,3 +136,7 @@ Create the SwiftPM package skeleton per plan.md §3/§17 (single target, concept
 ## Review Findings (2026-07-28 19:30)
 
 - [x] `Package.swift:37` — Public constant `package` is missing a documentation comment in the specified format (/// or /**). Add a /// doc comment explaining the package definition and its purpose.
+
+## Review Findings (2026-07-28 19:40)
+
+- [x] `Package.swift:86` — Test target name 'FoundationModelsSkillsTests' is hardcoded as a literal, contradicting the stated deduplication principle. The comment on lines 6-8 explicitly declares packageName as a 'single source of truth' to avoid repeating the literal across 'package, product, target, and test-target declarations', yet the test target name is hardcoded instead of derived from packageName. Add `let testTargetName = packageName + "Tests"` after line 9, then use `name: testTargetName,` at line 86 to honor the stated deduplication principle.

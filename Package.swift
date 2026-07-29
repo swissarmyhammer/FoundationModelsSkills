@@ -7,6 +7,7 @@ import PackageDescription
 // repeating the literal across the package, product, target, and test-target
 // declarations below.
 let packageName = "FoundationModelsSkills"
+let testTargetName = packageName + "Tests"
 
 // Shared product dependencies needed by both the library target and its test
 // target -- factored out so the two lists can't drift out of sync.
@@ -83,7 +84,7 @@ let package = Package(
             dependencies: commonDependencies
         ),
         .testTarget(
-            name: "FoundationModelsSkillsTests",
+            name: testTargetName,
             dependencies: [.byName(name: packageName)] + commonDependencies
         ),
     ]
