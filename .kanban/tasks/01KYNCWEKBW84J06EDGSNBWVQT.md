@@ -33,8 +33,8 @@ comments:
 depends_on:
 - 01KYNCSXAEKDVR36H387H5TYXR
 - 01KYNCVWNHA30PC3104072SJVJ
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: 8f80
 title: Skill operations + fused OperationTool (search/list/use)
 ---
 ## What

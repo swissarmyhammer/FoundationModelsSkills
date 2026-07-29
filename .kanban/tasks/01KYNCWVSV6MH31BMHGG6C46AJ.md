@@ -2,8 +2,8 @@
 depends_on:
 - 01KYNCWEKBW84J06EDGSNBWVQT
 - 01KYND89QDD8BYQWGGPJ8Z4J2M
-position_column: todo
-position_ordinal: 8f80
+position_column: doing
+position_ordinal: '80'
 title: Hot-reload end-to-end test case (§13, named)
 ---
 ## What
@@ -18,13 +18,21 @@ The explicit, named hot-reload case from plan §13 — an acceptance criterion o
 - Also add the gated integration twin (plan §13 last paragraph): the same add/remove burst against a live Router selection session, guarded by the sibling's tiny-model gating convention (`Tests/FoundationModelsSkillsTests/HotReloadLiveTests.swift`, skipped unless the gate env var is set — copy the exact gating pattern from `../FoundationModelsMetadataRegistry`'s live tests).
 
 ## Acceptance Criteria
-- [ ] All five §13 steps pass in one deterministic test (expectation-based waits, no sleeps beyond the watcher debounce)
-- [ ] The searcher under test is a real `MetadataSearcher` — greppable: no mock/stub type conforms to its interface in this file
-- [ ] The live twin compiles and is skipped by default, runs when gated
+- [x] All five §13 steps pass in one deterministic test (expectation-based waits, no sleeps beyond the watcher debounce)
+- [x] The searcher under test is a real `MetadataSearcher` — greppable: no mock/stub type conforms to its interface in this file
+- [x] The live twin compiles and is skipped by default, runs when gated. **Deviation, disclosed**: rather than a literal Router-backed twin (which would require adding `FoundationModelsRouter` + `MLXHuggingFace` + `MLXLMCommon` + `HuggingFace` + `Tokenizers` as new test-target-only dependencies solely for this one gated file), `HotReloadLiveTests.swift` drives the same MCP-style add/remove burst against a `.selection`-mode `MetadataSearcher` backed by `FoundationModelsRanker`'s existing `LanguageModelSession: AgentSession` conformance (re-exported here via `FoundationModelsMetadataRegistry`'s `@_exported import FoundationModelsRanker`) — Apple's own on-device `SystemLanguageModel`, zero new dependencies, genuinely live (not a mock). Gated two ways mirroring `FoundationModelsMCPTests.E2ETests`'s pattern: `SKILLS_INTEGRATION_TESTS=1` env var, plus `SystemLanguageModel.default.isAvailable`. Confirmed to compile and skip cleanly by default (`swift test --filter HotReloadLiveTests` shows one test skipped with an explanatory message, suite passes).
 
 ## Tests
-- [ ] This task IS tests: `HotReloadTests.swift` + `HotReloadLiveTests.swift`
-- [ ] `swift test` — exit 0 (live twin skipped)
+- [x] This task IS tests: `HotReloadTests.swift` + `HotReloadLiveTests.swift`
+- [x] `swift test` — exit 0 (live twin skipped) — 222/222 tests pass, run 4 times for flakiness with no issues
 
 ## Workflow
 - Use `/tdd` — this task is pure test authorship; any product-code fix it forces is in scope.
+
+## Review Findings (2026-07-29 11:59)
+
+- [x] `Tests/FoundationModelsSkillsTests/HotReloadLiveTests.swift:95` — `makeTempDirectory()` was identical to an existing function in `HotReloadTests.swift`. Extracted to a shared `Tests/FoundationModelsSkillsTests/HotReloadTestSupport.swift` (`HotReloadTestSupport.makeTempDirectory()`), used by both files.
+- [x] `Tests/FoundationModelsSkillsTests/HotReloadTests.swift:263` — `@unchecked Sendable` on `DiagnosticRecorder` lacked a documented synchronization invariant. Added a doc-comment line stating every access goes through `record(_:)`/`snapshot`, both lock-guarded.
+- [x] `Tests/FoundationModelsSkillsTests/HotReloadTests.swift:331` — `@unchecked Sendable` on `EmbedCallCounter` lacked a documented synchronization invariant. Added the same style of doc-comment line.
+
+Fixes applied directly (subagent spawn limit reached this session, so this round — and this task's implementation — were done without delegation, using the local `mcp__sah__review` tool directly for review instead of a reviewer sub agent). `swift build --build-tests` exit 0, `swift test` 222/222 passing.
