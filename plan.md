@@ -140,8 +140,8 @@ leaf — not built here *(decision #29)*.
   `DotfolderStack(name: "skills", workingDirectory: …)` is a convenience that derives one
   such list — shipped defaults (optional; `SKILLS_DEFAULTS_DIR` repoints it for dev, no
   rebuild) < user `$XDG_CONFIG_HOME/skills/` < project `<cwd>/.skills/` — and hosts that
-  want the client guide's cross-client `.agents/skills` layout, or a bare `~/.skills`
-  (which `DotfolderStack` cannot express), simply pass those roots instead. Precedence is
+  want the client guide's cross-client `.agents/skills` layout simply pass those roots
+  instead. Precedence is
   last-root-wins, realizing our full-replace rule, with source tracking carrying
   provenance into diagnostics. The spec mandates only what's *inside* a skill directory,
   so every one of these is a conforming host convention. Discovery skips
@@ -609,15 +609,17 @@ Revisit when Apple ships a supported per-process confinement API. *(decision #28
     hosts that want it**, deriving shipped defaults (optional; `SKILLS_DEFAULTS_DIR`
     repoints it for dev, no rebuild) < user `$XDG_CONFIG_HOME/skills/` (default
     `~/.config/skills/`) < project `<cwd>/.skills/`. But it is one way to compute roots,
-    not the interface. Note it **cannot** express a user layer at `~/.skills`, since its
-    user side is always `~/.config/<name>/` — which is precisely why the roots, not the
-    stack, are the parameter.
+    not the interface — a host with a different layout passes different roots without
+    needing this package changed.
 
-    `FoundationModelsACPAgent` passes `[~/.skills, <cwd>/.skills]` and owns those
-    literals. Its reasoning is worth recording here because it generalizes: skills are an
-    **ecosystem** artifact, so they are deliberately *not* namespaced per product — a
-    "deploy to staging" skill belongs to the user and the repo, not to whichever agent
-    reads it, and namespacing would force one copy per product.
+    `FoundationModelsACPAgent` passes the roots from `DotfolderStack(name: "skills")`,
+    i.e. `$XDG_CONFIG_HOME/skills/` (default `~/.config/skills/`) and `<cwd>/.skills/`.
+    Its reasoning is worth recording here because it generalizes: **`skills` is a fixed
+    stack name, not that agent's configurable `<name>`.** Skills are an **ecosystem**
+    artifact — a "deploy to staging" skill belongs to the user and the repo, not to
+    whichever agent reads it — so pinning the name to `skills` gives cross-product
+    sharing, where namespacing under a per-product name would force one copy per
+    product. No divergence from XDG is involved or needed.
 
     Either way: nearest-wins realizing full-replace (#3), source tracking carrying
     provenance, path safety built in. `FrontmatterDocument.split` does the textual frontmatter split
@@ -638,9 +640,8 @@ Revisit when Apple ships a supported per-process confinement API. *(decision #28
 ## 10. Public API sketch (illustrative)
 
 ```swift
-// Roots are the host's choice (#29). FoundationModelsACPAgent passes:
-//   [homeDirectory/".skills", cwd/".skills"]     // lowest precedence first
-// Hosts that prefer the XDG-shaped stack can derive roots from Extras instead:
+// Roots are the host's choice (#29). The usual way to compute them — and what
+// FoundationModelsACPAgent passes — is a `skills` dotfolder stack:
 let stack = DotfolderStack(
   name: "skills",                                // ~/.config/skills/ + <cwd>/.skills/
   workingDirectory: cwd,
