@@ -131,6 +131,8 @@ enum ChatMode {
     ///   - transcript: The session transcript to search.
     ///   - toolName: The tool name to match `Transcript.ToolCall.toolName`
     ///     against.
+    /// - Returns: The most recent matching call's `op` argument, or `nil` if
+    ///   `transcript` contains no call to `toolName`.
     private static func lastToolCallOpString(in transcript: Transcript, toolName: String) -> String? {
         var lastMatch: String?
         for entry in transcript {
