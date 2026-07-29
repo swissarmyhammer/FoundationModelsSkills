@@ -137,10 +137,7 @@ public struct ArgumentSubstitution: RenderPass {
     /// `range(withName:)`/`groupText` lookups share.
     ///
     /// Defined once here so the group names embedded in the regex pattern and the strings used
-    /// to look those groups back up can never drift out of sync -- review found three of these
-    /// (`escape`, `argumentsIndex`, `position`) duplicated as bare string literals between
-    /// `tokenPattern` and `classify(_:in:)`; all six alternatives are collected here on the same
-    /// principle.
+    /// to look those groups back up can never drift out of sync.
     private enum GroupName {
         static let escape = "escape"
         static let specialVar = "specialVar"
@@ -180,11 +177,26 @@ public struct ArgumentSubstitution: RenderPass {
             return makeKind(Int(digits))
         }
 
+        // Extracted so `${VAR}` and `$name` -- the only two alternatives that capture a
+        // name directly, rather than a digit run -- share one name-extraction step instead
+        // of repeating it; review found the two inline `if let name = groupText(...)` copies
+        // near-verbatim duplicated, differing only in group name and `TokenKind` constructor.
+        /// Extracts `groupName`'s captured name substring and builds the resulting
+        /// `TokenKind` via `makeKind`.
+        ///
+        /// Mirrors `digitGroupTokenKind` for the name-capturing alternatives. Callers check
+        /// `groupName`'s range before calling, so the `?? ""` fallback is defensive and never
+        /// reached in practice.
+        func nameGroupTokenKind(groupName: String, makeKind: (String) -> TokenKind) -> TokenKind {
+            let name = groupText(match, name: groupName, in: text) ?? ""
+            return makeKind(name)
+        }
+
         if match.range(withName: GroupName.escape).location != NSNotFound {
             return .escape
         }
-        if let name = groupText(match, name: GroupName.specialVar, in: text) {
-            return .specialVariable(name: name)
+        if match.range(withName: GroupName.specialVar).location != NSNotFound {
+            return nameGroupTokenKind(groupName: GroupName.specialVar) { .specialVariable(name: $0) }
         }
         if match.range(withName: GroupName.argumentsIndex).location != NSNotFound {
             return digitGroupTokenKind(groupName: GroupName.argumentsIndex) { .argumentsIndexed(index: $0) }
@@ -195,8 +207,8 @@ public struct ArgumentSubstitution: RenderPass {
         if match.range(withName: GroupName.position).location != NSNotFound {
             return digitGroupTokenKind(groupName: GroupName.position) { .positional(index: $0) }
         }
-        if let name = groupText(match, name: GroupName.namedArg, in: text) {
-            return .named(name: name)
+        if match.range(withName: GroupName.namedArg).location != NSNotFound {
+            return nameGroupTokenKind(groupName: GroupName.namedArg) { .named(name: $0) }
         }
         preconditionFailure("ArgumentSubstitution.tokenPattern matched but no known alternative captured.")
     }
@@ -369,10 +381,8 @@ public struct ArgumentSubstitution: RenderPass {
 }
 
 extension Array {
-    /// Returns the element at `index`, or `nil` when `index` is out of bounds.
-    ///
-    /// Used by `ArgumentSubstitution` for positional lookups, where an out-of-range index is
-    /// the ordinary "no value supplied" case, not a programmer error.
+    /// Safe subscript that returns `nil` for out-of-range indices, where absence represents
+    /// no value supplied, not an error.
     fileprivate subscript(safe index: Int) -> Element? {
         indices.contains(index) ? self[index] : nil
     }

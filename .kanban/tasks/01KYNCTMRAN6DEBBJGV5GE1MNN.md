@@ -75,6 +75,21 @@ comments:
 
     All review-finding checkboxes checked off in the task description. Task left in `doing` per /implement's process -- review owns the doing->review transition.
   timestamp: 2026-07-29T05:43:47.028939+00:00
+- actor: claude-code
+  id: 01kyp79b5np1039gznp5g6nerq
+  text: |-
+    Round-5 review findings addressed in Sources/FoundationModelsSkills/Render/ArgumentSubstitution.swift:
+
+    1. classify(_:in:)'s specialVar/namedArg near-duplicate if-statements: extracted a local nested helper nameGroupTokenKind(groupName:makeKind:), mirroring the existing digitGroupTokenKind(groupName:makeKind:) precedent. Both call sites now follow the same "check the range, then call the helper" shape digitGroupTokenKind's two call sites already use, instead of each inlining its own `if let name = groupText(...) { return .X(name: name) }`.
+
+    2. Array [safe:] subscript's doc comment reworded to drop the caller reference, using the exact reviewer-suggested wording: "Safe subscript that returns `nil` for out-of-range indices, where absence represents no value supplied, not an error."
+
+    Also did the requested final careful full pass over control flow, doc comments, and near-duplicate blocks, and proactively fixed one more instance of the same rot-risk category as finding 2: GroupName's own doc comment embedded a review-history narrative ("review found three of these... duplicated as bare string literals"); trimmed to a single semantics-only sentence. No other near-duplicate logic blocks, 4+-level nesting, or caller/history-referencing doc comments found anywhere else in the file.
+
+    Verification: swift build exit 0 (only pre-existing unrelated SwiftPM dependency-identity warnings, no new warnings); swift test 78/78 passed across 5 suites, exit 0. Adversarial double-check (round-5 diff) independently re-ran build/test itself (both green), confirmed both fixes are complete and behaviorally correct, and confirmed no other near-duplicate blocks or rot-risk doc comments remain anywhere in the file. Verdict: PASS.
+
+    Both review-finding checkboxes checked off in the task description. Task left in doing per /implement's process -- review owns the doing->review transition.
+  timestamp: 2026-07-29T05:59:15.381209+00:00
 depends_on:
 - 01KYNCS3K5T60E4JQAJ8JQWXC5
 - 01KYNCRS3QJFK120446YNXYAH7
@@ -148,3 +163,14 @@ Implement §5 pass 1 (Claude-compatible substitution), replacing the identity tr
   Also did the requested exhaustive final pass: re-checked every doc comment in the file (file header, `init`, `render`, `TokenKind` and all 6 cases, `GroupName`, `classify`, `digitGroupTokenKind`, `groupText`, `tokenPattern`, `SpecialVariable` and its members, `specialVariables`, `shellStyleTokens`, `QuoteState`, `doubleQuoteEscapable`, `flushPendingToken`, `consumeUnquotedBackslash`, the `Array` subscript extension) for the summary/blank-line/elaboration convention — every one either has a single-sentence summary with no further elaboration, or a single-sentence summary followed by a blank `///` line and then the elaboration. No other run-on summaries found.
 
   Verification: `swift build` exit 0 (only the pre-existing unrelated SwiftPM dependency-identity warnings, no new warnings); `swift test` 78/78 passed across 5 suites, exit 0. Adversarial double-check (round 4 diff) independently confirmed the raw-string interpolation is correct and produces byte-identical group names, `GroupName`'s placement doesn't break any doc-comment attachment, `classify`'s doc comment now matches convention, all six group names are unified with zero bare duplicates, and no other run-on doc-comment summaries exist in the file. Verdict: PASS.
+
+## Review Findings (2026-07-29 00:44)
+
+- [x] `Sources/FoundationModelsSkills/Render/ArgumentSubstitution.swift:177` — Near-identical if statement checking GroupName.namedArg; mirrors the specialVar check (line ~165) differing only by group name and token kind constructor. Extract to shared function to prevent maintenance drift. Extract both into a single shared helper parameterized by group name and token kind constructor, replacing both call sites.
+- [x] `Sources/FoundationModelsSkills/Render/ArgumentSubstitution.swift:328` — Doc comment references a specific caller ('Used by `ArgumentSubstitution`'), which rots as the codebase evolves and belongs in PR descriptions, not inline documentation. Remove the caller reference and focus on the semantic meaning: `/// Safe subscript that returns `nil` for out-of-range indices, where absence represents no value supplied, not an error.`.
+
+  Fixed (both): extracted a local nested helper `nameGroupTokenKind(groupName:makeKind:)` inside `classify(_:in:)`, mirroring the existing `digitGroupTokenKind(groupName:makeKind:)` precedent -- both the `GroupName.specialVar` and `GroupName.namedArg` checks now follow the same "check the range, then call the helper" shape `digitGroupTokenKind`'s two call sites already use, instead of each inlining its own `if let name = groupText(...) { return .X(name: name) }`. The `Array` `[safe:]` subscript's doc comment was reworded to the exact reviewer-suggested text, dropping the caller reference: "Safe subscript that returns `nil` for out-of-range indices, where absence represents no value supplied, not an error."
+
+  Also did the requested final careful full pass over control flow, doc comments, and near-duplicate blocks. Found and proactively fixed one more instance of the same rot-risk category as the second finding: the `GroupName` enum's own doc comment embedded a review-history narrative ("...can never drift out of sync -- review found three of these (`escape`, `argumentsIndex`, `position`) duplicated as bare string literals..."); trimmed to a single semantics-only sentence: "Defined once here so the group names embedded in the regex pattern and the strings used to look those groups back up can never drift out of sync." No other near-duplicate logic blocks, 4+-level nesting, or caller/history-referencing doc comments were found in the rest of the file.
+
+  Verification: `swift build` exit 0 (only the pre-existing unrelated SwiftPM dependency-identity warnings, no new warnings); `swift test` 78/78 passed across 5 suites, exit 0. Adversarial double-check (round-5 diff) independently confirmed both fixes are complete and behaviorally correct, confirmed no other near-duplicate blocks or rot-risk doc comments remain anywhere in the file, and re-ran `swift build`/`swift test` itself (both green). Verdict: PASS.
