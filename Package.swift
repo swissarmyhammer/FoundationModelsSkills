@@ -30,6 +30,15 @@ let commonDependencies: [Target.Dependency] = [
     .product(name: "Yams", package: "Yams"),
 ]
 
+/// The `FoundationModelsSkills` SwiftPM package definition.
+///
+/// Declares the single library target (plan.md decision #17: no target
+/// split, layering is conceptual, not modular) that will host
+/// agentskills.io-style skill discovery, search, and invocation as a fused
+/// `OperationTool` on top of `FoundationModelsExtras` (dotfolder stack,
+/// templating), `FoundationModelsOperationTool` (`@Operation` macro fusion),
+/// and `FoundationModelsMetadataRegistry` (hybrid search) -- see plan.md §3
+/// for the full layered architecture this package builds toward.
 let package = Package(
     name: packageName,
     // macOS 27+, no pre-27 fallback: the strictest floor in this package's own

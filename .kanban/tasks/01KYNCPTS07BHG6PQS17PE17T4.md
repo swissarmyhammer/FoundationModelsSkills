@@ -70,6 +70,23 @@ comments:
 
     Checked off the review finding checkbox. Leaving the task in `doing` per the implement skill's process -- review moves it, implement does not.
   timestamp: 2026-07-29T00:29:39.365097+00:00
+- actor: claude-code
+  id: 01kynmy988xga5vee075ah727x
+  text: |-
+    Fixed review finding (2026-07-28 19:30): added a `///` doc comment directly above `let package = Package(` in Package.swift, explaining the manifest declares the single library target for the FoundationModelsSkills package (agentskills.io-style skill discovery/search/invocation), per plan.md decision #17 (no target split) and §3 (layered architecture), naming the three fused dependencies (FoundationModelsExtras, FoundationModelsOperationTool, FoundationModelsMetadataRegistry). No blank line separates the comment from the declaration, so it binds correctly as Swift doc-comment attachment.
+
+    Verified:
+    - `swift build` exit 0 (only the pre-existing, previously documented benign "Conflicting identity for foundationmodelsoperationtool" warning; no new warnings).
+    - `swift test` exit 0, 1/1 test passing (`moduleAndDependenciesImportCleanly`).
+    - Clean-checkout repeat (`rm -rf .build Package.resolved && swift build && swift test`): both green.
+    - Adversarial double-check agent: PASS -- independently confirmed the diff is scoped to only this 9-line doc-comment addition (tags, dependencies, targets, platforms unchanged), the comment is accurately attached and factually consistent with the rest of the file, and independently reran build/test green.
+
+    Checked off the review finding checkbox. Description and tags (`26`, `29`) preserved verbatim aside from that one checkbox flip. Leaving the task in `doing` per the implement skill's process -- review moves it, implement does not.
+  timestamp: 2026-07-29T00:38:38.600970+00:00
+- actor: claude-code
+  id: 01kynmzj2rt7q1g2xpeaxybaj3
+  text: 'Correction: my first `update task` call to check off the finding used literal `\n` in the description parameter instead of actual newline characters, which corrupted the description (real newlines became literal backslash-n text) and, separately, wiped the `tags` array to empty despite passing `["26","29"]` in the same call. Caught it immediately via a follow-up `get task` and re-issued `update task` with real embedded newlines and the tags array again -- verified the description now round-trips with proper newlines, `tags: ["26","29"]` and `filter_tags` are restored, and progress is 1.0 (all boxes checked). Recording this here since prior agents already flagged `update task`''s replace-not-merge semantics as a hazard -- confirming: always pass real newlines (not escaped `\n` text) and always re-pass the full tags array on every `update task` call, then verify with `get task` immediately after.'
+  timestamp: 2026-07-29T00:39:20.408363+00:00
 position_column: doing
 position_ordinal: '80'
 title: Scaffold Package.swift and empty target structure
@@ -103,3 +120,7 @@ Create the SwiftPM package skeleton per plan.md §3/§17 (single target, concept
 ## Review Findings (2026-07-28 19:21)
 
 - [x] `Package.swift:35` — The string "FoundationModelsSkills" is hardcoded 5 times — as the package name (line 35), product name (line 44), target name (line 47), in the targets array (line 44), and in the test target dependencies (line 52). Repeating this literal creates risk of typos and inconsistency if the package/product/target name needs to change; extracting to a single named constant ensures all references stay in sync. Define `let packageName = "FoundationModelsSkills"` at the top level (before the `let package` declaration), then replace each hardcoded occurrence with `packageName`.
+
+## Review Findings (2026-07-28 19:30)
+
+- [x] `Package.swift:37` — Public constant `package` is missing a documentation comment in the specified format (/// or /**). Add a /// doc comment explaining the package definition and its purpose.

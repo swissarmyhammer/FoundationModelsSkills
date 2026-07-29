@@ -2,3 +2,4 @@
 .DS_Store
 .ralph/
 Package.resolved
+.validators/
