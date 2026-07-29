@@ -147,6 +147,20 @@ public struct ArgumentSubstitution: RenderPass {
     ///   - text: The text `match` was matched against, needed to extract named-group substrings.
     /// - Returns: The token kind `match` represents.
     private static func classify(_ match: NSTextCheckingResult, in text: String) -> TokenKind {
+        // Extracted so `$ARGUMENTS[N]` and `$N` -- the only two alternatives carrying a
+        // numeric index -- share one digit-parsing step instead of repeating it; review
+        // found the two inline copies near-verbatim duplicated.
+        /// Extracts `groupName`'s digit-run capture, parses it, and builds the resulting
+        /// `TokenKind` via `makeKind`.
+        ///
+        /// `Int` failing to parse (an implausibly large digit run) is not an error here --
+        /// see `TokenKind.argumentsIndexed`'s doc comment -- so `makeKind` always receives
+        /// a value, `nil` included, and the caller never needs its own fallback.
+        func digitGroupTokenKind(groupName: String, makeKind: (Int?) -> TokenKind) -> TokenKind {
+            let digits = groupText(match, name: groupName, in: text) ?? ""
+            return makeKind(Int(digits))
+        }
+
         if match.range(withName: "escape").location != NSNotFound {
             return .escape
         }
@@ -154,15 +168,13 @@ public struct ArgumentSubstitution: RenderPass {
             return .specialVariable(name: name)
         }
         if match.range(withName: "argumentsIndex").location != NSNotFound {
-            let digits = groupText(match, name: "argumentsIndex", in: text) ?? ""
-            return .argumentsIndexed(index: Int(digits))
+            return digitGroupTokenKind(groupName: "argumentsIndex") { .argumentsIndexed(index: $0) }
         }
         if match.range(withName: "argumentsBare").location != NSNotFound {
             return .argumentsBare
         }
         if match.range(withName: "position").location != NSNotFound {
-            let digits = groupText(match, name: "position", in: text) ?? ""
-            return .positional(index: Int(digits))
+            return digitGroupTokenKind(groupName: "position") { .positional(index: $0) }
         }
         if let name = groupText(match, name: "namedArg", in: text) {
             return .named(name: name)
@@ -276,6 +288,24 @@ public struct ArgumentSubstitution: RenderPass {
 
         let characters = Array(text)
         var index = 0
+
+        // Extracted so the unquoted-backslash branch inside the scan loop's
+        // `switch`/`while` sits at one nesting level under `case .none`, not two --
+        // review found the inline `if index + 1 < characters.count { ... }` pushed that
+        // branch to 4 levels deep (while > switch case > if > if).
+        /// Consumes an unquoted backslash escape: marks a token as pending, and -- when a
+        /// character follows the backslash -- appends that character and advances past
+        /// it.
+        ///
+        /// A trailing backslash with nothing after it still marks a token pending,
+        /// matching this tokenizer's lenient handling of an unterminated escape.
+        func consumeUnquotedBackslash() {
+            hasCurrentToken = true
+            guard index + 1 < characters.count else { return }
+            index += 1
+            current.append(characters[index])
+        }
+
         while index < characters.count {
             let character = characters[index]
             switch quote {
@@ -289,11 +319,7 @@ public struct ArgumentSubstitution: RenderPass {
                     quote = .single
                     hasCurrentToken = true
                 } else if character == "\\" {
-                    hasCurrentToken = true
-                    if index + 1 < characters.count {
-                        index += 1
-                        current.append(characters[index])
-                    }
+                    consumeUnquotedBackslash()
                 } else {
                     hasCurrentToken = true
                     current.append(character)

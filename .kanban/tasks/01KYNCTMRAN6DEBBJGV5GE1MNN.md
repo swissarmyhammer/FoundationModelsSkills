@@ -33,6 +33,31 @@ comments:
 
     Verification: `swift build` exit 0 (pre-existing unrelated SwiftPM dependency-identity warnings only, no new warnings), `swift test` 78/78 passed, exit 0. Adversarial double-check dispatched to confirm no behavior change before handoff.
   timestamp: 2026-07-29T05:09:15.559332+00:00
+- actor: claude-code
+  id: 01kyp59spg2824273y7zqsd02p
+  text: |-
+    Round 3 review findings addressed in Sources/FoundationModelsSkills/Render/ArgumentSubstitution.swift:
+
+    1. Duplicated digit-group extraction (argumentsIndex/position in classify(_:in:)): extracted a local nested helper `digitGroupTokenKind(groupName:makeKind:)` that captures `match`/`text` and does the extract-then-`Int(digits)`-then-construct sequence once, taking the capture group name and a `(Int?) -> TokenKind` constructor closure. Both the `$ARGUMENTS[N]` and `$N` branches now call it instead of repeating the sequence inline.
+    2. Remaining 4-level nesting (while > switch case .none > if > if, in shellStyleTokens' unquoted-backslash handling): extracted a local nested helper `consumeUnquotedBackslash()`, mirroring the flushPendingToken() precedent from round 1 -- guard-based early return instead of a nested if. Drops that branch to 3 levels.
+
+    Also did the requested final full-file control-flow pass: re-checked render(_:request:)'s for/switch (max 3 levels), classify(_:in:)'s flat if-chain, and all three shellStyleTokens quote-state branches (.none, .double, .single) including the pre-existing .double branch's comma-joined if/else-if (3 levels). No other 4+-level nesting or near-duplicate blocks found.
+
+    Both new helpers have doc comments following this project's convention (period-terminated summary, blank `///`, elaboration), plus an inline comment on each noting what review finding prompted the extraction.
+
+    Verification: swift build exit 0 (only pre-existing unrelated SwiftPM dependency-identity warnings, no new warnings); swift test 78/78 passed across 5 suites, exit 0. Both review finding checkboxes checked off in the task description; task left in doing per /implement's process (review owns the doing->review transition).
+  timestamp: 2026-07-29T05:24:33.104661+00:00
+- actor: claude-code
+  id: 01kyp5f6p1hmrrqyx9x30a44pv
+  text: |-
+    Adversarial double-check (round-3 diff) returned REVISE with two minor doc-comment/placement nits on the new `consumeUnquotedBackslash()` helper -- no correctness issues found; both new helpers (`digitGroupTokenKind`, `consumeUnquotedBackslash`) were confirmed behavior-identical to the removed inline code, nesting confirmed <=3 levels everywhere, no other duplication found.
+
+    Findings addressed:
+    1. `consumeUnquotedBackslash()`'s doc comment was missing the blank `///` line between its summary sentence and elaboration (the project convention, and the one thing this review round specifically asked to check) -- fixed by splitting into a summary paragraph, blank `///`, then the "trailing backslash" elaboration.
+    2. `consumeUnquotedBackslash()` was declared before `characters`/`index` (the state it captures), diverging from the `flushPendingToken()` precedent it claimed to mirror (which is declared after its captured state) -- moved the helper to after `let characters = Array(text)` / `var index = 0`, immediately before the `while` loop.
+
+    Re-verified after fixes: `swift build` exit 0 (same pre-existing unrelated warnings only), `swift test` 78/78 passed across 5 suites, exit 0. Per really-done's bounded-loop rule (fix once, re-check at most once), not re-spawning double-check a second time for these two cosmetic doc/placement nits -- fixes are mechanical and directly match the reviewer's suggested diffs verbatim, and both build/test are confirmed green post-fix.
+  timestamp: 2026-07-29T05:27:30.241966+00:00
 depends_on:
 - 01KYNCS3K5T60E4JQAJ8JQWXC5
 - 01KYNCRS3QJFK120446YNXYAH7
@@ -76,3 +101,17 @@ Implement §5 pass 1 (Claude-compatible substitution), replacing the identity tr
 - [x] `Sources/FoundationModelsSkills/Render/ArgumentSubstitution.swift:255` — Four levels of nesting (while loop > switch case > if condition > nested if condition) exceed the three-level threshold, reducing local readability and testability of this branch. Extract the whitespace token-finalization block (lines 255–259) into a helper method to reduce nesting to 3 levels, or use guard statements with early returns at the start of the case branch.
 
   Fixed: extracted a local nested helper `flushPendingToken()` inside `shellStyleTokens` that appends the pending token and resets the accumulator (guard-based early return). Both the whitespace-boundary branch inside the scan loop and the final post-loop flush now call it, reducing the whitespace branch to 3 levels of nesting (while > switch case > single-line call). Doc comment follows the project convention. `swift build` and `swift test` (78/78) green; adversarial double-check returned PASS.
+
+## Review Findings (2026-07-29 00:13)
+
+- [x] `Sources/FoundationModelsSkills/Render/ArgumentSubstitution.swift:168` — The digit-group extraction pattern at lines 168–170 is near-verbatim duplicated at lines 175–177, differing only in group name and TokenKind variant. Extract to a parameterized helper to prevent drift when one is updated without the other. Extract a helper function accepting group name and constructor callback (e.g., `(Int?) -> TokenKind`), mirroring the flushPendingToken pattern this change introduces.
+
+  Fixed: extracted a local nested helper `digitGroupTokenKind(groupName:makeKind:)` inside `classify(_:in:)`, capturing `match`/`text` from the enclosing scope, that extracts the named digit-run capture, parses it, and builds the `TokenKind` via a `(Int?) -> TokenKind` constructor closure. Both the `$ARGUMENTS[N]` and `$N` branches now call it with their own group name and case constructor instead of repeating the extract-then-`Int(digits)` sequence inline. Doc comment follows the project convention.
+
+- [x] `Sources/FoundationModelsSkills/Render/ArgumentSubstitution.swift:247` — Nested if at 4 levels deep (while → switch → if → if) exceeds the 3-level threshold for deep nesting. Extract the nested condition into a helper function or guard statement to reduce nesting depth.
+
+  Fixed: extracted a local nested helper `consumeUnquotedBackslash()` inside `shellStyleTokens`, mirroring the `flushPendingToken()` precedent -- it marks a token pending and, via a guard-based early return, appends the character following the backslash (if any) and advances past it. The unquoted-backslash branch in the `case .none` arm now calls it instead of nesting `if index + 1 < characters.count { ... }` inside the branch, dropping that arm from 4 levels of nesting (while > switch case > if > if) to 3 (while > switch case > single-line call).
+
+  Also did a final full-file control-flow pass per the review request: re-read `render(_:request:)`'s `for`/`switch` (max 3 levels, the `.named` case's `if`/`else`), `classify(_:in:)`'s flat if-chain, and every `shellStyleTokens` quote-state branch (`.none`, `.double`, `.single`), including the pre-existing `.double` branch's comma-joined `if`/`else if` (3 levels, not nested further). No other 4+-level nesting or near-duplicate blocks found.
+
+  Verification: `swift build` exit 0 (only the pre-existing unrelated SwiftPM dependency-identity warnings, no new warnings); `swift test` 78/78 passed across 5 suites, exit 0.
