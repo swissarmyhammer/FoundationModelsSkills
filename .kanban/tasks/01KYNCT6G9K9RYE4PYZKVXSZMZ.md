@@ -41,6 +41,34 @@ comments:
   id: 01kyq0b6c8yp1hezz13y2h2tkd
   text: 'Adversarial double-check (per really-done) returned REVISE, flagging that .kanban/tasks/01KYNCT6G9K9RYE4PYZKVXSZMZ.md''s body had collapsed to literal backslash-n instead of real newlines. That was a transient race: the double-check agent ran its git diff against a mid-flight state from my first `update task` call (which the tool''s replace-not-merge semantics corrupted, and which also dropped the `29` tag), captured before my very next `update task` call re-supplied real newlines and restored `tags: ["29"]`. I verified this myself via the described `get task` -> fix -> `get task` confirm loop in real time, and re-checked just now: `git diff -- .kanban/tasks/01KYNCT6G9K9RYE4PYZKVXSZMZ.md` shows a clean diff with real line breaks throughout, no backslash-n artifacts, and `get task` currently returns `tags: ["29"]`, `progress: 1.0`. No production-code finding from the double-check (Swift diff, build, and test all independently re-verified green by it). Proceeding as done per really-done''s advisory-gate contract, with this logged justification for the one flagged (already-resolved) finding.'
   timestamp: 2026-07-29T13:17:10.408385+00:00
+- actor: claude-code
+  id: 01kyq0z9qvdfcc2bv16pr2ykej
+  text: |-
+    Third review round: addressed both open findings in Sources/FoundationModelsSkills/Registry/SkillsRegistry.swift.
+
+    Read renderedMetadataText, renderedBody(for:), and call(id:arguments:) carefully. All three build a RenderRequest from the same triple (entry.skillDirectory, entry.winningLayer, self.policy); they differ only in: text (passed-in text vs entry.body), whether arguments is populated (only call() supplies non-empty arguments), whether argumentNames is populated (renderedMetadataText omits it -- a description/metadata render carries no $name target -- while renderedBody/call both pass entry.frontmatter.arguments), which RenderPipeline method runs (renderMetadata for renderedMetadataText vs renderBody for the other two), and error handling (renderedMetadataText/renderedBody are lenient try?/?? fallback since neither caller is throws; call propagates via try since it is throws -- this is the confirmed decision #25-adjacent distinction that must never collapse into one shared code path).
+
+    Added two private helpers:
+    - `renderRequest(text:entry:arguments:argumentNames:)` -- builds the RenderRequest, threading entry.skillDirectory/entry.winningLayer/policy (the shared fields), with arguments/argumentNames defaulting to empty. Used by all three call sites.
+    - `renderedFallback(_:entry:argumentNames:using:)` -- builds via renderRequest then applies (try? render(request)) ?? text, where `render` is a (RenderRequest) throws -> String closure. Used by renderedMetadataText (with pipeline.renderMetadata) and renderedBody(for:) (with pipeline.renderBody, plus argumentNames). call(id:arguments:) calls renderRequest directly (not renderedFallback) since it must propagate throws rather than absorb failures -- preserved its throws semantics unchanged.
+
+    Verified renderedMetadataText still routes only through pipeline.renderMetadata (passes 1+3, never pass 2/shell injection) -- unchanged, decision #25 preserved.
+
+    Fresh `swift build`: exit 0 (only pre-existing unrelated SwiftPM dependency-identity warnings). Fresh `swift test`: 185/185 passing, exit 0. Checked off both Review Findings checkboxes on the task description.
+
+    Did a final full read of the entire SkillsRegistry.swift file looking for further significant duplication (per the task's request for a careful final pass) -- found none worth extracting: CatalogBox.snapshot/replace's lock/unlock/defer pairs are two lines each and idiomatic, not duplication; the two public inits already delegate to one shared private init.
+
+    Spawned the double-check adversarial agent per really-done's process; will log its verdict once it returns.
+  timestamp: 2026-07-29T13:28:09.211299+00:00
+- actor: claude-code
+  id: 01kyq141vc1wd8qbztcvypgsz6
+  text: |-
+    Adversarial double-check (per really-done) returned PASS, no findings. It independently verified: all three RenderRequest call sites are byte-for-byte equivalent to pre-refactor behavior; renderedMetadataText still routes exclusively through pipeline.renderMetadata (passes 1+3 only, decision #25's shell-injection-never-runs-here invariant holds); call(id:arguments:) still propagates via try rather than absorbing through renderedFallback; RenderPipeline is a Sendable struct so passing pipeline.renderMetadata/renderBody as bound-method closures is safe, idiomatic Swift with no retain-cycle concern; doc comments on both new helpers follow this project's convention; only one remaining RenderRequest( construction site exists in the file (inside renderRequest itself); diff footprint is exactly the two new helpers plus the three call-site edits, no scope creep.
+
+    Corrected my own process error: I had added a comment claiming both Review Findings checkboxes were checked off, but had not yet actually called update task to do so. Fixed now -- update task called with both checkboxes flipped to [x], and confirmed via a follow-up get task that the description rendered with real line breaks (no backslash-n corruption) and tags: ["29"] is intact. progress is now 1.0.
+
+    Final state: swift build exit 0 (only pre-existing unrelated SwiftPM dependency-identity warnings), swift test 185/185 passing exit 0, double-check PASS, both review-finding checkboxes checked off, task left in doing column for /review to pick up.
+  timestamp: 2026-07-29T13:30:44.972615+00:00
 depends_on:
 - 01KYNCSXAEKDVR36H387H5TYXR
 - 01KYND89QDD8BYQWGGPJ8Z4J2M
@@ -74,3 +102,8 @@ Harness delivery channel (plan §6, decision #29): conform `SkillsRegistry` to E
 - [x] `Sources/FoundationModelsSkills/Registry/SkillsRegistry.swift:322` — `rawBody` is newly added with intentional internal access for use by the SlashCommands extension but lacks an explicit `internal` modifier. The rule requires explicit access modifiers on library declarations when the intent is API-shaping. Spell the intent explicitly: `internal func rawBody(id: String) -> String? {`.
 
 (4 additional engine findings on this pass targeted deduplicating the new `SlashCommandProvidingTests.swift` against pre-existing test files `SkillsRegistryTests.swift` / `SkillsRegistryReloadTests.swift` — dropped per the review skill's blanket exception against refactoring existing test code.)
+
+## Review Findings (2026-07-29 08:18)
+
+- [x] `Sources/FoundationModelsSkills/Registry/SkillsRegistry.swift:502` — renderedBody and renderedMetadataText contain nearly identical try-catch-fallback patterns: both construct a RenderRequest with common parameters (skillDirectory, winningLayer, policy), call a pipeline render method, and return the result with ?? fallback to original text. Extract a shared helper function parameterized by: (1) the pipeline render method to call (via closure or enum), (2) optional argumentNames for RenderRequest, and (3) the text to render. This eliminates the duplicated error-handling structure and common RenderRequest setup.
+- [x] `Sources/FoundationModelsSkills/Registry/SkillsRegistry.swift:539` — call(id:arguments:) and renderedBody both construct nearly identical RenderRequest objects with the same core parameters (text: entry.body, argumentNames, skillDirectory, winningLayer, policy), differing only by the presence of arguments in call(). Both then call pipeline.renderBody(request). Extract RenderRequest construction into a helper function parameterized by whether arguments should be included, allowing call() and renderedBody() to share request setup logic while maintaining their intentionally different error-handling strategies.

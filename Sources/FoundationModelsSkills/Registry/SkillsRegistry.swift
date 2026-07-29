@@ -445,6 +445,55 @@ public struct SkillsRegistry: Sendable {
 
     // MARK: - Rendering helpers
 
+    /// Builds a `RenderRequest` for `text` rendered under `entry`.
+    ///
+    /// Threads `entry.skillDirectory`/`entry.winningLayer` and this
+    /// registry's own `policy` -- the fields every render call site shares
+    /// -- so a call site only ever supplies what actually varies for it
+    /// (`text`, and, where relevant, `arguments`/`argumentNames`).
+    ///
+    /// - Parameters:
+    ///   - text: The text to render.
+    ///   - entry: The catalog entry supplying `skillDirectory`/`winningLayer`.
+    ///   - arguments: The arguments supplied at call time, in order.
+    ///     Defaults to empty -- a `description`/`metadata.*` render carries
+    ///     no per-call arguments.
+    ///   - argumentNames: The skill's `arguments:` frontmatter names, in
+    ///     declared order. Defaults to empty -- a `description`/`metadata.*`
+    ///     render has no `$name` substitution target.
+    /// - Returns: The assembled `RenderRequest`.
+    private func renderRequest(
+        text: String, entry: CatalogEntry, arguments: [String] = [], argumentNames: [String] = []
+    ) -> RenderRequest {
+        RenderRequest(
+            text: text, arguments: arguments, argumentNames: argumentNames, skillDirectory: entry.skillDirectory,
+            winningLayer: entry.winningLayer, policy: policy)
+    }
+
+    /// Renders `text` under `entry` through `render`, falling back to `text`
+    /// unchanged if rendering fails.
+    ///
+    /// Shared by every render call site that is not declared `throws` --
+    /// unlike `call(id:arguments:)`, which propagates a render failure
+    /// instead of absorbing it -- so each of those call sites need only
+    /// name which `RenderPipeline` method to render through and, where
+    /// relevant, its `argumentNames`.
+    ///
+    /// - Parameters:
+    ///   - text: The text to render.
+    ///   - entry: The catalog entry `text` belongs to.
+    ///   - argumentNames: The skill's `arguments:` frontmatter names, in
+    ///     declared order. Defaults to empty.
+    ///   - render: The `RenderPipeline` method to render `text` through.
+    /// - Returns: The rendered text, or `text` unchanged on render failure.
+    private func renderedFallback(
+        _ text: String, entry: CatalogEntry, argumentNames: [String] = [],
+        using render: (RenderRequest) throws -> String
+    ) -> String {
+        let request = renderRequest(text: text, entry: entry, argumentNames: argumentNames)
+        return (try? render(request)) ?? text
+    }
+
     /// Renders `text` (a `description`/`metadata.*` value) through passes 1
     /// and 3, falling back to `text` unchanged if rendering fails.
     ///
@@ -461,9 +510,7 @@ public struct SkillsRegistry: Sendable {
     ///     request's directory and winning layer.
     /// - Returns: The rendered text, or `text` unchanged on render failure.
     private func renderedMetadataText(_ text: String, entry: CatalogEntry) -> String {
-        let request = RenderRequest(
-            text: text, skillDirectory: entry.skillDirectory, winningLayer: entry.winningLayer, policy: policy)
-        return (try? pipeline.renderMetadata(request)) ?? text
+        renderedFallback(text, entry: entry, using: pipeline.renderMetadata)
     }
 
     /// Renders every entry in `entry.frontmatter.metadata` via
@@ -611,10 +658,8 @@ public struct SkillsRegistry: Sendable {
     /// - Returns: The rendered body, or the unrendered body on render
     ///   failure.
     private func renderedBody(for entry: CatalogEntry) -> String {
-        let request = RenderRequest(
-            text: entry.body, argumentNames: entry.frontmatter.arguments, skillDirectory: entry.skillDirectory,
-            winningLayer: entry.winningLayer, policy: policy)
-        return (try? pipeline.renderBody(request)) ?? entry.body
+        renderedFallback(
+            entry.body, entry: entry, argumentNames: entry.frontmatter.arguments, using: pipeline.renderBody)
     }
 
     // MARK: - call(id:arguments:)
@@ -641,9 +686,8 @@ public struct SkillsRegistry: Sendable {
         guard let entry = snapshot.catalog[id] else {
             throw UnknownSkillError(id: id, validIDs: snapshot.catalog.keys.sorted())
         }
-        let request = RenderRequest(
-            text: entry.body, arguments: arguments, argumentNames: entry.frontmatter.arguments,
-            skillDirectory: entry.skillDirectory, winningLayer: entry.winningLayer, policy: policy)
+        let request = renderRequest(
+            text: entry.body, entry: entry, arguments: arguments, argumentNames: entry.frontmatter.arguments)
         return try pipeline.renderBody(request)
     }
 
