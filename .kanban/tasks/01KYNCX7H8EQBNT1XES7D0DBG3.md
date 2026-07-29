@@ -1,8 +1,8 @@
 ---
 depends_on:
 - 01KYNCWEKBW84J06EDGSNBWVQT
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: '9180'
 title: Dual-use CLI via OperationCLIDriver
 ---
 ## What
