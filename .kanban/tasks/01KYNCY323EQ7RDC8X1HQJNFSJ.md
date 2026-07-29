@@ -1,8 +1,8 @@
 ---
 depends_on:
 - 01KYNCXN2E5CJY5XTMAKWN93H0
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: '9380'
 title: 'run script op: triple gates + direct-exec runner (§7.3.1)'
 ---
 ## What
