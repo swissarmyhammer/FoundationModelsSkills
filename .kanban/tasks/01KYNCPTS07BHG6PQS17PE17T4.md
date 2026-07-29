@@ -99,7 +99,7 @@ comments:
 
     Checked off the review finding checkbox. Description and tags (`26`, `29`) verified intact via follow-up `get task` after the update. Leaving the task in `doing` per the implement skill's process — review moves it, implement does not.
   timestamp: 2026-07-29T00:48:32.604309+00:00
-position_column: doing
+position_column: done
 position_ordinal: '80'
 title: Scaffold Package.swift and empty target structure
 ---
