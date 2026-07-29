@@ -99,13 +99,7 @@ struct SkillsRegistryReloadTests {
         try await withThrowingTaskGroup(of: Void.self) { group in
             for _ in 0..<8 {
                 group.addTask {
-                    while ContinuousClock.now < readerDeadline {
-                        let ids = registry.metadata().map(\.id)
-                        #expect(Set(ids).count == ids.count, "duplicate ids indicate a torn catalog read")
-                        #expect(ids.allSatisfy { $0.hasPrefix("stress-") })
-                        _ = registry.commandListing()
-                        _ = registry.diagnostics
-                    }
+                    Self.readerTask(registry: registry, deadline: readerDeadline)
                 }
             }
             group.addTask {
@@ -116,6 +110,28 @@ struct SkillsRegistryReloadTests {
                 }
             }
             try await group.waitForAll()
+        }
+    }
+
+    /// Repeatedly reads `registry`'s catalog until `deadline`, asserting
+    /// that every read observes a complete, self-consistent catalog
+    /// generation -- never a torn one straddling a concurrent rebuild.
+    ///
+    /// Extracted out of `concurrentReadersNeverObserveAPartialCatalogDuringARebuildBurst()`'s
+    /// `addTask` closure so that closure's body is a single call rather than
+    /// a nested `while` loop, keeping the test within this project's
+    /// 3-level nesting limit.
+    ///
+    /// - Parameters:
+    ///   - registry: The registry to read from.
+    ///   - deadline: When to stop reading.
+    private static func readerTask(registry: SkillsRegistry, deadline: ContinuousClock.Instant) {
+        while ContinuousClock.now < deadline {
+            let ids = registry.metadata().map(\.id)
+            #expect(Set(ids).count == ids.count, "duplicate ids indicate a torn catalog read")
+            #expect(ids.allSatisfy { $0.hasPrefix("stress-") })
+            _ = registry.commandListing()
+            _ = registry.diagnostics
         }
     }
 

@@ -632,8 +632,14 @@ public struct SkillsRegistry: Sendable {
     ///   unknown outright, or fully hidden from every surface. Otherwise,
     ///   any error a render pass raises (plan.md §5's three passes).
     public func call(id: String, arguments: [String] = []) throws -> String {
-        guard let entry = catalog[id] else {
-            throw UnknownSkillError(id: id, validIDs: catalog.keys.sorted())
+        // Read `catalogBox.snapshot` exactly once and reuse it for both the
+        // lookup and `validIDs`, so a reload racing between two separate
+        // reads can never make them internally inconsistent (an `id`
+        // reported unknown that `validIDs` also lists as valid, or vice
+        // versa).
+        let snapshot = catalogBox.snapshot
+        guard let entry = snapshot.catalog[id] else {
+            throw UnknownSkillError(id: id, validIDs: snapshot.catalog.keys.sorted())
         }
         let request = RenderRequest(
             text: entry.body, arguments: arguments, argumentNames: entry.frontmatter.arguments,
@@ -696,6 +702,20 @@ public struct SkillsRegistry: Sendable {
     /// the watcher starts and, more importantly, when it stops -- is what
     /// `SkillsRegistry` needs to own; a struct has no `deinit` to hang that
     /// stop on.
+    ///
+    /// `@unchecked Sendable`: both stored properties (`watcher`,
+    /// `continuation`) are immutable `let`s referring to types that are
+    /// themselves safe under concurrent use -- `SkillWatcher` is
+    /// `@unchecked Sendable` and serializes its own mutable state on a
+    /// private queue, and `AsyncStream.Continuation` is documented safe to
+    /// call from multiple threads concurrently. This class itself declares
+    /// no other stored state: the watcher's `onChange` closure wired up in
+    /// `init` captures `layers`/`catalogBox`/`reader`/`continuation`
+    /// directly rather than `self`, so no `ReloadCoordinator` instance
+    /// property is ever read or written outside of `init`/`start()`/`deinit`,
+    /// none of which race with each other (`start()` and `deinit` are only
+    /// ever called from the owning `SkillsRegistry`'s single construction
+    /// and deinitialization points).
     private final class ReloadCoordinator: @unchecked Sendable {
         private let watcher: SkillWatcher
         private let continuation: AsyncStream<[SkillMetadata]>.Continuation

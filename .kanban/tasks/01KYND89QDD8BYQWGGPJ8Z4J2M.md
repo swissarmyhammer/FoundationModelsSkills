@@ -34,6 +34,21 @@ comments:
 
     Task remains in `doing`, ready for `/review`.
   timestamp: 2026-07-29T11:56:25.979041+00:00
+- actor: claude-code
+  id: 01kypwwqddwarrf522pctjezk0
+  text: |-
+    Fixed all three review findings.
+
+    1. TOCTOU race in `call(id:arguments:)`: replaced the two separate reads of the private `catalog` computed property (each of which independently re-acquires `catalogBox`'s lock) with a single `let snapshot = catalogBox.snapshot` before the guard, reusing `snapshot.catalog` for both the lookup and `UnknownSkillError.validIDs`. This closes the window where a reload racing between the two old reads could produce an error whose `id`/`validIDs` came from different catalog generations. Checked every other catalog-touching call site (`sortedCatalogEntries`, `metadata()`, `commandListing()`, `preloadedBodies()`, `diagnostics`) — each already reads `catalogBox.snapshot` exactly once per invocation, so this was the only instance of the pattern.
+
+    2. Documented `ReloadCoordinator`'s `@unchecked Sendable` invariant: added a doc comment stating both stored properties (`watcher`, `continuation`) are `let`s of inherently concurrency-safe types (`SkillWatcher` serializes its own mutable state on a private `DispatchQueue`; `AsyncStream.Continuation` is documented safe for concurrent calls), and that the coordinator itself holds no other state since the watcher's `onChange` closure captures `layers`/`catalogBox`/`reader`/`continuation` directly rather than `self`.
+
+    3. Extracted the concurrent-reader stress test's while-loop body into a new `private static func readerTask(registry:deadline:)` in `SkillsRegistryReloadTests.swift`, called as a single statement from `addTask`, bringing the task-group closure back within the project's 3-level nesting limit while preserving the exact same assertions (no duplicate ids, `"stress-"` prefix check, `commandListing()`/`diagnostics` also exercised).
+
+    Verification (all run fresh this session): `swift build` — exit 0, clean. `swift test` — 172/172 tests passed. `swift test --sanitize=thread --filter SkillsRegistryReloadTests` — 7/7 passed, zero TSan data-race reports. Adversarial double-check agent (via really-done) returned PASS, independently confirming all three fixes are correct, accurate, and complete, with no new races or regressions and no other missed instances of the same patterns elsewhere in the file/test suite.
+
+    All three review-finding checkboxes and all original acceptance-criteria/test checkboxes are now checked off (progress 1.0). Task left in `doing` per /implement's process, ready for /review.
+  timestamp: 2026-07-29T12:16:50.605499+00:00
 depends_on:
 - 01KYNCSXAEKDVR36H387H5TYXR
 - 01KYNCSDX30R4T2NRXP7XRQMM2
@@ -63,3 +78,9 @@ The reloadable half of the registry (plan §7 "Reload & metadata injection"; dec
 
 ## Workflow
 - Use `/tdd` — write failing tests first, then implement to make them pass.
+
+## Review Findings (2026-07-29 07:01)
+
+- [x] `Sources/FoundationModelsSkills/Registry/SkillsRegistry.swift:364` — The `UnknownSkillError` thrown by `call(id:arguments:)` can have contradictory information: the `id` field reports an unknown skill, but `validIDs` might include that same `id` if the catalog was reloaded between the two reads of `catalog`. This violates the error's contract — a caller seeing the error cannot trust whether the skill is actually invalid. Read the `catalogBox.snapshot` once before the guard statement, then reuse that snapshot for both lookups to ensure the error message is internally consistent.
+- [x] `Sources/FoundationModelsSkills/Registry/SkillsRegistry.swift:468` — @unchecked Sendable requires a documented synchronization invariant — ReloadCoordinator lacks documentation explaining why concurrent access is safe. Add a doc comment explaining the Sendable invariant before the class declaration, e.g.: '@unchecked Sendable: all stored properties are immutable (declared as `let`) and refer to Sendable types, so concurrent access is safe'.
+- [x] `Tests/FoundationModelsSkillsTests/SkillsRegistryReloadTests.swift:118` — While loop nested 4 levels deep (withThrowingTaskGroup → for loop → addTask closure → while) exceeds the 3-level threshold; deep nesting reduces readability of the concurrent reader task logic. Extract the reader task implementation into a separate helper method (e.g., `readerTask(registry:deadline:)`) to reduce nesting and improve readability of the concurrent test setup.
