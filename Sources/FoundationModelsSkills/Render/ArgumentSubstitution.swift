@@ -258,6 +258,22 @@ public struct ArgumentSubstitution: RenderPass {
         var hasCurrentToken = false
         var quote: QuoteState = .none
 
+        // Extracted so the whitespace-boundary branch below (and the final flush after the
+        // loop) sit at one nesting level under their `switch`/`while`, not two -- review found
+        // the previous inline `if hasCurrentToken { ... }` pushed that branch to 4 levels deep.
+        /// Appends the currently accumulated token to `tokens`, if any, and resets the
+        /// accumulator.
+        ///
+        /// Shared by the whitespace-boundary branch inside the scan loop and by the final
+        /// flush after the loop ends, so both call sites agree on what counts as "a token is
+        /// pending".
+        func flushPendingToken() {
+            guard hasCurrentToken else { return }
+            tokens.append(current)
+            current = ""
+            hasCurrentToken = false
+        }
+
         let characters = Array(text)
         var index = 0
         while index < characters.count {
@@ -265,11 +281,7 @@ public struct ArgumentSubstitution: RenderPass {
             switch quote {
             case .none:
                 if character.isWhitespace {
-                    if hasCurrentToken {
-                        tokens.append(current)
-                        current = ""
-                        hasCurrentToken = false
-                    }
+                    flushPendingToken()
                 } else if character == "\"" {
                     quote = .double
                     hasCurrentToken = true
@@ -306,9 +318,7 @@ public struct ArgumentSubstitution: RenderPass {
             }
             index += 1
         }
-        if hasCurrentToken {
-            tokens.append(current)
-        }
+        flushPendingToken()
         return tokens
     }
 }

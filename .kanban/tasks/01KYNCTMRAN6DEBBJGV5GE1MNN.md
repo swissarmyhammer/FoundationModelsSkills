@@ -26,6 +26,13 @@ comments:
 
     Verification after fixes: `swift build` and `swift test` both green, 78/78 tests (75 original + 3 new regression tests), exit 0, no new warnings. A second, confirmation-scoped double-check pass is in flight to verify the fixes actually resolve the findings and didn't introduce anything new.
   timestamp: 2026-07-29T04:53:43.167620+00:00
+- actor: claude-code
+  id: 01kyp4dsn7rr41asncdxy8nbnn
+  text: |-
+    Review finding addressed: extracted the whitespace token-finalization block in `shellStyleTokens` (ArgumentSubstitution.swift) into a local nested function `flushPendingToken()` (guard-based early return, appends+resets the accumulator). This drops the whitespace-boundary branch from 4 levels of nesting (while > switch case > if isWhitespace > if hasCurrentToken) to 3 (while > switch case > single-line call), and is also reused for the final post-loop flush that previously duplicated the same append logic. Behavior is unchanged -- same append/reset sequence, same guard condition. Added a doc comment on the new helper following this project's convention (period-terminated summary, blank `///`, elaboration) plus an inline comment noting why it was extracted.
+
+    Verification: `swift build` exit 0 (pre-existing unrelated SwiftPM dependency-identity warnings only, no new warnings), `swift test` 78/78 passed, exit 0. Adversarial double-check dispatched to confirm no behavior change before handoff.
+  timestamp: 2026-07-29T05:09:15.559332+00:00
 depends_on:
 - 01KYNCS3K5T60E4JQAJ8JQWXC5
 - 01KYNCRS3QJFK120446YNXYAH7
@@ -63,3 +70,9 @@ Implement §5 pass 1 (Claude-compatible substitution), replacing the identity tr
 - `$name`/`$N`/`$ARGUMENTS[N]` all share one position space: all supplied arguments joined as typed, then split by a hand-rolled shell-style tokenizer (double/single quotes, backslash escapes). Documented on `RenderRequest.argumentNames` that this is the shell-tokenized position space, not necessarily raw `arguments` array indices.
 - Went through one adversarial double-check REVISE round: fixed a critical crash (oversized `$N`/`$ARGUMENTS[N]` digit runs reaching `preconditionFailure` instead of substituting empty), corrected a misleading doc comment plus added a pinning regression test for the `$name` position-space behavior, and filled in doc-comment gaps on `TokenKind`, `SpecialVariable`, and `tokenPattern`. Second double-check pass returned PASS.
 - Final verification: `swift build` and `swift test` both green, 78/78 tests across 5 suites, exit 0, no new warnings.
+
+## Review Findings (2026-07-28 23:59)
+
+- [x] `Sources/FoundationModelsSkills/Render/ArgumentSubstitution.swift:255` — Four levels of nesting (while loop > switch case > if condition > nested if condition) exceed the three-level threshold, reducing local readability and testability of this branch. Extract the whitespace token-finalization block (lines 255–259) into a helper method to reduce nesting to 3 levels, or use guard statements with early returns at the start of the case branch.
+
+  Fixed: extracted a local nested helper `flushPendingToken()` inside `shellStyleTokens` that appends the pending token and resets the accumulator (guard-based early return). Both the whitespace-boundary branch inside the scan loop and the final post-loop flush now call it, reducing the whitespace branch to 3 levels of nesting (while > switch case > single-line call). Doc comment follows the project convention. `swift build` and `swift test` (78/78) green; adversarial double-check returned PASS.
