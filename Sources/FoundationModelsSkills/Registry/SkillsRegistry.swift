@@ -521,7 +521,7 @@ public struct SkillsRegistry: Sendable {
     ///
     /// - Parameter parameter: The parameter to summarize.
     /// - Returns: The placeholder summary text.
-    static func parameterSummary(_ parameter: SkillParameter) -> String {
+    internal static func parameterSummary(_ parameter: SkillParameter) -> String {
         if let placeholder = parameter.placeholder { return placeholder }
         let name = parameter.variadic ? "\(parameter.name)..." : parameter.name
         return parameter.required ? "<\(name)>" : "[\(name)]"
@@ -656,7 +656,7 @@ public struct SkillsRegistry: Sendable {
     /// - Parameter id: The skill id to look up.
     /// - Returns: The raw body text, or `nil` when `id` is not currently in
     ///   the catalog.
-    func rawBody(id: String) -> String? {
+    internal func rawBody(id: String) -> String? {
         catalogBox.snapshot.catalog[id]?.body
     }
 
