@@ -85,6 +85,15 @@ let package = Package(
             name: packageName,
             dependencies: commonDependencies
         ),
+        // The §11 dual-use worked example: CLI, `--chat`, and `--watch` modes
+        // over the checked-in `Examples/skill-library` fixture stack. Lives
+        // in the root manifest (not a nested example package) so one `swift
+        // build` covers library and demo alike.
+        .executableTarget(
+            name: "skills-demo",
+            dependencies: [.byName(name: packageName)] + commonDependencies,
+            path: "Examples/skills-demo"
+        ),
         .testTarget(
             name: testTargetName,
             dependencies: [.byName(name: packageName)] + commonDependencies

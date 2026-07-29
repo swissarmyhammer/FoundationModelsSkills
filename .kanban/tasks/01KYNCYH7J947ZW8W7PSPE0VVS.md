@@ -1,11 +1,23 @@
 ---
+comments:
+- actor: claude-code
+  id: 01kyqx64476173p89c6zthfny4
+  text: |-
+    Implemented: `skills-demo` executable target added to root Package.swift (`Examples/skills-demo/`), depending on the library + commonDependencies. Files: FixtureStack.swift (#filePath-relative DotfolderStack over Examples/skill-library, hermetic), SkillsDemoAssembly.swift (shared registry+context builder), SkillsDemoMain.swift (@main entry, dispatches --chat/--watch/default CLI), ChatMode.swift (scripted search→use round trip, SKILLS_DEMO_FORCE_UNAVAILABLE env seam), WatchMode.swift (@MainActor, registry.onReload → searchAgent.update(items:) wiring, SIGTERM handled via DispatchSource + SIG_IGN, exits 0 cleanly).
+
+    Default CLI verified manually: `skill list`, `skill search --query`, `skill use --id <id> --arguments <text>` all work against the fixture library (note: plan.md's prose example `skill use commit --arguments ...` is illustrative — the real fallback-CLI grammar requires `--id commit`, matching every other op's named-flag convention in this family, e.g. NotesTool's `note get --id`).
+
+    Tests: Tests/FoundationModelsSkillsTests/SkillsDemoTests.swift spawns the built binary (mirrors FoundationModelsExtras' ExtrasDemoIntegrationTests pattern) — 3 CLI-mode tests, 1 forced-unavailable --chat test, 1 --watch start/SIGTERM/clean-exit test. Full suite: 258/258 passing.
+
+    Discovered along the way: WatchMode's SIGTERM handler must be @MainActor (Swift 6 strict concurrency flags a plain nonisolated static var DispatchSourceSignal as unsafe global mutable state) — fixed by isolating the whole enum to @MainActor.
+  timestamp: 2026-07-29T21:41:12.967171+00:00
 depends_on:
 - 01KYNCX7H8EQBNT1XES7D0DBG3
 - 01KYNCV471YM5S7MVZMHXM25QJ
 - 01KYNCVGQNCFM67RHYYC88BZ6F
 - 01KYNCWVSV6MH31BMHGG6C46AJ
-position_column: todo
-position_ordinal: '9380'
+position_column: doing
+position_ordinal: '80'
 title: 'skills-demo executable: CLI, --chat, --watch modes'
 ---
 ## What
