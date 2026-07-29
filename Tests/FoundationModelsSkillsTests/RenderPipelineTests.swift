@@ -133,7 +133,7 @@ struct RenderPipelineTests {
             argumentSubstitution: RecordingPass(name: "argumentSubstitution", recorder: recorder),
             shellInjection: RecordingPass(name: "shellInjection", recorder: recorder),
             stencil: RecordingPass(name: "stencil", recorder: recorder))
-        let policy = RenderPolicy(disableShellExecution: true, disableScriptExecution: true)
+        let policy = RenderPolicy(isShellExecutionDisabled: true, isScriptExecutionDisabled: true)
 
         _ = try pipeline.renderBody(request(policy: policy))
 
@@ -149,7 +149,7 @@ struct RenderPipelineTests {
             argumentSubstitution: RecordingPass(name: "argumentSubstitution", recorder: recorder),
             shellInjection: RecordingPass(name: "shellInjection", recorder: recorder),
             stencil: RecordingPass(name: "stencil", recorder: recorder))
-        let policy = RenderPolicy(disableShellExecution: true, disableScriptExecution: true)
+        let policy = RenderPolicy(isShellExecutionDisabled: true, isScriptExecutionDisabled: true)
 
         _ = try pipeline.renderMetadata(request(policy: policy))
 

@@ -1,23 +1,30 @@
 import Foundation
 import FoundationModelsExtras
 
+// Review fix (^8jqwxc5): both flags were originally named
+// `disableShellExecution`/`disableScriptExecution`, which reads as an
+// imperative rather than a state assertion. Renamed to
+// `isShellExecutionDisabled`/`isScriptExecutionDisabled` to follow the
+// boolean assertion naming pattern.
 /// Policy flags that gate side-effecting render-pipeline passes, set once at
 /// `SkillsRegistry` construction so every render path -- model-driven `use
 /// skill`, user-driven `/command`, and the CLI -- honors the same policy
 /// (plan.md decisions #25/#28).
 ///
 /// Neither flag does anything yet: this task's three passes are identity
-/// transforms. `ShellInjection` (pass 2) reads `disableShellExecution` once
-/// it lands; `disableScriptExecution` is read by the M6 `run script`
+/// transforms. `ShellInjection` (pass 2) reads `isShellExecutionDisabled`
+/// once it lands; `isScriptExecutionDisabled` is read by the M6 `run script`
 /// resource operation, outside this pipeline entirely.
 public struct RenderPolicy: Sendable, Equatable {
-    /// Disables `` !`command` ``/fenced shell injection (pass 2) when
-    /// `true` -- the pass substitutes an inert marker instead of running
+    /// Asserts `` !`command` ``/fenced shell injection (pass 2) is disabled.
+    ///
+    /// When `true`, the pass substitutes an inert marker instead of running
     /// anything (plan.md decision #25).
-    public var disableShellExecution: Bool
-    /// Disables the M6 `run script` resource operation when `true` --
-    /// enforced downstream, not by this pipeline (plan.md decision #28).
-    public var disableScriptExecution: Bool
+    public var isShellExecutionDisabled: Bool
+    /// Asserts the M6 `run script` resource operation is disabled.
+    ///
+    /// Enforced downstream, not by this pipeline (plan.md decision #28).
+    public var isScriptExecutionDisabled: Bool
 
     /// Creates a `RenderPolicy`.
     ///
@@ -25,12 +32,12 @@ public struct RenderPolicy: Sendable, Equatable {
     /// into restriction explicitly.
     ///
     /// - Parameters:
-    ///   - disableShellExecution: Disables pass 2 when `true`.
-    ///   - disableScriptExecution: Disables the M6 `run script` operation
+    ///   - isShellExecutionDisabled: Disables pass 2 when `true`.
+    ///   - isScriptExecutionDisabled: Disables the M6 `run script` operation
     ///     when `true`.
-    public init(disableShellExecution: Bool = false, disableScriptExecution: Bool = false) {
-        self.disableShellExecution = disableShellExecution
-        self.disableScriptExecution = disableScriptExecution
+    public init(isShellExecutionDisabled: Bool = false, isScriptExecutionDisabled: Bool = false) {
+        self.isShellExecutionDisabled = isShellExecutionDisabled
+        self.isScriptExecutionDisabled = isScriptExecutionDisabled
     }
 }
 

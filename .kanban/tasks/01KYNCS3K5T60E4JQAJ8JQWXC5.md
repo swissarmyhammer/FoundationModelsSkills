@@ -30,6 +30,20 @@ comments:
 
     Final state: swift build exit 0 (no new warnings); swift test 63/63 passed, exit 0 (56 pre-existing + 7 new -- the policy test split added one net test vs. the original 6). Re-ran really-done's verification command fresh after every edit round per its Iron Law.
   timestamp: 2026-07-29T03:34:05.673924+00:00
+- actor: claude-code
+  id: 01kynzj4yhhhppj0kn1wdxbvds
+  text: |-
+    Addressed both review findings: renamed `RenderPolicy.disableShellExecution` -> `isShellExecutionDisabled` and `disableScriptExecution` -> `isScriptExecutionDisabled` in Sources/FoundationModelsSkills/Render/RenderPipeline.swift (stored properties, init parameter labels, self-assignments, and all doc comments, keeping the single-sentence-summary/blank-line/elaboration convention). Added a `//` comment above `RenderPolicy` recording the rename for future readers. Updated both call sites in Tests/FoundationModelsSkillsTests/RenderPipelineTests.swift (renderPolicyIsPlumbedToEveryBodyPassInvocation, renderPolicyIsPlumbedToEveryMetadataPassInvocation). Grepped Sources/ and Tests/ repo-wide -- no other call sites remain; Package.swift has no RenderPolicy references. plan.md and unrelated kanban task descriptions still mention the old names in prose (out of scope -- task instructions scoped the rename to Sources/ and Tests/).
+
+    swift build: exit 0 (only pre-existing unrelated package-identity warning). swift test: 63/63 passed, exit 0. Adversarial double-check dispatched for sign-off.
+  timestamp: 2026-07-29T03:44:15.313338+00:00
+- actor: claude-code
+  id: 01kynznep7v6syvcc9x22nspmx
+  text: |-
+    Adversarial double-check returned REVISE: the plain `//` "Review fix" comment I'd added sat between the `RenderPolicy` type-level `///` doc comment and the `public struct RenderPolicy` declaration, which orphans the doc comment from Swift doc tooling (DocC/Xcode Quick Help only associate a contiguous `///` block with the declaration immediately following it -- an intervening `//` block breaks that). Fixed: moved the review-fix comment above the `///` doc-comment block entirely, so the doc comment is once again contiguous with the struct it documents.
+
+    Re-verified fresh: swift build exit 0 (only the pre-existing unrelated package-identity warning), swift test 63/63 passed, exit 0.
+  timestamp: 2026-07-29T03:46:03.591973+00:00
 depends_on:
 - 01KYNCR37A3M7MYKAH7T0QREYS
 position_column: doing
@@ -41,7 +55,7 @@ The M2 render scaffold (plan §5): wire the three-pass pipeline shape with ident
 
 - `Sources/FoundationModelsSkills/Render/RenderPipeline.swift`:
   - `RenderRequest` (skill body or metadata value, arguments, skill directory, winning layer, policy).
-  - Ordered passes: (1) argument/variable substitution, (2) shell injection, (3) Stencil — each a `RenderPass` protocol value; passes run once, output of pass N is NEVER re-scanned by pass N or earlier (plan: single-shot, no re-scanning).
+  - Ordered passes: (1) argument/variable substitution, (2) shell injection, (3) Stencil -- each a `RenderPass` protocol value; passes run once, output of pass N is NEVER re-scanned by pass N or earlier (plan: single-shot, no re-scanning).
   - Two pass-sets: body render = passes 1+2+3; `description`/`metadata` render = passes 1+3 only (shell never runs at metadata-build time, decision #25).
   - `RenderPolicy` struct holding `disableShellExecution` and `disableScriptExecution` (consumed later; lives here so the registry can own it at construction, decisions #25/#28).
 - Passes are identity functions in this task; each later render task replaces one.
@@ -53,8 +67,13 @@ The M2 render scaffold (plan §5): wire the three-pass pipeline shape with ident
 - [x] `RenderPolicy` is plumbed to every pass invocation
 
 ## Tests
-- [x] `Tests/FoundationModelsSkillsTests/RenderPipelineTests.swift` — order recording; metadata-path pass-set; no-re-scan invariant with identity+marker fakes
-- [x] `swift test` — exit 0
+- [x] `Tests/FoundationModelsSkillsTests/RenderPipelineTests.swift` -- order recording; metadata-path pass-set; no-re-scan invariant with identity+marker fakes
+- [x] `swift test` -- exit 0
 
 ## Workflow
-- Use `/tdd` — write failing tests first, then implement to make them pass.
+- Use `/tdd` -- write failing tests first, then implement to make them pass.
+
+## Review Findings (2026-07-28 22:37)
+
+- [x] `Sources/FoundationModelsSkills/Render/RenderPipeline.swift:13` -- Boolean property `disableShellExecution` does not read as an assertion about the receiver; should use a form like `isShellExecutionDisabled` to clearly express state. Rename property to `isShellExecutionDisabled` or `shellExecutionDisabled` to follow the boolean assertion naming pattern. Update the init parameter label and all call sites accordingly.
+- [x] `Sources/FoundationModelsSkills/Render/RenderPipeline.swift:17` -- Boolean property `disableScriptExecution` does not read as an assertion about the receiver; should use a form like `isScriptExecutionDisabled` to clearly express state. Rename property to `isScriptExecutionDisabled` or `scriptExecutionDisabled` to follow the boolean assertion naming pattern. Update the init parameter label and all call sites accordingly.
