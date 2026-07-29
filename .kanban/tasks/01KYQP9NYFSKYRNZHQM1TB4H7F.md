@@ -11,8 +11,12 @@ comments:
     - Full suite green: 270/270 tests passing.
     - Scoped review (`review sha HEAD~1..HEAD`) is running in the background (task kidnscjzm) — awaiting result before moving to done.
   timestamp: 2026-07-29T23:03:32.845111+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01kyr27deamv041zs13gw3gkjx
+  text: 'Review clean after one round of findings (dedup temp-directory helper). Checkpoints: 2b8d55b (implementation), dc86173 (dedup fix). Full suite green at 270/270. Moved to done.'
+  timestamp: 2026-07-29T23:09:18.154286+00:00
+position_column: done
+position_ordinal: '9880'
 title: Fix trust mapping and dotfolder_name for roots-constructed registries
 ---
 ## What
