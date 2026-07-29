@@ -343,12 +343,7 @@ struct SkillsRegistryReloadTests {
     ///   - target: The count to wait for.
     ///   - timeout: How long to keep polling before giving up.
     private static func expectCount(_ tally: EventTally, atLeast target: Int, timeout: Duration) async {
-        let deadline = ContinuousClock.now.advanced(by: timeout)
-        var current = await tally.count
-        while current < target, ContinuousClock.now < deadline {
-            try? await Task.sleep(for: .milliseconds(10))
-            current = await tally.count
-        }
+        let current = await Self.poll({ await tally.count }, until: { $0 >= target }, timeout: timeout)
         #expect(current >= target, "expected at least \(target) events, observed \(current)")
     }
 
@@ -371,13 +366,32 @@ struct SkillsRegistryReloadTests {
     ///   - tracker: The tracker to poll.
     ///   - timeout: How long to keep polling before giving up.
     private static func expectFinishes(_ tracker: FinishTracker, timeout: Duration) async {
-        let deadline = ContinuousClock.now.advanced(by: timeout)
-        var finished = await tracker.isFinished
-        while !finished, ContinuousClock.now < deadline {
-            try? await Task.sleep(for: .milliseconds(10))
-            finished = await tracker.isFinished
-        }
+        let finished = await Self.poll({ await tracker.isFinished }, until: { $0 }, timeout: timeout)
         #expect(finished, "subscriber stream did not finish within \(timeout)")
+    }
+
+    /// Polls `getter`'s result until `predicate` accepts it or `timeout`
+    /// elapses.
+    ///
+    /// The shared polling loop `expectCount(_:atLeast:timeout:)`,
+    /// `expectFinishes(_:timeout:)`, and
+    /// `waitForPublicationCount(_:atLeast:timeout:)` each build on, so the
+    /// deadline/sleep-interval logic lives in exactly one place.
+    ///
+    /// - Parameters:
+    ///   - getter: Reads the current value to test.
+    ///   - predicate: Whether the current value satisfies the wait.
+    ///   - timeout: How long to keep polling before giving up.
+    /// - Returns: The last observed value, whether or not it satisfied
+    ///   `predicate`.
+    private static func poll<T>(_ getter: () async -> T, until predicate: (T) -> Bool, timeout: Duration) async -> T {
+        let deadline = ContinuousClock.now.advanced(by: timeout)
+        var current = await getter()
+        while !predicate(current), ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(10))
+            current = await getter()
+        }
+        return current
     }
 
     // MARK: - Test helpers
@@ -458,13 +472,7 @@ struct SkillsRegistryReloadTests {
     private static func waitForPublicationCount(
         _ recorder: MetadataUpdateRecorder, atLeast target: Int, timeout: Duration
     ) async -> Int {
-        let deadline = ContinuousClock.now.advanced(by: timeout)
-        var current = await recorder.publications.count
-        while current < target, ContinuousClock.now < deadline {
-            try? await Task.sleep(for: .milliseconds(10))
-            current = await recorder.publications.count
-        }
-        return current
+        await Self.poll({ await recorder.publications.count }, until: { $0 >= target }, timeout: timeout)
     }
 
     /// Creates a fresh, empty temporary directory for a test root, so one
