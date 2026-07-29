@@ -1,6 +1,6 @@
 ---
-position_column: todo
-position_ordinal: '9780'
+position_column: doing
+position_ordinal: '80'
 title: Fix trust mapping and dotfolder_name for roots-constructed registries
 ---
 ## What

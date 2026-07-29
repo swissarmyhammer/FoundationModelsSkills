@@ -184,35 +184,115 @@ struct StencilPassTests {
         }
     }
 
-    // MARK: - Trust override: the root -> Trust mapping is data, per root
+    // MARK: - Labeled roots (^1tb4h7f): `SkillsRegistry.init(layers:)` trust matrix
 
-    @Test func trustOverrideForcesAProjectRootToRenderTrusted() throws {
-        let projectRoot = URL(fileURLWithPath: "/tmp/stencil-pass-tests/project", isDirectory: true)
-        let pass = StencilPass(
-            trustOverrides: [projectRoot: .trusted], wellKnownValues: Self.fixtureWellKnownValues)
-        let projectLayer = DotfolderStack.Layer(source: .project, root: projectRoot)
-
-        let rendered = try render(
-            Self.nonWhitelistedTagBody, using: pass,
-            request: request(text: Self.nonWhitelistedTagBody, winningLayer: projectLayer))
-
-        #expect(rendered == "no")
+    /// Creates a fresh, empty throwaway directory under
+    /// `FileManager.default.temporaryDirectory`.
+    ///
+    /// - Returns: The new directory's URL.
+    /// - Throws: Whatever `FileManager.createDirectory` throws.
+    private static func makeTempDirectory() throws -> URL {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("StencilPassTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
     }
 
-    @Test func trustOverrideForcesADefaultsRootToRenderUntrusted() throws {
-        let defaultsRoot = URL(fileURLWithPath: "/tmp/stencil-pass-tests/defaults", isDirectory: true)
-        let pass = StencilPass(
-            trustOverrides: [defaultsRoot: .untrusted], wellKnownValues: Self.fixtureWellKnownValues)
-        let defaultsLayer = DotfolderStack.Layer(source: .defaults, root: defaultsRoot)
+    /// Writes a minimal `id/SKILL.md` under `root`, with `body` as the raw,
+    /// unrendered body text.
+    ///
+    /// - Parameters:
+    ///   - id: The skill id -- both the subdirectory name and the
+    ///     frontmatter's `name:` field.
+    ///   - body: The raw body text to write, verbatim.
+    ///   - root: The directory to write the skill's own subdirectory under.
+    /// - Throws: Whatever `FileManager.createDirectory` or `String.write`
+    ///   throws.
+    private static func writeMinimalSkillFile(id: String, body: String, in root: URL) throws {
+        let skillDirectory = root.appendingPathComponent(id, isDirectory: true)
+        try FileManager.default.createDirectory(at: skillDirectory, withIntermediateDirectories: true)
+        try "---\nname: \(id)\ndescription: fixture.\n---\n\(body)"
+            .write(to: skillDirectory.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
+    }
+
+    @Test func registryConstructedFromLabeledLayersRendersTheDefaultsRootTrustedAndOthersUntrusted() throws {
+        let root = try Self.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let defaultsRoot = root.appendingPathComponent("defaults", isDirectory: true)
+        let projectRoot = root.appendingPathComponent("project", isDirectory: true)
+        try Self.writeMinimalSkillFile(id: "trusted-tag", body: Self.nonWhitelistedTagBody, in: defaultsRoot)
+        try Self.writeMinimalSkillFile(id: "untrusted-tag", body: Self.nonWhitelistedTagBody, in: projectRoot)
+
+        // The one sanctioned way to label a bare-`[URL]` root's trust
+        // (^1tb4h7f): `SkillsRegistry.init(layers:)`, not an override table.
+        let registry = SkillsRegistry(
+            layers: [
+                DotfolderStack.Layer(source: .defaults, root: defaultsRoot),
+                DotfolderStack.Layer(source: .project, root: projectRoot),
+            ])
+
+        #expect(try registry.call(id: "trusted-tag") == "no")
 
         do {
-            _ = try render(
-                Self.nonWhitelistedTagBody, using: pass,
-                request: request(text: Self.nonWhitelistedTagBody, winningLayer: defaultsLayer))
-            Issue.record("expected TemplateEngineError to be thrown")
+            _ = try registry.call(id: "untrusted-tag")
+            Issue.record("expected a TemplateEngineError for the untrusted layer")
         } catch is TemplateEngineError {
             // Expected.
         }
+    }
+
+    @Test func unlabeledRootsConvenienceKeepsEveryRootUntrusted() throws {
+        let root = try Self.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try Self.writeMinimalSkillFile(id: "untrusted-tag", body: Self.nonWhitelistedTagBody, in: root)
+
+        // `init(roots:)` (no labels) must keep today's all-untrusted
+        // behavior, even for a root that would render trusted if labeled
+        // `.defaults`.
+        let registry = SkillsRegistry(roots: [root])
+
+        do {
+            _ = try registry.call(id: "untrusted-tag")
+            Issue.record("expected a TemplateEngineError since init(roots:) labels no layer .defaults")
+        } catch is TemplateEngineError {
+            // Expected.
+        }
+    }
+
+    // MARK: - `{{ dotfolder_name }}` derives from the highest-precedence project layer
+
+    @Test func wellKnownValuesCurrentDerivesDotfolderNameFromTheHighestPrecedenceProjectLayer() {
+        // A real-layer derivation test (^1tb4h7f): every other test in this
+        // file injects `dotfolderName` directly via `WellKnownValues.init`.
+        // `init(roots:)`'s unlabeled convenience tags every root `.project`,
+        // so a naive "first matching layer" derivation would silently pick
+        // the *lowest*-precedence root instead of the intended one.
+        let lowPrecedence = DotfolderStack.Layer(
+            source: .project,
+            root: URL(fileURLWithPath: "/tmp/stencil-pass-tests/.low-precedence", isDirectory: true))
+        let highPrecedence = DotfolderStack.Layer(
+            source: .project,
+            root: URL(fileURLWithPath: "/tmp/stencil-pass-tests/.high-precedence", isDirectory: true))
+
+        let values = StencilPass.WellKnownValues.current(layers: [lowPrecedence, highPrecedence])
+
+        #expect(values.dotfolderName == "high-precedence")
+    }
+
+    @Test func dotfolderNameRendersFromRealLayersEndToEndForALabeledRegistry() throws {
+        let root = try Self.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let lowPrecedenceRoot = root.appendingPathComponent(".low-precedence", isDirectory: true)
+        let highPrecedenceRoot = root.appendingPathComponent(".high-precedence", isDirectory: true)
+        try Self.writeMinimalSkillFile(id: "dotfolder-probe", body: "{{ dotfolder_name }}", in: highPrecedenceRoot)
+
+        let registry = SkillsRegistry(
+            layers: [
+                DotfolderStack.Layer(source: .project, root: lowPrecedenceRoot),
+                DotfolderStack.Layer(source: .project, root: highPrecedenceRoot),
+            ])
+
+        #expect(try registry.call(id: "dotfolder-probe") == "high-precedence")
     }
 
     // MARK: - Partial include, over host-supplied roots, nearest wins

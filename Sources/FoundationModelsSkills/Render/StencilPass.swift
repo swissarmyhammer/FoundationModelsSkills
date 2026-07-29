@@ -18,11 +18,13 @@ import FoundationModelsExtras
 /// being module-internal to `FoundationModelsExtras` (not part of its
 /// public surface).
 ///
-/// Trust is derived per render from `RenderRequest.winningLayer`: the
-/// `trustOverrides` table is consulted first (root -> `Trust`, so a host can
-/// override any individual root), falling back to the plan.md decision #29
-/// default -- the layer the host tagged `.defaults` renders `.trusted`;
-/// `.user`/`.project` layers render `.untrusted`.
+/// Trust is derived per render from `RenderRequest.winningLayer`, strictly
+/// by the plan.md decision #29 mapping -- the layer the host tagged
+/// `.defaults` renders `.trusted`; `.user`/`.project` layers render
+/// `.untrusted`. There is no override escape hatch: a host that wants a
+/// particular root to render trusted labels it `.defaults` at the layer
+/// level (`SkillsRegistry.init(layers:)`), the one sanctioned way to
+/// influence this mapping.
 ///
 /// `{% include "header" %}` partials resolve through `DotfolderLoader`,
 /// Extras' internal loader that `TemplateEngine.init(partials:)` wires up
@@ -41,15 +43,6 @@ public struct StencilPass: RenderPass {
     /// on its own; a later root's `_partials/<name>` shadows an earlier
     /// root's copy.
     public var layers: [DotfolderStack.Layer]
-
-    /// Per-root `Trust` overrides, consulted before the default rule.
-    ///
-    /// Empty by default -- every root then renders under the default rule
-    /// (`layer.source == .defaults` -> `.trusted`, otherwise `.untrusted`).
-    /// A host that wants a specific root to render trusted (or untrusted)
-    /// regardless of its `Source` tag sets an entry here, keyed by that
-    /// root's `URL`.
-    public var trustOverrides: [URL: TemplateEngine.Trust]
 
     /// The environment dictionary consulted for the ladder's middle rung.
     ///
@@ -71,8 +64,6 @@ public struct StencilPass: RenderPass {
     ///   - layers: The host-supplied layer roots to resolve `{% include %}`
     ///     partials against, lowest precedence first. Defaults to empty (no
     ///     partials resolution).
-    ///   - trustOverrides: Per-root `Trust` overrides, consulted before the
-    ///     default rule. Defaults to empty.
     ///   - environment: The environment dictionary for the ladder's middle
     ///     rung. Defaults to the real process environment.
     ///   - wellKnownValues: The well-known values for the ladder's lowest
@@ -80,12 +71,10 @@ public struct StencilPass: RenderPass {
     ///     from `layers` when `nil`.
     public init(
         layers: [DotfolderStack.Layer] = [],
-        trustOverrides: [URL: TemplateEngine.Trust] = [:],
         environment: [String: String] = ProcessInfo.processInfo.environment,
         wellKnownValues: WellKnownValues? = nil
     ) {
         self.layers = layers
-        self.trustOverrides = trustOverrides
         self.environment = environment
         self.wellKnownValues = wellKnownValues ?? .current(layers: layers)
     }
@@ -126,15 +115,13 @@ public struct StencilPass: RenderPass {
         }
     }
 
-    /// Resolves `layer`'s `Trust`: `trustOverrides` first, the default rule
-    /// otherwise.
+    /// Resolves `layer`'s `Trust` by the plan.md decision #29 mapping.
     ///
     /// - Parameter layer: The winning layer to resolve trust for.
-    /// - Returns: `trustOverrides[layer.root]` when present; otherwise
-    ///   `.trusted` for a `.defaults` layer and `.untrusted` for any other
-    ///   source.
+    /// - Returns: `.trusted` for a `.defaults` layer; `.untrusted` for any
+    ///   other source.
     private func resolvedTrust(for layer: DotfolderStack.Layer) -> TemplateEngine.Trust {
-        trustOverrides[layer.root] ?? (layer.source == .defaults ? .trusted : .untrusted)
+        layer.source == .defaults ? .trusted : .untrusted
     }
 
     /// Builds this render's merged `TemplateContext`: well-known values
@@ -294,15 +281,23 @@ extension StencilPass {
         }
 
         /// Recovers a bare dotfolder name (e.g. `"myagent"`) from `layers`'
-        /// `.project`-sourced layer's root directory name
+        /// highest-precedence `.project`-sourced layer's root directory name
         /// (`<workingDirectory>/.myagent`), mirroring
         /// `DotfolderStack.projectDotfolderName`.
+        ///
+        /// `layers` is ordered lowest precedence first (the same convention
+        /// every other layer-ordered method in this package follows), so the
+        /// *last* matching layer -- not the first -- is the winning one.
+        /// This matters for `SkillsRegistry.init(roots:)`'s unlabeled
+        /// convenience, which tags every root `.project`: picking the first
+        /// match there would silently resolve the lowest-precedence root's
+        /// name instead of the intended project root's.
         ///
         /// - Parameter layers: The host-supplied layer roots to search.
         /// - Returns: The dotfolder name, or `nil` when `layers` carries no
         ///   `.project`-sourced layer.
         private static func projectDotfolderName(in layers: [DotfolderStack.Layer]) -> String? {
-            guard let projectLayer = layers.first(where: { $0.source == .project }) else { return nil }
+            guard let projectLayer = layers.last(where: { $0.source == .project }) else { return nil }
             let directoryName = projectLayer.root.lastPathComponent
             return directoryName.hasPrefix(".") ? String(directoryName.dropFirst()) : directoryName
         }

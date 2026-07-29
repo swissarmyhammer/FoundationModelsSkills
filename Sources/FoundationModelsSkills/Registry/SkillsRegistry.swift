@@ -251,20 +251,27 @@ public struct SkillsRegistry: Sendable {
         self.init(layers: stack.layers, policy: policy, watch: watch)
     }
 
-    /// Builds a `SkillsRegistry` from its already-resolved layers, shared by
-    /// both public initializers so `init(roots:policy:watch:)`'s
-    /// synthesized, uniformly untrusted layers and
-    /// `init(stack:policy:watch:)`'s real, per-layer-trusted ones flow
-    /// through exactly one construction path.
+    /// Creates a `SkillsRegistry` over explicitly trust-labeled layers,
+    /// building its catalog once, immediately.
+    ///
+    /// The general constructor `init(roots:policy:watch:)` and
+    /// `init(stack:policy:watch:)` both funnel through: a host that wants a
+    /// bare-`[URL]` root labeled `.defaults` (so its skills render Stencil-
+    /// trusted, plan.md decision #29) without going through a full
+    /// `DotfolderStack` builds its own `[DotfolderStack.Layer]` and calls
+    /// this initializer directly -- the one sanctioned way to influence
+    /// `StencilPass`'s trust mapping; there is no separate override
+    /// mechanism.
     ///
     /// - Parameters:
     ///   - layers: The layers to build the catalog over, lowest precedence
-    ///     first.
+    ///     first; a later layer's copy of an id fully replaces an earlier
+    ///     layer's copy of the same id.
     ///   - policy: The render policy every render call this registry makes
-    ///     honors.
+    ///     honors. Defaults to the permissive `RenderPolicy()`.
     ///   - watch: Whether to watch every layer root and rebuild the catalog
-    ///     on change.
-    private init(layers: [DotfolderStack.Layer], policy: RenderPolicy, watch: Bool) {
+    ///     on change (plan.md §7). Defaults to `false` -- a static catalog.
+    public init(layers: [DotfolderStack.Layer], policy: RenderPolicy = RenderPolicy(), watch: Bool = false) {
         roots = layers.map(\.root)
         self.policy = policy
 
