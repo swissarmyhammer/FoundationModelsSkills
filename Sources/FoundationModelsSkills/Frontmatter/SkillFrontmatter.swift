@@ -314,6 +314,39 @@ extension SkillFrontmatter: Decodable {
         notes.append("metadata.\(key.rawValue) is present but is not \(expectedType); ignoring.")
     }
 
+    /// Resolves one extension field end-to-end: coerces `metadata[key]` via
+    /// `coerce`, records a mistyped-value note when it's present but fails
+    /// to coerce (`noteMetadataTypeMismatch`), then reconciles the coerced
+    /// metadata value against `topLevel` (`resolvedExtensionField`) --
+    /// combining all three steps so every extension field's `init(from:)`
+    /// call site is one line rather than a near-duplicate three-statement
+    /// block per field.
+    ///
+    /// Passing the *coerced* value (not the raw `FrontmatterValue`) into
+    /// `resolvedExtensionField` matters: a mistyped `metadata.<key>` must
+    /// actually be ignored, not merely diagnosed while still flowing
+    /// through as the field's resolved value.
+    ///
+    /// - Parameters:
+    ///   - key: The extension field being resolved.
+    ///   - topLevel: The field's already-decoded top-level value.
+    ///   - coerce: Converts a raw `metadata[key]` value to `T`, or `nil` if
+    ///     it's the wrong shape.
+    ///   - expectedType: The type name reported in a mistyped-value note.
+    ///   - metadata: The full `metadata:` mapping.
+    ///   - notes: Accumulates any conflict or mistyped-value note.
+    /// - Returns: The resolved value, per `resolvedExtensionField`'s own
+    ///   top-level-wins contract.
+    private static func resolveExtensionField<T>(
+        _ key: ExtensionKey, topLevel: T?, coerce: (FrontmatterValue) -> T?, expectedType: String,
+        metadata: [String: FrontmatterValue], notes: inout [String]
+    ) -> T? {
+        let metadataValue = metadata[key.rawValue].flatMap(coerce)
+        noteMetadataTypeMismatch(
+            key, expectedType: expectedType, coercedValue: metadataValue, metadata: metadata, notes: &notes)
+        return resolvedExtensionField(key, topLevel: topLevel, metadataValue: metadataValue, notes: &notes)
+    }
+
     /// Decodes `SkillFrontmatter` from a YAML mapping (via Yams' `Decoder`).
     ///
     /// Spec fields (`name`, `description`, `license`, `compatibility`,
@@ -362,52 +395,24 @@ extension SkillFrontmatter: Decodable {
 
         var notes: [String] = []
 
-        let metadataPreload = metadata[ExtensionKey.preload.rawValue]?.boolValue
-        Self.noteMetadataTypeMismatch(
-            .preload, expectedType: Self.booleanExtensionFieldTypeDescription, coercedValue: metadataPreload,
+        preload = Self.resolveExtensionField(
+            .preload, topLevel: topLevelPreload, coerce: \.boolValue,
+            expectedType: Self.booleanExtensionFieldTypeDescription, metadata: metadata, notes: &notes)
+        userInvocable = Self.resolveExtensionField(
+            .userInvocable, topLevel: topLevelUserInvocable, coerce: \.boolValue,
+            expectedType: Self.booleanExtensionFieldTypeDescription, metadata: metadata, notes: &notes)
+        disableModelInvocation = Self.resolveExtensionField(
+            .disableModelInvocation, topLevel: topLevelDisableModelInvocation, coerce: \.boolValue,
+            expectedType: Self.booleanExtensionFieldTypeDescription, metadata: metadata, notes: &notes)
+        argumentsRaw = Self.resolveExtensionField(
+            .arguments, topLevel: topLevelArguments, coerce: { Self.isStringOrArray($0) ? $0 : nil },
+            expectedType: "a string or list of strings", metadata: metadata, notes: &notes)
+        argumentHint = Self.resolveExtensionField(
+            .argumentHint, topLevel: topLevelArgumentHint, coerce: \.stringValue, expectedType: "a string",
             metadata: metadata, notes: &notes)
-        preload = Self.resolvedExtensionField(
-            .preload, topLevel: topLevelPreload, metadataValue: metadataPreload, notes: &notes)
-
-        let metadataUserInvocable = metadata[ExtensionKey.userInvocable.rawValue]?.boolValue
-        Self.noteMetadataTypeMismatch(
-            .userInvocable, expectedType: Self.booleanExtensionFieldTypeDescription,
-            coercedValue: metadataUserInvocable, metadata: metadata, notes: &notes)
-        userInvocable = Self.resolvedExtensionField(
-            .userInvocable, topLevel: topLevelUserInvocable, metadataValue: metadataUserInvocable,
-            notes: &notes)
-
-        let metadataDisableModelInvocation = metadata[ExtensionKey.disableModelInvocation.rawValue]?
-            .boolValue
-        Self.noteMetadataTypeMismatch(
-            .disableModelInvocation, expectedType: Self.booleanExtensionFieldTypeDescription,
-            coercedValue: metadataDisableModelInvocation, metadata: metadata, notes: &notes)
-        disableModelInvocation = Self.resolvedExtensionField(
-            .disableModelInvocation, topLevel: topLevelDisableModelInvocation,
-            metadataValue: metadataDisableModelInvocation, notes: &notes)
-
-        let metadataArgumentsRaw = metadata[ExtensionKey.arguments.rawValue]
-        let metadataArgumentsTyped = metadataArgumentsRaw.flatMap { Self.isStringOrArray($0) ? $0 : nil }
-        Self.noteMetadataTypeMismatch(
-            .arguments, expectedType: "a string or list of strings", coercedValue: metadataArgumentsTyped,
-            metadata: metadata, notes: &notes)
-        argumentsRaw = Self.resolvedExtensionField(
-            .arguments, topLevel: topLevelArguments, metadataValue: metadataArgumentsRaw, notes: &notes)
-
-        let metadataArgumentHint = metadata[ExtensionKey.argumentHint.rawValue]?.stringValue
-        Self.noteMetadataTypeMismatch(
-            .argumentHint, expectedType: "a string", coercedValue: metadataArgumentHint,
-            metadata: metadata, notes: &notes)
-        argumentHint = Self.resolvedExtensionField(
-            .argumentHint, topLevel: topLevelArgumentHint, metadataValue: metadataArgumentHint,
-            notes: &notes)
-
-        let metadataPartial = metadata[ExtensionKey.partial.rawValue]?.boolValue
-        Self.noteMetadataTypeMismatch(
-            .partial, expectedType: Self.booleanExtensionFieldTypeDescription, coercedValue: metadataPartial,
-            metadata: metadata, notes: &notes)
-        partial = Self.resolvedExtensionField(
-            .partial, topLevel: topLevelPartial, metadataValue: metadataPartial, notes: &notes)
+        partial = Self.resolveExtensionField(
+            .partial, topLevel: topLevelPartial, coerce: \.boolValue,
+            expectedType: Self.booleanExtensionFieldTypeDescription, metadata: metadata, notes: &notes)
 
         self.notes = notes
         self.unknownTopLevelKeys =
