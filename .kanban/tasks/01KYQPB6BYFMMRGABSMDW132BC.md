@@ -1,6 +1,6 @@
 ---
-position_column: todo
-position_ordinal: 9c80
+position_column: doing
+position_ordinal: '80'
 title: 'UseSkill required-arg check: use SkillParameter.required, not placeholder text'
 ---
 ## What

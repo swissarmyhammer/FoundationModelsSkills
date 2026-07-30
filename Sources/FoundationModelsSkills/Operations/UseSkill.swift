@@ -127,7 +127,7 @@ public struct UseSkill: OperationDefinition {
 
         let supplied = arguments ?? []
         if let missingParameterName = Self.firstMissingRequiredParameterName(
-            parameters: entry.parameters, suppliedCount: supplied.count)
+            parameters: entry.parameterDetails, suppliedCount: supplied.count)
         {
             return .corrective(Self.missingArgumentMessage(name: missingParameterName))
         }
@@ -181,65 +181,21 @@ public struct UseSkill: OperationDefinition {
     /// The name of the first required parameter `suppliedCount` doesn't
     /// cover, or `nil` when every required parameter has a value.
     ///
-    /// Reads the required/optional axis back out of each rendered
-    /// placeholder summary (plan.md §6.1 grammar: `<x>` required, `[x]`
-    /// optional, a bare unbracketed hint token also required) --
-    /// `SkillMetadata.parameters` carries only the display placeholder, not
-    /// the structured `SkillParameter.required` flag, so this is a
-    /// best-effort inverse of `SkillsRegistry`'s own placeholder synthesis.
-    /// The one case this can misread as optional is a skill whose own
-    /// `argument-hint:` text happens not to use bracket syntax at all;
-    /// harmless in practice, since the render pipeline still substitutes
-    /// whatever was supplied.
+    /// Consults `SkillParameter.required` directly (plan.md §6.1) rather
+    /// than re-deriving requiredness from a display placeholder's bracket
+    /// syntax -- a skill whose `argument-hint:` token happens not to use
+    /// brackets (e.g. `argument-hint: env`) is still read correctly, since
+    /// `required` comes from the same structured inference that built the
+    /// placeholder, not from parsing the placeholder back out.
     ///
     /// - Parameters:
-    ///   - parameters: The target skill's parameter placeholder summaries,
-    ///     in position order.
+    ///   - parameters: The target skill's structured parameters, in
+    ///     position order.
     ///   - suppliedCount: The number of arguments actually supplied.
     /// - Returns: The first missing required parameter's name, or `nil`.
-    private static func firstMissingRequiredParameterName(parameters: [String], suppliedCount: Int) -> String? {
-        for (position, placeholder) in parameters.enumerated() where position >= suppliedCount {
-            guard placeholder.first != Self.optionalPlaceholderOpen else { continue }
-            return Self.parameterName(fromPlaceholder: placeholder)
-        }
-        return nil
-    }
-
-    // MARK: - Placeholder grammar (plan.md §6.1)
-
-    /// The bracket opening a required placeholder, e.g. the `<` in `<message>`.
-    private static let requiredPlaceholderOpen: Character = "<"
-
-    /// The bracket closing a required placeholder, e.g. the `>` in `<message>`.
-    private static let requiredPlaceholderClose: Character = ">"
-
-    /// The bracket opening an optional placeholder, e.g. the `[` in `[env]`.
-    private static let optionalPlaceholderOpen: Character = "["
-
-    /// The bracket closing an optional placeholder, e.g. the `]` in `[env]`.
-    private static let optionalPlaceholderClose: Character = "]"
-
-    /// The trailing marker of a variadic placeholder, e.g. the `...` in `<files...>`.
-    private static let variadicPlaceholderSuffix = "..."
-
-    /// Strips a placeholder summary's enclosing bracket and trailing
-    /// ellipsis to recover its bare name.
-    ///
-    /// - Parameter placeholder: The placeholder summary, e.g. `"<message>"`,
-    ///   `"[env]"`, or `"<files...>"`.
-    /// - Returns: The bare parameter name, e.g. `"message"`, `"env"`,
-    ///   `"files"`.
-    private static func parameterName(fromPlaceholder placeholder: String) -> String {
-        var inner = Substring(placeholder)
-        let openBrackets: Set<Character> = [Self.requiredPlaceholderOpen, Self.optionalPlaceholderOpen]
-        let closeBrackets: Set<Character> = [Self.requiredPlaceholderClose, Self.optionalPlaceholderClose]
-        if let first = inner.first, let last = inner.last, openBrackets.contains(first), closeBrackets.contains(last)
-        {
-            inner = inner.dropFirst().dropLast()
-        }
-        if inner.hasSuffix(Self.variadicPlaceholderSuffix) {
-            inner = inner.dropLast(Self.variadicPlaceholderSuffix.count)
-        }
-        return String(inner)
+    private static func firstMissingRequiredParameterName(
+        parameters: [SkillParameter], suppliedCount: Int
+    ) -> String? {
+        parameters.first { $0.position >= suppliedCount && $0.required }?.name
     }
 }

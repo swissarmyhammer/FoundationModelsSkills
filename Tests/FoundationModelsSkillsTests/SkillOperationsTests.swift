@@ -1,3 +1,4 @@
+import Foundation
 import FoundationModels
 import FoundationModelsMetadataRegistry
 import FoundationModelsSkills
@@ -205,6 +206,123 @@ struct SkillOperationsTests {
             return
         }
         #expect(result.body.contains("fix parser"))
+    }
+
+    // MARK: - Missing-argument check consults SkillParameter.required directly (^dw132bc)
+
+    /// Writes a single skill (id `"widget"`) under a fresh private temp
+    /// directory with the given frontmatter fragments, then builds a
+    /// `SkillsToolContext` over just that root -- isolated from the shared
+    /// `project/.skills` fixture library so each case here exercises exactly
+    /// one parameter source (`arguments:`, `argument-hint:`, or body
+    /// inference) without another source's default bleeding in.
+    ///
+    /// - Parameters:
+    ///   - argumentsLine: The raw `arguments:` frontmatter line (including
+    ///     the trailing newline), or `""` to omit it entirely.
+    ///   - argumentHintLine: The raw `argument-hint:` frontmatter line
+    ///     (including the trailing newline), or `""` to omit it entirely.
+    ///   - body: The skill body text.
+    /// - Returns: The context, plus a cleanup closure the caller must invoke
+    ///   (via `defer`) once done.
+    private static func makeTempContext(
+        argumentsLine: String = "", argumentHintLine: String = "", body: String = "Body text.\n"
+    ) throws -> (context: SkillsToolContext, cleanup: () -> Void) {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let skillDirectory = root.appendingPathComponent("widget", isDirectory: true)
+        try FileManager.default.createDirectory(at: skillDirectory, withIntermediateDirectories: true)
+        let frontmatter =
+            "---\nname: widget\ndescription: Does a widget thing.\n\(argumentsLine)\(argumentHintLine)---\n\(body)"
+        try frontmatter.write(
+            to: skillDirectory.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
+
+        let registry = SkillsRegistry(roots: [root])
+        let searcher = MetadataSearcher(items: registry.metadata().filter(\.isModelVisible))
+        let context = SkillsToolContext(registry: registry, searchAgent: SkillSearchAgent(searcher: searcher))
+        return (context, { try? FileManager.default.removeItem(at: root) })
+    }
+
+    @Test func useSkillWithAnUnbracketedHintAndTheArgumentSuppliedSucceeds() async throws {
+        // `argument-hint: env` (no brackets) still defaults to required --
+        // the same default `arguments:`-only and body-inferred parameters
+        // use -- but a satisfied required argument must never draw a
+        // corrective regardless of which source classified it.
+        let (context, cleanup) = try Self.makeTempContext(
+            argumentHintLine: "argument-hint: env\n", body: "Value: $0\n")
+        defer { cleanup() }
+
+        let output = try await UseSkill(id: "widget", arguments: ["production"]).execute(in: context)
+
+        guard case .success(let result) = output else {
+            Issue.record("expected a result outcome, got \(output)")
+            return
+        }
+        #expect(result.body.contains("production"))
+    }
+
+    @Test func useSkillWithAnUnbracketedHintAndTheArgumentMissingReturnsACorrective() async throws {
+        // Bare `argument-hint: env` has no source marking it optional, so
+        // `SkillParameter.required` defaults `true` -- the corrective must
+        // still fire, sourced from the structured flag, not from parsing
+        // the placeholder text back apart.
+        let (context, cleanup) = try Self.makeTempContext(
+            argumentHintLine: "argument-hint: env\n", body: "Value: $0\n")
+        defer { cleanup() }
+
+        let output = try await UseSkill(id: "widget", arguments: []).execute(in: context)
+
+        guard case .corrective(let message) = output else {
+            Issue.record("expected a corrective outcome, got \(output)")
+            return
+        }
+        #expect(message.contains("env"))
+    }
+
+    @Test func useSkillWithABracketedOptionalHintAndTheArgumentMissingSucceeds() async throws {
+        // `[env]` explicitly marks the parameter optional -- omitting it
+        // must dispatch successfully, proving the optional case still
+        // reads correctly through the structured `required` flag.
+        let (context, cleanup) = try Self.makeTempContext(
+            argumentHintLine: "argument-hint: \"[env]\"\n", body: "Body text.\n")
+        defer { cleanup() }
+
+        let output = try await UseSkill(id: "widget", arguments: []).execute(in: context)
+
+        guard case .success = output else {
+            Issue.record("expected a result outcome, got \(output)")
+            return
+        }
+    }
+
+    @Test func useSkillWithArgumentsOnlyNoHintAndTheArgumentMissingReturnsACorrective() async throws {
+        // `arguments:` alone (no `argument-hint:`) also defaults every
+        // named parameter to required.
+        let (context, cleanup) = try Self.makeTempContext(argumentsLine: "arguments: env\n")
+        defer { cleanup() }
+
+        let output = try await UseSkill(id: "widget", arguments: []).execute(in: context)
+
+        guard case .corrective(let message) = output else {
+            Issue.record("expected a corrective outcome, got \(output)")
+            return
+        }
+        #expect(message.contains("env"))
+    }
+
+    @Test func useSkillWithABodyInferredParameterAndTheArgumentMissingReturnsACorrective() async throws {
+        // No `arguments:`/`argument-hint:` at all -- the sole parameter is
+        // synthesized from the body's `$0` reference, always required.
+        let (context, cleanup) = try Self.makeTempContext(body: "Value: $0\n")
+        defer { cleanup() }
+
+        let output = try await UseSkill(id: "widget", arguments: []).execute(in: context)
+
+        guard case .corrective(let message) = output else {
+            Issue.record("expected a corrective outcome, got \(output)")
+            return
+        }
+        #expect(message.contains("arg0"))
     }
 
     // MARK: - Resolver: canonical + forgiving spellings

@@ -36,6 +36,14 @@ public struct SkillMetadata: Sendable, Equatable {
     /// `"[env]"` (plan.md §7's `SkillRow.parameters` shape).
     public var parameters: [String]
 
+    /// The same parameters `parameters` summarizes, in their original
+    /// structured form -- carries `SkillParameter.required` (and
+    /// `.variadic`/`.name`) so a consumer like `UseSkill` can check
+    /// requiredness directly instead of re-deriving it from a display
+    /// placeholder's bracket syntax, which misreads an unbracketed
+    /// `argument-hint:` token as required.
+    public var parameterDetails: [SkillParameter]
+
     /// Whether this skill is currently eligible for the model-facing
     /// surface: `search skill`/`list skill`/`use skill` (plan.md §6).
     public var isModelVisible: Bool
@@ -49,16 +57,19 @@ public struct SkillMetadata: Sendable, Equatable {
     ///     scalar (at any depth) rendered. Defaults to empty.
     ///   - parameters: Placeholder summaries of this skill's parameters.
     ///     Defaults to empty.
+    ///   - parameterDetails: The structured form of `parameters`, carrying
+    ///     `required`/`variadic`/`name`. Defaults to empty.
     ///   - isModelVisible: Whether this skill is currently eligible for the
     ///     model-facing surface.
     public init(
         id: String, description: String, metadata: [String: FrontmatterValue] = [:],
-        parameters: [String] = [], isModelVisible: Bool
+        parameters: [String] = [], parameterDetails: [SkillParameter] = [], isModelVisible: Bool
     ) {
         self.id = id
         self.description = description
         self.metadata = metadata
         self.parameters = parameters
+        self.parameterDetails = parameterDetails
         self.isModelVisible = isModelVisible
     }
 }
@@ -566,16 +577,13 @@ public struct SkillsRegistry: Sendable {
         }
     }
 
-    /// Infers `entry`'s parameters (plan.md §6.1) and summarizes each as a
-    /// display placeholder.
+    /// Infers `entry`'s structured parameters (plan.md §6.1).
     ///
-    /// - Parameter entry: The catalog entry to summarize parameters for.
-    /// - Returns: One placeholder summary per inferred parameter, in
-    ///   position order.
-    private func parameterSummaries(entry: CatalogEntry) -> [String] {
-        ParameterInference.infer(frontmatter: entry.frontmatter, body: entry.body)
-            .parameters
-            .map(Self.parameterSummary)
+    /// - Parameter entry: The catalog entry to infer parameters for.
+    /// - Returns: One `SkillParameter` per inferred parameter, in position
+    ///   order.
+    private func parameters(entry: CatalogEntry) -> [SkillParameter] {
+        ParameterInference.infer(frontmatter: entry.frontmatter, body: entry.body).parameters
     }
 
     /// Summarizes one parameter as a display placeholder: its own
@@ -607,11 +615,13 @@ public struct SkillsRegistry: Sendable {
     public func metadata() -> [SkillMetadata] {
         sortedCatalogEntries()
             .map { entry in
-                SkillMetadata(
+                let entryParameters = parameters(entry: entry)
+                return SkillMetadata(
                     id: entry.id,
                     description: renderedMetadataText(text: entry.frontmatter.description ?? "", entry: entry),
                     metadata: renderedMetadataFields(entry: entry),
-                    parameters: parameterSummaries(entry: entry),
+                    parameters: entryParameters.map(Self.parameterSummary),
+                    parameterDetails: entryParameters,
                     isModelVisible: entry.isModelVisible)
             }
     }
