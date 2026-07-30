@@ -93,7 +93,12 @@ internal enum ScriptProcessRunner {
         let data = await capturedData
         try? pipe.fileHandleForReading.close()
 
-        let durationMs = Int(start.duration(to: .now).components.seconds * 1000)
+        // `.components.seconds` alone drops the sub-second remainder --
+        // `.attoseconds` (10^-18 s) divided by 10^15 recovers the
+        // millisecond term a whole-seconds-only conversion would truncate
+        // away entirely (a 400ms run would otherwise report 0).
+        let elapsed = start.duration(to: .now).components
+        let durationMs = Int(elapsed.seconds * 1000 + elapsed.attoseconds / 1_000_000_000_000_000)
         let allLines = Self.lines(of: data)
         let tail = Self.tailFormatted(lines: allLines)
         return Outcome(

@@ -1,6 +1,6 @@
 ---
-position_column: todo
-position_ordinal: a180
+position_column: doing
+position_ordinal: '80'
 title: 'Resource op fidelity: durationMs, cap/hidden-file tests, bounded read'
 ---
 ## What

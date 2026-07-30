@@ -117,19 +117,33 @@ public struct ReadResource: OperationDefinition {
     /// The maximum number of lines a successful read returns per call.
     private static let maxLinesPerCall = 500
 
+    /// Above this size, a resource is refused from its stat'd size alone,
+    /// never read -- generous for any legitimate script/reference/asset
+    /// text file within `maxLinesPerCall`'s budget, but small enough that a
+    /// multi-GB binary asset is refused without ever loading its content
+    /// into memory (the previous behavior: a full `Data(contentsOf:)` read,
+    /// only THEN checked for UTF-8 validity to produce this same refusal).
+    private static let maxReadableByteSize = 1_000_000
+
     /// Reads `path` under `id`'s directory, or returns a corrective message.
     ///
     /// - Parameter context: The shared context supplying the model-visible
     ///   registry.
     /// - Returns: `.success(_:)` carrying the sliced content on success;
     ///   `.corrective(_:)` for an unusable id, a confinement violation, an
-    ///   unreadable file, or non-UTF-8 content.
+    ///   oversized or unreadable file, or non-UTF-8 content.
     /// - Throws: Nothing; the signature carries `throws` to satisfy the
     ///   `OperationDefinition` protocol requirement.
     public func execute(in context: SkillsToolContext) async throws -> ReadResourceOutput {
         await ResourceIDLookup.withResolvedDirectory(id: id, context: context) { skillDirectory in
             guard let resolved = PathConfinement.resolvedURL(relativePath: path, in: skillDirectory) else {
                 return .corrective(PathConfinement.deniedMessage(path: path))
+            }
+            guard let statedSize = Self.fileSize(at: resolved) else {
+                return .corrective(Self.unreadableMessage(path: path))
+            }
+            guard statedSize <= Self.maxReadableByteSize else {
+                return .corrective(Self.tooLargeMessage(path: path, byteSize: statedSize))
             }
             guard let data = try? Data(contentsOf: resolved) else {
                 return .corrective(Self.unreadableMessage(path: path))
@@ -140,6 +154,16 @@ public struct ReadResource: OperationDefinition {
 
             return .success(Self.slice(text: text, id: id, path: path, start: start, end: end))
         }
+    }
+
+    /// `url`'s file size, read from filesystem metadata alone -- never opens
+    /// or reads the file's content.
+    ///
+    /// - Parameter url: The file to stat.
+    /// - Returns: The file's size in bytes, or `nil` if it could not be
+    ///   stat'd.
+    private static func fileSize(at url: URL) -> Int? {
+        (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize
     }
 
     /// Slices `text` to the requested (or defaulted) `start`/`end` line
@@ -176,6 +200,18 @@ public struct ReadResource: OperationDefinition {
     /// - Returns: The corrective message.
     private static func unreadableMessage(path: String) -> String {
         "The path `\(path)` could not be read."
+    }
+
+    /// The corrective message for a confined `path` whose stat'd size
+    /// exceeds `maxReadableByteSize` -- refused before ever being opened.
+    ///
+    /// - Parameters:
+    ///   - path: The oversized resource's path.
+    ///   - byteSize: The resource's stat'd size in bytes.
+    /// - Returns: The corrective message.
+    private static func tooLargeMessage(path: String, byteSize: Int) -> String {
+        "The resource `\(path)` is \(byteSize) bytes, exceeding the \(Self.maxReadableByteSize)-byte limit "
+            + "this operation reads."
     }
 
     /// The corrective message for a confined, readable `path` whose content

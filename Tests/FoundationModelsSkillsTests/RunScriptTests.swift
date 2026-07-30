@@ -225,6 +225,47 @@ struct RunScriptTests {
         #expect(result.exitCode == 0)
         #expect(result.lines == 1)
         #expect(result.output == ["1: building release notes"])
+        // Bounded, not an exact value -- this fixture script runs in a few
+        // milliseconds, but the point is proving `durationMs` reports a
+        // real sub-second measurement at all (see
+        // `durationMsReportsTheSubSecondRemainderNotJustWholeSeconds`,
+        // which pins the specific truncation bug this bound would have let
+        // slip through unnoticed: `Int(0)` also satisfies `>= 0`).
+        #expect(result.durationMs >= 0)
+        #expect(result.durationMs < 2000)
+    }
+
+    // MARK: - durationMs sub-second precision
+
+    /// `ScriptProcessRunner.run(...)`'s duration previously converted via
+    /// `Int(elapsed.components.seconds * 1000)` alone, silently discarding
+    /// the `.attoseconds` remainder -- a genuinely ~300ms run would report
+    /// `durationMs == 0`. A `sleep 0.3` fixture pins the fix: the reported
+    /// duration must land in a bounded window around 300ms, proving the
+    /// sub-second term survived the conversion.
+    @Test func durationMsReportsTheSubSecondRemainderNotJustWholeSeconds() async throws {
+        let root = try HotReloadTestSupport.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try Self.writeMinimalSkillFile(id: "sub-second-sleeper", in: root, allowedTools: "Script")
+        try Self.writeExecutableShebangScript(
+            named: "sleep-a-bit.sh", inSkillID: "sub-second-sleeper", under: root,
+            contents: "#!/bin/sh\nsleep 0.3\necho done\n")
+
+        let output = try await RunScript(id: "sub-second-sleeper", path: "scripts/sleep-a-bit.sh").execute(
+            in: Self.makeContext(roots: [root]))
+
+        guard case .success(let result) = output else {
+            Issue.record("expected a success outcome, got \(output)")
+            return
+        }
+        #expect(result.status == "completed")
+        // A whole-seconds-only conversion would report 0 here -- the lower
+        // bound alone would have let the truncation bug slip through
+        // unnoticed, so this asserts a genuinely sub-second-aware range:
+        // comfortably above 0, below the 2s ceiling a flaky/slow CI runner
+        // might otherwise trip.
+        #expect(result.durationMs >= 200)
+        #expect(result.durationMs < 2000)
     }
 
     // MARK: - Fixture helpers
@@ -273,13 +314,17 @@ struct RunScriptTests {
     ///   - name: The script's file name.
     ///   - id: The owning skill id.
     ///   - directory: The root the skill lives under.
+    ///   - contents: The script's full text, shebang included. Defaults to
+    ///     a minimal `echo hi` script.
     /// - Throws: Whatever `FileManager.createDirectory`, `String.write`, or
     ///   `FileManager.setAttributes` throws.
-    private static func writeExecutableShebangScript(named name: String, inSkillID id: String, under directory: URL)
+    private static func writeExecutableShebangScript(
+        named name: String, inSkillID id: String, under directory: URL, contents: String = "#!/bin/sh\necho hi\n"
+    )
         throws
     {
         let scriptURL = try Self.scriptsDirectory(inSkillID: id, under: directory).appendingPathComponent(name)
-        try "#!/bin/sh\necho hi\n".write(to: scriptURL, atomically: true, encoding: .utf8)
+        try contents.write(to: scriptURL, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
     }
 }

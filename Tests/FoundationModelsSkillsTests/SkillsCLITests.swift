@@ -298,7 +298,28 @@ struct SkillsCLITests {
                 properties: ["op": "run script", "id": "release-notes", "path": "scripts/build.sh"]))
 
         #expect(cliResult.exitCode == 0)
-        #expect(cliResult.output == modelOutput)
+        // `run script` dispatches through a real subprocess -- the CLI path
+        // and the model path above are two genuinely independent process
+        // executions, so their real (post-`durationMs`-truncation-fix)
+        // wall-clock durations never reliably match. Every other field,
+        // deterministic for this fixture, still must round-trip
+        // byte-for-byte.
+        #expect(Self.strippingDurationMs(from: cliResult.output) == Self.strippingDurationMs(from: modelOutput))
+        #expect(cliResult.output.contains("\"durationMs\":"))
+        #expect(modelOutput.contains("\"durationMs\":"))
+    }
+
+    /// Strips the genuinely time-variant `"durationMs":<n>` field out of a
+    /// `run script` result payload, replacing it with a fixed placeholder --
+    /// `scriptRunVerbRoundTripsToTheIdenticalModelDispatchOutput()`'s two
+    /// dispatches are independent subprocess executions, so their real
+    /// wall-clock durations are never expected to match; every other field
+    /// still round-trips byte-for-byte.
+    ///
+    /// - Parameter json: A `run script` result payload's raw JSON text.
+    /// - Returns: `json` with its `durationMs` value normalized to `0`.
+    private static func strippingDurationMs(from json: String) -> String {
+        json.replacingOccurrences(of: #""durationMs":\d+"#, with: "\"durationMs\":0", options: .regularExpression)
     }
 
     /// Builds the model-facing fused tool over `registry`, via the same

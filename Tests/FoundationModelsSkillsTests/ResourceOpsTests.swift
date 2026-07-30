@@ -129,6 +129,34 @@ struct ResourceOpsTests {
         #expect(json.contains("\(byteSize) bytes"))
     }
 
+    // MARK: - Bounded read: oversized resources refuse from stat'd size alone (§7.3)
+
+    @Test func readResourceOnAnOversizedFileRefusesFromItsStatedSizeWithoutReadingIt() async throws {
+        let root = try HotReloadTestSupport.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let skillDirectory = try Self.writeMinimalSkillFile(id: "oversized", in: root)
+        // Comfortably over the 1,000,000-byte read limit -- large enough
+        // that fully materializing it (the pre-fix behavior) would be a
+        // real, measurable cost, but still fast to write in a test.
+        let oversizedData = Data(repeating: 0x41, count: 2_000_000)
+        let fileURL = skillDirectory.appendingPathComponent("huge.txt")
+        try oversizedData.write(to: fileURL)
+        let statedSize = try #require(
+            FileManager.default.attributesOfItem(atPath: fileURL.path)[.size] as? Int)
+        #expect(statedSize == 2_000_000)
+
+        let tool = try Self.makeTool(roots: [root])
+        let arguments = GeneratedContent(
+            properties: ["op": "read resource", "id": "oversized", "path": "huge.txt"])
+
+        let json = try await tool.call(arguments: arguments)
+
+        #expect(Self.isCorrective(json))
+        #expect(json.contains("exceeding"))
+        #expect(json.contains("\(statedSize) bytes"))
+    }
+
     // MARK: - Confinement matrix (plan.md §13)
 
     @Test func readResourceRejectsDotDotTraversal() async throws {
@@ -212,6 +240,33 @@ struct ResourceOpsTests {
 
         #expect(json.contains("\"total\":150"))
         #expect(!json.contains("\"total\":100"))
+        // The row-count cap itself was never asserted -- `total: 150` alone
+        // doesn't prove `resources` was actually truncated to 100 rather
+        // than, say, silently returning all 150. Each row's `"path":` key
+        // appears exactly once per row.
+        #expect(json.components(separatedBy: "\"path\":").count - 1 == 100)
+    }
+
+    // MARK: - Hidden files skipped (§7.3)
+
+    @Test func listResourceSkipsADotfile() async throws {
+        let root = try HotReloadTestSupport.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let skillDirectory = try Self.writeMinimalSkillFile(id: "has-dotfile", in: root)
+        try "visible".write(
+            to: skillDirectory.appendingPathComponent("visible.txt"), atomically: true, encoding: .utf8)
+        try "hidden".write(
+            to: skillDirectory.appendingPathComponent(".hidden"), atomically: true, encoding: .utf8)
+
+        let tool = try Self.makeTool(roots: [root])
+        let arguments = GeneratedContent(properties: ["op": "list resource", "id": "has-dotfile"])
+
+        let json = try await tool.call(arguments: arguments)
+
+        #expect(json.contains("\"total\":1"))
+        #expect(json.contains("\"path\":\"visible.txt\""))
+        #expect(!json.contains(".hidden"))
     }
 
     // MARK: - Surface visibility (plan.md §7.2/§7.3, ^kb2t82c)
