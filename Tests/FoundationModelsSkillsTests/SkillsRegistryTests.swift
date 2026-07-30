@@ -399,6 +399,110 @@ struct SkillsRegistryTests {
         #expect(registry.preloadedBodies().contains("PRELOADED_MODEL_HIDDEN_MARKER"))
     }
 
+    // MARK: - Parameter-inference diagnostics fold into the registry surface
+
+    /// Writes a `SKILL.md` under `root` whose `arguments:` names three
+    /// parameters but `argument-hint:` only supplies two tokens -- an arity
+    /// mismatch `ParameterInference.infer` records as a diagnostic (plan.md
+    /// §6.1).
+    ///
+    /// - Parameter root: The directory to write the skill's own subdirectory
+    ///   and `SKILL.md` under.
+    /// - Throws: Whatever `writeSkillFixture(id:skillMarkdown:in:)` throws.
+    private static func writeArityMismatchSkill(in root: URL) throws {
+        try writeSkillFixture(
+            id: "arity-mismatch",
+            skillMarkdown: """
+                ---
+                name: arity-mismatch
+                description: A registry test fixture whose arguments: and argument-hint: disagree in count.
+                arguments: message channel urgency
+                argument-hint: "<message> [channel]"
+                ---
+                Body text, unused by this fixture's own tests.
+                """,
+            in: root)
+    }
+
+    @Test func anArgumentsArgumentHintArityMismatchProducesARegistryDiagnosticNamingTheSkillAndTheMismatch()
+        throws
+    {
+        let root = try Self.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try Self.writeArityMismatchSkill(in: root)
+
+        let registry = SkillsRegistry(roots: [root])
+
+        let diagnostic = try #require(
+            registry.diagnostics.first { $0.skillID == "arity-mismatch" && $0.severity == .advisory })
+        #expect(diagnostic.message.contains("argument-hint:"))
+        #expect(diagnostic.message.contains("arguments:"))
+        #expect(diagnostic.provenance.root.path == root.path)
+    }
+
+    // MARK: - commandListing() description truncation
+
+    /// Writes a `SKILL.md` under `root` whose `description:` is well over
+    /// `SkillsRegistry`'s menu truncation cap, built from repeated words so
+    /// the truncation boundary always lands on a space.
+    ///
+    /// - Parameter root: The directory to write the skill's own subdirectory
+    ///   and `SKILL.md` under.
+    /// - Throws: Whatever `writeSkillFixture(id:skillMarkdown:in:)` throws.
+    private static func writeLongDescriptionSkill(in root: URL) throws {
+        let longDescription = Array(repeating: "wordwordword", count: 30).joined(separator: " ")
+        try writeSkillFixture(
+            id: "long-description",
+            skillMarkdown: """
+                ---
+                name: long-description
+                description: "\(longDescription)"
+                ---
+                Body text, unused by this fixture's own tests.
+                """,
+            in: root)
+    }
+
+    @Test func aDescriptionOverTwoHundredCharactersIsTruncatedInCommandListingButFullLengthInMetadata()
+        throws
+    {
+        let root = try Self.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try Self.writeLongDescriptionSkill(in: root)
+
+        let registry = SkillsRegistry(roots: [root])
+
+        let metadataEntry = try #require(registry.metadata().first { $0.id == "long-description" })
+        #expect(metadataEntry.description.count > 200)
+
+        let listingEntry = try #require(registry.commandListing().first { $0.id == "long-description" })
+        let listingDescription = try #require(listingEntry.description)
+        #expect(listingDescription.count <= 201)
+        #expect(listingDescription.hasSuffix("…"))
+        #expect(metadataEntry.description.hasPrefix(listingDescription.dropLast()))
+    }
+
+    @Test func aDescriptionAtOrUnderTwoHundredCharactersIsUnchangedInCommandListing() throws {
+        let root = try Self.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let shortDescription = String(repeating: "a", count: 200)
+        try Self.writeSkillFixture(
+            id: "boundary-description",
+            skillMarkdown: """
+                ---
+                name: boundary-description
+                description: "\(shortDescription)"
+                ---
+                Body text, unused by this fixture's own tests.
+                """,
+            in: root)
+
+        let registry = SkillsRegistry(roots: [root])
+
+        let listingEntry = try #require(registry.commandListing().first { $0.id == "boundary-description" })
+        #expect(listingEntry.description == shortDescription)
+    }
+
     // MARK: - No directory-convention literal in registry source
 
     @Test func registrySourceNamesNoDotfolderConventionLiteral() throws {

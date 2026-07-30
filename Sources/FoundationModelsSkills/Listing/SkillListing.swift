@@ -81,8 +81,9 @@ public struct SkillListing: Sendable, Equatable {
     ///
     /// Inference diagnostics (source-mismatch notes) are not carried on this
     /// type -- callers that need them call `ParameterInference.infer`
-    /// directly; the downstream `SkillsRegistry` (M3) folds them into its own
-    /// diagnostic surface alongside `SkillFrontmatter.notes`.
+    /// directly; `SkillsRegistry.buildCatalog(layers:)` does exactly that,
+    /// folding them into its own `diagnostics` surface alongside
+    /// `SkillValidator`'s.
     ///
     /// - Parameters:
     ///   - id: The directory name -- the canonical id (plan.md §4).

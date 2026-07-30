@@ -1,6 +1,19 @@
 ---
-position_column: todo
-position_ordinal: a280
+comments:
+- actor: claude-code
+  id: 01kyrkcpvfsv88d5r0ft61ywmj
+  text: |-
+    Implemented both §6.1 fixes:
+
+    1. `SkillsRegistry.buildCatalog(layers:)` now calls `ParameterInference.infer(frontmatter:body:)` for every non-hidden validated skill and folds each diagnostic string into `SkillDiagnostic(severity: .advisory, skillID:, provenance:, message:)`, reusing the same `Provenance(discovered:)` idiom `validate(discovered:diagnostics:)` already uses. Corrected the stale `SkillListing.swift` doc comment (it claimed the registry already did this) to name the actual fold site.
+    2. Added `SkillsRegistry.menuDescriptionMaxLength = 200` and `truncatedForMenu(_:)` (breaks on the last word boundary at/before the limit, appends "…"); `listing(for:)` now truncates through it. `metadata()` is untouched and stays full-length.
+
+    Added to `SkillsRegistryTests.swift`: an arity-mismatch fixture proving the new diagnostic names the skill and cites both `arguments:`/`argument-hint:`; a >200-char fixture proving `commandListing()` truncates while `metadata()` stays full-length; a boundary fixture (exactly 200 chars) proving no truncation at the limit.
+
+    `swift build --build-tests` clean; `swift test` 314/314 passed. Committing checkpoint next.
+  timestamp: 2026-07-30T04:09:17.423226+00:00
+position_column: doing
+position_ordinal: '80'
 title: 'Listing fidelity: surface parameter-mismatch diagnostics, truncate menu descriptions'
 ---
 ## What

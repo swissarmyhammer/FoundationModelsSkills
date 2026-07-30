@@ -436,11 +436,35 @@ public struct SkillsRegistry: Sendable {
             guard let validated = Self.validate(discovered: discovered, diagnostics: &diagnostics), !validated.isHidden else {
                 continue
             }
+            diagnostics.append(
+                contentsOf: Self.inferenceDiagnostics(validated: validated, discovered: discovered))
             catalog[discovered.id] = CatalogEntry(
                 validated: validated, discovered: discovered, winningLayer: layers[discovered.rootIndex])
         }
 
         return (catalog, diagnostics)
+    }
+
+    /// Runs `ParameterInference` over `validated` and converts every
+    /// resulting source-mismatch note (e.g. `arguments:`/`argument-hint:`
+    /// arity disagreement) into a `SkillDiagnostic`, carrying `discovered`'s
+    /// winning-root provenance (plan.md §6.1: "Diagnostics flag mismatches
+    /// between sources").
+    ///
+    /// - Parameters:
+    ///   - validated: The validated skill to infer parameters for.
+    ///   - discovered: Its discovery record, for provenance.
+    /// - Returns: One advisory `SkillDiagnostic` per inference note; empty
+    ///   when the sources agree.
+    private static func inferenceDiagnostics(
+        validated: ValidatedSkill, discovered: DiscoveredSkill
+    ) -> [SkillDiagnostic] {
+        ParameterInference.infer(frontmatter: validated.frontmatter, body: validated.body).diagnostics
+            .map { message in
+                SkillDiagnostic(
+                    severity: .advisory, skillID: validated.id,
+                    provenance: SkillDiagnostic.Provenance(discovered: discovered), message: message)
+            }
     }
 
     /// Reads `discovered`'s `SKILL.md` and runs it through `SkillValidator`,
@@ -644,16 +668,37 @@ public struct SkillsRegistry: Sendable {
     }
 
     /// Builds one `commandListing()` row for `entry`, with its description
-    /// rendered.
+    /// rendered and truncated for the menu.
     ///
     /// - Parameter entry: The catalog entry to build a row for.
-    /// - Returns: The row, `description` rendered when present.
+    /// - Returns: The row, `description` rendered and menu-truncated when
+    ///   present.
     private func listing(for entry: CatalogEntry) -> SkillListing {
         var listing = SkillListing(id: entry.id, frontmatter: entry.frontmatter, body: entry.body)
         if let description = entry.frontmatter.description {
-            listing.description = renderedMetadataText(text: description, entry: entry)
+            listing.description = Self.truncatedForMenu(renderedMetadataText(text: description, entry: entry))
         }
         return listing
+    }
+
+    /// The maximum `description` length `commandListing()` shows in the
+    /// user `/` menu (plan.md §6.1: "rendered, truncated for the menu").
+    /// `metadata()` renders the same description full-length -- this cap
+    /// applies only to the menu surface.
+    private static let menuDescriptionMaxLength = 200
+
+    /// Truncates `text` to at most `menuDescriptionMaxLength` characters,
+    /// breaking on the last word boundary at or before the limit where one
+    /// exists and appending an ellipsis.
+    ///
+    /// - Parameter text: The rendered description to truncate.
+    /// - Returns: `text` unchanged when it already fits within the limit;
+    ///   otherwise the truncated, ellipsis-suffixed text.
+    private static func truncatedForMenu(_ text: String) -> String {
+        guard text.count > menuDescriptionMaxLength else { return text }
+        let limit = text.index(text.startIndex, offsetBy: menuDescriptionMaxLength)
+        let breakIndex = text[..<limit].lastIndex(of: " ") ?? limit
+        return text[..<breakIndex].trimmingCharacters(in: .whitespaces) + "…"
     }
 
     // MARK: - preloadedBodies()
