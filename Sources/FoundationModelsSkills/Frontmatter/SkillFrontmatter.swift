@@ -228,18 +228,26 @@ extension SkillFrontmatter: Decodable {
         init?(intValue: Int) { nil }
     }
 
+    /// The spec fields (plan.md §4), decoded only at the top level -- the
+    /// single source of truth `knownTopLevelKeys` builds from, so the two
+    /// never drift.
+    private static let specFieldKeys: Set<String> = [
+        "name", "description", "license", "compatibility", "allowed-tools", "metadata",
+    ]
+
     /// Every top-level key this decoder recognizes -- spec fields plus
     /// extension-field spellings. Anything else lands in
     /// `unknownTopLevelKeys`.
-    private static let knownTopLevelKeys: Set<String> = [
-        "name", "description", "license", "compatibility", "allowed-tools", "metadata",
-        "preload", "user-invocable", "disable-model-invocation", "arguments", "argument-hint",
-        "partial",
-    ]
+    private static let knownTopLevelKeys: Set<String> =
+        Self.specFieldKeys.union(ExtensionKey.allCases.map(\.rawValue))
 
     /// Extension-field spellings, shared between top-level lookup and
     /// `metadata.*` lookup so the two stay in lockstep.
-    private enum ExtensionKey: String {
+    ///
+    /// `CaseIterable` so `knownTopLevelKeys` can derive its extension-field
+    /// half from this single source rather than a second hand-maintained
+    /// literal list.
+    private enum ExtensionKey: String, CaseIterable {
         case preload
         case userInvocable = "user-invocable"
         case disableModelInvocation = "disable-model-invocation"
@@ -312,6 +320,31 @@ extension SkillFrontmatter: Decodable {
             return
         }
         notes.append("metadata.\(key.rawValue) is present but is not \(expectedType); ignoring.")
+    }
+
+    /// Appends an advisory note and drops `topLevel` when it's present but
+    /// not a string or list of strings.
+    ///
+    /// Every other extension field's top-level spelling decodes straight to
+    /// its exact Swift type (`Bool`/`String`), so a mistyped top-level value
+    /// already fails the decode outright and never reaches `init(from:)` at
+    /// all. `arguments:` is the one exception -- its top-level decode target
+    /// is `FrontmatterValue` itself (to accept both the string and list
+    /// spellings), which decodes *any* YAML shape successfully, so a
+    /// mistyped `arguments: 42` needs this explicit check to be diagnosed
+    /// and dropped the same way a mistyped `metadata.arguments` already is.
+    ///
+    /// - Parameters:
+    ///   - topLevel: The already-decoded top-level `arguments:` value.
+    ///   - notes: Accumulates the note, if any.
+    /// - Returns: `topLevel` unchanged when valid or absent; `nil` when
+    ///   present but the wrong shape.
+    private static func validatedTopLevelArguments(
+        _ topLevel: FrontmatterValue?, notes: inout [String]
+    ) -> FrontmatterValue? {
+        guard let topLevel, !Self.isStringOrArray(topLevel) else { return topLevel }
+        notes.append("'arguments' is present but is not a string or list of strings; ignoring.")
+        return nil
     }
 
     /// Resolves one extension field end-to-end: coerces `metadata[key]` via
@@ -404,8 +437,9 @@ extension SkillFrontmatter: Decodable {
         disableModelInvocation = Self.resolveExtensionField(
             .disableModelInvocation, topLevel: topLevelDisableModelInvocation, coerce: \.boolValue,
             expectedType: Self.booleanExtensionFieldTypeDescription, metadata: metadata, notes: &notes)
+        let validatedTopLevelArguments = Self.validatedTopLevelArguments(topLevelArguments, notes: &notes)
         argumentsRaw = Self.resolveExtensionField(
-            .arguments, topLevel: topLevelArguments, coerce: { Self.isStringOrArray($0) ? $0 : nil },
+            .arguments, topLevel: validatedTopLevelArguments, coerce: { Self.isStringOrArray($0) ? $0 : nil },
             expectedType: "a string or list of strings", metadata: metadata, notes: &notes)
         argumentHint = Self.resolveExtensionField(
             .argumentHint, topLevel: topLevelArgumentHint, coerce: \.stringValue, expectedType: "a string",
