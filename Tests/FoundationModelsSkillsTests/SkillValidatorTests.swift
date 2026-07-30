@@ -161,8 +161,9 @@ struct SkillValidatorTests {
 
     // MARK: - description: required (excluded from model surface, kept user-invocable)
 
-    @Test("missing or empty description excludes the model surface but stays user-invocable",
-        arguments: [nil, ""] as [String?])
+    @Test(
+        "missing, empty, or whitespace-only description excludes the model surface but stays user-invocable",
+        arguments: [nil, "", "   ", "\t\n"] as [String?])
     func missingOrEmptyDescriptionExcludesModelSurface(description: String?) {
         let result = validate(frontmatter: SkillFrontmatter(name: "my-skill", description: description))
         #expect(result.diagnostics.contains { $0.severity == .warning })
@@ -214,6 +215,15 @@ struct SkillValidatorTests {
     @Test func compatibilityAbsentProducesNoDiagnostic() {
         let result = validate(frontmatter: SkillFrontmatter(name: "my-skill", description: "A description."))
         #expect(result.diagnostics.isEmpty)
+    }
+
+    @Test func emptyCompatibilityIsAnAdvisoryButDataIsKept() {
+        let result = validate(
+            frontmatter: SkillFrontmatter(
+                name: "my-skill", description: "A description.", compatibility: ""))
+        #expect(result.diagnostics.contains { $0.severity == .advisory })
+        #expect(result.skill?.frontmatter.compatibility == "")
+        #expect(result.skill?.isModelVisibleEligible == true)
     }
 
     // MARK: - Unparseable YAML: skip

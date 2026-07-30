@@ -1,6 +1,6 @@
 ---
-position_column: todo
-position_ordinal: 9b80
+position_column: doing
+position_ordinal: '80'
 title: 'Validation edges: blank description, empty compatibility, mistyped metadata.*'
 ---
 ## What

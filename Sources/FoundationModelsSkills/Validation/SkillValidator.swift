@@ -72,6 +72,7 @@ public struct ValidatedSkill: Sendable, Equatable {
 /// | missing/empty `description` | warning | excluded from the model surface, kept user-invocable |
 /// | `description` over 1024 characters | warning | kept as data |
 /// | `compatibility` over 500 characters | warning | kept as data |
+/// | `compatibility` present but empty | advisory | kept as data |
 /// | unparseable YAML (decoder `.skipped`) | skip | not loaded at all |
 /// | `partial: true` | warning | hidden from every surface |
 /// | shadowed id | advisory | none |
@@ -184,6 +185,7 @@ public enum SkillValidator {
         Rule(evaluate: missingDescriptionDiagnostic, consequence: .excludeFromModelSurface),
         Rule(evaluate: descriptionOverLimitDiagnostic, consequence: .none),
         Rule(evaluate: compatibilityOverLimitDiagnostic, consequence: .none),
+        Rule(evaluate: emptyCompatibilityDiagnostic, consequence: .none),
         Rule(evaluate: partialFlagDiagnostic, consequence: .hide),
         Rule(evaluate: shadowedIDDiagnostic, consequence: .none),
         Rule(evaluate: bodyLineCountDiagnostic, consequence: .none),
@@ -344,19 +346,43 @@ public enum SkillValidator {
             limit: compatibilityCharacterLimit, context: context)
     }
 
-    // MARK: - description: required
-
-    /// Rule: a missing or empty `description:` draws a `.warning`
-    /// diagnostic and excludes the skill from the model-facing surface (it
-    /// cannot be disclosed without one) while keeping it user-invocable --
-    /// this package's one deliberate softening of the client-implementation
-    /// guide's skip-entirely rule (plan.md §4, decision #27).
+    /// Rule: `compatibility:` present but empty draws an `.advisory`
+    /// diagnostic -- the spec's 1-character floor, distinct from
+    /// `overLimitDiagnostic`'s upper-bound-only check (which short-circuits
+    /// on an empty value, since an empty string can never exceed a limit).
+    /// A wholly absent `compatibility:` is unremarkable and draws nothing;
+    /// only an explicit `compatibility: ""` is worth a note.
     ///
     /// - Parameter context: The rule context.
-    /// - Returns: A diagnostic when `description:` is missing or empty, else
-    ///   `nil`.
+    /// - Returns: A diagnostic when `compatibility:` is present but empty,
+    ///   else `nil`.
+    private static func emptyCompatibilityDiagnostic(_ context: RuleContext) -> SkillDiagnostic? {
+        guard context.frontmatter.compatibility == "" else { return nil }
+        return SkillDiagnostic(
+            severity: .advisory, skillID: context.id, provenance: context.provenance,
+            message: "compatibility is present but empty; kept as data.")
+    }
+
+    // MARK: - description: required
+
+    /// Rule: a missing, empty, or whitespace-only `description:` draws a
+    /// `.warning` diagnostic and excludes the skill from the model-facing
+    /// surface (it cannot be disclosed without one) while keeping it
+    /// user-invocable -- this package's one deliberate softening of the
+    /// client-implementation guide's skip-entirely rule (plan.md §4,
+    /// decision #27).
+    ///
+    /// Trims before testing emptiness so `description: "   "` -- whitespace
+    /// a model could never usefully disclose -- draws the same diagnostic
+    /// as a genuinely absent or empty value, rather than slipping through
+    /// as "present".
+    ///
+    /// - Parameter context: The rule context.
+    /// - Returns: A diagnostic when `description:` is missing, empty, or
+    ///   whitespace-only, else `nil`.
     private static func missingDescriptionDiagnostic(_ context: RuleContext) -> SkillDiagnostic? {
-        guard context.frontmatter.description == nil || context.frontmatter.description == "" else {
+        let trimmed = context.frontmatter.description?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed == nil || trimmed == "" else {
             return nil
         }
         return SkillDiagnostic(

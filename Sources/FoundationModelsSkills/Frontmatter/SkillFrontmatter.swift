@@ -263,6 +263,42 @@ extension SkillFrontmatter: Decodable {
         return topLevel
     }
 
+    /// Whether `value` is YAML's explicit or implicit null (`~`, `null`, or
+    /// an empty scalar) -- a mistyped-value note would be noise for a null,
+    /// which reads as "absent", not "present with the wrong type".
+    private static func isNull(_ value: FrontmatterValue) -> Bool {
+        if case .null = value { return true }
+        return false
+    }
+
+    /// Appends an advisory note when `metadata.<key>` is present with a
+    /// value that failed to coerce to `key`'s expected extension-field type
+    /// -- independent of whether a top-level value also exists for the same
+    /// field (that conflict, when both coerce cleanly, is
+    /// `resolvedExtensionField`'s own concern), so a mistyped-but-otherwise-
+    /// unused `metadata.*` entry is never silently dropped without a trace
+    /// (plan.md §4/#27).
+    ///
+    /// - Parameters:
+    ///   - key: The extension field being checked.
+    ///   - expectedType: The type name to report in the note (e.g. "a
+    ///     boolean").
+    ///   - coercedValue: The already-attempted coercion of
+    ///     `metadata[key.rawValue]` -- `nil` when absent, null, or the wrong
+    ///     type.
+    ///   - metadata: The full `metadata:` mapping, to distinguish "absent"
+    ///     from "present but wrong type".
+    ///   - notes: Accumulates the note, if any.
+    private static func noteMetadataTypeMismatch<T>(
+        _ key: ExtensionKey, expectedType: String, coercedValue: T?,
+        metadata: [String: FrontmatterValue], notes: inout [String]
+    ) {
+        guard coercedValue == nil, let rawValue = metadata[key.rawValue], !isNull(rawValue) else {
+            return
+        }
+        notes.append("metadata.\(key.rawValue) is present but is not \(expectedType); ignoring.")
+    }
+
     /// Decodes `SkillFrontmatter` from a YAML mapping (via Yams' `Decoder`).
     ///
     /// Spec fields (`name`, `description`, `license`, `compatibility`,
@@ -310,25 +346,49 @@ extension SkillFrontmatter: Decodable {
         let topLevelPartial = try decodeBoolExtensionField(.partial)
 
         var notes: [String] = []
+
+        let metadataPreload = metadata[ExtensionKey.preload.rawValue]?.boolValue
+        Self.noteMetadataTypeMismatch(
+            .preload, expectedType: "a boolean", coercedValue: metadataPreload,
+            metadata: metadata, notes: &notes)
         preload = Self.resolvedExtensionField(
-            .preload, topLevel: topLevelPreload,
-            metadataValue: metadata[ExtensionKey.preload.rawValue]?.boolValue, notes: &notes)
+            .preload, topLevel: topLevelPreload, metadataValue: metadataPreload, notes: &notes)
+
+        let metadataUserInvocable = metadata[ExtensionKey.userInvocable.rawValue]?.boolValue
+        Self.noteMetadataTypeMismatch(
+            .userInvocable, expectedType: "a boolean", coercedValue: metadataUserInvocable,
+            metadata: metadata, notes: &notes)
         userInvocable = Self.resolvedExtensionField(
-            .userInvocable, topLevel: topLevelUserInvocable,
-            metadataValue: metadata[ExtensionKey.userInvocable.rawValue]?.boolValue, notes: &notes)
+            .userInvocable, topLevel: topLevelUserInvocable, metadataValue: metadataUserInvocable,
+            notes: &notes)
+
+        let metadataDisableModelInvocation = metadata[ExtensionKey.disableModelInvocation.rawValue]?
+            .boolValue
+        Self.noteMetadataTypeMismatch(
+            .disableModelInvocation, expectedType: "a boolean",
+            coercedValue: metadataDisableModelInvocation, metadata: metadata, notes: &notes)
         disableModelInvocation = Self.resolvedExtensionField(
             .disableModelInvocation, topLevel: topLevelDisableModelInvocation,
-            metadataValue: metadata[ExtensionKey.disableModelInvocation.rawValue]?.boolValue,
-            notes: &notes)
+            metadataValue: metadataDisableModelInvocation, notes: &notes)
+
         argumentsRaw = Self.resolvedExtensionField(
             .arguments, topLevel: topLevelArguments,
             metadataValue: metadata[ExtensionKey.arguments.rawValue], notes: &notes)
+
+        let metadataArgumentHint = metadata[ExtensionKey.argumentHint.rawValue]?.stringValue
+        Self.noteMetadataTypeMismatch(
+            .argumentHint, expectedType: "a string", coercedValue: metadataArgumentHint,
+            metadata: metadata, notes: &notes)
         argumentHint = Self.resolvedExtensionField(
-            .argumentHint, topLevel: topLevelArgumentHint,
-            metadataValue: metadata[ExtensionKey.argumentHint.rawValue]?.stringValue, notes: &notes)
+            .argumentHint, topLevel: topLevelArgumentHint, metadataValue: metadataArgumentHint,
+            notes: &notes)
+
+        let metadataPartial = metadata[ExtensionKey.partial.rawValue]?.boolValue
+        Self.noteMetadataTypeMismatch(
+            .partial, expectedType: "a boolean", coercedValue: metadataPartial,
+            metadata: metadata, notes: &notes)
         partial = Self.resolvedExtensionField(
-            .partial, topLevel: topLevelPartial,
-            metadataValue: metadata[ExtensionKey.partial.rawValue]?.boolValue, notes: &notes)
+            .partial, topLevel: topLevelPartial, metadataValue: metadataPartial, notes: &notes)
 
         self.notes = notes
         self.unknownTopLevelKeys =

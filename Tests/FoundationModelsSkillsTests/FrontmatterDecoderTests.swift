@@ -153,6 +153,48 @@ struct FrontmatterDecoderTests {
         #expect(frontmatter.notes.contains { $0.contains("argument-hint") })
     }
 
+    // MARK: - Extension fields present under metadata.* with the wrong type: advisory note
+
+    @Test(
+        "a mistyped boolean extension field under metadata.* draws an advisory note and is ignored",
+        arguments: [
+            "preload",
+            "user-invocable",
+            "disable-model-invocation",
+            "partial",
+        ])
+    func mistypedBooleanExtensionFieldUnderMetadataRecordsANoteAndIsIgnored(key: String) throws {
+        let frontmatter = try decodeFrontmatter(
+            "name: x\ndescription: d\nmetadata:\n  \(key): \"true\"")
+        #expect(boolField(key, of: frontmatter) == nil)
+        #expect(frontmatter.notes.contains { $0.contains("metadata.\(key)") })
+    }
+
+    @Test func mistypedArgumentHintUnderMetadataRecordsANoteAndIsIgnored() throws {
+        let frontmatter = try decodeFrontmatter("name: x\ndescription: d\nmetadata:\n  argument-hint: 42")
+        #expect(frontmatter.argumentHint == nil)
+        #expect(frontmatter.notes.contains { $0.contains("metadata.argument-hint") })
+    }
+
+    @Test(
+        "a correctly-typed boolean extension field under metadata.* draws no mistyped-value note",
+        arguments: [
+            "preload",
+            "user-invocable",
+            "disable-model-invocation",
+            "partial",
+        ])
+    func correctlyTypedBooleanExtensionFieldUnderMetadataRecordsNoMismatchNote(key: String) throws {
+        let frontmatter = try decodeFrontmatter("name: x\ndescription: d\nmetadata:\n  \(key): true")
+        #expect(!frontmatter.notes.contains { $0.contains("metadata.\(key)") })
+    }
+
+    @Test func nullExtensionFieldUnderMetadataRecordsNoMismatchNote() throws {
+        let frontmatter = try decodeFrontmatter("name: x\ndescription: d\nmetadata:\n  preload: ~")
+        #expect(frontmatter.preload == nil)
+        #expect(frontmatter.notes.isEmpty)
+    }
+
     // MARK: - argument-hint: top-level and metadata.*
 
     @Test func argumentHintDecodesFromTopLevel() throws {
