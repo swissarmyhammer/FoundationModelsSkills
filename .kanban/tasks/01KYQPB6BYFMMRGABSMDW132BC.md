@@ -1,6 +1,11 @@
 ---
-position_column: doing
-position_ordinal: '80'
+comments:
+- actor: claude-code
+  id: 01kyra8bpmsw753gw8k494n649
+  text: 'Implemented: SkillMetadata gained parameterDetails: [SkillParameter] alongside the existing parameters: [String] display summaries, built once per catalog entry in SkillsRegistry.metadata(). UseSkill.firstMissingRequiredParameterName now consults SkillParameter.required directly instead of re-deriving it from the rendered placeholder''s bracket syntax; the placeholder-grammar parsing helpers it used are removed entirely. SkillRow.parameters (display) is unchanged. Added a required-flag matrix in SkillOperationsTests.swift covering all three parameter sources (arguments:-only, hint-only unbracketed/bracketed, body-inferred) against a private temp-directory fixture, isolated from the shared project/.skills library. One review round also caught and fixed a pre-existing byte-identical withLock<T> duplication between CatalogBox and ReloadBroadcaster (dating to an earlier task), replaced with Foundation''s NSLocking.withLock(_:). Final review clean, 291/291 tests green.'
+  timestamp: 2026-07-30T01:29:37.748416+00:00
+position_column: done
+position_ordinal: 9d80
 title: 'UseSkill required-arg check: use SkillParameter.required, not placeholder text'
 ---
 ## What
