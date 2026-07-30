@@ -27,6 +27,12 @@ import Testing
 /// `isModelVisible` before ever reaching `MetadataSearcher`), so it never
 /// perturbs the embed-count/diagnostic assertions steps 1-2 already make
 /// about `alpha`/`bravo`.
+///
+/// The count-only event tally, generic polling, "exactly one event" wait,
+/// and `SKILL.md` fixture-writing helpers all live in shared
+/// `ReloadTestSupport`, not reimplemented here -- `SkillsRegistryReloadTests`
+/// waits on the identical reload signal shape (review findings, 2026-07-29
+/// 21:57).
 struct HotReloadTests {
     /// How long the test waits for an expected `update(items:)` call to
     /// reach the searcher before treating its absence as a failure.
@@ -46,7 +52,7 @@ struct HotReloadTests {
     func hotReloadEndToEndFiveStepScenario() async throws {
         let root = try HotReloadTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
-        try Self.writeSkillFile(id: "alpha", in: root, descriptionSuffix: "v1")
+        try ReloadTestSupport.writeSkillFile(id: "alpha", in: root, descriptionSuffix: "v1")
 
         let registry = SkillsRegistry(roots: [root], watch: true)
         let embedGate = EmbedGate()
@@ -67,7 +73,7 @@ struct HotReloadTests {
             onDiagnostic: { diagnostics.record($0) }
         )
         let agent = SkillSearchAgent(searcher: searcher)
-        let updates = UpdateCallRecorder()
+        let updates = ReloadTestSupport.EventTally()
         let subscription = Self.subscribe(registry, forwardingTo: agent, recordingInto: updates)
         defer { subscription.cancel() }
 
@@ -106,7 +112,7 @@ struct HotReloadTests {
     func selectionTierSearchesThroughAScriptedAgentSessionAfterReload() async throws {
         let root = try HotReloadTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
-        try Self.writeSkillFile(id: "alpha", in: root, descriptionSuffix: "v1")
+        try ReloadTestSupport.writeSkillFile(id: "alpha", in: root, descriptionSuffix: "v1")
 
         let registry = SkillsRegistry(roots: [root], watch: true)
         let sessionFactory = SelectionSessionFactory(responsesPerCall: [
@@ -122,11 +128,11 @@ struct HotReloadTests {
         #expect(preReloadMatches.map(\.id) == ["alpha"])
         #expect(sessionFactory.callCount == 1)
 
-        let updates = UpdateCallRecorder()
+        let updates = ReloadTestSupport.EventTally()
         let subscription = Self.subscribe(registry, forwardingTo: agent, recordingInto: updates)
         defer { subscription.cancel() }
 
-        try Self.writeSkillFile(id: "bravo", in: root, descriptionSuffix: "v1")
+        try ReloadTestSupport.writeSkillFile(id: "bravo", in: root, descriptionSuffix: "v1")
         await Self.expectExactlyOneUpdate(updates, since: 0)
 
         let postReloadMatches = try await agent.search(query: "anything", limit: 5)
@@ -165,12 +171,12 @@ struct HotReloadTests {
     ///   step's reload settles -- `charlie`'s v1 body should already be
     ///   present.
     private static func stepOneAdd(
-        root: URL, registry: SkillsRegistry, updates: UpdateCallRecorder, diagnostics: DiagnosticRecorder,
-        embedGate: EmbedGate, tool: OperationTool<SkillsToolContext>
+        root: URL, registry: SkillsRegistry, updates: ReloadTestSupport.EventTally,
+        diagnostics: DiagnosticRecorder, embedGate: EmbedGate, tool: OperationTool<SkillsToolContext>
     ) async throws -> String {
         await embedGate.close()
-        try Self.writeSkillFile(id: "bravo", in: root, descriptionSuffix: "v1")
-        try Self.writeSkillFile(
+        try ReloadTestSupport.writeSkillFile(id: "bravo", in: root, descriptionSuffix: "v1")
+        try ReloadTestSupport.writeSkillFile(
             id: "charlie", in: root, descriptionSuffix: "v1",
             extraFrontmatter: "preload: true\ndisable-model-invocation: true\n",
             body: "Preload payload v1 for charlie.")
@@ -220,13 +226,13 @@ struct HotReloadTests {
     ///   step's reload settles -- `charlie`'s v2 body should have replaced
     ///   v1.
     private static func stepTwoEdit(
-        root: URL, registry: SkillsRegistry, updates: UpdateCallRecorder, embedder: FakeEmbedder
+        root: URL, registry: SkillsRegistry, updates: ReloadTestSupport.EventTally, embedder: FakeEmbedder
     ) async throws -> String {
-        let baseline = await updates.callCount
+        let baseline = await updates.count
         let countBeforeEdit = embedder.embeddedTextCount
 
-        try Self.writeSkillFile(id: "bravo", in: root, descriptionSuffix: "v2")
-        try Self.writeSkillFile(
+        try ReloadTestSupport.writeSkillFile(id: "bravo", in: root, descriptionSuffix: "v2")
+        try ReloadTestSupport.writeSkillFile(
             id: "charlie", in: root, descriptionSuffix: "v1",
             extraFrontmatter: "preload: true\ndisable-model-invocation: true\n",
             body: "Preload payload v2 for charlie.")
@@ -241,8 +247,8 @@ struct HotReloadTests {
         #expect(preloadedAfterEdit.contains("Preload payload v2 for charlie."))
         #expect(!preloadedAfterEdit.contains("Preload payload v1 for charlie."))
 
-        let secondBaseline = await updates.callCount
-        try Self.writeSkillFile(id: "bravo", in: root, descriptionSuffix: "v2")
+        let secondBaseline = await updates.count
+        try ReloadTestSupport.writeSkillFile(id: "bravo", in: root, descriptionSuffix: "v2")
         await Self.expectExactlyOneUpdate(updates, since: secondBaseline)
         // No async catch-up follows a no-op touch, so there is nothing to
         // poll for -- the noFurtherSignalWindow the update-count wait above
@@ -268,11 +274,12 @@ struct HotReloadTests {
     /// - Returns: `registry.preloadedBodies()`, captured right after this
     ///   step's reload settles -- `charlie`'s body should be entirely gone.
     private static func stepThreeRemove(
-        root: URL, registry: SkillsRegistry, updates: UpdateCallRecorder, tool: OperationTool<SkillsToolContext>
+        root: URL, registry: SkillsRegistry, updates: ReloadTestSupport.EventTally,
+        tool: OperationTool<SkillsToolContext>
     )
         async throws -> String
     {
-        let baseline = await updates.callCount
+        let baseline = await updates.count
         try FileManager.default.removeItem(at: root.appendingPathComponent("alpha", isDirectory: true))
         try FileManager.default.removeItem(at: root.appendingPathComponent("charlie", isDirectory: true))
         await Self.expectExactlyOneUpdate(updates, since: baseline)
@@ -309,10 +316,10 @@ struct HotReloadTests {
     ///   - updates: Tallies every forwarded `update(items:)` call.
     ///   - tool: The fused `skills` tool to dispatch through.
     private static func stepFourVisibilityFlip(
-        root: URL, updates: UpdateCallRecorder, tool: OperationTool<SkillsToolContext>
+        root: URL, updates: ReloadTestSupport.EventTally, tool: OperationTool<SkillsToolContext>
     ) async throws {
-        let baseline = await updates.callCount
-        try Self.writeSkillFile(
+        let baseline = await updates.count
+        try ReloadTestSupport.writeSkillFile(
             id: "bravo", in: root, descriptionSuffix: "v2", extraFrontmatter: "disable-model-invocation: true\n")
         await Self.expectExactlyOneUpdate(updates, since: baseline)
 
@@ -377,18 +384,7 @@ struct HotReloadTests {
         #expect(schemaAfter == schemaBefore, "the fused tool's schema must never vary with catalog content")
     }
 
-    // MARK: - Update-call recorder
-
-    /// Tallies every `SkillSearchAgent.update(items:)` call this test's
-    /// `onReload` subscription forwards.
-    private actor UpdateCallRecorder {
-        private(set) var callCount = 0
-
-        /// Records one forwarded `update(items:)` call.
-        func recordUpdate() {
-            callCount += 1
-        }
-    }
+    // MARK: - Update-call subscription
 
     /// Starts a background task that iterates `registry.onReload` (when
     /// non-`nil`), forwarding each published metadata list into
@@ -403,13 +399,13 @@ struct HotReloadTests {
     /// - Returns: The subscription task; the caller cancels it once done
     ///   observing.
     private static func subscribe(
-        _ registry: SkillsRegistry, forwardingTo agent: SkillSearchAgent, recordingInto recorder: UpdateCallRecorder
+        _ registry: SkillsRegistry, forwardingTo agent: SkillSearchAgent, recordingInto recorder: ReloadTestSupport.EventTally
     ) -> Task<Void, Never> {
         Task {
             guard let stream = registry.onReload else { return }
             for await metadata in stream {
                 await agent.update(items: metadata)
-                await recorder.recordUpdate()
+                await recorder.record()
             }
         }
     }
@@ -422,33 +418,10 @@ struct HotReloadTests {
     /// - Parameters:
     ///   - recorder: The recorder to assert against.
     ///   - baseline: The call count observed before the action under test.
-    private static func expectExactlyOneUpdate(_ recorder: UpdateCallRecorder, since baseline: Int) async {
-        let afterFirst = await Self.waitForUpdateCount(recorder, atLeast: baseline + 1, timeout: Self.expectedSignalTimeout)
-        #expect(afterFirst == baseline + 1)
-
-        let afterSettling = await Self.waitForUpdateCount(recorder, atLeast: baseline + 2, timeout: Self.noFurtherSignalWindow)
-        #expect(afterSettling == baseline + 1)
-    }
-
-    /// Polls `recorder`'s call count until it reaches `target` or `timeout`
-    /// elapses.
-    ///
-    /// - Parameters:
-    ///   - recorder: The recorder to poll.
-    ///   - target: The call count to wait for.
-    ///   - timeout: How long to keep polling before giving up.
-    /// - Returns: The observed call count at the moment polling stopped,
-    ///   whether or not it reached `target`.
-    private static func waitForUpdateCount(_ recorder: UpdateCallRecorder, atLeast target: Int, timeout: Duration)
-        async -> Int
-    {
-        let deadline = ContinuousClock.now.advanced(by: timeout)
-        var current = await recorder.callCount
-        while current < target, ContinuousClock.now < deadline {
-            try? await Task.sleep(for: .milliseconds(10))
-            current = await recorder.callCount
-        }
-        return current
+    private static func expectExactlyOneUpdate(_ recorder: ReloadTestSupport.EventTally, since baseline: Int) async {
+        await ReloadTestSupport.expectExactlyOneEvent(
+            countGetter: { await recorder.count }, since: baseline,
+            signalTimeout: Self.expectedSignalTimeout, settleWindow: Self.noFurtherSignalWindow)
     }
 
     // MARK: - Diagnostic recorder
@@ -490,14 +463,10 @@ struct HotReloadTests {
     /// - Returns: `true` if a matching diagnostic was observed before
     ///   `timeout`; `false` otherwise.
     private static func waitForDiagnostic(
-        _ recorder: DiagnosticRecorder, timeout: Duration, matching matches: (MetadataDiagnostic) -> Bool
+        _ recorder: DiagnosticRecorder, timeout: Duration, matching matches: @escaping (MetadataDiagnostic) -> Bool
     ) async -> Bool {
-        let deadline = ContinuousClock.now.advanced(by: timeout)
-        while ContinuousClock.now < deadline {
-            if recorder.snapshot.contains(where: matches) { return true }
-            try? await Task.sleep(for: .milliseconds(10))
-        }
-        return recorder.snapshot.contains(where: matches)
+        await ReloadTestSupport.poll(
+            { recorder.snapshot.contains(where: matches) }, until: { $0 }, timeout: timeout)
     }
 
     /// Polls `embedder`'s embedded-text count until it reaches `target` or
@@ -513,10 +482,7 @@ struct HotReloadTests {
     private static func waitForEmbeddedTextCount(_ embedder: FakeEmbedder, atLeast target: Int, timeout: Duration)
         async
     {
-        let deadline = ContinuousClock.now.advanced(by: timeout)
-        while embedder.embeddedTextCount < target, ContinuousClock.now < deadline {
-            try? await Task.sleep(for: .milliseconds(10))
-        }
+        _ = await ReloadTestSupport.poll({ embedder.embeddedTextCount }, until: { $0 >= target }, timeout: timeout)
     }
 
     /// Races `gate.waitUntilBlocked()` against `timeout`, so a step waiting
@@ -752,60 +718,5 @@ struct HotReloadTests {
             let responses = index < responsesPerCall.count ? responsesPerCall[index] : []
             return ScriptedAgentSession(responses)
         }
-    }
-
-    // MARK: - Fixture file helpers
-
-    /// Builds a minimal but structurally valid `SKILL.md` body for `id`,
-    /// with `descriptionSuffix` folded into `description:` -- the field
-    /// `SkillMetadata.renderBlock()` actually indexes, unlike the body,
-    /// which `renderBlock()` never includes.
-    ///
-    /// - Parameters:
-    ///   - id: The skill id the frontmatter's `name:` field carries.
-    ///   - descriptionSuffix: Text appended to `description:`, so successive
-    ///     calls with different suffixes produce a genuinely different
-    ///     indexed block.
-    ///   - extraFrontmatter: Additional raw frontmatter lines (each already
-    ///     newline-terminated) inserted before the closing `---`, or empty
-    ///     for none.
-    ///   - body: The body text, or `nil` for the default `"Body text for
-    ///     \(id)."` -- overridden by a `preload: true` fixture so
-    ///     `preloadedBodies()` has genuinely distinguishable content to
-    ///     assert against across an edit.
-    /// - Returns: The `SKILL.md` file contents.
-    private static func skillFileContents(
-        id: String, descriptionSuffix: String, extraFrontmatter: String, body: String? = nil
-    ) -> String {
-        "---\nname: \(id)\ndescription: hot-reload fixture \(descriptionSuffix)\n\(extraFrontmatter)---\n"
-            + "\(body ?? "Body text for \(id).")\n"
-    }
-
-    /// Writes `id/SKILL.md` directly under `directory`, creating the skill's
-    /// own subdirectory first if it does not already exist.
-    ///
-    /// - Parameters:
-    ///   - id: The skill id -- both the subdirectory name and the
-    ///     frontmatter's `name:` field.
-    ///   - directory: The root to write under.
-    ///   - descriptionSuffix: Forwarded to
-    ///     `skillFileContents(id:descriptionSuffix:extraFrontmatter:body:)`.
-    ///   - extraFrontmatter: Forwarded to
-    ///     `skillFileContents(id:descriptionSuffix:extraFrontmatter:body:)`;
-    ///     defaults to none.
-    ///   - body: Forwarded to
-    ///     `skillFileContents(id:descriptionSuffix:extraFrontmatter:body:)`;
-    ///     defaults to `nil`.
-    /// - Throws: Whatever `FileManager.createDirectory` or `String.write`
-    ///   throws.
-    private static func writeSkillFile(
-        id: String, in directory: URL, descriptionSuffix: String, extraFrontmatter: String = "", body: String? = nil
-    ) throws {
-        let skillDirectory = directory.appendingPathComponent(id, isDirectory: true)
-        try FileManager.default.createDirectory(at: skillDirectory, withIntermediateDirectories: true)
-        try Self.skillFileContents(
-            id: id, descriptionSuffix: descriptionSuffix, extraFrontmatter: extraFrontmatter, body: body
-        )
-        .write(to: skillDirectory.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
     }
 }

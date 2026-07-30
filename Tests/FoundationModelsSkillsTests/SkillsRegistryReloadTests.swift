@@ -10,6 +10,11 @@ import Testing
 /// `[SkillMetadata]` exactly once per rebuild, `watch: false` performs no
 /// watching at all, and the watcher's lifecycle is owned by the registry --
 /// stopped once the registry (and every copy of it) is deinitialized.
+///
+/// The count-only event tally, generic polling, "exactly one event" wait,
+/// and `SKILL.md` fixture-writing helpers all live in shared
+/// `ReloadTestSupport`, not reimplemented here -- `HotReloadTests` waits on
+/// the identical reload signal shape (review findings, 2026-07-29 21:57).
 struct SkillsRegistryReloadTests {
     /// How long a test waits for an expected `onReload` publication to
     /// arrive before treating its absence as a failure. Generous relative to
@@ -30,14 +35,14 @@ struct SkillsRegistryReloadTests {
     {
         let root = try WatcherTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
-        try Self.writeSkillFile(id: "editable-skill", in: root, descriptionSuffix: "before edit")
+        try ReloadTestSupport.writeSkillFile(id: "editable-skill", in: root, descriptionSuffix: "before edit")
 
         let registry = SkillsRegistry(roots: [root], watch: true)
         let recorder = MetadataUpdateRecorder()
         let subscription = Self.subscribe(registry, to: recorder)
         defer { subscription.cancel() }
 
-        try Self.writeSkillFile(id: "editable-skill", in: root, descriptionSuffix: "after edit")
+        try ReloadTestSupport.writeSkillFile(id: "editable-skill", in: root, descriptionSuffix: "after edit")
         await Self.expectExactlyOnePublication(recorder, since: 0)
 
         let latest = try #require(await recorder.publications.last)
@@ -60,7 +65,8 @@ struct SkillsRegistryReloadTests {
     @Test func reloadRefreshesPreloadedBodiesAndDiagnostics() async throws {
         let root = try WatcherTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
-        try Self.writePreloadSkillFile(id: "preload-skill", in: root, body: "Preload body v1.")
+        try ReloadTestSupport.writeSkillFile(
+            id: "preload-skill", in: root, extraFrontmatter: "preload: true\n", body: "Preload body v1.")
 
         let registry = SkillsRegistry(roots: [root], watch: true)
         #expect(registry.preloadedBodies().contains("Preload body v1."))
@@ -71,7 +77,8 @@ struct SkillsRegistryReloadTests {
         defer { subscription.cancel() }
 
         // Edit: preloadedBodies() picks up the new content, not the old.
-        try Self.writePreloadSkillFile(id: "preload-skill", in: root, body: "Preload body v2.")
+        try ReloadTestSupport.writeSkillFile(
+            id: "preload-skill", in: root, extraFrontmatter: "preload: true\n", body: "Preload body v2.")
         await Self.expectExactlyOnePublication(recorder, since: 0)
         #expect(registry.preloadedBodies().contains("Preload body v2."))
         #expect(!registry.preloadedBodies().contains("Preload body v1."))
@@ -114,14 +121,14 @@ struct SkillsRegistryReloadTests {
     @Test func callAfterAReloadReturnsTheNewBodyNotTheStaleOne() async throws {
         let root = try WatcherTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
-        try Self.writeSkillFile(id: "callable-skill", in: root, body: "v1")
+        try ReloadTestSupport.writeSkillFile(id: "callable-skill", in: root, body: "v1")
 
         let registry = SkillsRegistry(roots: [root], watch: true)
         let recorder = MetadataUpdateRecorder()
         let subscription = Self.subscribe(registry, to: recorder)
         defer { subscription.cancel() }
 
-        try Self.writeSkillFile(id: "callable-skill", in: root, body: "v2")
+        try ReloadTestSupport.writeSkillFile(id: "callable-skill", in: root, body: "v2")
         await Self.expectExactlyOnePublication(recorder, since: 0)
 
         let body = try registry.call(id: "callable-skill")
@@ -134,14 +141,14 @@ struct SkillsRegistryReloadTests {
     @Test func addingASkillDirectoryPropagatesToMetadataAndCommandListing() async throws {
         let root = try WatcherTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
-        try Self.writeSkillFile(id: "existing-skill", in: root, descriptionSuffix: "v1")
+        try ReloadTestSupport.writeSkillFile(id: "existing-skill", in: root, descriptionSuffix: "v1")
 
         let registry = SkillsRegistry(roots: [root], watch: true)
         let recorder = MetadataUpdateRecorder()
         let subscription = Self.subscribe(registry, to: recorder)
         defer { subscription.cancel() }
 
-        try Self.writeSkillFile(id: "new-skill", in: root, descriptionSuffix: "v1")
+        try ReloadTestSupport.writeSkillFile(id: "new-skill", in: root, descriptionSuffix: "v1")
         await Self.expectExactlyOnePublication(recorder, since: 0)
 
         #expect(Set(registry.metadata().map(\.id)) == ["existing-skill", "new-skill"])
@@ -151,8 +158,8 @@ struct SkillsRegistryReloadTests {
     @Test func removingASkillDirectoryPropagatesToMetadataAndCommandListing() async throws {
         let root = try WatcherTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
-        try Self.writeSkillFile(id: "surviving-skill", in: root, descriptionSuffix: "v1")
-        try Self.writeSkillFile(id: "doomed-skill", in: root, descriptionSuffix: "v1")
+        try ReloadTestSupport.writeSkillFile(id: "surviving-skill", in: root, descriptionSuffix: "v1")
+        try ReloadTestSupport.writeSkillFile(id: "doomed-skill", in: root, descriptionSuffix: "v1")
 
         let registry = SkillsRegistry(roots: [root], watch: true)
         let recorder = MetadataUpdateRecorder()
@@ -173,7 +180,7 @@ struct SkillsRegistryReloadTests {
         defer { try? FileManager.default.removeItem(at: root) }
         let knownIDs = (0..<5).map { "stress-\($0)" }
         for id in knownIDs {
-            try Self.writeSkillFile(id: id, in: root, descriptionSuffix: "v1")
+            try ReloadTestSupport.writeSkillFile(id: id, in: root, descriptionSuffix: "v1")
         }
 
         let registry = SkillsRegistry(roots: [root], watch: true)
@@ -188,7 +195,7 @@ struct SkillsRegistryReloadTests {
             group.addTask {
                 for iteration in 0..<15 {
                     let mutatedID = knownIDs[iteration % knownIDs.count]
-                    try Self.writeSkillFile(id: mutatedID, in: root, descriptionSuffix: "rev\(iteration)")
+                    try ReloadTestSupport.writeSkillFile(id: mutatedID, in: root, descriptionSuffix: "rev\(iteration)")
                     try await Task.sleep(for: .milliseconds(20))
                 }
             }
@@ -223,7 +230,7 @@ struct SkillsRegistryReloadTests {
     @Test func watchDefaultsToFalseWhenOmitted() throws {
         let root = try WatcherTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
-        try Self.writeSkillFile(id: "static-skill", in: root, descriptionSuffix: "v1")
+        try ReloadTestSupport.writeSkillFile(id: "static-skill", in: root, descriptionSuffix: "v1")
 
         let registry = SkillsRegistry(roots: [root])
         #expect(registry.onReload == nil)
@@ -232,12 +239,12 @@ struct SkillsRegistryReloadTests {
     @Test func watchFalseEditingATempFileChangesNothing() async throws {
         let root = try WatcherTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
-        try Self.writeSkillFile(id: "static-skill", in: root, descriptionSuffix: "before edit")
+        try ReloadTestSupport.writeSkillFile(id: "static-skill", in: root, descriptionSuffix: "before edit")
 
         let registry = SkillsRegistry(roots: [root], watch: false)
         #expect(registry.onReload == nil)
 
-        try Self.writeSkillFile(id: "static-skill", in: root, descriptionSuffix: "after edit")
+        try ReloadTestSupport.writeSkillFile(id: "static-skill", in: root, descriptionSuffix: "after edit")
         // Gives an incorrectly-wired watcher a chance to fire before asserting nothing changed.
         try await Task.sleep(for: Self.noFurtherSignalWindow)
 
@@ -259,7 +266,7 @@ struct SkillsRegistryReloadTests {
         let subscription = Self.subscribe(registry, to: recorder)
         defer { subscription.cancel() }
 
-        try Self.writeSkillFile(id: "late-arrival", in: lateRoot, descriptionSuffix: "v1")
+        try ReloadTestSupport.writeSkillFile(id: "late-arrival", in: lateRoot, descriptionSuffix: "v1")
         await Self.expectExactlyOnePublication(recorder, since: 0)
 
         #expect(registry.metadata().map(\.id) == ["late-arrival"])
@@ -270,17 +277,17 @@ struct SkillsRegistryReloadTests {
     @Test func twoConcurrentConsumersBothObserveEveryReloadInAFiveReloadBurst() async throws {
         let root = try WatcherTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
-        try Self.writeSkillFile(id: "burst-skill", in: root, descriptionSuffix: "v0")
+        try ReloadTestSupport.writeSkillFile(id: "burst-skill", in: root, descriptionSuffix: "v0")
 
         let registry = SkillsRegistry(roots: [root], watch: true)
-        let onReloadTally = EventTally()
+        let onReloadTally = ReloadTestSupport.EventTally()
         let onReloadSubscription = Task {
             guard let stream = registry.onReload else { return }
             for await _ in stream { await onReloadTally.record() }
         }
         defer { onReloadSubscription.cancel() }
 
-        let commandUpdatesTally = EventTally()
+        let commandUpdatesTally = ReloadTestSupport.EventTally()
         let commandUpdatesSubscription = Task {
             guard let stream = registry.commandUpdates else { return }
             for await _ in stream { await commandUpdatesTally.record() }
@@ -288,7 +295,7 @@ struct SkillsRegistryReloadTests {
         defer { commandUpdatesSubscription.cancel() }
 
         for iteration in 1...5 {
-            try Self.writeSkillFile(id: "burst-skill", in: root, descriptionSuffix: "v\(iteration)")
+            try ReloadTestSupport.writeSkillFile(id: "burst-skill", in: root, descriptionSuffix: "v\(iteration)")
             await Self.expectCount(onReloadTally, atLeast: iteration, timeout: Self.expectedSignalTimeout)
         }
         // A settling window so a coalesced extra tick (there shouldn't be
@@ -304,30 +311,30 @@ struct SkillsRegistryReloadTests {
     @Test func aLateCommandUpdatesSubscriberReceivesSubsequentTicks() async throws {
         let root = try WatcherTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
-        try Self.writeSkillFile(id: "late-subscriber-skill", in: root, descriptionSuffix: "v0")
+        try ReloadTestSupport.writeSkillFile(id: "late-subscriber-skill", in: root, descriptionSuffix: "v0")
 
         let registry = SkillsRegistry(roots: [root], watch: true)
-        let earlyTally = EventTally()
+        let earlyTally = ReloadTestSupport.EventTally()
         let earlySubscription = Task {
             guard let stream = registry.commandUpdates else { return }
             for await _ in stream { await earlyTally.record() }
         }
         defer { earlySubscription.cancel() }
 
-        try Self.writeSkillFile(id: "late-subscriber-skill", in: root, descriptionSuffix: "v1")
+        try ReloadTestSupport.writeSkillFile(id: "late-subscriber-skill", in: root, descriptionSuffix: "v1")
         await Self.expectCount(earlyTally, atLeast: 1, timeout: Self.expectedSignalTimeout)
 
         // A fresh subscription, registered only now -- after the first
         // reload already happened -- must still observe every reload from
         // this point forward, independent of `earlySubscription`.
-        let lateTally = EventTally()
+        let lateTally = ReloadTestSupport.EventTally()
         let lateSubscription = Task {
             guard let stream = registry.commandUpdates else { return }
             for await _ in stream { await lateTally.record() }
         }
         defer { lateSubscription.cancel() }
 
-        try Self.writeSkillFile(id: "late-subscriber-skill", in: root, descriptionSuffix: "v2")
+        try ReloadTestSupport.writeSkillFile(id: "late-subscriber-skill", in: root, descriptionSuffix: "v2")
         await Self.expectCount(lateTally, atLeast: 1, timeout: Self.expectedSignalTimeout)
         await Self.expectCount(earlyTally, atLeast: 2, timeout: Self.expectedSignalTimeout)
 
@@ -338,7 +345,7 @@ struct SkillsRegistryReloadTests {
     @Test func everySubscriberFinishesCleanlyOnRegistryDeinitNoLeakedContinuations() async throws {
         let root = try WatcherTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
-        try Self.writeSkillFile(id: "deinit-fanout-skill", in: root, descriptionSuffix: "v0")
+        try ReloadTestSupport.writeSkillFile(id: "deinit-fanout-skill", in: root, descriptionSuffix: "v0")
 
         var registry: SkillsRegistry? = SkillsRegistry(roots: [root], watch: true)
         let onReloadStream = try #require(registry?.onReload)
@@ -368,7 +375,7 @@ struct SkillsRegistryReloadTests {
     @Test func deinitStopsTheWatcherAndDeliversNoFurtherOnReloadPublicationsAfterward() async throws {
         let root = try WatcherTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
-        try Self.writeSkillFile(id: "short-lived-skill", in: root, descriptionSuffix: "v1")
+        try ReloadTestSupport.writeSkillFile(id: "short-lived-skill", in: root, descriptionSuffix: "v1")
 
         var registry: SkillsRegistry? = SkillsRegistry(roots: [root], watch: true)
         let stream = try #require(registry?.onReload)
@@ -380,26 +387,13 @@ struct SkillsRegistryReloadTests {
         }
         defer { subscription.cancel() }
 
-        try Self.writeSkillFile(id: "short-lived-skill", in: root, descriptionSuffix: "v2")
+        try ReloadTestSupport.writeSkillFile(id: "short-lived-skill", in: root, descriptionSuffix: "v2")
         try await Task.sleep(for: Self.noFurtherSignalWindow)
 
         #expect(await recorder.publications.isEmpty)
     }
 
     // MARK: - Multi-consumer fan-out test helpers
-
-    /// Counts how many events a subscription has observed, independent of
-    /// their payload -- the multi-consumer tests only care about counts,
-    /// unlike `MetadataUpdateRecorder`, which also needs each publication's
-    /// content.
-    private actor EventTally {
-        private(set) var count = 0
-
-        /// Records one more observed event.
-        func record() {
-            count += 1
-        }
-    }
 
     /// Polls `tally`'s count until it reaches `target` or `timeout` elapses,
     /// then asserts it reached `target`.
@@ -408,8 +402,10 @@ struct SkillsRegistryReloadTests {
     ///   - tally: The tally to poll.
     ///   - target: The count to wait for.
     ///   - timeout: How long to keep polling before giving up.
-    private static func expectCount(_ tally: EventTally, atLeast target: Int, timeout: Duration) async {
-        let current = await Self.poll({ await tally.count }, until: { $0 >= target }, timeout: timeout)
+    private static func expectCount(_ tally: ReloadTestSupport.EventTally, atLeast target: Int, timeout: Duration)
+        async
+    {
+        let current = await ReloadTestSupport.poll({ await tally.count }, until: { $0 >= target }, timeout: timeout)
         #expect(current >= target, "expected at least \(target) events, observed \(current)")
     }
 
@@ -432,32 +428,8 @@ struct SkillsRegistryReloadTests {
     ///   - tracker: The tracker to poll.
     ///   - timeout: How long to keep polling before giving up.
     private static func expectFinishes(_ tracker: FinishTracker, timeout: Duration) async {
-        let finished = await Self.poll({ await tracker.isFinished }, until: { $0 }, timeout: timeout)
+        let finished = await ReloadTestSupport.poll({ await tracker.isFinished }, until: { $0 }, timeout: timeout)
         #expect(finished, "subscriber stream did not finish within \(timeout)")
-    }
-
-    /// Polls `getter`'s result until `predicate` accepts it or `timeout`
-    /// elapses.
-    ///
-    /// The shared polling loop `expectCount(_:atLeast:timeout:)`,
-    /// `expectFinishes(_:timeout:)`, and
-    /// `waitForPublicationCount(_:atLeast:timeout:)` each build on, so the
-    /// deadline/sleep-interval logic lives in exactly one place.
-    ///
-    /// - Parameters:
-    ///   - getter: Reads the current value to test.
-    ///   - predicate: Whether the current value satisfies the wait.
-    ///   - timeout: How long to keep polling before giving up.
-    /// - Returns: The last observed value, whether or not it satisfied
-    ///   `predicate`.
-    private static func poll<T>(_ getter: () async -> T, until predicate: (T) -> Bool, timeout: Duration) async -> T {
-        let deadline = ContinuousClock.now.advanced(by: timeout)
-        var current = await getter()
-        while !predicate(current), ContinuousClock.now < deadline {
-            try? await Task.sleep(for: .milliseconds(10))
-            current = await getter()
-        }
-        return current
     }
 
     // MARK: - Test helpers
@@ -468,7 +440,9 @@ struct SkillsRegistryReloadTests {
     /// An actor rather than relying on the `AsyncStream` itself for
     /// assertions, mirroring `SkillWatcherTests.SignalRecorder`: polling this
     /// recorder's state sidesteps an `AsyncStream` iterator's single-consumer
-    /// limitation entirely.
+    /// limitation entirely. Carries its own metadata payload (unlike
+    /// `ReloadTestSupport.EventTally`, which is count-only), so it is not
+    /// itself a candidate for that shared type.
     private actor MetadataUpdateRecorder {
         private(set) var publications: [[SkillMetadata]] = []
 
@@ -516,110 +490,9 @@ struct SkillsRegistryReloadTests {
     private static func expectExactlyOnePublication(_ recorder: MetadataUpdateRecorder, since baseline: Int)
         async -> Int
     {
-        let afterFirst = await Self.waitForPublicationCount(
-            recorder, atLeast: baseline + 1, timeout: Self.expectedSignalTimeout)
-        #expect(afterFirst == baseline + 1)
-
-        let afterSettling = await Self.waitForPublicationCount(
-            recorder, atLeast: baseline + 2, timeout: Self.noFurtherSignalWindow)
-        #expect(afterSettling == baseline + 1)
-        return afterSettling
-    }
-
-    /// Polls `recorder`'s publication count until it reaches `target` or
-    /// `timeout` elapses.
-    ///
-    /// - Parameters:
-    ///   - recorder: The recorder to poll.
-    ///   - target: The publication count to wait for.
-    ///   - timeout: How long to keep polling before giving up.
-    /// - Returns: The observed publication count at the moment polling
-    ///   stopped, whether or not it reached `target`.
-    private static func waitForPublicationCount(
-        _ recorder: MetadataUpdateRecorder, atLeast target: Int, timeout: Duration
-    ) async -> Int {
-        await Self.poll({ await recorder.publications.count }, until: { $0 >= target }, timeout: timeout)
-    }
-
-    /// Builds a minimal but structurally valid `SKILL.md` body for `id`,
-    /// with `descriptionSuffix` folded into `description:` so a caller can
-    /// observe a genuinely different `SkillMetadata.description` after an
-    /// edit.
-    ///
-    /// - Parameters:
-    ///   - id: The skill id the frontmatter's `name:` field carries.
-    ///   - descriptionSuffix: Text appended to `description:`, so successive
-    ///     calls with different suffixes produce distinguishable metadata.
-    /// - Returns: The `SKILL.md` file contents.
-    private static func skillFileContents(id: String, descriptionSuffix: String) -> String {
-        "---\nname: \(id)\ndescription: reload fixture \(descriptionSuffix)\n---\nBody text for \(id).\n"
-    }
-
-    /// Writes `id/SKILL.md` directly under `directory`, creating the
-    /// skill's own subdirectory first if it does not already exist.
-    ///
-    /// - Parameters:
-    ///   - id: The skill id -- both the subdirectory name and the
-    ///     frontmatter's `name:` field.
-    ///   - directory: The root to write under.
-    ///   - descriptionSuffix: Forwarded to `skillFileContents(id:descriptionSuffix:)`.
-    /// - Throws: Whatever `FileManager.createDirectory` or `String.write`
-    ///   throws.
-    private static func writeSkillFile(id: String, in directory: URL, descriptionSuffix: String) throws {
-        let skillDirectory = directory.appendingPathComponent(id, isDirectory: true)
-        try FileManager.default.createDirectory(at: skillDirectory, withIntermediateDirectories: true)
-        try Self.skillFileContents(id: id, descriptionSuffix: descriptionSuffix)
-            .write(to: skillDirectory.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
-    }
-
-    /// Builds a minimal but structurally valid `SKILL.md` for `id` with
-    /// `body` as its body text, so a caller can observe a genuinely
-    /// different `call(id:arguments:)` result after an edit (unlike
-    /// `skillFileContents(id:descriptionSuffix:)`, whose body text never
-    /// varies -- only its `description:` does).
-    ///
-    /// - Parameters:
-    ///   - id: The skill id the frontmatter's `name:` field carries.
-    ///   - body: The body text to render back through `call(id:arguments:)`.
-    /// - Returns: The `SKILL.md` file contents.
-    private static func skillFileContents(id: String, body: String) -> String {
-        "---\nname: \(id)\ndescription: reload fixture\n---\n\(body)\n"
-    }
-
-    /// Writes `id/SKILL.md` directly under `directory` with `body` as its
-    /// body text, creating the skill's own subdirectory first if it does
-    /// not already exist.
-    ///
-    /// - Parameters:
-    ///   - id: The skill id -- both the subdirectory name and the
-    ///     frontmatter's `name:` field.
-    ///   - directory: The root to write under.
-    ///   - body: Forwarded to `skillFileContents(id:body:)`.
-    /// - Throws: Whatever `FileManager.createDirectory` or `String.write`
-    ///   throws.
-    private static func writeSkillFile(id: String, in directory: URL, body: String) throws {
-        let skillDirectory = directory.appendingPathComponent(id, isDirectory: true)
-        try FileManager.default.createDirectory(at: skillDirectory, withIntermediateDirectories: true)
-        try Self.skillFileContents(id: id, body: body)
-            .write(to: skillDirectory.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
-    }
-
-    /// Writes `id/SKILL.md` directly under `directory` with `preload: true`
-    /// and `body` as its rendered body text, creating the skill's own
-    /// subdirectory first if it does not already exist.
-    ///
-    /// - Parameters:
-    ///   - id: The skill id -- both the subdirectory name and the
-    ///     frontmatter's `name:` field.
-    ///   - directory: The root to write under.
-    ///   - body: The body text `preloadedBodies()` should surface.
-    /// - Throws: Whatever `FileManager.createDirectory` or `String.write`
-    ///   throws.
-    private static func writePreloadSkillFile(id: String, in directory: URL, body: String) throws {
-        let skillDirectory = directory.appendingPathComponent(id, isDirectory: true)
-        try FileManager.default.createDirectory(at: skillDirectory, withIntermediateDirectories: true)
-        try "---\nname: \(id)\ndescription: reload fixture\npreload: true\n---\n\(body)\n"
-            .write(to: skillDirectory.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
+        await ReloadTestSupport.expectExactlyOneEvent(
+            countGetter: { await recorder.publications.count }, since: baseline,
+            signalTimeout: Self.expectedSignalTimeout, settleWindow: Self.noFurtherSignalWindow)
     }
 
     /// Writes `id/SKILL.md` directly under `directory` with no `description:`
@@ -628,7 +501,9 @@ struct SkillsRegistryReloadTests {
     /// rule draws a `.warning` diagnostic for this (excluded from the
     /// model-facing surface, kept user-invocable and still loaded), a cheap,
     /// deliberate way to raise a diagnostic without hiding the skill
-    /// entirely.
+    /// entirely. Not folded into `ReloadTestSupport.writeSkillFile`, whose
+    /// `skillFileContents` always emits a `description:` line -- this
+    /// fixture's entire point is to omit it.
     ///
     /// - Parameters:
     ///   - id: The skill id -- both the subdirectory name and the
