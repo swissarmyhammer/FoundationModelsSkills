@@ -343,6 +343,7 @@ extension SkillFrontmatter: Decodable {
         _ topLevel: FrontmatterValue?, notes: inout [String]
     ) -> FrontmatterValue? {
         guard let topLevel, !Self.isStringOrArray(topLevel) else { return topLevel }
+        guard !Self.isNull(topLevel) else { return nil }
         notes.append("'arguments' is present but is not a string or list of strings; ignoring.")
         return nil
     }
