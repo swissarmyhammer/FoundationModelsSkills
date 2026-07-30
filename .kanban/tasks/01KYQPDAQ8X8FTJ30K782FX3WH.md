@@ -12,8 +12,12 @@ comments:
 
     `swift build --build-tests` clean; `swift test` 314/314 passed. Committing checkpoint next.
   timestamp: 2026-07-30T04:09:17.423226+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01kyrkp1hw3wv08rs7k1m1s5eg
+  text: 'Review clean: 0 findings, 14/14 review tasks attempted, 0 failed. Moved to done.'
+  timestamp: 2026-07-30T04:14:23.292754+00:00
+position_column: done
+position_ordinal: a380
 title: 'Listing fidelity: surface parameter-mismatch diagnostics, truncate menu descriptions'
 ---
 ## What
