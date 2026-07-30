@@ -32,6 +32,35 @@ struct SkillOperationsTests {
         try SkillsTool.make(context: Self.makeFixtureContext())
     }
 
+    // MARK: - Known deviation: op-level correctives never hit upstream's retry cap
+
+    /// Pins the README's documented deviation (`## Known deviations`):
+    /// `OperationTool.call(arguments:)`'s retry cap only counts
+    /// *resolver-level* failures (unknown op, missing required parameters) --
+    /// an op-level `CorrectiveOutcome.corrective(_:)`, like `use skill`'s
+    /// unknown-id message, always reaches `operation.run(...)` successfully
+    /// and resets the counter, so it never counts as a failure no matter how
+    /// many times it repeats in a row.
+    ///
+    /// Not a desired behavior -- a regression sentinel. If a future upstream
+    /// `FoundationModelsOperationTool` change starts distinguishing
+    /// op-level correctives from real successes, this test starts failing
+    /// (the terminal message would appear), which is the signal to update
+    /// this test and the README section together.
+    @Test func repeatedUnknownIDUseSkillDispatchesAreNeverCappedByUpstreamsRetryLimit() async throws {
+        let tool = try Self.makeFixtureTool()
+        let arguments = GeneratedContent(properties: ["op": "use skill", "id": "totally-made-up"])
+
+        // Upstream's default retryCap is 2 -- five consecutive corrective
+        // dispatches is comfortably past that, on the same `tool` instance
+        // so its retry-state actor is shared across every call below.
+        for _ in 1...5 {
+            let json = try await tool.call(arguments: arguments)
+            #expect(json.contains("not currently usable"))
+            #expect(!json.contains("Too many invalid operation attempts"))
+        }
+    }
+
     // MARK: - Dispatch table: typed outputs (§7)
 
     @Test func searchSkillDispatchReturnsRankedRowsWithTotal() async throws {

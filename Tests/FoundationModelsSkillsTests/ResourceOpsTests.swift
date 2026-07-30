@@ -36,6 +36,17 @@ struct ResourceOpsTests {
         try SkillsTool.make(context: Self.makeContext(roots: roots))
     }
 
+    /// Whether `json` is a corrective outcome -- a bare JSON string (plan.md
+    /// §7: "corrective messages stay plain strings"), never a `{...}`
+    /// object, which is what every successful `Encodable` result serializes
+    /// as instead.
+    ///
+    /// - Parameter json: A dispatch result's raw JSON text.
+    /// - Returns: Whether `json` is a corrective (a JSON string literal).
+    private static func isCorrective(_ json: String) -> Bool {
+        json.hasPrefix("\"")
+    }
+
     // MARK: - Listing snapshot (§7.3)
 
     @Test func listResourceOverReleaseNotesReturnsSortedKindedRowsWithRealTotal() async throws {
@@ -58,7 +69,7 @@ struct ResourceOpsTests {
 
         let json = try await tool.call(arguments: arguments)
 
-        #expect(json.contains("\"corrective\""))
+        #expect(Self.isCorrective(json))
         #expect(json.contains("not currently usable"))
     }
 
@@ -113,7 +124,7 @@ struct ResourceOpsTests {
             properties: ["op": "read resource", "id": "release-notes", "path": "assets/logo.bin"])
         let json = try await tool.call(arguments: arguments)
 
-        #expect(json.contains("\"corrective\""))
+        #expect(Self.isCorrective(json))
         #expect(json.contains("not valid UTF-8"))
         #expect(json.contains("\(byteSize) bytes"))
     }
@@ -127,7 +138,7 @@ struct ResourceOpsTests {
 
         let json = try await tool.call(arguments: arguments)
 
-        #expect(json.contains("\"corrective\""))
+        #expect(Self.isCorrective(json))
         #expect(json.contains("not accessible"))
     }
 
@@ -138,7 +149,7 @@ struct ResourceOpsTests {
 
         let json = try await tool.call(arguments: arguments)
 
-        #expect(json.contains("\"corrective\""))
+        #expect(Self.isCorrective(json))
         #expect(json.contains("not accessible"))
     }
 
@@ -158,7 +169,7 @@ struct ResourceOpsTests {
 
         let json = try await tool.call(arguments: arguments)
 
-        #expect(json.contains("\"corrective\""))
+        #expect(Self.isCorrective(json))
         #expect(json.contains("not accessible"))
     }
 
@@ -241,8 +252,8 @@ struct ResourceOpsTests {
         let deployJSON = try await tool.call(
             arguments: GeneratedContent(properties: ["op": "list resource", "id": "deploy"]))
 
-        #expect(!lintJSON.contains("\"corrective\""))
-        #expect(deployJSON.contains("\"corrective\""))
+        #expect(!Self.isCorrective(lintJSON))
+        #expect(Self.isCorrective(deployJSON))
         #expect(deployJSON.contains("not currently usable"))
     }
 
@@ -254,8 +265,8 @@ struct ResourceOpsTests {
         let lintJSON = try await tool.call(
             arguments: GeneratedContent(properties: ["op": "list resource", "id": "lint"]))
 
-        #expect(!deployJSON.contains("\"corrective\""))
-        #expect(lintJSON.contains("\"corrective\""))
+        #expect(!Self.isCorrective(deployJSON))
+        #expect(Self.isCorrective(lintJSON))
         #expect(lintJSON.contains("not currently usable"))
     }
 
@@ -269,7 +280,7 @@ struct ResourceOpsTests {
             arguments: GeneratedContent(
                 properties: ["op": "read resource", "id": "deploy", "path": "SKILL.md"]))
 
-        #expect(json.contains("\"corrective\""))
+        #expect(Self.isCorrective(json))
         let usableIDsList = try #require(json.components(separatedBy: "Currently usable ids: ").last)
         #expect(usableIDsList.contains("lint"))
         #expect(!usableIDsList.contains("deploy"))
@@ -285,7 +296,7 @@ struct ResourceOpsTests {
             arguments: GeneratedContent(
                 properties: ["op": "read resource", "id": "lint", "path": "SKILL.md"]))
 
-        #expect(json.contains("\"corrective\""))
+        #expect(Self.isCorrective(json))
         let usableIDsList = try #require(json.components(separatedBy: "Currently usable ids: ").last)
         #expect(usableIDsList.contains("deploy"))
         #expect(!usableIDsList.contains("lint"))

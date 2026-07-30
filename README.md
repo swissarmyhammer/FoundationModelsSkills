@@ -102,6 +102,26 @@ Verb aliases: `find`/`discover` → `search`; `call`/`invoke`/`get` → `use`. (
 defaults it to `isModelVisible`; `SkillsCLI` supplies a different predicate (id membership in
 `registry.commandListing()`) so the CLI presents the user-facing surface instead.
 
+## Known deviations
+
+- **Op-level correctives don't count toward upstream's retry cap.** Plan.md §7/decision #22:
+  "upstream's retry cap (default 2) stops loops." `OperationTool.call(arguments:)`
+  (`../FoundationModelsOperationTool/Sources/Operations/OperationTool.swift`) only tracks
+  *resolver-level* failures — unknown op, missing required parameters, unparseable values — via
+  `recordCorrective`. Once dispatch actually reaches an operation's own `execute(in:)`, that call
+  unconditionally counts as success and resets the counter (`retryState.reset()`), even when the
+  op itself returns a `CorrectiveOutcome.corrective(_:)` (e.g. `use skill` with an unknown id,
+  `read resource` with an inaccessible path). A model looping on a bad `id` therefore never hits
+  the cap. Fixing this properly needs an upstream signal on `AnyOperation.run`'s result (an
+  `isCorrective` flag, or an enum distinguishing the two cases) — `OperationTool.Output` is
+  presently an opaque `String`, so the fused tool has no way to see which channel an operation's
+  own JSON came from. That's a protocol-level change to `FoundationModelsOperationTool`, a
+  separate package other consumers of this pattern also depend on, out of this package's scope to
+  land unilaterally. Not yet coordinated upstream; tracked here rather than silently left
+  undocumented. `SkillOperationsTests.repeatedUnknownIDUseSkillDispatchesAreNeverCappedByUpstreamsRetryLimit`
+  pins the current (uncapped) behavior so a future upstream fix is noticed here as a test failure,
+  not silently.
+
 ## Security posture
 
 - **No OS sandbox in v1.** `` !`shell` `` injection (§5) and `run script` (§7.3) run as ordinary

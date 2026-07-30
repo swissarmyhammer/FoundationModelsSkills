@@ -176,7 +176,10 @@ struct SkillsCLITests {
         let result = await driver.run(arguments: ["resource", "list", "--id", "deploy"])
 
         #expect(result.exitCode == 0)
-        #expect(!result.output.contains("\"corrective\""))
+        // A corrective outcome serializes as a bare JSON string (plan.md
+        // §7); a successful `ListResourceResult` serializes as a `{...}`
+        // object, so a non-corrective result never starts with `"`.
+        #expect(!result.output.hasPrefix("\""))
     }
 
     // MARK: - Round trip: CLI payload == model payload (§7.2)

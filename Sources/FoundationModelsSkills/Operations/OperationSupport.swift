@@ -106,17 +106,13 @@ public enum CorrectiveOutcome<Success: Encodable & Sendable & Equatable>: Encoda
     /// A recoverable failure carrying a corrective message for the model.
     case corrective(String)
 
-    /// The coding key for the `.corrective(_:)` encoding.
-    private enum CodingKeys: String, CodingKey {
-        /// The corrective-message field.
-        case corrective
-    }
-
     /// Encodes the outcome.
     ///
     /// A `.success(_:)` outcome encodes `Success` inline; a
-    /// `.corrective(_:)` outcome encodes a single `corrective` field
-    /// carrying the message.
+    /// `.corrective(_:)` outcome encodes the message as a bare JSON string
+    /// -- plan.md §7's own words: "corrective messages stay plain strings
+    /// per the return-don't-throw contract," matching upstream's own
+    /// resolver-level correctives.
     ///
     /// - Parameter encoder: The encoder to write the outcome into.
     /// - Throws: Whatever `encoder` throws while writing.
@@ -125,8 +121,8 @@ public enum CorrectiveOutcome<Success: Encodable & Sendable & Equatable>: Encoda
         case .success(let value):
             try value.encode(to: encoder)
         case .corrective(let message):
-            var container = encoder.container(keyedBy: CodingKeys.self)
-            try container.encode(message, forKey: .corrective)
+            var container = encoder.singleValueContainer()
+            try container.encode(message)
         }
     }
 }
