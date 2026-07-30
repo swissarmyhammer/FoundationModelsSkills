@@ -15,8 +15,12 @@ comments:
 
     Note: hit heavy `.build`-lock contention this session from an unrelated background process (PPID 18302, the sah diagnostics/LSP leader) repeatedly running its own `swift build`/`swift test` against this same repo on a different tty, plus my own orphaned `swift-test`/`swift-package resolve` processes from killed shell tasks -- had to `kill -9` several stuck PIDs holding the SwiftPM lock before `swift package resolve` could actually acquire it and complete. Piping `swift test`/`swift build` through `tail` also appeared to stall misleadingly during this contention; redirecting to a log file and polling it directly gave a truthful picture. None of this was caused by the Package.swift change itself.
   timestamp: 2026-07-30T12:05:20.588444+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01kysfmxypag9sbafq12xwnqv0
+  text: 'Review clean: 0 findings, 14/14 attempted (1 finding fixed in first round: doc-comment blank-line separation on the new swissArmyHammerOrg constant). Moved to done.'
+  timestamp: 2026-07-30T12:23:06.966453+00:00
+position_column: done
+position_ordinal: a580
 title: Resolve SwiftPM identity conflict for FoundationModelsOperationTool (path vs URL)
 ---
 ## What
