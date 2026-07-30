@@ -259,6 +259,22 @@ struct ResourceOpsTests {
         #expect(lintJSON.contains("not currently usable"))
     }
 
+    @Test func readResourceOnTheModelSurfaceRefusesDeployWithACorrectiveNamingOnlyModelVisibleIDs() async throws {
+        // Symmetric to `listResourceOnTheModelSurfaceReachesLintButRefusesDeploy`,
+        // for `ReadResource` on the opposite surface: `deploy` is user-only,
+        // so the model surface must refuse it.
+        let tool = try SkillsTool.make(context: Self.makeContext())
+
+        let json = try await tool.call(
+            arguments: GeneratedContent(
+                properties: ["op": "read resource", "id": "deploy", "path": "SKILL.md"]))
+
+        #expect(json.contains("\"corrective\""))
+        let usableIDsList = try #require(json.components(separatedBy: "Currently usable ids: ").last)
+        #expect(usableIDsList.contains("lint"))
+        #expect(!usableIDsList.contains("deploy"))
+    }
+
     @Test func readResourceOnTheUserSurfaceRefusesLintWithACorrectiveNamingOnlyUserVisibleIDs() async throws {
         // Proves `ReadResource` (not just `ListResource`) honors the same
         // surface predicate, and that the corrective's "currently usable
