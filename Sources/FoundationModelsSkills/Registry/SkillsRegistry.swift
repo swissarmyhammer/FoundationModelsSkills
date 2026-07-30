@@ -799,7 +799,7 @@ public struct SkillsRegistry: Sendable {
         /// atomically so a caller can never observe one paired with the
         /// other's prior or next generation.
         var snapshot: (catalog: [String: CatalogEntry], diagnostics: [SkillDiagnostic]) {
-            withLock { (catalog, diagnostics) }
+            lock.withLock { (catalog, diagnostics) }
         }
 
         /// Atomically replaces both the catalog and its diagnostics with a
@@ -809,24 +809,10 @@ public struct SkillsRegistry: Sendable {
         ///   - catalog: The rebuilt catalog, keyed by id.
         ///   - diagnostics: The rebuilt catalog's diagnostics.
         func replace(catalog: [String: CatalogEntry], diagnostics: [SkillDiagnostic]) {
-            withLock {
+            lock.withLock {
                 self.catalog = catalog
                 self.diagnostics = diagnostics
             }
-        }
-
-        /// Runs `body` while holding `lock`, releasing it via `defer` before
-        /// returning under any control-flow path, so `snapshot` and
-        /// `replace(catalog:diagnostics:)` share one lock-acquire/release
-        /// point instead of each repeating `lock()`/`defer { unlock() }`
-        /// verbatim.
-        ///
-        /// - Parameter body: The work to run under the lock.
-        /// - Returns: `body`'s result.
-        private func withLock<T>(_ body: () -> T) -> T {
-            lock.lock()
-            defer { lock.unlock() }
-            return body()
         }
     }
 
@@ -933,7 +919,7 @@ public struct SkillsRegistry: Sendable {
         ///   `finishAll()` runs.
         func subscribe() -> AsyncStream<[SkillMetadata]> {
             let (stream, continuation) = AsyncStream<[SkillMetadata]>.makeStream()
-            let id = withLock {
+            let id = lock.withLock {
                 let id = nextID
                 nextID += 1
                 continuations[id] = continuation
@@ -947,7 +933,7 @@ public struct SkillsRegistry: Sendable {
         ///
         /// - Parameter metadata: The refreshed metadata list to publish.
         func publish(_ metadata: [SkillMetadata]) {
-            let subscribers = withLock { Array(continuations.values) }
+            let subscribers = lock.withLock { Array(continuations.values) }
             for continuation in subscribers {
                 continuation.yield(metadata)
             }
@@ -957,7 +943,7 @@ public struct SkillsRegistry: Sendable {
         /// accepting new publications -- called once, from
         /// `ReloadCoordinator.deinit`.
         func finishAll() {
-            let subscribers = withLock {
+            let subscribers = lock.withLock {
                 defer { continuations.removeAll() }
                 return Array(continuations.values)
             }
@@ -972,19 +958,7 @@ public struct SkillsRegistry: Sendable {
         ///
         /// - Parameter id: The subscriber id to remove.
         private func unsubscribe(id: Int) {
-            withLock { _ = continuations.removeValue(forKey: id) }
-        }
-
-        /// Runs `body` while holding `lock`, releasing it via `defer`
-        /// before returning under any control-flow path -- mirrors
-        /// `CatalogBox.withLock(_:)`.
-        ///
-        /// - Parameter body: The work to run under the lock.
-        /// - Returns: `body`'s result.
-        private func withLock<T>(_ body: () -> T) -> T {
-            lock.lock()
-            defer { lock.unlock() }
-            return body()
+            lock.withLock { _ = continuations.removeValue(forKey: id) }
         }
     }
 }
