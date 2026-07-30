@@ -1,6 +1,11 @@
 ---
-position_column: doing
-position_ordinal: '80'
+comments:
+- actor: claude-code
+  id: 01kyrb4xn4c316zstarkpw8gky
+  text: 'Resolved the §7.2/§7.3 tension the same way UseSkill/ListSkill/SearchSkill already do: ResourceIDLookup.resolve and unusableIDMessage now consult context.visibilityPredicate instead of hardcoded $0.isModelVisible. A model-facing context still defaults to isModelVisible (unchanged behavior); only a surface supplying a different predicate (SkillsCLI''s user-surface one) now sees resource ops honor it. Documented the resolution in ResourceIDLookup''s doc comment. Added a model-vs-user surface matrix for list/read resource against lint/deploy in ResourceOpsTests.swift, plus resource list/read and script run CLI invocations + model-dispatch round-trip parity in SkillsCLITests.swift. Final review clean, 303/303 tests green.'
+  timestamp: 2026-07-30T01:45:13.636600+00:00
+position_column: done
+position_ordinal: '9e80'
 title: Resource ops must honor the surface visibility predicate (CLI = user)
 ---
 ## What
