@@ -11,8 +11,15 @@ comments:
 
     `swift build --build-tests` clean; `swift test` 318/318 passed (314 + 4 new). Committing checkpoint next.
   timestamp: 2026-07-30T04:18:09.337418+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01kyrpcjt7evs26j8jk7f5pz6y
+  text: |-
+    Second review round (after fixing 3 findings: 2 missing `- Throws:` doc sections, 1 duplicated fixture-writer helper, plus a follow-up finding to reuse `WatcherTestSupport.makeTempDirectory()` in `makeTempContext` instead of hand-rolling it): 0 findings, 14/14 attempted, 0 failed. Moved to done.
+
+    Note: hit one transient `swift test` hang mid-task caused by orphaned `swiftpm-testing-helper`/`swift-test` processes left over from an earlier invocation holding the `.build` lock -- killed them (`kill -9`) and reran cleanly, consistent with the same class of environmental flake documented on earlier tasks this session. Also saw one genuine-looking `HotReloadTests` suite failure (3 issues) on a subsequent run; retried in isolation and it passed cleanly, matching this session's previously-documented FSEvents/watcher flakiness under background system load -- not caused by this task's changes.
+  timestamp: 2026-07-30T05:01:39.015722+00:00
+position_column: done
+position_ordinal: a480
 title: Close remaining audit test gaps (discovery depth, trailing args, reload surfaces)
 ---
 ## What
