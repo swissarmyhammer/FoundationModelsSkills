@@ -80,7 +80,7 @@ struct RunScriptTests {
     @Test func runScriptRefusesWithNoGrantAtAll() async throws {
         let root = try HotReloadTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
-        try Self.writeMinimalSkillFile(id: "no-grant", in: root, allowedTools: nil)
+        try ResourceTestSupport.writeMinimalSkillFile(id: "no-grant", in: root, allowedTools: nil)
         try Self.writeExecutableShebangScript(named: "run.sh", inSkillID: "no-grant", under: root)
 
         let output = try await RunScript(id: "no-grant", path: "scripts/run.sh").execute(
@@ -96,7 +96,7 @@ struct RunScriptTests {
     @Test func runScriptRefusesWithANonMatchingGlob() async throws {
         let root = try HotReloadTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
-        try Self.writeMinimalSkillFile(id: "narrow-grant", in: root, allowedTools: "Script(scripts/other/*)")
+        try ResourceTestSupport.writeMinimalSkillFile(id: "narrow-grant", in: root, allowedTools: "Script(scripts/other/*)")
         try Self.writeExecutableShebangScript(named: "run.sh", inSkillID: "narrow-grant", under: root)
 
         let output = try await RunScript(id: "narrow-grant", path: "scripts/run.sh").execute(
@@ -138,7 +138,7 @@ struct RunScriptTests {
     @Test func runScriptRefusesANonExecutableFile() async throws {
         let root = try HotReloadTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
-        try Self.writeMinimalSkillFile(id: "not-executable", in: root, allowedTools: "Script")
+        try ResourceTestSupport.writeMinimalSkillFile(id: "not-executable", in: root, allowedTools: "Script")
         let scriptURL = try Self.scriptsDirectory(inSkillID: "not-executable", under: root)
             .appendingPathComponent("run.sh")
         try "#!/bin/sh\necho hi\n".write(to: scriptURL, atomically: true, encoding: .utf8)
@@ -157,7 +157,7 @@ struct RunScriptTests {
     @Test func runScriptRefusesAFileWithNoShebang() async throws {
         let root = try HotReloadTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
-        try Self.writeMinimalSkillFile(id: "no-shebang", in: root, allowedTools: "Script")
+        try ResourceTestSupport.writeMinimalSkillFile(id: "no-shebang", in: root, allowedTools: "Script")
         let scriptURL = try Self.scriptsDirectory(inSkillID: "no-shebang", under: root)
             .appendingPathComponent("run.sh")
         try "echo hi\n".write(to: scriptURL, atomically: true, encoding: .utf8)
@@ -178,7 +178,7 @@ struct RunScriptTests {
     @Test func runScriptTimesOutAndKillsTheWholeProcessGroup() async throws {
         let root = try HotReloadTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
-        try Self.writeMinimalSkillFile(id: "sleeper", in: root, allowedTools: "Script")
+        try ResourceTestSupport.writeMinimalSkillFile(id: "sleeper", in: root, allowedTools: "Script")
         let scriptURL = try Self.scriptsDirectory(inSkillID: "sleeper", under: root)
             .appendingPathComponent("sleep-and-background.sh")
         try """
@@ -246,7 +246,7 @@ struct RunScriptTests {
     @Test func durationMsReportsTheSubSecondRemainderNotJustWholeSeconds() async throws {
         let root = try HotReloadTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
-        try Self.writeMinimalSkillFile(id: "sub-second-sleeper", in: root, allowedTools: "Script")
+        try ResourceTestSupport.writeMinimalSkillFile(id: "sub-second-sleeper", in: root, allowedTools: "Script")
         try Self.writeExecutableShebangScript(
             named: "sleep-a-bit.sh", inSkillID: "sub-second-sleeper", under: root,
             contents: "#!/bin/sh\nsleep 0.3\necho done\n")
@@ -269,28 +269,6 @@ struct RunScriptTests {
     }
 
     // MARK: - Fixture helpers
-
-    /// Writes a minimal, always-valid `id/SKILL.md` under `directory`,
-    /// creating the skill's own subdirectory first.
-    ///
-    /// - Parameters:
-    ///   - id: The skill id -- both the subdirectory name and the
-    ///     frontmatter's `name:` field.
-    ///   - directory: The root to write under.
-    ///   - allowedTools: The raw `allowed-tools:` frontmatter value to
-    ///     write, or `nil` to omit the field entirely.
-    /// - Returns: The created skill directory.
-    /// - Throws: Whatever `FileManager.createDirectory` or `String.write`
-    ///   throws.
-    @discardableResult
-    private static func writeMinimalSkillFile(id: String, in directory: URL, allowedTools: String?) throws -> URL {
-        let skillDirectory = directory.appendingPathComponent(id, isDirectory: true)
-        try FileManager.default.createDirectory(at: skillDirectory, withIntermediateDirectories: true)
-        let allowedToolsLine = allowedTools.map { "allowed-tools: \"\($0)\"\n" } ?? ""
-        try "---\nname: \(id)\ndescription: run-script fixture.\n\(allowedToolsLine)---\nBody text for \(id).\n"
-            .write(to: skillDirectory.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
-        return skillDirectory
-    }
 
     /// The `scripts/` subdirectory under `id`'s skill directory, created if
     /// it does not already exist.

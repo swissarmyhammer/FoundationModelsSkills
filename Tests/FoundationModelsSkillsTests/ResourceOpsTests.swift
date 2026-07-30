@@ -135,7 +135,7 @@ struct ResourceOpsTests {
         let root = try HotReloadTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
 
-        let skillDirectory = try Self.writeMinimalSkillFile(id: "oversized", in: root)
+        let skillDirectory = try ResourceTestSupport.writeMinimalSkillFile(id: "oversized", in: root)
         // Comfortably over the 1,000,000-byte read limit -- large enough
         // that fully materializing it (the pre-fix behavior) would be a
         // real, measurable cost, but still fast to write in a test.
@@ -185,7 +185,7 @@ struct ResourceOpsTests {
         let root = try HotReloadTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
 
-        let skillDirectory = try Self.writeMinimalSkillFile(id: "escaper", in: root)
+        let skillDirectory = try ResourceTestSupport.writeMinimalSkillFile(id: "escaper", in: root)
         let outsideFile = root.appendingPathComponent("secret.txt")
         try "top secret".write(to: outsideFile, atomically: true, encoding: .utf8)
         try FileManager.default.createSymbolicLink(
@@ -205,7 +205,7 @@ struct ResourceOpsTests {
         let root = try HotReloadTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
 
-        let skillDirectory = try Self.writeMinimalSkillFile(id: "escaper", in: root)
+        let skillDirectory = try ResourceTestSupport.writeMinimalSkillFile(id: "escaper", in: root)
         let outsideFile = root.appendingPathComponent("secret.txt")
         try "top secret".write(to: outsideFile, atomically: true, encoding: .utf8)
         try FileManager.default.createSymbolicLink(
@@ -226,7 +226,7 @@ struct ResourceOpsTests {
         let root = try HotReloadTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
 
-        let skillDirectory = try Self.writeMinimalSkillFile(id: "many-files", in: root)
+        let skillDirectory = try ResourceTestSupport.writeMinimalSkillFile(id: "many-files", in: root)
         for index in 1...150 {
             let name = String(format: "file-%03d.txt", index)
             try "content \(index)".write(
@@ -253,7 +253,7 @@ struct ResourceOpsTests {
         let root = try HotReloadTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
 
-        let skillDirectory = try Self.writeMinimalSkillFile(id: "has-dotfile", in: root)
+        let skillDirectory = try ResourceTestSupport.writeMinimalSkillFile(id: "has-dotfile", in: root)
         try "visible".write(
             to: skillDirectory.appendingPathComponent("visible.txt"), atomically: true, encoding: .utf8)
         try "hidden".write(
@@ -357,24 +357,4 @@ struct ResourceOpsTests {
         #expect(!usableIDsList.contains("lint"))
     }
 
-    // MARK: - Fixture helpers
-
-    /// Writes a minimal, always-valid `id/SKILL.md` under `directory`,
-    /// creating the skill's own subdirectory first.
-    ///
-    /// - Parameters:
-    ///   - id: The skill id -- both the subdirectory name and the
-    ///     frontmatter's `name:` field.
-    ///   - directory: The root to write under.
-    /// - Returns: The created skill directory.
-    /// - Throws: Whatever `FileManager.createDirectory` or `String.write`
-    ///   throws.
-    @discardableResult
-    private static func writeMinimalSkillFile(id: String, in directory: URL) throws -> URL {
-        let skillDirectory = directory.appendingPathComponent(id, isDirectory: true)
-        try FileManager.default.createDirectory(at: skillDirectory, withIntermediateDirectories: true)
-        try "---\nname: \(id)\ndescription: resource-ops fixture.\n---\nBody text for \(id).\n"
-            .write(to: skillDirectory.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
-        return skillDirectory
-    }
 }
