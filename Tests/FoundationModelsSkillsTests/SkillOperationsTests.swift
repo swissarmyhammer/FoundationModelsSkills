@@ -26,6 +26,8 @@ struct SkillOperationsTests {
     }
 
     /// Builds the fused `skills` tool over `makeFixtureContext()`.
+    ///
+    /// - Throws: Whatever `SkillsTool.make(context:)` throws.
     private static func makeFixtureTool() throws -> OperationTool<SkillsToolContext> {
         try SkillsTool.make(context: Self.makeFixtureContext())
     }
@@ -253,11 +255,12 @@ struct SkillOperationsTests {
     ///   - body: The skill body text.
     /// - Returns: The context, plus a cleanup closure the caller must invoke
     ///   (via `defer`) once done.
+    /// - Throws: Whatever `WatcherTestSupport.makeTempDirectory()`,
+    ///   `FileManager.createDirectory`, or `String.write` throws.
     private static func makeTempContext(
         argumentsLine: String = "", argumentHintLine: String = "", body: String = "Body text.\n"
     ) throws -> (context: SkillsToolContext, cleanup: () -> Void) {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let root = try WatcherTestSupport.makeTempDirectory()
         let skillDirectory = root.appendingPathComponent("widget", isDirectory: true)
         try FileManager.default.createDirectory(at: skillDirectory, withIntermediateDirectories: true)
         let frontmatter =

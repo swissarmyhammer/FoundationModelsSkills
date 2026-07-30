@@ -539,10 +539,7 @@ struct SkillsRegistryReloadTests {
     /// - Throws: Whatever `FileManager.createDirectory` or `String.write`
     ///   throws.
     private static func writeSkillFileMissingDescription(id: String, in directory: URL) throws {
-        let skillDirectory = directory.appendingPathComponent(id, isDirectory: true)
-        try FileManager.default.createDirectory(at: skillDirectory, withIntermediateDirectories: true)
-        try "---\nname: \(id)\n---\nBody text for \(id).\n"
-            .write(to: skillDirectory.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
+        try Self.writeSkillFileWithRawContents("---\nname: \(id)\n---\nBody text for \(id).\n", id: id, in: directory)
     }
 
     /// Writes `id/SKILL.md` directly under `directory` with genuinely
@@ -561,9 +558,27 @@ struct SkillsRegistryReloadTests {
     /// - Throws: Whatever `FileManager.createDirectory` or `String.write`
     ///   throws.
     private static func writeSkillFileWithUnparseableYAML(id: String, in directory: URL) throws {
+        try Self.writeSkillFileWithRawContents(
+            "---\nname: [unterminated\n---\nBody text for \(id).\n", id: id, in: directory)
+    }
+
+    /// Writes `id/SKILL.md` directly under `directory` with `contents`
+    /// verbatim, creating the skill's own subdirectory first if it does not
+    /// already exist -- the shared workhorse
+    /// `writeSkillFileMissingDescription` and
+    /// `writeSkillFileWithUnparseableYAML` both build on, so each stays a
+    /// one-line description of its own fixture shape.
+    ///
+    /// - Parameters:
+    ///   - contents: The complete `SKILL.md` file contents, frontmatter
+    ///     fence included.
+    ///   - id: The skill id -- the subdirectory name.
+    ///   - directory: The root to write under.
+    /// - Throws: Whatever `FileManager.createDirectory` or `String.write`
+    ///   throws.
+    private static func writeSkillFileWithRawContents(_ contents: String, id: String, in directory: URL) throws {
         let skillDirectory = directory.appendingPathComponent(id, isDirectory: true)
         try FileManager.default.createDirectory(at: skillDirectory, withIntermediateDirectories: true)
-        try "---\nname: [unterminated\n---\nBody text for \(id).\n"
-            .write(to: skillDirectory.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
+        try contents.write(to: skillDirectory.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
     }
 }
