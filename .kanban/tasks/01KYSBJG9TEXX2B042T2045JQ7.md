@@ -1,5 +1,21 @@
 ---
-position_column: todo
+comments:
+- actor: claude-code
+  id: 01kysemcjcxy9eakmxj2d73593
+  text: |-
+    User redirected the fix direction mid-investigation: rather than changing FoundationModelsRouter to use a path dependency on FoundationModelsOperationTool (my initial reading of the task's suggested fix), the correct direction is the opposite -- FoundationModelsSkills' own Package.swift should reference every sibling (FoundationModelsExtras, FoundationModelsOperationTool, FoundationModelsMetadataRegistry) by remote git URL (`git@github.com:swissarmyhammer/<name>.git`, `main` branch), matching the family convention FoundationModelsRouter/FoundationModelsMetadataRegistry already use, "in all cases" / "consistent".
+
+    Implemented: switched all three sibling `path:` dependencies in Package.swift to remote URL deps under a new `swissArmyHammerOrg` constant; updated the stale `commonDependencies` doc comment explaining path-vs-URL identity resolution (now URL-only, so simplified); confirmed all three sibling repos' local `main` was already in sync with `origin/main` before switching. Documented the fix and the (untouched, pre-existing) mlx `Cmlx.bundle` toolchain warning in a new README "## Development" section per the acceptance criteria.
+
+    `swift build`: zero "Conflicting identity" warnings (confirmed both before/after via direct build output, not just grep). `swift test`: 318/318 passed, verified clean across 2 consecutive full-suite runs (one earlier run showed 2 failures in `SkillsRegistryReloadTests` -- `reloadRefreshesPreloadedBodiesAndDiagnostics`/`aLateCommandUpdatesSubscriberReceivesSubsequentTicks`, both FSEvents signal-timeout expectations; immediately retried in isolation and full-suite, both came back clean, matching this session's already-documented background-load watcher flakiness, unrelated to this change).
+
+    Also sanity-checked FoundationModelsRouter's own `swift test` (untouched by this change, not expected to be affected) -- clean.
+
+    Did not touch FoundationModelsRouter or FoundationModelsMetadataRegistry themselves at all; only this package's own manifest changed.
+
+    Note: hit heavy `.build`-lock contention this session from an unrelated background process (PPID 18302, the sah diagnostics/LSP leader) repeatedly running its own `swift build`/`swift test` against this same repo on a different tty, plus my own orphaned `swift-test`/`swift-package resolve` processes from killed shell tasks -- had to `kill -9` several stuck PIDs holding the SwiftPM lock before `swift package resolve` could actually acquire it and complete. Piping `swift test`/`swift build` through `tail` also appeared to stall misleadingly during this contention; redirecting to a log file and polling it directly gave a truthful picture. None of this was caused by the Package.swift change itself.
+  timestamp: 2026-07-30T12:05:20.588444+00:00
+position_column: doing
 position_ordinal: '80'
 title: Resolve SwiftPM identity conflict for FoundationModelsOperationTool (path vs URL)
 ---

@@ -9,23 +9,35 @@ import PackageDescription
 let packageName = "FoundationModelsSkills"
 let testTargetName = packageName + "Tests"
 
+/// The GitHub organization URL base the swissarmyhammer-family sibling
+/// dependencies resolve under.
+///
+/// Covers `FoundationModelsExtras`, `FoundationModelsOperationTool`, and
+/// `FoundationModelsMetadataRegistry` -- extracted so the org lives in one
+/// place instead of three dependency entries that could silently drift.
+/// Every sibling is wired as a *remote* dependency (`main` branch), never a
+/// local `path:` one, matching the family convention
+/// (`FoundationModelsRouter`, `FoundationModelsMetadataRegistry`) so this
+/// package's CI can use the family's shared `swift-ci.yaml` reusable
+/// workflow, which only checks out the calling repo -- a `path:` dependency
+/// on an uncommitted sibling checkout would not exist there. It also avoids
+/// the SwiftPM "Conflicting identity" warning a mixed path/URL reference to
+/// the same package produces when another dependency in the graph (e.g.
+/// `FoundationModelsMetadataRegistry -> FoundationModelsRouter ->
+/// FoundationModelsOperationTool`) already pulls it in remotely.
+let swissArmyHammerOrg = "git@github.com:swissarmyhammer/"
+
 /// Shared product dependencies needed by both the library target and its test
 /// target -- factored out so the two lists can't drift out of sync.
 let commonDependencies: [Target.Dependency] = [
     .product(name: "FoundationModelsExtras", package: "FoundationModelsExtras"),
-    // Despite `FoundationModelsOperationTool`'s own manifest
-    // declaring its package identity as `FoundationModelsOperations`
-    // (its `Package(name:)`), a *path* dependency's identity is
-    // resolved by SwiftPM from the directory name, not the
-    // manifest's declared name -- confirmed empirically: `package:
-    // "FoundationModelsOperations"` fails to resolve with "unknown
-    // package", listing `FoundationModelsOperationTool` as the
-    // valid identity for this path. This is the opposite of this
-    // family's existing *remote* git dependencies on the same
-    // package (e.g. FoundationModelsShelltool,
-    // FoundationModelsFileTool), which also key off
-    // `FoundationModelsOperationTool` -- there, because that is
-    // the URL's last path component.
+    // A remote dependency's package identity is the URL's last path
+    // component, not the manifest's own declared `Package(name:)` --
+    // `FoundationModelsOperationTool`'s manifest names itself
+    // `FoundationModelsOperations`, but every family consumer (this
+    // package, FoundationModelsRouter, FoundationModelsShelltool,
+    // FoundationModelsFileTool) keys off `FoundationModelsOperationTool`
+    // here, matching the URL.
     .product(name: "Operations", package: "FoundationModelsOperationTool"),
     // Dual-use CLI driver (plan.md §7.2): assembles the same fused
     // `OperationTool` into an ArgumentParser command tree for `SkillsCLI`.
@@ -66,15 +78,15 @@ let package = Package(
         // Layers 1-2 substrate: `DotfolderStack`, `FrontmatterDocument`,
         // `TemplateEngine` (plan.md §3, decision #29 -- imported, not built
         // here).
-        .package(path: "../FoundationModelsExtras"),
+        .package(url: "\(swissArmyHammerOrg)FoundationModelsExtras.git", branch: "main"),
         // FM tool fusion: `OperationTool`/`@Operation` macro machinery
         // (decision #20) plus `OperationCLIDriver` for the dual-use CLI
         // (plan.md §7.2).
-        .package(path: "../FoundationModelsOperationTool"),
+        .package(url: "\(swissArmyHammerOrg)FoundationModelsOperationTool.git", branch: "main"),
         // `SkillSearchAgent`'s hybrid retrieval (BM25 + trigram + cosine ->
         // RRF) and Router-backed selection session, via
         // `MetadataSearcher<SkillMetadata>` (plan.md decision #26).
-        .package(path: "../FoundationModelsMetadataRegistry"),
+        .package(url: "\(swissArmyHammerOrg)FoundationModelsMetadataRegistry.git", branch: "main"),
         // YAML frontmatter decoding stays ours, with Yams, per Extras' no-YAML
         // rule (plan.md decision #29). Pinned `exact:`, matching
         // `FoundationModelsExtras`' own Yams pin.

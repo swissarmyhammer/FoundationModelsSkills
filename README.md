@@ -164,6 +164,25 @@ behavior.
   `FoundationModelsSkills` namespace enum (`Sources/FoundationModelsSkills/FoundationModelsSkills.swift`)
   for the full accounting of which dependency forces this.
 
+## Development
+
+- **Sibling dependencies are remote, not local `path:`.** `FoundationModelsExtras`,
+  `FoundationModelsOperationTool`, and `FoundationModelsMetadataRegistry` are all pinned to
+  `git@github.com:swissarmyhammer/<name>.git` (`main` branch) in `Package.swift`, matching the
+  family convention `FoundationModelsRouter`/`FoundationModelsMetadataRegistry` already use. A
+  local `path:` dependency here previously produced a SwiftPM "Conflicting identity" warning for
+  `FoundationModelsOperationTool` — this package pulled it in twice, once by path and once
+  transitively (via `FoundationModelsMetadataRegistry -> FoundationModelsRouter`) by URL — which
+  SwiftPM states "will be escalated to an error in future versions." Wiring every sibling remotely
+  resolves the identity to a single reference, and matches the family's shared `swift-ci.yaml`
+  reusable workflow, which only checks out the calling repo (a `path:` dependency on an
+  uncommitted sibling checkout would not exist there).
+- **The mlx `Cmlx.bundle` "missing creator for mutated node" build warning is known toolchain
+  noise**, not something this package's code or manifest causes — it comes from `mlx-swift`'s own
+  bundle target (pulled in transitively via `FoundationModelsMetadataRegistry ->
+  FoundationModelsRouter -> mlx-swift-lm -> mlx-swift`) and appears on every `swift build`/`swift
+  test` regardless of what changed here. Not chased; upstream toolchain/mlx-swift concern.
+
 ## Documentation
 
 Design rationale — the layered architecture, every resolved decision, and the full render-pipeline
