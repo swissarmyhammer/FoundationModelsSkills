@@ -27,6 +27,13 @@ public final class SkillWatcher: @unchecked Sendable {
     /// within one of this watcher's own `DispatchSource` event handlers.
     private static let queueSpecificKey = DispatchSpecificKey<Bool>()
 
+    /// The event mask every directory-level `DispatchSource` observes,
+    /// whether it's a real watched-tree directory (`watchTree(at:)`) or a
+    /// missing root's nearest existing ancestor (`armRoots()`) -- both need
+    /// to notice an entry being created, removed, or renamed directly
+    /// under them.
+    nonisolated(unsafe) private static let directoryEventMask: DispatchSource.FileSystemEvent = [.write, .delete, .rename]
+
     private let roots: [URL]
     private let debounceInterval: DispatchTimeInterval
     private let onChange: @Sendable () -> Void
@@ -157,7 +164,7 @@ public final class SkillWatcher: @unchecked Sendable {
             if FileManager.default.fileExists(atPath: root.path) {
                 watchTree(at: root)
             } else if let ancestor = Self.nearestExistingAncestor(of: root), watchedSources[ancestor.path] == nil {
-                watchEntry(at: ancestor, eventMask: [.write, .delete, .rename])
+                watchEntry(at: ancestor, eventMask: Self.directoryEventMask)
             }
         }
     }
@@ -187,7 +194,7 @@ public final class SkillWatcher: @unchecked Sendable {
     /// - Parameter directory: The directory to watch, along with its
     ///   descendants.
     private func watchTree(at directory: URL) {
-        watchEntry(at: directory, eventMask: [.write, .delete, .rename])
+        watchEntry(at: directory, eventMask: Self.directoryEventMask)
         for child in Self.directoryContents(of: directory) {
             if child.isDirectory {
                 watchTree(at: child.url)

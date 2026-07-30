@@ -123,10 +123,10 @@ struct SkillWatcherTests {
         // shared temp root sees constant, unrelated activity from every
         // other test's own `makeTempDirectory()` call, which would make the
         // "exactly one signal" assertion below flaky.
-        let privateDirectory = try Self.makeTempDirectory()
+        let privateDirectory = try WatcherTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: privateDirectory) }
         let bogusRoot = privateDirectory.appendingPathComponent("does-not-exist", isDirectory: true)
-        let realRoot = try Self.makeTempDirectory()
+        let realRoot = try WatcherTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: realRoot) }
 
         let (onChange, recorder) = Self.makeSignalRecorder()
@@ -142,7 +142,7 @@ struct SkillWatcherTests {
     // MARK: - Late root creation (^80kravf): armed via nearest existing ancestor
 
     @Test func creatingARootThatDidNotExistAtStartIsDetected() async throws {
-        let privateDirectory = try Self.makeTempDirectory()
+        let privateDirectory = try WatcherTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: privateDirectory) }
         let lateRoot = privateDirectory.appendingPathComponent("skills-arrive-later", isDirectory: true)
 
@@ -156,7 +156,7 @@ struct SkillWatcherTests {
     }
 
     @Test func deletingAndRecreatingARootKeepsEventsFlowing() async throws {
-        let privateDirectory = try Self.makeTempDirectory()
+        let privateDirectory = try WatcherTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: privateDirectory) }
         let root = privateDirectory.appendingPathComponent("comes-and-goes", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -182,7 +182,7 @@ struct SkillWatcherTests {
     // MARK: - Stop prevents further callbacks
 
     @Test func stopPreventsFurtherCallbacksAfterAChange() async throws {
-        let root = try Self.makeTempDirectory()
+        let root = try WatcherTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
 
         let (onChange, recorder) = Self.makeSignalRecorder()
@@ -198,7 +198,7 @@ struct SkillWatcherTests {
     // MARK: - Reentrant stop from within onChange
 
     @Test func stoppingFromWithinOnChangeLeavesTheWatcherGenuinelyStoppedAndRestartable() async throws {
-        let root = try Self.makeTempDirectory()
+        let root = try WatcherTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
 
         let recorder = SignalRecorder()
@@ -280,7 +280,7 @@ struct SkillWatcherTests {
     private static func withWatchedTempRoot(
         _ body: (URL, SignalRecorder) async throws -> Void
     ) async throws {
-        let root = try Self.makeTempDirectory()
+        let root = try WatcherTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
 
         let (onChange, recorder) = Self.makeSignalRecorder()
@@ -342,18 +342,6 @@ struct SkillWatcherTests {
             current = await recorder.count
         }
         return current
-    }
-
-    /// Creates a fresh, empty temporary directory for a test root, so one
-    /// test's filesystem activity can never be observed by another.
-    ///
-    /// - Throws: Whatever `FileManager.createDirectory` throws.
-    /// - Returns: The new directory's URL.
-    private static func makeTempDirectory() throws -> URL {
-        let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString, isDirectory: true)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        return directory
     }
 
     /// Builds a minimal but structurally valid `SKILL.md` body for `id`.

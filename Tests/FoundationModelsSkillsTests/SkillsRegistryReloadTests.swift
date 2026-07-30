@@ -28,7 +28,7 @@ struct SkillsRegistryReloadTests {
     @Test func editingASkillFileTriggersExactlyOneRebuildAndOneOnReloadPublicationWithRefreshedMetadata()
         async throws
     {
-        let root = try Self.makeTempDirectory()
+        let root = try WatcherTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         try Self.writeSkillFile(id: "editable-skill", in: root, descriptionSuffix: "before edit")
 
@@ -65,7 +65,7 @@ struct SkillsRegistryReloadTests {
     /// `concurrentReadersNeverObserveAPartialCatalogDuringARebuildBurst()`,
     /// is what exercises reads racing an in-flight rebuild.
     @Test func callAfterAReloadReturnsTheNewBodyNotTheStaleOne() async throws {
-        let root = try Self.makeTempDirectory()
+        let root = try WatcherTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         try Self.writeSkillFile(id: "callable-skill", in: root, body: "v1")
 
@@ -85,7 +85,7 @@ struct SkillsRegistryReloadTests {
     // MARK: - Add / remove propagate to metadata() and commandListing()
 
     @Test func addingASkillDirectoryPropagatesToMetadataAndCommandListing() async throws {
-        let root = try Self.makeTempDirectory()
+        let root = try WatcherTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         try Self.writeSkillFile(id: "existing-skill", in: root, descriptionSuffix: "v1")
 
@@ -102,7 +102,7 @@ struct SkillsRegistryReloadTests {
     }
 
     @Test func removingASkillDirectoryPropagatesToMetadataAndCommandListing() async throws {
-        let root = try Self.makeTempDirectory()
+        let root = try WatcherTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         try Self.writeSkillFile(id: "surviving-skill", in: root, descriptionSuffix: "v1")
         try Self.writeSkillFile(id: "doomed-skill", in: root, descriptionSuffix: "v1")
@@ -122,7 +122,7 @@ struct SkillsRegistryReloadTests {
     // MARK: - Concurrent readers never observe a partial catalog
 
     @Test func concurrentReadersNeverObserveAPartialCatalogDuringARebuildBurst() async throws {
-        let root = try Self.makeTempDirectory()
+        let root = try WatcherTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         let knownIDs = (0..<5).map { "stress-\($0)" }
         for id in knownIDs {
@@ -174,7 +174,7 @@ struct SkillsRegistryReloadTests {
     // MARK: - watch: false performs no watching
 
     @Test func watchDefaultsToFalseWhenOmitted() throws {
-        let root = try Self.makeTempDirectory()
+        let root = try WatcherTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         try Self.writeSkillFile(id: "static-skill", in: root, descriptionSuffix: "v1")
 
@@ -183,7 +183,7 @@ struct SkillsRegistryReloadTests {
     }
 
     @Test func watchFalseEditingATempFileChangesNothing() async throws {
-        let root = try Self.makeTempDirectory()
+        let root = try WatcherTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         try Self.writeSkillFile(id: "static-skill", in: root, descriptionSuffix: "before edit")
 
@@ -202,7 +202,7 @@ struct SkillsRegistryReloadTests {
     // MARK: - Late root creation (^80kravf): end-to-end through the registry
 
     @Test func aRootThatDidNotExistAtConstructionSurfacesItsSkillOnceCreated() async throws {
-        let privateDirectory = try Self.makeTempDirectory()
+        let privateDirectory = try WatcherTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: privateDirectory) }
         let lateRoot = privateDirectory.appendingPathComponent("skills-arrive-later", isDirectory: true)
 
@@ -221,7 +221,7 @@ struct SkillsRegistryReloadTests {
     // MARK: - Multi-consumer fan-out (^321b23t): no shared-stream tick stealing
 
     @Test func twoConcurrentConsumersBothObserveEveryReloadInAFiveReloadBurst() async throws {
-        let root = try Self.makeTempDirectory()
+        let root = try WatcherTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         try Self.writeSkillFile(id: "burst-skill", in: root, descriptionSuffix: "v0")
 
@@ -255,7 +255,7 @@ struct SkillsRegistryReloadTests {
     }
 
     @Test func aLateCommandUpdatesSubscriberReceivesSubsequentTicks() async throws {
-        let root = try Self.makeTempDirectory()
+        let root = try WatcherTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         try Self.writeSkillFile(id: "late-subscriber-skill", in: root, descriptionSuffix: "v0")
 
@@ -289,7 +289,7 @@ struct SkillsRegistryReloadTests {
     }
 
     @Test func everySubscriberFinishesCleanlyOnRegistryDeinitNoLeakedContinuations() async throws {
-        let root = try Self.makeTempDirectory()
+        let root = try WatcherTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         try Self.writeSkillFile(id: "deinit-fanout-skill", in: root, descriptionSuffix: "v0")
 
@@ -319,7 +319,7 @@ struct SkillsRegistryReloadTests {
     // MARK: - Watcher lifecycle owned by the registry
 
     @Test func deinitStopsTheWatcherAndDeliversNoFurtherOnReloadPublicationsAfterward() async throws {
-        let root = try Self.makeTempDirectory()
+        let root = try WatcherTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         try Self.writeSkillFile(id: "short-lived-skill", in: root, descriptionSuffix: "v1")
 
@@ -492,18 +492,6 @@ struct SkillsRegistryReloadTests {
         _ recorder: MetadataUpdateRecorder, atLeast target: Int, timeout: Duration
     ) async -> Int {
         await Self.poll({ await recorder.publications.count }, until: { $0 >= target }, timeout: timeout)
-    }
-
-    /// Creates a fresh, empty temporary directory for a test root, so one
-    /// test's filesystem activity can never be observed by another.
-    ///
-    /// - Throws: Whatever `FileManager.createDirectory` throws.
-    /// - Returns: The new directory's URL.
-    private static func makeTempDirectory() throws -> URL {
-        let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString, isDirectory: true)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        return directory
     }
 
     /// Builds a minimal but structurally valid `SKILL.md` body for `id`,
