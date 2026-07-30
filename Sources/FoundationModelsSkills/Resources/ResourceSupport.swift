@@ -24,13 +24,21 @@ extension StringProtocol {
     }
 }
 
-/// Shared "resolve `id` against the model-visible catalog" lookup and
-/// corrective-message logic for `ListResource`, `ReadResource`, and
-/// `RunScript` (plan.md §7.3, decision #22).
+/// Shared "resolve `id` against the calling context's visible catalog"
+/// lookup and corrective-message logic for `ListResource`, `ReadResource`,
+/// and `RunScript` (plan.md §7.3, decision #22).
 ///
-/// Resource operations see only the model-visible catalog, unlike
-/// `UseSkill`'s surface-dependent `context.visibilityPredicate` -- plan.md
-/// §7.3's own words: "All three see only the model-visible catalog."
+/// Resolves plan.md's own internal tension between §7.3 ("resource
+/// operations see only the model-visible catalog") and §7.2 ("the CLI
+/// respects the same visibility rules as the user surface -- it is a user,
+/// not a model") the same way `UseSkill`/`ListSkill`/`SearchSkill` already
+/// do: visibility comes from `context.visibilityPredicate`, not a hardcoded
+/// `isModelVisible` check. A host's model-facing context still defaults
+/// `visibilityPredicate` to `isModelVisible` (`SkillsToolContext`'s own
+/// default), so nothing changes there; only a surface that supplies a
+/// different predicate (e.g. `SkillsCLI`'s user-surface one) sees resource
+/// ops honor it too, instead of the CLI inverting visibility relative to
+/// `commandListing()`.
 internal enum ResourceIDLookup {
     /// The outcome of resolving an id: its directory on disk, or the
     /// corrective message to return in its place.
@@ -48,20 +56,24 @@ internal enum ResourceIDLookup {
         case corrective(String)
     }
 
-    /// Resolves `id` against `context`'s model-visible catalog to its
-    /// directory on disk, or the corrective message for an unusable id
-    /// (decision #22) -- the single place `ListResource` and
-    /// `ReadResource` share this id-resolution step, so neither repeats the
-    /// visibility check, the directory lookup, and the message construction
-    /// as its own inline guard.
+    /// Resolves `id` against `context`'s visible catalog
+    /// (`context.visibilityPredicate`'s subset) to its directory on disk, or
+    /// the corrective message for an unusable id (decision #22) -- the
+    /// single place `ListResource` and `ReadResource` share this
+    /// id-resolution step, so neither repeats the visibility check, the
+    /// directory lookup, and the message construction as its own inline
+    /// guard.
     ///
     /// - Parameters:
     ///   - id: The skill id to resolve.
-    ///   - context: The shared context supplying the registry.
+    ///   - context: The shared context supplying the registry and which
+    ///     entries `context.visibilityPredicate` accepts.
     /// - Returns: `.success(_:)` carrying the matching entry's directory, or
-    ///   `.corrective(_:)` when `id` is unknown, stale, or model-hidden.
+    ///   `.corrective(_:)` when `id` is unknown, stale, or not visible on
+    ///   this surface.
     internal static func resolve(id: String, context: SkillsToolContext) -> Resolution {
-        guard context.registry.metadata().contains(where: { $0.id == id && $0.isModelVisible }),
+        guard
+            context.registry.metadata().contains(where: { $0.id == id && context.visibilityPredicate($0) }),
             let skillDirectory = context.registry.skillDirectory(id: id)
         else {
             return .corrective(Self.unusableIDMessage(id: id, context: context))
@@ -92,17 +104,18 @@ internal enum ResourceIDLookup {
         }
     }
 
-    /// The corrective message for an id that is unknown, stale, or
-    /// model-hidden, carrying the current model-visible id list (decision
-    /// #22).
+    /// The corrective message for an id that is unknown, stale, or not
+    /// visible on this surface, carrying the current usable id list
+    /// (decision #22).
     ///
     /// - Parameters:
     ///   - id: The id that could not be resolved.
-    ///   - context: The shared context supplying the registry.
+    ///   - context: The shared context supplying the registry and which
+    ///     entries `context.visibilityPredicate` accepts.
     /// - Returns: The corrective message.
     private static func unusableIDMessage(id: String, context: SkillsToolContext) -> String {
         let prefix = "The skill id `\(id)` is not currently usable"
-        let validIDs = context.registry.metadata().filter(\.isModelVisible).map(\.id).sorted()
+        let validIDs = context.registry.metadata().filter(context.visibilityPredicate).map(\.id).sorted()
         guard !validIDs.isEmpty else {
             return "\(prefix), and no skills are currently usable."
         }

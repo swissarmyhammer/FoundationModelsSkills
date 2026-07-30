@@ -203,6 +203,78 @@ struct ResourceOpsTests {
         #expect(!json.contains("\"total\":100"))
     }
 
+    // MARK: - Surface visibility (plan.md §7.2/§7.3, ^kb2t82c)
+
+    /// Builds a context whose `visibilityPredicate` mirrors `SkillsCLI`'s
+    /// own private `makeContext(registry:)`: the user-facing subset
+    /// (`registry.commandListing()`'s ids), not the model-facing default.
+    ///
+    /// `SkillsCLI` only exposes this predicate indirectly, through
+    /// `makeDriver(registry:)`'s CLI string-argument dispatch path -- but
+    /// resource ops take an `id` (and, for `read`/`run`, a `path`) rather
+    /// than a CLI verb, so this builds the equivalent context directly for
+    /// `SkillsTool.make(context:)` dispatch.
+    ///
+    /// - Parameter roots: The registry roots to build over. Defaults to the
+    ///   §11 fixture library.
+    /// - Returns: The assembled user-surface context.
+    private static func makeUserSurfaceContext(roots: [URL] = [Self.projectSkillsRoot]) -> SkillsToolContext {
+        let registry = SkillsRegistry(roots: roots)
+        let userVisibleIDs = Set(registry.commandListing().map(\.id))
+        let isUserVisible: @Sendable (SkillMetadata) -> Bool = { userVisibleIDs.contains($0.id) }
+        let searcher = MetadataSearcher(items: registry.metadata().filter(isUserVisible))
+        return SkillsToolContext(
+            registry: registry,
+            searchAgent: SkillSearchAgent(searcher: searcher, visibilityPredicate: isUserVisible),
+            visibilityPredicate: isUserVisible)
+    }
+
+    @Test func listResourceOnTheModelSurfaceReachesLintButRefusesDeploy() async throws {
+        // `lint` (`user-invocable: false`) is model-only; `deploy`
+        // (`disable-model-invocation: true`) is user-only -- the model
+        // surface must see exactly the opposite of the CLI/user surface
+        // below.
+        let tool = try SkillsTool.make(context: Self.makeContext())
+
+        let lintJSON = try await tool.call(
+            arguments: GeneratedContent(properties: ["op": "list resource", "id": "lint"]))
+        let deployJSON = try await tool.call(
+            arguments: GeneratedContent(properties: ["op": "list resource", "id": "deploy"]))
+
+        #expect(!lintJSON.contains("\"corrective\""))
+        #expect(deployJSON.contains("\"corrective\""))
+        #expect(deployJSON.contains("not currently usable"))
+    }
+
+    @Test func listResourceOnTheUserSurfaceReachesDeployButRefusesLint() async throws {
+        let tool = try SkillsTool.make(context: Self.makeUserSurfaceContext())
+
+        let deployJSON = try await tool.call(
+            arguments: GeneratedContent(properties: ["op": "list resource", "id": "deploy"]))
+        let lintJSON = try await tool.call(
+            arguments: GeneratedContent(properties: ["op": "list resource", "id": "lint"]))
+
+        #expect(!deployJSON.contains("\"corrective\""))
+        #expect(lintJSON.contains("\"corrective\""))
+        #expect(lintJSON.contains("not currently usable"))
+    }
+
+    @Test func readResourceOnTheUserSurfaceRefusesLintWithACorrectiveNamingOnlyUserVisibleIDs() async throws {
+        // Proves `ReadResource` (not just `ListResource`) honors the same
+        // surface predicate, and that the corrective's "currently usable
+        // ids" list reflects this surface's own visible set.
+        let tool = try SkillsTool.make(context: Self.makeUserSurfaceContext())
+
+        let json = try await tool.call(
+            arguments: GeneratedContent(
+                properties: ["op": "read resource", "id": "lint", "path": "SKILL.md"]))
+
+        #expect(json.contains("\"corrective\""))
+        let usableIDsList = try #require(json.components(separatedBy: "Currently usable ids: ").last)
+        #expect(usableIDsList.contains("deploy"))
+        #expect(!usableIDsList.contains("lint"))
+    }
+
     // MARK: - Fixture helpers
 
     /// Writes a minimal, always-valid `id/SKILL.md` under `directory`,

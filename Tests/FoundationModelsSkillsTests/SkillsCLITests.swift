@@ -127,6 +127,58 @@ struct SkillsCLITests {
         #expect(!usableIDsList.contains("lint"))
     }
 
+    // MARK: - Resource op invocations (§7.2/§7.3, ^kb2t82c)
+
+    @Test func resourceListVerbListsReleaseNotesResources() async throws {
+        let driver = try Self.makeFixtureDriver()
+
+        let result = await driver.run(arguments: ["resource", "list", "--id", "release-notes"])
+
+        #expect(result.exitCode == 0)
+        #expect(result.output.contains("\"total\":3"))
+    }
+
+    @Test func resourceReadVerbReadsTheBuildScript() async throws {
+        let driver = try Self.makeFixtureDriver()
+
+        let result = await driver.run(
+            arguments: ["resource", "read", "--id", "release-notes", "--path", "scripts/build.sh"])
+
+        #expect(result.exitCode == 0)
+        #expect(result.output.contains("building release notes"))
+    }
+
+    @Test func scriptRunVerbExecutesTheBuildScript() async throws {
+        let driver = try Self.makeFixtureDriver()
+
+        let result = await driver.run(
+            arguments: ["script", "run", "--id", "release-notes", "--path", "scripts/build.sh"])
+
+        #expect(result.exitCode == 0)
+        #expect(result.output.contains("building release notes"))
+    }
+
+    @Test func resourceListVerbRefusesLintWhichIsModelOnly() async throws {
+        // `release-notes` is visible on both surfaces (no visibility
+        // flags); `lint` is model-only -- the CLI's user surface must
+        // refuse it the same way `skill use --id lint` already does.
+        let driver = try Self.makeFixtureDriver()
+
+        let result = await driver.run(arguments: ["resource", "list", "--id", "lint"])
+
+        #expect(result.exitCode == 0)
+        #expect(result.output.contains("is not currently usable"))
+    }
+
+    @Test func resourceListVerbReachesDeployWhichIsHiddenFromTheModelSurface() async throws {
+        let driver = try Self.makeFixtureDriver()
+
+        let result = await driver.run(arguments: ["resource", "list", "--id", "deploy"])
+
+        #expect(result.exitCode == 0)
+        #expect(!result.output.contains("\"corrective\""))
+    }
+
     // MARK: - Round trip: CLI payload == model payload (§7.2)
 
     @Test func searchVerbRoundTripsToTheIdenticalModelDispatchOutput() async throws {
@@ -164,6 +216,49 @@ struct SkillsCLITests {
         let cliResult = await driver.run(arguments: ["skill", "use", "--id", "commit", "--arguments", "fix parser"])
         let modelOutput = try await modelTool.call(
             arguments: GeneratedContent(properties: ["op": "use skill", "id": "commit", "arguments": ["fix parser"]]))
+
+        #expect(cliResult.exitCode == 0)
+        #expect(cliResult.output == modelOutput)
+    }
+
+    @Test func resourceListVerbRoundTripsToTheIdenticalModelDispatchOutput() async throws {
+        let registry = Self.makeFixtureRegistry()
+        let driver = try SkillsCLI.makeDriver(registry: registry)
+        let modelTool = try Self.makeModelTool(registry: registry)
+
+        let cliResult = await driver.run(arguments: ["resource", "list", "--id", "release-notes"])
+        let modelOutput = try await modelTool.call(
+            arguments: GeneratedContent(properties: ["op": "list resource", "id": "release-notes"]))
+
+        #expect(cliResult.exitCode == 0)
+        #expect(cliResult.output == modelOutput)
+    }
+
+    @Test func resourceReadVerbRoundTripsToTheIdenticalModelDispatchOutput() async throws {
+        let registry = Self.makeFixtureRegistry()
+        let driver = try SkillsCLI.makeDriver(registry: registry)
+        let modelTool = try Self.makeModelTool(registry: registry)
+
+        let cliResult = await driver.run(
+            arguments: ["resource", "read", "--id", "release-notes", "--path", "scripts/build.sh"])
+        let modelOutput = try await modelTool.call(
+            arguments: GeneratedContent(
+                properties: ["op": "read resource", "id": "release-notes", "path": "scripts/build.sh"]))
+
+        #expect(cliResult.exitCode == 0)
+        #expect(cliResult.output == modelOutput)
+    }
+
+    @Test func scriptRunVerbRoundTripsToTheIdenticalModelDispatchOutput() async throws {
+        let registry = Self.makeFixtureRegistry()
+        let driver = try SkillsCLI.makeDriver(registry: registry)
+        let modelTool = try Self.makeModelTool(registry: registry)
+
+        let cliResult = await driver.run(
+            arguments: ["script", "run", "--id", "release-notes", "--path", "scripts/build.sh"])
+        let modelOutput = try await modelTool.call(
+            arguments: GeneratedContent(
+                properties: ["op": "run script", "id": "release-notes", "path": "scripts/build.sh"]))
 
         #expect(cliResult.exitCode == 0)
         #expect(cliResult.output == modelOutput)
