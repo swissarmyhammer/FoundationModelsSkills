@@ -11,8 +11,12 @@ comments:
     - Full suite green: 280/280, confirmed clean across 3 consecutive runs (one earlier run hit an unrelated one-off flake, not reproduced).
     - Scoped review running in background (task kj2ug29j6) — awaiting result.
   timestamp: 2026-07-29T23:55:23.895582+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01kyr5yp096a5d3fg6efbrhvnq
+  text: 'Review clean at 8c95c70 (0 findings). Two prior review-finding fixes landed: directoryEventMask constant deduped across watchTree(at:)/armRoots() (76c1528 → follow-up), and WatcherTestSupport.swift extracted to dedupe makeTempDirectory() between SkillWatcherTests and SkillsRegistryReloadTests. Full suite green 280/280. Moving to done.'
+  timestamp: 2026-07-30T00:14:26.313017+00:00
+position_column: done
+position_ordinal: 9b80
 title: 'Watcher: arm layer roots created after start()'
 ---
 ## What
