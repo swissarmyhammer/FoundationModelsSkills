@@ -1,6 +1,11 @@
 ---
-position_column: doing
-position_ordinal: '80'
+comments:
+- actor: claude-code
+  id: 01kyr97j6f9bvg9qkrmh214y6a
+  text: 'Implemented all three fixes: whitespace-only description now trims before the missing/empty check; new emptyCompatibilityDiagnostic (advisory) for an explicit compatibility: ""; mistyped metadata.* extension values (and, per review escalation, mistyped top-level `arguments:` too) now draw an advisory note and are dropped rather than silently kept or dropped-without-trace. Consolidated the five near-duplicate extension-field resolution blocks in SkillFrontmatter.init(from:) into one resolveExtensionField helper, which also fixed a real bug the consolidation surfaced (mistyped metadata.arguments was noted as ignored but still flowed through unchanged). knownTopLevelKeys now derives from specFieldKeys + ExtensionKey.allCases instead of a third hand-maintained literal list. Went through 6 review rounds fixing: isolation-marker consistency (N/A, reverted after compiler proved it wrong), arguments type-check gap, boolean-literal dedup, extension-field-block dedup + passthrough bug, top-level arguments validation + knownTopLevelKeys dedup, null-argument edge case, and final test dedup. Final review clean, 286/286 tests green.'
+  timestamp: 2026-07-30T01:11:43.055363+00:00
+position_column: done
+position_ordinal: 9c80
 title: 'Validation edges: blank description, empty compatibility, mistyped metadata.*'
 ---
 ## What
