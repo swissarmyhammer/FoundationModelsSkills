@@ -1,4 +1,16 @@
 ---
+comments:
+- actor: claude-code
+  id: 01kyr4vtbqs5gykzy7vt9sevbg
+  text: |-
+    Implemented and checkpointed at 76c1528:
+    - `SkillWatcher.watchExistingRoots()` renamed to `armRoots()`: an existing root still gets the real recursive watch; a missing root now watches its nearest existing ancestor directory instead of being skipped outright. `flush()`'s existing rebuild-from-scratch cycle re-resolves each root's existence every quiet period, so the ancestor watch escalates to the real recursive one the moment the root actually appears — no watcher restart needed. Delete-then-recreate flows through the same mechanism (the delete itself triggers a flush whose rebuild falls back to re-arming the ancestor).
+    - Added `nearestExistingAncestor(of:)`, walking `deletingLastPathComponent()` up until something exists on disk.
+    - Found and fixed a real flakiness landmine along the way: the existing `nonexistentRootInTheListIsSkippedWithoutError` test placed its bogus root directly under the shared system temp directory — with the new ancestor-arming, that meant watching `$TMPDIR` itself, which sees constant unrelated churn from every other test's own `makeTempDirectory()` calls. Moved the bogus root under a private per-test directory instead.
+    - New tests: `creatingARootThatDidNotExistAtStartIsDetected`, `deletingAndRecreatingARootKeepsEventsFlowing` (`SkillWatcherTests`), and an end-to-end `aRootThatDidNotExistAtConstructionSurfacesItsSkillOnceCreated` (`SkillsRegistryReloadTests`).
+    - Full suite green: 280/280, confirmed clean across 3 consecutive runs (one earlier run hit an unrelated one-off flake, not reproduced).
+    - Scoped review running in background (task kj2ug29j6) — awaiting result.
+  timestamp: 2026-07-29T23:55:23.895582+00:00
 position_column: doing
 position_ordinal: '80'
 title: 'Watcher: arm layer roots created after start()'

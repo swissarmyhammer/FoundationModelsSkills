@@ -32,6 +32,10 @@ public final class SkillWatcher: @unchecked Sendable {
     /// missing root's nearest existing ancestor (`armRoots()`) -- both need
     /// to notice an entry being created, removed, or renamed directly
     /// under them.
+    ///
+    /// `nonisolated(unsafe)` here (unlike `queueSpecificKey` above) because
+    /// `DispatchSource.FileSystemEvent` itself isn't `Sendable`, even though
+    /// this immutable `OptionSet` of raw bits is trivially safe to share.
     nonisolated(unsafe) private static let directoryEventMask: DispatchSource.FileSystemEvent = [.write, .delete, .rename]
 
     private let roots: [URL]
