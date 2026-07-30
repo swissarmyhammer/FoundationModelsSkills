@@ -1,5 +1,4 @@
 import FoundationModels
-import FoundationModelsMetadataRegistry
 import FoundationModelsSkills
 import Operations
 import OperationsCLI
@@ -270,12 +269,10 @@ struct SkillsCLITests {
         #expect(cliResult.output == modelOutput)
     }
 
-    /// Builds the model-facing fused tool over `registry`, mirroring
-    /// `SkillOperationsTests.makeFixtureContext()`'s stub-searcher
-    /// construction.
+    /// Builds the model-facing fused tool over `registry`, via the same
+    /// `FixtureLibrary.makeSkillsToolContext(registry:)` helper
+    /// `SkillOperationsTests.makeFixtureContext()` uses.
     private static func makeModelTool(registry: SkillsRegistry) throws -> OperationTool<SkillsToolContext> {
-        let searcher = MetadataSearcher(items: registry.metadata().filter(\.isModelVisible))
-        let context = SkillsToolContext(registry: registry, searchAgent: SkillSearchAgent(searcher: searcher))
-        return try SkillsTool.make(context: context)
+        try SkillsTool.make(context: FixtureLibrary.makeSkillsToolContext(registry: registry))
     }
 }

@@ -22,9 +22,7 @@ struct SkillOperationsTests {
     /// `MetadataSearcher` (no embedder, no session) standing in for the
     /// stub-searcher context the acceptance criteria call for.
     private static func makeFixtureContext() -> SkillsToolContext {
-        let registry = SkillsRegistry(roots: [projectSkillsRoot])
-        let searcher = MetadataSearcher(items: registry.metadata().filter(\.isModelVisible))
-        return SkillsToolContext(registry: registry, searchAgent: SkillSearchAgent(searcher: searcher))
+        FixtureLibrary.makeSkillsToolContext(registry: SkillsRegistry(roots: [projectSkillsRoot]))
     }
 
     /// Builds the fused `skills` tool over `makeFixtureContext()`.

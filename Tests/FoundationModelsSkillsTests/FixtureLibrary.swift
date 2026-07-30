@@ -1,4 +1,6 @@
 import Foundation
+import FoundationModelsMetadataRegistry
+import FoundationModelsSkills
 
 /// Resolves paths into the fixture skill library at `Examples/skill-library`,
 /// relative to the calling test file's own location on disk.
@@ -66,5 +68,22 @@ enum FixtureLibrary {
                 + "traversal, got \"\(relativePath)\""
         )
         return root(thisFile: thisFile).appendingPathComponent(relativePath)
+    }
+
+    /// Builds a `SkillsToolContext` over `registry`, with a real,
+    /// GPU-free `.retrieval`-mode `MetadataSearcher` (no embedder, no
+    /// session) standing in for the stub-searcher context the acceptance
+    /// criteria call for.
+    ///
+    /// Shared by `SkillOperationsTests.makeFixtureContext()` (the model
+    /// surface's own registry) and `SkillsCLITests.makeModelTool(registry:)`
+    /// (a registry the CLI test also drives directly), so the two suites'
+    /// dispatch-context construction can never drift.
+    ///
+    /// - Parameter registry: The registry the resulting context wraps.
+    /// - Returns: The assembled context.
+    static func makeSkillsToolContext(registry: SkillsRegistry) -> SkillsToolContext {
+        let searcher = MetadataSearcher(items: registry.metadata().filter(\.isModelVisible))
+        return SkillsToolContext(registry: registry, searchAgent: SkillSearchAgent(searcher: searcher))
     }
 }
