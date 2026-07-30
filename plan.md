@@ -283,9 +283,14 @@ struct ListSkillResult:   Encodable { let skills:  [SkillRow]; let total: Int }
 struct UseSkillResult:    Encodable { let id: String; let body: String }  // body = §5 render
 ```
 
-- **Noun is singular `skill`**; the forgiving resolver tolerates plurals, reversed order
-  (`skill list`), and `_`/`-` separators. Verb aliases ride the shared resolver table:
-  `find/discover → search`, `call/run/invoke/get → use`. *(decisions #20–21)*
+- **Noun is singular `skill`**; the forgiving resolver tolerates reversed order
+  (`skill list`) and `_`/`-` separators — **not** plural nouns: upstream's resolver
+  compares the noun token literally with no singularization, so `skills list` stays
+  `Unknown operation` (amended; see decision #21). Verb aliases ride the shared resolver
+  table: `find/discover → search`, `call/invoke/get → use`. `run` is deliberately **not**
+  a `use` alias — it's reserved for the M6 `run script` operation, since upstream's verb
+  rewrite is unconditional per-verb (not per-noun) and a `run → use` entry would rewrite a
+  literal `"run script"` query before it ever reached `RunScript`. *(decisions #20–21)*
 - **`id` is a plain string, validated at dispatch.** No dynamic id enum: skills hot-reload
   between turns, and Apple's enum-enforcement bug (forums 812501/811620) means the model can
   emit values outside an `anyOf` list anyway. An unknown/stale/model-hidden id returns a
@@ -393,8 +398,14 @@ render skills outside any session:
 ```
 skills skill list
 skills skill search "commit my changes"
-skills skill use deploy --arguments production
+skills skill use --id deploy --arguments production
 ```
+
+*(Amended: the macro-less fallback CLI leaf (`FallbackOperationCommand`/`FallbackPayloadBuilder`
+in `../FoundationModelsOperationTool`) recognizes only `--name value`/`-short` flags — a bare
+positional token like `deploy` right after `use` is silently dropped, never populating `id`.
+The originally-drafted positional form (`use deploy …`) never actually worked; `--id` is
+required. See `SkillsCLITests`' CLI-syntax pins.)*
 
 Help, did-you-mean, and shell completions come from stock ArgumentParser. The CLI respects
 the same visibility rules as the user surface (it is a user, not a model).
@@ -548,8 +559,16 @@ Revisit when Apple ships a supported per-process confinement API. *(decision #28
     return-don't-throw corrective errors, the retry cap, `includesSchemaInInstructions`, and
     the CLI driver. Upstream tasks 2/4/5/6 are prerequisites for our M4.
 21. **Vocabulary → noun `skill`, verbs `search` / `list` / `use`.** Aliases:
-    `find/discover → search`; `call/run/invoke/get → use`; plural/reversed/`_`-`-` tolerated
-    by the resolver. **Skills are rows, not operations** — never one op per skill id.
+    `find/discover → search`; `call/invoke/get → use`; reversed/`_`-`-` tolerated by the
+    resolver. **`run` is not a `use` alias** — reserved for the M6 `run script` operation
+    (upstream's verb rewrite is unconditional per-verb, not per-noun; a `run → use` entry
+    would collide with `run script`). **Plural nouns do not resolve** — upstream's resolver
+    compares the noun token literally, with no singularization; `skills list` stays
+    `Unknown operation`. *(Amended: originally read "call/run/invoke/get → use;
+    plural/reversed/`_`-`-` tolerated," which overstated what the shipped resolver does —
+    `run` and noun pluralization were never actually reachable; see `SkillsTool.swift`'s
+    `verbAliasOverrides` and `SkillOperationsTests`' resolver-matrix pins.)* **Skills are
+    rows, not operations** — never one op per skill id.
 22. **Skill id → plain string + dispatch validation.** Unknown/stale/model-hidden id returns
     a corrective message listing current ids (upstream pattern); retry cap stops loops.
 23. **Resource nouns specified in §7.3, built at M6.** `list resource` / `read resource` /
@@ -692,7 +711,7 @@ for skill in registry.commandListing() { /* skill.id, .description, .parameters 
 
 // Dual-use CLI from the SAME declarations:
 let cli = OperationCLIDriver(tool: skillsTool)
-try await cli.run(CommandLine.arguments)  // skills skill use deploy --arguments production
+try await cli.run(CommandLine.arguments)  // skills skill use --id deploy --arguments production
 ```
 
 ## 11. Examples (`./Examples`)

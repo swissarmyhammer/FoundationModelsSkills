@@ -406,13 +406,15 @@ struct SkillOperationsTests {
     }
 
     @Test func resolverDoesNotAcceptThePluralReversedSpellingSkillsList() async throws {
-        // ...but the plural spelling `skills list` plan.md decision #21
-        // describes does not: there is no noun-normalization lever in the
-        // shipped resolver to fold `skills` (plural) onto our declared
-        // singular noun `skill`. Documented as a discrepancy on the kanban
-        // task; pinned here so a future resolver change that adds plural
-        // tolerance is noticed (this test would then need updating to
-        // expect success).
+        // ...but the plural spelling `skills list` does not: there is no
+        // noun-normalization lever in the shipped resolver to fold `skills`
+        // (plural) onto our declared singular noun `skill`. This is the
+        // RESOLVED contract -- plan.md decision #21 was amended to say so
+        // explicitly, since the original text overstated what upstream's
+        // resolver actually does (no singularization). Pinned here so a
+        // future resolver change that adds plural tolerance is noticed
+        // (this test would then need updating to expect success, alongside
+        // another plan.md amendment).
         let tool = try Self.makeFixtureTool()
         let arguments = GeneratedContent(properties: ["op": "skills list"])
 
@@ -460,8 +462,11 @@ struct SkillOperationsTests {
         // keeping it would have rewritten a literal `"run script"` query to
         // `"use script"`, which doesn't exist, before it ever reached
         // `RunScript`. `"run skill"` therefore no longer resolves to `use
-        // skill` -- pinned here so a future resolver/alias change that
-        // reintroduces the collision is caught by a test.
+        // skill` -- this is the RESOLVED contract (plan.md decision #21 was
+        // amended to say `run` is deliberately not a `use` alias, reserved
+        // for `run script`), not a workaround -- pinned here so a future
+        // resolver/alias change that reintroduces the collision is caught
+        // by a test.
         let tool = try Self.makeFixtureTool()
         let arguments = GeneratedContent(properties: ["op": "run skill", "id": "commit", "arguments": ["fix parser"]])
 

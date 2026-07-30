@@ -54,6 +54,38 @@ struct SkillsCLITests {
         #expect(result.output.contains("fix parser"))
     }
 
+    // MARK: - CLI syntax: positional id vs --id flag (§7.2, resolved contract)
+
+    @Test func useVerbWithABarePositionalIDIsSilentlyDroppedNotDispatched() async throws {
+        // §7.2's originally-drafted example (`use deploy --arguments
+        // production`) never actually worked: the macro-less fallback CLI
+        // leaf (`FallbackOperationCommand`/`FallbackPayloadBuilder` in
+        // `../FoundationModelsOperationTool`) recognizes only `--name
+        // value`/`-short` flags -- a bare positional token right after the
+        // verb is silently dropped, never populating `id`. This is the
+        // RESOLVED contract (plan.md §7.2 was amended to require `--id`),
+        // pinned here so a future upstream positional-parameter change is
+        // noticed.
+        let driver = try Self.makeFixtureDriver()
+
+        let result = await driver.run(arguments: ["skill", "use", "deploy", "--arguments", "production"])
+
+        #expect(result.exitCode == 0)
+        // No `id` was ever resolved -- the resolver's own missing-required-
+        // parameter corrective fires, naming `id`, not a rendered body.
+        #expect(!result.output.contains("\"id\":\"deploy\""))
+        #expect(result.output.contains("id"))
+    }
+
+    @Test func useVerbWithTheIDFlagDispatchesCorrectly() async throws {
+        let driver = try Self.makeFixtureDriver()
+
+        let result = await driver.run(arguments: ["skill", "use", "--id", "deploy", "--arguments", "production"])
+
+        #expect(result.exitCode == 0)
+        #expect(result.output.contains("\"id\":\"deploy\""))
+    }
+
     @Test func useVerbHonorsShellExecutionDisabledPolicy() async throws {
         // §25 coverage gap (^zbv0t4j): the disable flag was previously never
         // proven on the CLI path -- `skill use` dispatches through the exact

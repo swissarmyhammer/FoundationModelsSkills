@@ -1,6 +1,6 @@
 ---
-position_column: todo
-position_ordinal: 9f80
+position_column: doing
+position_ordinal: '80'
 title: 'Resolver vocabulary vs #21: run-skill alias, plural nouns, CLI positional ids'
 ---
 ## What
