@@ -17,6 +17,16 @@ import Testing
 /// documents as the *caller's* responsibility, not something either type
 /// does automatically; this test is also the one place that seam is
 /// exercised end to end.
+///
+/// A `charlie` skill (`preload: true`, `disable-model-invocation: true`)
+/// rides alongside `alpha`/`bravo` across steps 1-3, so `preloadedBodies()`
+/// is genuinely exercised through an add/edit/remove -- not merely asserted
+/// empty because nothing in the scenario was ever preloaded. Its
+/// `disable-model-invocation: true` keeps it out of the search agent
+/// entirely (`SkillSearchAgent.update(items:)` filters to
+/// `isModelVisible` before ever reaching `MetadataSearcher`), so it never
+/// perturbs the embed-count/diagnostic assertions steps 1-2 already make
+/// about `alpha`/`bravo`.
 struct HotReloadTests {
     /// How long the test waits for an expected `update(items:)` call to
     /// reach the searcher before treating its absence as a failure.
@@ -39,10 +49,20 @@ struct HotReloadTests {
         try Self.writeSkillFile(id: "alpha", in: root, descriptionSuffix: "v1")
 
         let registry = SkillsRegistry(roots: [root], watch: true)
-        let embedder = FakeEmbedder(dimension: 2)
+        let embedGate = EmbedGate()
+        let embedder = FakeEmbedder(dimension: 2, gate: embedGate)
         let diagnostics = DiagnosticRecorder()
+        // `weights: cosine: 0` matters beyond "this scenario never asserts
+        // on cosine ranking" (already true before this change): step 1
+        // deliberately closes `embedGate` around a catalog-item re-embed to
+        // observe it mid-flight, and a concurrent `search` call's own cosine
+        // scoring would otherwise call `embedder.embed(_:)` a *second* time
+        // for the query -- on the same gate the test's own code is still
+        // awaiting the search to return before it can open. A nonzero
+        // cosine weight here would self-deadlock step 1 against itself.
         let searcher = await MetadataSearcher(
             items: registry.metadata().filter(\.isModelVisible),
+            weights: Weights(cosine: 0),
             embedder: embedder,
             onDiagnostic: { diagnostics.record($0) }
         )
@@ -54,36 +74,76 @@ struct HotReloadTests {
         let tool = try SkillsTool.make(context: SkillsToolContext(registry: registry, searchAgent: agent))
         let schemaBefore = String(describing: tool.parameters)
 
-        try await Self.stepOneAdd(root: root, registry: registry, updates: updates, diagnostics: diagnostics, tool: tool)
-        try await Self.stepTwoEdit(root: root, updates: updates, embedder: embedder)
-        try await Self.stepThreeRemove(root: root, updates: updates, tool: tool)
+        let preloadedAfterAdd = try await Self.stepOneAdd(
+            root: root, registry: registry, updates: updates, diagnostics: diagnostics, embedGate: embedGate,
+            tool: tool)
+        let preloadedAfterEdit = try await Self.stepTwoEdit(
+            root: root, registry: registry, updates: updates, embedder: embedder)
+        let preloadedAfterRemove = try await Self.stepThreeRemove(
+            root: root, registry: registry, updates: updates, tool: tool)
         try await Self.stepFourVisibilityFlip(root: root, updates: updates, tool: tool)
-        try await Self.stepFivePreloadAndListing(registry: registry, tool: tool, schemaBefore: schemaBefore)
+        try await Self.stepFivePreloadAndListing(
+            registry: registry, tool: tool, schemaBefore: schemaBefore, preloadedAfterAdd: preloadedAfterAdd,
+            preloadedAfterEdit: preloadedAfterEdit, preloadedAfterRemove: preloadedAfterRemove)
     }
 
     // MARK: - Step 1: add
 
-    /// Adds a new `SKILL.md`, confirms exactly one `update(items:)` call
-    /// reaches the searcher, that the new id is immediately keyword-searchable,
-    /// and that the async cosine catch-up eventually reports
+    /// Adds a new `SKILL.md` (plus a `preload: true` sibling, `charlie`),
+    /// confirms exactly one `update(items:)` call reaches the searcher, that
+    /// the new id is immediately keyword-searchable *while the async cosine
+    /// catch-up is still genuinely pending* (not merely asserted before an
+    /// unenforced race), and that the catch-up eventually reports
     /// `.embedCatchUp(pending:total:)`.
+    ///
+    /// The pending window is made deterministic by `embedGate`: closed
+    /// before the write, so `FakeEmbedder.embed(_:)` blocks the very first
+    /// time `MetadataSearcher.update(items:)` reaches it -- `waitUntilBlocked()`
+    /// confirms that block has genuinely started (proving the synchronous
+    /// keyword/trigram rebuild already happened, per `update(items:)`'s own
+    /// documented ordering) before this method's own search runs
+    /// concurrently against the same actor, which Swift's actor reentrancy
+    /// permits precisely because `update(items:)` is suspended, not
+    /// synchronously blocking the actor.
     ///
     /// - Parameters:
     ///   - root: The watched temp root.
     ///   - registry: The registry under test.
     ///   - updates: Tallies every forwarded `update(items:)` call.
     ///   - diagnostics: Tallies every `MetadataDiagnostic` the searcher emits.
+    ///   - embedGate: Gates `FakeEmbedder.embed(_:)` to make the pending
+    ///     window deterministic.
     ///   - tool: The fused `skills` tool to dispatch through.
+    /// - Returns: `registry.preloadedBodies()`, captured right after this
+    ///   step's reload settles -- `charlie`'s v1 body should already be
+    ///   present.
     private static func stepOneAdd(
         root: URL, registry: SkillsRegistry, updates: UpdateCallRecorder, diagnostics: DiagnosticRecorder,
-        tool: OperationTool<SkillsToolContext>
-    ) async throws {
+        embedGate: EmbedGate, tool: OperationTool<SkillsToolContext>
+    ) async throws -> String {
+        await embedGate.close()
         try Self.writeSkillFile(id: "bravo", in: root, descriptionSuffix: "v1")
-        await Self.expectExactlyOneUpdate(updates, since: 0)
+        try Self.writeSkillFile(
+            id: "charlie", in: root, descriptionSuffix: "v1",
+            extraFrontmatter: "preload: true\ndisable-model-invocation: true\n",
+            body: "Preload payload v1 for charlie.")
+
+        let blocked = await Self.waitUntilBlockedOrTimeout(embedGate, timeout: Self.expectedSignalTimeout)
+        #expect(blocked, "expected the embed catch-up to have started (and be blocked on the gate) by now")
 
         let searchJSON = try await tool.call(
             arguments: GeneratedContent(properties: ["op": "search skill", "query": "bravo"]))
-        #expect(searchJSON.contains("\"id\":\"bravo\""))
+        #expect(
+            searchJSON.contains("\"id\":\"bravo\""),
+            "keyword/trigram search must succeed on a newly added item while its embed catch-up is still pending")
+
+        // `charlie` (`disable-model-invocation: true`) never reaches the
+        // search agent at all -- only `registry.preloadedBodies()` sees it
+        // -- so this read is unaffected by the still-closed gate.
+        let preloadedAfterAdd = registry.preloadedBodies()
+
+        await embedGate.open()
+        await Self.expectExactlyOneUpdate(updates, since: 0)
 
         let caughtUp = await Self.waitForDiagnostic(
             diagnostics, timeout: Self.expectedSignalTimeout
@@ -92,28 +152,47 @@ struct HotReloadTests {
             return false
         }
         #expect(caughtUp, "expected an .embedCatchUp diagnostic covering both catalog items")
+
+        return preloadedAfterAdd
     }
 
     // MARK: - Step 2: edit
 
     /// Edits `bravo`'s description (the text `renderBlock()` actually
     /// indexes -- `SkillMetadata.renderBlock()` never includes a skill's
-    /// body), confirming only the changed item re-embeds, then re-writes it
-    /// with identical content, confirming zero further re-embeds.
+    /// body) and `charlie`'s preloaded body, confirming only the changed
+    /// searcher-visible item re-embeds, then re-writes `bravo` with
+    /// identical content, confirming zero further re-embeds.
     ///
     /// - Parameters:
     ///   - root: The watched temp root.
+    ///   - registry: The registry under test.
     ///   - updates: Tallies every forwarded `update(items:)` call.
     ///   - embedder: The counting embedder to assert re-embed counts against.
-    private static func stepTwoEdit(root: URL, updates: UpdateCallRecorder, embedder: FakeEmbedder) async throws {
+    /// - Returns: `registry.preloadedBodies()`, captured right after this
+    ///   step's reload settles -- `charlie`'s v2 body should have replaced
+    ///   v1.
+    private static func stepTwoEdit(
+        root: URL, registry: SkillsRegistry, updates: UpdateCallRecorder, embedder: FakeEmbedder
+    ) async throws -> String {
         let baseline = await updates.callCount
         let countBeforeEdit = embedder.embeddedTextCount
 
         try Self.writeSkillFile(id: "bravo", in: root, descriptionSuffix: "v2")
+        try Self.writeSkillFile(
+            id: "charlie", in: root, descriptionSuffix: "v1",
+            extraFrontmatter: "preload: true\ndisable-model-invocation: true\n",
+            body: "Preload payload v2 for charlie.")
         await Self.expectExactlyOneUpdate(updates, since: baseline)
         await Self.waitForEmbeddedTextCount(embedder, atLeast: countBeforeEdit + 1, timeout: Self.expectedSignalTimeout)
         let countAfterRealEdit = embedder.embeddedTextCount
-        #expect(countAfterRealEdit == countBeforeEdit + 1, "only the changed item's block should re-embed")
+        #expect(
+            countAfterRealEdit == countBeforeEdit + 1,
+            "only the changed, searcher-visible item should re-embed -- charlie is model-hidden and never reaches the embedder")
+
+        let preloadedAfterEdit = registry.preloadedBodies()
+        #expect(preloadedAfterEdit.contains("Preload payload v2 for charlie."))
+        #expect(!preloadedAfterEdit.contains("Preload payload v1 for charlie."))
 
         let secondBaseline = await updates.callCount
         try Self.writeSkillFile(id: "bravo", in: root, descriptionSuffix: "v2")
@@ -123,23 +202,32 @@ struct HotReloadTests {
         // already spent is long enough for a wrongly-triggered re-embed to
         // have started.
         #expect(embedder.embeddedTextCount == countAfterRealEdit, "a no-op touch (unchanged content) must not re-embed")
+
+        return preloadedAfterEdit
     }
 
     // MARK: - Step 3: remove
 
-    /// Removes `alpha`, confirming its id disappears from `search skill` /
-    /// `list skill`, and that `use skill` against it draws the corrective
-    /// carrying the current id list.
+    /// Removes `alpha` and `charlie`, confirming `alpha`'s id disappears
+    /// from `search skill` / `list skill`, that `use skill` against it draws
+    /// the corrective carrying the current id list, and that `charlie`'s
+    /// preloaded body no longer survives in `preloadedBodies()`.
     ///
     /// - Parameters:
     ///   - root: The watched temp root.
+    ///   - registry: The registry under test.
     ///   - updates: Tallies every forwarded `update(items:)` call.
     ///   - tool: The fused `skills` tool to dispatch through.
-    private static func stepThreeRemove(root: URL, updates: UpdateCallRecorder, tool: OperationTool<SkillsToolContext>)
-        async throws
+    /// - Returns: `registry.preloadedBodies()`, captured right after this
+    ///   step's reload settles -- `charlie`'s body should be entirely gone.
+    private static func stepThreeRemove(
+        root: URL, registry: SkillsRegistry, updates: UpdateCallRecorder, tool: OperationTool<SkillsToolContext>
+    )
+        async throws -> String
     {
         let baseline = await updates.callCount
         try FileManager.default.removeItem(at: root.appendingPathComponent("alpha", isDirectory: true))
+        try FileManager.default.removeItem(at: root.appendingPathComponent("charlie", isDirectory: true))
         await Self.expectExactlyOneUpdate(updates, since: baseline)
 
         let searchJSON = try await tool.call(
@@ -153,6 +241,13 @@ struct HotReloadTests {
             arguments: GeneratedContent(properties: ["op": "use skill", "id": "alpha"]))
         #expect(useJSON.contains("not currently usable"))
         #expect(useJSON.contains("bravo"), "the corrective should carry the current (still-usable) id list")
+
+        let preloadedAfterRemove = registry.preloadedBodies()
+        #expect(
+            !preloadedAfterRemove.contains("Preload payload"),
+            "a removed preload: true skill's body must never survive in preloadedBodies()")
+
+        return preloadedAfterRemove
     }
 
     // MARK: - Step 4: visibility flip on reload
@@ -186,17 +281,26 @@ struct HotReloadTests {
     // MARK: - Step 5: preload + listing refresh, schema stability
 
     /// Confirms `preloadedBodies()` and `commandListing()` both reflect the
-    /// scenario's cumulative changes, and that the fused tool's schema is
-    /// byte-identical to what it was before any of the four preceding steps
-    /// ran -- the schema is a pure function of the fixed operation set, never
-    /// of catalog content (plan.md §7).
+    /// scenario's cumulative changes, that `preloadedBodies()` genuinely
+    /// tracked `charlie`'s add/edit/remove across steps 1-3 (not merely
+    /// empty because nothing was ever preloaded), and that the fused tool's
+    /// schema is byte-identical to what it was before any of the four
+    /// preceding steps ran -- the schema is a pure function of the fixed
+    /// operation set, never of catalog content (plan.md §7).
     ///
     /// - Parameters:
     ///   - registry: The registry under test.
     ///   - tool: The fused `skills` tool the schema is read from.
     ///   - schemaBefore: The tool's schema description captured before step 1.
+    ///   - preloadedAfterAdd: `registry.preloadedBodies()`, captured right
+    ///     after step 1's reload settled.
+    ///   - preloadedAfterEdit: `registry.preloadedBodies()`, captured right
+    ///     after step 2's reload settled.
+    ///   - preloadedAfterRemove: `registry.preloadedBodies()`, captured
+    ///     right after step 3's reload settled.
     private static func stepFivePreloadAndListing(
-        registry: SkillsRegistry, tool: OperationTool<SkillsToolContext>, schemaBefore: String
+        registry: SkillsRegistry, tool: OperationTool<SkillsToolContext>, schemaBefore: String,
+        preloadedAfterAdd: String, preloadedAfterEdit: String, preloadedAfterRemove: String
     ) async throws {
         // `bravo` is now `disable-model-invocation: true` -- user-invocable
         // but not model-visible -- so it still appears on the user-facing
@@ -206,8 +310,21 @@ struct HotReloadTests {
         #expect(listing.contains { $0.id == "bravo" })
         #expect(!listing.contains { $0.id == "alpha" })
 
+        // The §13 preload half, actually exercised: each snapshot below was
+        // captured right after its own step's reload settled, proving
+        // `preloadedBodies()` tracked `charlie`'s add, then edit, then
+        // removal -- not merely that it's empty because nothing in the
+        // scenario was ever preloaded.
+        #expect(preloadedAfterAdd.contains("Preload payload v1 for charlie."))
+        #expect(preloadedAfterEdit.contains("Preload payload v2 for charlie."))
+        #expect(!preloadedAfterEdit.contains("Preload payload v1 for charlie."))
+        #expect(!preloadedAfterRemove.contains("Preload payload"))
+
         let preloaded = registry.preloadedBodies()
         #expect(!preloaded.contains("alpha"), "a removed skill's body must never survive in preloadedBodies()")
+        #expect(
+            !preloaded.contains("Preload payload"),
+            "the removed preload: true skill must not reappear by the end of the scenario")
 
         let schemaAfter = String(describing: tool.parameters)
         #expect(schemaAfter == schemaBefore, "the fused tool's schema must never vary with catalog content")
@@ -355,6 +472,32 @@ struct HotReloadTests {
         }
     }
 
+    /// Races `gate.waitUntilBlocked()` against `timeout`, so a step waiting
+    /// for the embed catch-up to have genuinely started never hangs forever
+    /// if that assumption ever stops holding (e.g. a future upstream change
+    /// makes `MetadataSearcher.update(items:)` skip the embedder entirely).
+    ///
+    /// - Parameters:
+    ///   - gate: The gate to wait on.
+    ///   - timeout: How long to wait before giving up.
+    /// - Returns: `true` if `gate` reported a blocked `embed(_:)` call
+    ///   before `timeout`; `false` otherwise.
+    private static func waitUntilBlockedOrTimeout(_ gate: EmbedGate, timeout: Duration) async -> Bool {
+        await withTaskGroup(of: Bool.self) { group in
+            group.addTask {
+                await gate.waitUntilBlocked()
+                return true
+            }
+            group.addTask {
+                try? await Task.sleep(for: timeout)
+                return false
+            }
+            let result = await group.next() ?? false
+            group.cancelAll()
+            return result
+        }
+    }
+
     // MARK: - Fixture embedder
 
     /// A deterministic `TextEmbedding` test double, mirroring
@@ -363,19 +506,25 @@ struct HotReloadTests {
     /// Every text embeds to an all-zero vector -- this scenario never
     /// asserts on cosine ranking, only on *counts* (how many texts were
     /// embedded) and on the `.embedCatchUp` diagnostic's presence, so no
-    /// registered vector table is needed.
+    /// registered vector table is needed. An optional `gate` lets step 1
+    /// deterministically observe an in-flight (not-yet-complete) embed call.
     private final class FakeEmbedder: TextEmbedding {
         let dimension: Int
         private let counter: EmbedCallCounter
+        private let gate: EmbedGate?
 
         /// Creates a fake embedder that returns an all-zero vector for every
         /// text.
         ///
-        /// - Parameter dimension: The length of every embedding vector this
-        ///   embedder produces.
-        init(dimension: Int) {
+        /// - Parameters:
+        ///   - dimension: The length of every embedding vector this
+        ///     embedder produces.
+        ///   - gate: Blocks every `embed(_:)` call until the gate is open,
+        ///     or `nil` to never block. Defaults to `nil`.
+        init(dimension: Int, gate: EmbedGate? = nil) {
             self.dimension = dimension
             self.counter = EmbedCallCounter()
+            self.gate = gate
         }
 
         /// The total number of texts passed to `embed(_:)` across every call
@@ -383,6 +532,7 @@ struct HotReloadTests {
         var embeddedTextCount: Int { counter.count }
 
         func embed(_ texts: [String]) async throws -> [[Float]] {
+            if let gate { await gate.waitUntilOpen() }
             counter.increment(by: texts.count)
             return texts.map { _ in [Float](repeating: 0, count: dimension) }
         }
@@ -413,6 +563,61 @@ struct HotReloadTests {
         }
     }
 
+    /// A gate `FakeEmbedder.embed(_:)` can be told to block on, so step 1 can
+    /// observe a deterministic window where the async embed catch-up is
+    /// confirmed in flight (blocked awaiting this gate) but not yet
+    /// complete -- proving a concurrent keyword search still succeeds during
+    /// that window, per `MetadataSearcher.update(items:)`'s own reentrancy
+    /// documentation (a concurrent `search` interleaves while `update` is
+    /// suspended awaiting the embedder, since both are calls into the same
+    /// actor and `update` is suspended, not synchronously blocking it).
+    ///
+    /// Starts open, so every construction-time embed and every step 2+ embed
+    /// never blocks; step 1 closes it for one deliberate window, then
+    /// reopens it for the rest of the scenario.
+    private actor EmbedGate {
+        private var isOpen = true
+        private var openWaiters: [CheckedContinuation<Void, Never>] = []
+        private var isBlocked = false
+        private var blockedWaiters: [CheckedContinuation<Void, Never>] = []
+
+        /// Closes the gate: every subsequent `embed(_:)` call blocks in
+        /// `waitUntilOpen()` until `open()` runs.
+        func close() {
+            isOpen = false
+            isBlocked = false
+        }
+
+        /// Opens the gate, resuming every call currently blocked in
+        /// `waitUntilOpen()` and letting every future call through
+        /// immediately.
+        func open() {
+            isOpen = true
+            let waiting = openWaiters
+            openWaiters = []
+            for continuation in waiting { continuation.resume() }
+        }
+
+        /// Called by `FakeEmbedder.embed(_:)`: returns immediately while the
+        /// gate is open; otherwise marks the gate blocked (waking any
+        /// `waitUntilBlocked()` caller) and suspends until `open()` runs.
+        func waitUntilOpen() async {
+            guard !isOpen else { return }
+            isBlocked = true
+            let waiting = blockedWaiters
+            blockedWaiters = []
+            for continuation in waiting { continuation.resume() }
+            await withCheckedContinuation { openWaiters.append($0) }
+        }
+
+        /// Suspends the caller until some `embed(_:)` call is currently
+        /// blocked on this gate.
+        func waitUntilBlocked() async {
+            guard !isBlocked else { return }
+            await withCheckedContinuation { blockedWaiters.append($0) }
+        }
+    }
+
     // MARK: - Fixture file helpers
 
     /// Builds a minimal but structurally valid `SKILL.md` body for `id`,
@@ -428,9 +633,16 @@ struct HotReloadTests {
     ///   - extraFrontmatter: Additional raw frontmatter lines (each already
     ///     newline-terminated) inserted before the closing `---`, or empty
     ///     for none.
+    ///   - body: The body text, or `nil` for the default `"Body text for
+    ///     \(id)."` -- overridden by a `preload: true` fixture so
+    ///     `preloadedBodies()` has genuinely distinguishable content to
+    ///     assert against across an edit.
     /// - Returns: The `SKILL.md` file contents.
-    private static func skillFileContents(id: String, descriptionSuffix: String, extraFrontmatter: String) -> String {
-        "---\nname: \(id)\ndescription: hot-reload fixture \(descriptionSuffix)\n\(extraFrontmatter)---\nBody text for \(id).\n"
+    private static func skillFileContents(
+        id: String, descriptionSuffix: String, extraFrontmatter: String, body: String? = nil
+    ) -> String {
+        "---\nname: \(id)\ndescription: hot-reload fixture \(descriptionSuffix)\n\(extraFrontmatter)---\n"
+            + "\(body ?? "Body text for \(id).")\n"
     }
 
     /// Writes `id/SKILL.md` directly under `directory`, creating the skill's
@@ -441,18 +653,23 @@ struct HotReloadTests {
     ///     frontmatter's `name:` field.
     ///   - directory: The root to write under.
     ///   - descriptionSuffix: Forwarded to
-    ///     `skillFileContents(id:descriptionSuffix:extraFrontmatter:)`.
+    ///     `skillFileContents(id:descriptionSuffix:extraFrontmatter:body:)`.
     ///   - extraFrontmatter: Forwarded to
-    ///     `skillFileContents(id:descriptionSuffix:extraFrontmatter:)`;
+    ///     `skillFileContents(id:descriptionSuffix:extraFrontmatter:body:)`;
     ///     defaults to none.
+    ///   - body: Forwarded to
+    ///     `skillFileContents(id:descriptionSuffix:extraFrontmatter:body:)`;
+    ///     defaults to `nil`.
     /// - Throws: Whatever `FileManager.createDirectory` or `String.write`
     ///   throws.
     private static func writeSkillFile(
-        id: String, in directory: URL, descriptionSuffix: String, extraFrontmatter: String = ""
+        id: String, in directory: URL, descriptionSuffix: String, extraFrontmatter: String = "", body: String? = nil
     ) throws {
         let skillDirectory = directory.appendingPathComponent(id, isDirectory: true)
         try FileManager.default.createDirectory(at: skillDirectory, withIntermediateDirectories: true)
-        try Self.skillFileContents(id: id, descriptionSuffix: descriptionSuffix, extraFrontmatter: extraFrontmatter)
-            .write(to: skillDirectory.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
+        try Self.skillFileContents(
+            id: id, descriptionSuffix: descriptionSuffix, extraFrontmatter: extraFrontmatter, body: body
+        )
+        .write(to: skillDirectory.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
     }
 }

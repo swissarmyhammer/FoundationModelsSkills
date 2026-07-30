@@ -1,6 +1,6 @@
 ---
-position_column: todo
-position_ordinal: a080
+position_column: doing
+position_ordinal: '80'
 title: 'Hot-reload §13 test integrity: preload step, selection tier, live twin'
 ---
 ## What

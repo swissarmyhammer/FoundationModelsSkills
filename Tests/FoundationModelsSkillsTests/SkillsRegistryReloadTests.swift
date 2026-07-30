@@ -46,6 +46,53 @@ struct SkillsRegistryReloadTests {
         #expect(!entry.description.contains("before edit"))
     }
 
+    // MARK: - Reload refreshes preloadedBodies() and diagnostics
+
+    /// Closes a coverage gap distinct from every other test in this file:
+    /// none of them ever asserts on `preloadedBodies()` or `diagnostics`
+    /// after a reload, only on `metadata()`/`commandListing()`/`call(id:
+    /// arguments:)`. Drives a `preload: true` skill through an edit (content
+    /// change) and confirms `preloadedBodies()` tracks it, then introduces an
+    /// unrelated broken sibling (missing `description:`) and confirms
+    /// `diagnostics` reflects the new generation -- without disturbing the
+    /// still-valid preloaded skill -- then removes the preloaded skill and
+    /// confirms its body is gone.
+    @Test func reloadRefreshesPreloadedBodiesAndDiagnostics() async throws {
+        let root = try WatcherTestSupport.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try Self.writePreloadSkillFile(id: "preload-skill", in: root, body: "Preload body v1.")
+
+        let registry = SkillsRegistry(roots: [root], watch: true)
+        #expect(registry.preloadedBodies().contains("Preload body v1."))
+        #expect(registry.diagnostics.isEmpty)
+
+        let recorder = MetadataUpdateRecorder()
+        let subscription = Self.subscribe(registry, to: recorder)
+        defer { subscription.cancel() }
+
+        // Edit: preloadedBodies() picks up the new content, not the old.
+        try Self.writePreloadSkillFile(id: "preload-skill", in: root, body: "Preload body v2.")
+        await Self.expectExactlyOnePublication(recorder, since: 0)
+        #expect(registry.preloadedBodies().contains("Preload body v2."))
+        #expect(!registry.preloadedBodies().contains("Preload body v1."))
+        #expect(registry.diagnostics.isEmpty, "a well-formed preloaded skill's reload must raise no diagnostics")
+
+        // Introduce a broken sibling (no `description:`) alongside the
+        // preloaded skill: diagnostics must reflect the new generation, and
+        // the unrelated preloaded skill's own body must be untouched.
+        try Self.writeSkillFileMissingDescription(id: "broken-skill", in: root)
+        await Self.expectExactlyOnePublication(recorder, since: 1)
+        #expect(registry.diagnostics.contains { $0.skillID == "broken-skill" })
+        #expect(
+            registry.preloadedBodies().contains("Preload body v2."),
+            "an unrelated broken sibling must not disturb the preloaded skill's own body")
+
+        // Remove: preloadedBodies() drops it entirely.
+        try FileManager.default.removeItem(at: root.appendingPathComponent("preload-skill", isDirectory: true))
+        await Self.expectExactlyOnePublication(recorder, since: 2)
+        #expect(!registry.preloadedBodies().contains("Preload body"))
+    }
+
     // MARK: - call(id:arguments:) reflects the post-reload catalog (TOCTOU regression)
 
     /// Coverage motivated by the round-1 TOCTOU fix in `call(id:arguments:)`
@@ -554,6 +601,45 @@ struct SkillsRegistryReloadTests {
         let skillDirectory = directory.appendingPathComponent(id, isDirectory: true)
         try FileManager.default.createDirectory(at: skillDirectory, withIntermediateDirectories: true)
         try Self.skillFileContents(id: id, body: body)
+            .write(to: skillDirectory.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
+    }
+
+    /// Writes `id/SKILL.md` directly under `directory` with `preload: true`
+    /// and `body` as its rendered body text, creating the skill's own
+    /// subdirectory first if it does not already exist.
+    ///
+    /// - Parameters:
+    ///   - id: The skill id -- both the subdirectory name and the
+    ///     frontmatter's `name:` field.
+    ///   - directory: The root to write under.
+    ///   - body: The body text `preloadedBodies()` should surface.
+    /// - Throws: Whatever `FileManager.createDirectory` or `String.write`
+    ///   throws.
+    private static func writePreloadSkillFile(id: String, in directory: URL, body: String) throws {
+        let skillDirectory = directory.appendingPathComponent(id, isDirectory: true)
+        try FileManager.default.createDirectory(at: skillDirectory, withIntermediateDirectories: true)
+        try "---\nname: \(id)\ndescription: reload fixture\npreload: true\n---\n\(body)\n"
+            .write(to: skillDirectory.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
+    }
+
+    /// Writes `id/SKILL.md` directly under `directory` with no `description:`
+    /// at all, creating the skill's own subdirectory first if it does not
+    /// already exist -- `SkillValidator`'s `missingDescriptionDiagnostic`
+    /// rule draws a `.warning` diagnostic for this (excluded from the
+    /// model-facing surface, kept user-invocable and still loaded), a cheap,
+    /// deliberate way to raise a diagnostic without hiding the skill
+    /// entirely.
+    ///
+    /// - Parameters:
+    ///   - id: The skill id -- both the subdirectory name and the
+    ///     frontmatter's `name:` field.
+    ///   - directory: The root to write under.
+    /// - Throws: Whatever `FileManager.createDirectory` or `String.write`
+    ///   throws.
+    private static func writeSkillFileMissingDescription(id: String, in directory: URL) throws {
+        let skillDirectory = directory.appendingPathComponent(id, isDirectory: true)
+        try FileManager.default.createDirectory(at: skillDirectory, withIntermediateDirectories: true)
+        try "---\nname: \(id)\n---\nBody text for \(id).\n"
             .write(to: skillDirectory.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
     }
 }

@@ -82,26 +82,41 @@ struct HotReloadLiveTests {
         let config = SelectionConfig(model: { instructions, _ in
             LanguageModelSession(model: .default, instructions: instructions)
         })
-        let registry = SkillsRegistry(roots: [root])
+        // `watch: true` -- the twin's whole point is to drive a REAL reload
+        // through the registry, not to read a catalog frozen at construction
+        // time. `SkillsRegistry(roots:)` alone defaults to `watch: false`
+        // (`metadata()` never changes after `init`, regardless of later
+        // filesystem writes); this was the M4 regression the removal
+        // assertion below silently passed against -- `toolA` was still in
+        // the frozen catalog the whole time, so its "removal" was never
+        // actually exercised.
+        let registry = SkillsRegistry(roots: [root], watch: true)
         let searcher = MetadataSearcher(items: registry.metadata().filter(\.isModelVisible), mode: .selection, selection: config)
         let agent = SkillSearchAgent(searcher: searcher)
+        let reloadStream = try #require(registry.onReload, "watch: true must publish onReload")
+        var reloads = reloadStream.makeAsyncIterator()
 
         // The MCP-style burst pattern `HotReloadTests`' deterministic
         // scenario and `FoundationModelsMetadataRegistryTests.HotReloadTests
         // .mcpStyleAddAndRemoveBurstStaysSearchableAndEmbedsOnlyNetNewItems()`
         // both exercise: forward every catalog change straight to
-        // `update(items:)`, without coalescing.
+        // `update(items:)`. Awaiting one real `onReload` publication per
+        // write -- rather than reading `registry.metadata()` immediately
+        // after the write -- makes each forward wait for the watcher's
+        // actual (debounced) reload, not a stale pre-reload snapshot.
         try Self.writeSkillFile(id: "toolB", in: root, descriptionSuffix: "writes a file to disk")
-        await agent.update(items: registry.metadata().filter(\.isModelVisible))
+        let afterAdd = try #require(await reloads.next(), "expected a reload publication after adding toolB")
+        await agent.update(items: afterAdd.filter(\.isModelVisible))
 
         let matches = try await agent.search(query: "read the contents of a file", limit: 5)
         #expect(matches.contains { $0.id == "toolA" })
 
         try FileManager.default.removeItem(at: root.appendingPathComponent("toolA", isDirectory: true))
-        await agent.update(items: registry.metadata().filter(\.isModelVisible))
+        let afterRemoval = try #require(await reloads.next(), "expected a reload publication after removing toolA")
+        await agent.update(items: afterRemoval.filter(\.isModelVisible))
 
-        let afterRemoval = try await agent.search(query: "read the contents of a file", limit: 5)
-        #expect(!afterRemoval.contains { $0.id == "toolA" })
+        let afterRemovalMatches = try await agent.search(query: "read the contents of a file", limit: 5)
+        #expect(!afterRemovalMatches.contains { $0.id == "toolA" })
     }
 
     // MARK: - Fixture file helpers
