@@ -57,10 +57,7 @@ internal enum GeneratedContentBuilder {
         requiredKey: String, requiredValue: any ConvertibleToGeneratedContent,
         optionalKey: String, optionalValue: OptionalValue?
     ) -> GeneratedContent {
-        guard let optionalValue else {
-            return GeneratedContent(properties: [requiredKey: requiredValue])
-        }
-        return GeneratedContent(properties: [requiredKey: requiredValue, optionalKey: optionalValue])
+        make(required: [(requiredKey, requiredValue)], optional: [(optionalKey, optionalValue)])
     }
 
     /// Builds a payload from any number of required properties plus any

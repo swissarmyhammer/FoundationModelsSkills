@@ -109,6 +109,7 @@ struct SkillsCLITests {
         let result = await driver.run(arguments: ["skill", "use", "--id", "lint"])
 
         #expect(result.exitCode == 0)
+        #expect(result.output.hasPrefix("\""))
         #expect(result.output.contains("is not currently usable"))
         #expect(!result.output.contains("\"id\":\"lint\""))
     }
@@ -117,6 +118,7 @@ struct SkillsCLITests {
         let driver = try Self.makeFixtureDriver()
 
         let result = await driver.run(arguments: ["skill", "use", "--id", "lint"])
+        #expect(result.output.hasPrefix("\""))
         let usableIDsList = try #require(result.output.components(separatedBy: "Currently usable ids: ").last)
 
         // The corrective's "currently usable ids" list is this surface's own
@@ -167,6 +169,7 @@ struct SkillsCLITests {
         let result = await driver.run(arguments: ["resource", "list", "--id", "lint"])
 
         #expect(result.exitCode == 0)
+        #expect(result.output.hasPrefix("\""))
         #expect(result.output.contains("is not currently usable"))
     }
 

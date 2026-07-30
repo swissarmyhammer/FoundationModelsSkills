@@ -56,6 +56,7 @@ struct SkillOperationsTests {
         // so its retry-state actor is shared across every call below.
         for _ in 1...5 {
             let json = try await tool.call(arguments: arguments)
+            #expect(json.hasPrefix("\""))
             #expect(json.contains("not currently usable"))
             #expect(!json.contains("Too many invalid operation attempts"))
         }
