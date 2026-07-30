@@ -27,20 +27,35 @@ enum ResourceTestSupport {
         return SkillsToolContext(registry: registry, searchAgent: SkillSearchAgent(searcher: searcher))
     }
 
+    /// Thrown by `writeMinimalSkillFile(id:in:allowedTools:)` when `id` is
+    /// not a plain directory name, or `allowedTools` carries a character
+    /// that would corrupt the written YAML frontmatter -- a test-authoring
+    /// bug, never expected in practice, since every call site names a fixed
+    /// literal.
+    private struct UnsafeFixtureInput: Error {}
+
     /// Writes a minimal, always-valid `id/SKILL.md` under `directory`,
     /// creating the skill's own subdirectory first.
     ///
     /// - Parameters:
     ///   - id: The skill id -- both the subdirectory name and the
-    ///     frontmatter's `name:` field.
+    ///     frontmatter's `name:` field. Must be a plain name with no path
+    ///     separators or `..` components.
     ///   - directory: The root to write under.
     ///   - allowedTools: The raw `allowed-tools:` frontmatter value to
-    ///     write, or `nil` (the default) to omit the field entirely.
+    ///     write, or `nil` (the default) to omit the field entirely. Must
+    ///     not contain a `"` or a newline, either of which would corrupt
+    ///     the written YAML frontmatter's structure.
     /// - Returns: The created skill directory.
-    /// - Throws: Whatever `FileManager.createDirectory` or `String.write`
-    ///   throws.
+    /// - Throws: `UnsafeFixtureInput` if `id` is not a plain name or
+    ///   `allowedTools` carries a YAML-structural character; otherwise
+    ///   whatever `FileManager.createDirectory` or `String.write` throws.
     @discardableResult
     static func writeMinimalSkillFile(id: String, in directory: URL, allowedTools: String? = nil) throws -> URL {
+        guard !id.contains("/"), !id.contains("..") else { throw UnsafeFixtureInput() }
+        guard allowedTools?.contains("\"") != true, allowedTools?.contains("\n") != true else {
+            throw UnsafeFixtureInput()
+        }
         let skillDirectory = directory.appendingPathComponent(id, isDirectory: true)
         try FileManager.default.createDirectory(at: skillDirectory, withIntermediateDirectories: true)
         let allowedToolsLine = allowedTools.map { "allowed-tools: \"\($0)\"\n" } ?? ""

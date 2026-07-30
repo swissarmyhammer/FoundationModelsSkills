@@ -280,6 +280,7 @@ struct RunScriptTests {
     /// - Returns: The `scripts/` directory.
     /// - Throws: Whatever `FileManager.createDirectory` throws.
     private static func scriptsDirectory(inSkillID id: String, under directory: URL) throws -> URL {
+        guard !id.contains("/"), !id.contains("..") else { throw UnsafeFixtureFileName() }
         let scriptsDirectory = directory.appendingPathComponent(id, isDirectory: true)
             .appendingPathComponent("scripts", isDirectory: true)
         try FileManager.default.createDirectory(at: scriptsDirectory, withIntermediateDirectories: true)
