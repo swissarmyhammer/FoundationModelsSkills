@@ -170,6 +170,11 @@ struct FrontmatterDecoderTests {
         #expect(frontmatter.notes.contains { $0.contains("metadata.\(key)") })
     }
 
+    @Test func mistypedArgumentsUnderMetadataRecordsANote() throws {
+        let frontmatter = try decodeFrontmatter("name: x\ndescription: d\nmetadata:\n  arguments: 42")
+        #expect(frontmatter.notes.contains { $0.contains("metadata.arguments") })
+    }
+
     @Test func mistypedArgumentHintUnderMetadataRecordsANoteAndIsIgnored() throws {
         let frontmatter = try decodeFrontmatter("name: x\ndescription: d\nmetadata:\n  argument-hint: 42")
         #expect(frontmatter.argumentHint == nil)
