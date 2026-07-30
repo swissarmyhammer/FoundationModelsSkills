@@ -87,6 +87,53 @@ struct HotReloadTests {
             preloadedAfterEdit: preloadedAfterEdit, preloadedAfterRemove: preloadedAfterRemove)
     }
 
+    // MARK: - Selection tier: a scripted AgentSession double, GPU-free, post-reload
+
+    /// Closes the other §13 gap distinct from the deterministic scenario
+    /// above: that scenario's searcher is always `.retrieval`-mode (a
+    /// `FakeEmbedder`, no `AgentSession` at all) -- the selection tier had
+    /// zero GPU-free coverage anywhere in this package. Mirrors
+    /// `FoundationModelsMetadataRegistryTests.TestSupport.ScriptedAgentSession`
+    /// (this package's own zero-GPU stand-in for the selection tier's
+    /// session seam) and drives one `.selection`-mode search before a reload
+    /// and one after, proving `MetadataSearcher.update(items:)` genuinely
+    /// rebuilds the whole `SelectionTier` -- and therefore its id-enum
+    /// grammar and cached root session -- on a real content change, rather
+    /// than serving a stale one: `SelectionSessionFactory.callCount`
+    /// reaching `2` proves `SelectionConfig.model` was invoked a *second*
+    /// time, which only happens if the tier was rebuilt.
+    @Test
+    func selectionTierSearchesThroughAScriptedAgentSessionAfterReload() async throws {
+        let root = try HotReloadTestSupport.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try Self.writeSkillFile(id: "alpha", in: root, descriptionSuffix: "v1")
+
+        let registry = SkillsRegistry(roots: [root], watch: true)
+        let sessionFactory = SelectionSessionFactory(responsesPerCall: [
+            [#"{"ids":["alpha"]}"#],
+            [#"{"ids":["bravo"]}"#],
+        ])
+        let config = SelectionConfig(model: { _, _ in sessionFactory.makeSession() })
+        let searcher = MetadataSearcher(
+            items: registry.metadata().filter(\.isModelVisible), mode: .selection, selection: config)
+        let agent = SkillSearchAgent(searcher: searcher)
+
+        let preReloadMatches = try await agent.search(query: "anything", limit: 5)
+        #expect(preReloadMatches.map(\.id) == ["alpha"])
+        #expect(sessionFactory.callCount == 1)
+
+        let updates = UpdateCallRecorder()
+        let subscription = Self.subscribe(registry, forwardingTo: agent, recordingInto: updates)
+        defer { subscription.cancel() }
+
+        try Self.writeSkillFile(id: "bravo", in: root, descriptionSuffix: "v1")
+        await Self.expectExactlyOneUpdate(updates, since: 0)
+
+        let postReloadMatches = try await agent.search(query: "anything", limit: 5)
+        #expect(postReloadMatches.map(\.id) == ["bravo"])
+        #expect(sessionFactory.callCount == 2, "a real content change must rebuild the tier's cached root session")
+    }
+
     // MARK: - Step 1: add
 
     /// Adds a new `SKILL.md` (plus a `preload: true` sibling, `charlie`),
@@ -615,6 +662,95 @@ struct HotReloadTests {
         func waitUntilBlocked() async {
             guard !isBlocked else { return }
             await withCheckedContinuation { blockedWaiters.append($0) }
+        }
+    }
+
+    // MARK: - Scripted AgentSession (selection tier, GPU-free)
+
+    /// A scripted `AgentSession` test double, mirroring
+    /// `FoundationModelsMetadataRegistryTests.TestSupport.ScriptedAgentSession`
+    /// (this package's own zero-GPU stand-in for the selection tier's
+    /// session seam, plan.md §6/§8): returns each of `responses` in order,
+    /// one per `respond(to:)` call, regardless of the prompt. Uses the
+    /// protocol's default `fork()` (returns `self`) since nothing here needs
+    /// to assert on fork call counts.
+    ///
+    /// `final class ... @unchecked Sendable`: `respond(to:)` needs to
+    /// advance a call index across an `await` boundary; state lives behind
+    /// `lock`, mirroring `EmbedCallCounter`'s pattern in this same file.
+    private final class ScriptedAgentSession: AgentSession, @unchecked Sendable {
+        /// Thrown once every scripted response has been consumed -- a test
+        /// bug (an under-scripted fixture), never expected in practice.
+        private struct ExhaustedScriptedResponses: Error {}
+
+        private let responses: [String]
+        private let lock = NSLock()
+        private var callIndex = 0
+
+        /// Creates a scripted session that returns `responses` in order, one
+        /// per `respond(to:)` call.
+        ///
+        /// - Parameter responses: The canned responses to return, in call
+        ///   order.
+        init(_ responses: [String]) {
+            self.responses = responses
+        }
+
+        func respond(to prompt: String) async throws -> String {
+            let index = lock.withLock { () -> Int in
+                let index = callIndex
+                callIndex += 1
+                return index
+            }
+            guard index < responses.count else { throw ExhaustedScriptedResponses() }
+            return responses[index]
+        }
+    }
+
+    /// Vends a fresh `ScriptedAgentSession` per call, one canned response
+    /// array per invocation -- lets a test script the selection tier's
+    /// pre-reload and post-reload sessions independently. `SelectionTier`
+    /// rebuilds its cached root session (and therefore calls
+    /// `SelectionConfig.model` again) only when
+    /// `MetadataSearcher.update(items:)` observes a genuine content change,
+    /// so `callCount` reaching `2` after a reload is itself proof the tier
+    /// was rebuilt, not merely reused.
+    ///
+    /// `final class ... @unchecked Sendable`: mirrors `EmbedCallCounter`'s
+    /// lock-guarded-state pattern.
+    private final class SelectionSessionFactory: @unchecked Sendable {
+        private let responsesPerCall: [[String]]
+        private let lock = NSLock()
+        private var callIndex = 0
+
+        /// Creates a factory that vends one freshly-scripted session per
+        /// call, drawing that call's canned responses from
+        /// `responsesPerCall` in order.
+        ///
+        /// - Parameter responsesPerCall: One scripted-response array per
+        ///   expected `makeSession()` call, in call order.
+        init(responsesPerCall: [[String]]) {
+            self.responsesPerCall = responsesPerCall
+        }
+
+        /// How many times `makeSession()` has been called so far.
+        var callCount: Int {
+            lock.lock()
+            defer { lock.unlock() }
+            return callIndex
+        }
+
+        /// Creates and returns the next freshly-scripted session --
+        /// `SelectionConfig`'s `model` factory parameter (with `instructions`
+        /// and `grammar` both ignored, mirroring `HotReloadLiveTests`' own
+        /// `LanguageModelSession`-backed closure).
+        func makeSession() -> any AgentSession {
+            lock.lock()
+            let index = callIndex
+            callIndex += 1
+            lock.unlock()
+            let responses = index < responsesPerCall.count ? responsesPerCall[index] : []
+            return ScriptedAgentSession(responses)
         }
     }
 
