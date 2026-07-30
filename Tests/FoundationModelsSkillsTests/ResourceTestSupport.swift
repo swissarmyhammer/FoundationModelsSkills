@@ -1,11 +1,32 @@
 import Foundation
+import FoundationModelsMetadataRegistry
+import FoundationModelsSkills
 
-/// Shared skill-fixture helper for `ResourceOpsTests` and `RunScriptTests`
-/// -- both write a minimal, always-valid `SKILL.md` under a temp root;
-/// `RunScriptTests`' `allowed-tools:` variant folds in as an optional
-/// parameter, since the two were otherwise byte-identical (review findings,
-/// 2026-07-29 22:27).
+/// Shared skill-fixture helpers for `ResourceOpsTests` and `RunScriptTests`
+/// -- both write a minimal, always-valid `SKILL.md` under a temp root and
+/// both build a `SkillsToolContext` the identical way; `RunScriptTests`'
+/// `allowed-tools:`/`policy` variants fold in as optional parameters, since
+/// the two were otherwise byte-identical (review findings, 2026-07-29
+/// 22:27 and 22:36).
 enum ResourceTestSupport {
+    /// Builds a `SkillsToolContext` over `roots`, under `policy`.
+    ///
+    /// Wraps a real, GPU-free `.retrieval`-mode `MetadataSearcher` standing
+    /// in for the stub-searcher context the resource/run-script op tests
+    /// use -- neither dispatches through it, but `SkillsToolContext` still
+    /// requires one.
+    ///
+    /// - Parameters:
+    ///   - roots: The registry roots to build over.
+    ///   - policy: The render policy the registry is constructed with.
+    ///     Defaults to the permissive `RenderPolicy()`.
+    /// - Returns: The assembled context.
+    static func makeContext(roots: [URL], policy: RenderPolicy = RenderPolicy()) -> SkillsToolContext {
+        let registry = SkillsRegistry(roots: roots, policy: policy)
+        let searcher = MetadataSearcher(items: registry.metadata().filter(\.isModelVisible))
+        return SkillsToolContext(registry: registry, searchAgent: SkillSearchAgent(searcher: searcher))
+    }
+
     /// Writes a minimal, always-valid `id/SKILL.md` under `directory`,
     /// creating the skill's own subdirectory first.
     ///

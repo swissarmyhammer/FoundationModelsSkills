@@ -15,20 +15,16 @@ struct ResourceOpsTests {
 
     private static let projectSkillsRoot = FixtureLibrary.url(relativePath: "project/.skills")
 
-    /// Builds a `SkillsToolContext` over `roots`.
-    ///
-    /// Wraps a real, GPU-free `.retrieval`-mode `MetadataSearcher` standing
-    /// in for the stub-searcher context the sibling op tests use -- resource
-    /// ops never dispatch through it, but `SkillsToolContext` still requires
-    /// one.
+    /// Builds a `SkillsToolContext` over `roots`, via the shared
+    /// `ResourceTestSupport.makeContext(roots:policy:)` -- `RunScriptTests`
+    /// builds one the identical way, differing only in its `policy`
+    /// parameter.
     ///
     /// - Parameter roots: The registry roots to build over. Defaults to the
     ///   §11 fixture library.
     /// - Returns: The assembled context.
     private static func makeContext(roots: [URL] = [Self.projectSkillsRoot]) -> SkillsToolContext {
-        let registry = SkillsRegistry(roots: roots)
-        let searcher = MetadataSearcher(items: registry.metadata().filter(\.isModelVisible))
-        return SkillsToolContext(registry: registry, searchAgent: SkillSearchAgent(searcher: searcher))
+        ResourceTestSupport.makeContext(roots: roots)
     }
 
     /// Builds the fused `skills` tool over `makeContext(roots:)`.

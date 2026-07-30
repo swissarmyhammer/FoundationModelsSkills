@@ -15,7 +15,10 @@ struct RunScriptTests {
 
     private static let projectSkillsRoot = FixtureLibrary.url(relativePath: "project/.skills")
 
-    /// Builds a `SkillsToolContext` over `roots` under `policy`.
+    /// Builds a `SkillsToolContext` over `roots` under `policy`, via the
+    /// shared `ResourceTestSupport.makeContext(roots:policy:)` --
+    /// `ResourceOpsTests` builds one the identical way, minus this `policy`
+    /// parameter.
     ///
     /// - Parameters:
     ///   - roots: The registry roots to build over. Defaults to the §11
@@ -26,9 +29,7 @@ struct RunScriptTests {
     private static func makeContext(
         roots: [URL] = [Self.projectSkillsRoot], policy: RenderPolicy = RenderPolicy()
     ) -> SkillsToolContext {
-        let registry = SkillsRegistry(roots: roots, policy: policy)
-        let searcher = MetadataSearcher(items: registry.metadata().filter(\.isModelVisible))
-        return SkillsToolContext(registry: registry, searchAgent: SkillSearchAgent(searcher: searcher))
+        ResourceTestSupport.makeContext(roots: roots, policy: policy)
     }
 
     // MARK: - Gate matrix (plan.md §13)
@@ -285,22 +286,30 @@ struct RunScriptTests {
         return scriptsDirectory
     }
 
+    /// Thrown by `writeExecutableShebangScript(named:inSkillID:under:contents:)`
+    /// when `name` is not a plain file name -- a test-authoring bug, never
+    /// expected in practice, since every call site names a fixed literal.
+    private struct UnsafeFixtureFileName: Error {}
+
     /// Writes an executable, shebang-carrying script named `name` under
     /// `id`'s `scripts/` directory.
     ///
     /// - Parameters:
-    ///   - name: The script's file name.
+    ///   - name: The script's file name -- a plain name with no path
+    ///     separators or `..` components.
     ///   - id: The owning skill id.
     ///   - directory: The root the skill lives under.
     ///   - contents: The script's full text, shebang included. Defaults to
     ///     a minimal `echo hi` script.
-    /// - Throws: Whatever `FileManager.createDirectory`, `String.write`, or
-    ///   `FileManager.setAttributes` throws.
+    /// - Throws: `UnsafeFixtureFileName` if `name` is not a plain file name;
+    ///   otherwise whatever `FileManager.createDirectory`, `String.write`,
+    ///   or `FileManager.setAttributes` throws.
     private static func writeExecutableShebangScript(
         named name: String, inSkillID id: String, under directory: URL, contents: String = "#!/bin/sh\necho hi\n"
     )
         throws
     {
+        guard !name.contains("/"), !name.contains("..") else { throw UnsafeFixtureFileName() }
         let scriptURL = try Self.scriptsDirectory(inSkillID: id, under: directory).appendingPathComponent(name)
         try contents.write(to: scriptURL, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
