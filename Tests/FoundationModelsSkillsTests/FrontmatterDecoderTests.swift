@@ -188,6 +188,12 @@ struct FrontmatterDecoderTests {
         #expect(frontmatter.notes.isEmpty)
     }
 
+    @Test func nullArgumentsUnderMetadataRecordsNoMismatchNote() throws {
+        let frontmatter = try decodeFrontmatter("name: x\ndescription: d\nmetadata:\n  arguments: ~")
+        #expect(frontmatter.argumentsRaw == nil)
+        #expect(frontmatter.notes.isEmpty)
+    }
+
     @Test func mistypedArgumentHintUnderMetadataRecordsANoteAndIsIgnored() throws {
         let frontmatter = try decodeFrontmatter("name: x\ndescription: d\nmetadata:\n  argument-hint: 42")
         #expect(frontmatter.argumentHint == nil)
