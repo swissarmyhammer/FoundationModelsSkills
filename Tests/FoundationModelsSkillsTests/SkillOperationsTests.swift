@@ -353,6 +353,28 @@ struct SkillOperationsTests {
         #expect(message.contains("arg0"))
     }
 
+    // MARK: - Surplus arguments ride the §5 ARGUMENTS: auto-append, never an error
+
+    @Test func useSkillWithMoreArgumentsThanDeclaredSucceedsAndAutoAppendsTheSurplus() async throws {
+        // `widget` declares exactly one named parameter (`env`) and its body
+        // references only `$0`, never a bare `$ARGUMENTS` -- so a second,
+        // undeclared argument has no named slot to land in. Per plan.md §7,
+        // the extra must still ride the pass-1 `ARGUMENTS: <value>`
+        // no-data-loss fallback rather than causing an error.
+        let (context, cleanup) = try Self.makeTempContext(
+            argumentsLine: "arguments: env\n", body: "Value: $0\n")
+        defer { cleanup() }
+
+        let output = try await UseSkill(id: "widget", arguments: ["production", "extra-flag"]).execute(in: context)
+
+        guard case .success(let result) = output else {
+            Issue.record("expected a result outcome, got \(output)")
+            return
+        }
+        #expect(result.body.contains("Value: production"))
+        #expect(result.body.contains("ARGUMENTS: production extra-flag"))
+    }
+
     // MARK: - Resolver: canonical + forgiving spellings
 
     @Test func resolverAcceptsTheCanonicalOpStrings() async throws {

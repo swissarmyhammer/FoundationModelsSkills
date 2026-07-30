@@ -1,6 +1,18 @@
 ---
-position_column: todo
-position_ordinal: a380
+comments:
+- actor: claude-code
+  id: 01kyrkwy9sch8w3kf08avv6w0z
+  text: |-
+    All three gaps were behavior-already-correct, test-only closures (no product code changes needed):
+
+    1. Discovery depth: added `nestedTwoLevelsBelowRootIsNotDiscovered` (root/a/b/SKILL.md) and `aSkillFileDirectlyAtTheRootItselfIsNotDiscovered` (root/SKILL.md) to `SkillDiscoveryTests.swift`, pinning `SkillDiscovery`'s existing one-level-only, never-the-root-itself scan.
+    2. Surplus trailing args: added `useSkillWithMoreArgumentsThanDeclaredSucceedsAndAutoAppendsTheSurplus` to `SkillOperationsTests.swift` using the existing `makeTempContext` helper (a skill declaring one named arg whose body references only `$0`, never bare `$ARGUMENTS`) — supplies two arguments, asserts success plus the literal `ARGUMENTS: production extra-flag` auto-append tail.
+    3. Post-reload diagnostics for a genuinely broken skill: added `reloadIntroducingAGenuinelyMalformedYAMLSkillSurfacesASkipDiagnostic` to `SkillsRegistryReloadTests.swift`, distinct from the existing `reloadRefreshesPreloadedBodiesAndDiagnostics`'s missing-description (`.warning`) case — this one reuses the unparseable-YAML fixture shape from `DiagnosticsRenderingTests` (unterminated `[` in `name:`) and confirms the resulting `.skip` diagnostic surfaces after a live reload, not just at construction.
+
+    `swift build --build-tests` clean; `swift test` 318/318 passed (314 + 4 new). Committing checkpoint next.
+  timestamp: 2026-07-30T04:18:09.337418+00:00
+position_column: doing
+position_ordinal: '80'
 title: Close remaining audit test gaps (discovery depth, trailing args, reload surfaces)
 ---
 ## What

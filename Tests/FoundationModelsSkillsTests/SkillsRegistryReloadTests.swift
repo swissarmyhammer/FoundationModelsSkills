@@ -100,6 +100,33 @@ struct SkillsRegistryReloadTests {
         #expect(!registry.preloadedBodies().contains("Preload body"))
     }
 
+    /// Distinct from `reloadRefreshesPreloadedBodiesAndDiagnostics`'s broken
+    /// sibling (missing `description:`, a `.warning`): this one's YAML is
+    /// genuinely unparseable, the `.skip` severity path
+    /// (`DiagnosticsRenderingTests.skipDiagnosticForUnparseableYAMLStillCarriesProvenance`
+    /// pins the same fixture shape at construction time) -- proving the
+    /// skip diagnostic surfaces post-reload too, not just at construction.
+    @Test func reloadIntroducingAGenuinelyMalformedYAMLSkillSurfacesASkipDiagnostic() async throws {
+        let root = try WatcherTestSupport.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try ReloadTestSupport.writeSkillFile(id: "well-formed-skill", in: root)
+
+        let registry = SkillsRegistry(roots: [root], watch: true)
+        #expect(registry.diagnostics.isEmpty)
+
+        let recorder = MetadataUpdateRecorder()
+        let subscription = Self.subscribe(registry, to: recorder)
+        defer { subscription.cancel() }
+
+        try Self.writeSkillFileWithUnparseableYAML(id: "malformed-skill", in: root)
+        await Self.expectExactlyOnePublication(recorder, since: 0)
+
+        let skipDiagnostic = try #require(registry.diagnostics.first { $0.skillID == "malformed-skill" })
+        #expect(skipDiagnostic.severity == .skip)
+        #expect(registry.metadata().contains { $0.id == "well-formed-skill" })
+        #expect(!registry.metadata().contains { $0.id == "malformed-skill" })
+    }
+
     // MARK: - call(id:arguments:) reflects the post-reload catalog (TOCTOU regression)
 
     /// Coverage motivated by the round-1 TOCTOU fix in `call(id:arguments:)`
@@ -515,6 +542,28 @@ struct SkillsRegistryReloadTests {
         let skillDirectory = directory.appendingPathComponent(id, isDirectory: true)
         try FileManager.default.createDirectory(at: skillDirectory, withIntermediateDirectories: true)
         try "---\nname: \(id)\n---\nBody text for \(id).\n"
+            .write(to: skillDirectory.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
+    }
+
+    /// Writes `id/SKILL.md` directly under `directory` with genuinely
+    /// unparseable YAML frontmatter (an unterminated flow sequence), the
+    /// same shape
+    /// `DiagnosticsRenderingTests.skipDiagnosticForUnparseableYAMLStillCarriesProvenance`
+    /// pins at construction time -- `SkillValidator`'s `.skipped` outcome
+    /// draws a `.skip` diagnostic and the skill is excluded from the
+    /// catalog entirely, unlike `writeSkillFileMissingDescription`'s
+    /// `.warning` (well-formed YAML, merely missing a field).
+    ///
+    /// - Parameters:
+    ///   - id: The skill id -- both the subdirectory name and the
+    ///     frontmatter's `name:` field.
+    ///   - directory: The root to write under.
+    /// - Throws: Whatever `FileManager.createDirectory` or `String.write`
+    ///   throws.
+    private static func writeSkillFileWithUnparseableYAML(id: String, in directory: URL) throws {
+        let skillDirectory = directory.appendingPathComponent(id, isDirectory: true)
+        try FileManager.default.createDirectory(at: skillDirectory, withIntermediateDirectories: true)
+        try "---\nname: [unterminated\n---\nBody text for \(id).\n"
             .write(to: skillDirectory.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
     }
 }

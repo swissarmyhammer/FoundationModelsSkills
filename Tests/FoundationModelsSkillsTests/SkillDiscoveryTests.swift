@@ -84,6 +84,40 @@ struct SkillDiscoveryTests {
         #expect(discovered.map(\.id) == ["real-skill"])
     }
 
+    // MARK: - Depth bound: exactly one level below root, never the root itself
+
+    /// A `SKILL.md` two levels below `root` (`root/a/b/SKILL.md`) is not
+    /// discovered -- only `root`'s immediate subdirectories are ever
+    /// scanned (`SkillDiscovery.candidateSkillDirectories(under:)`), never
+    /// recursed further.
+    @Test func nestedTwoLevelsBelowRootIsNotDiscovered() throws {
+        let root = try Self.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try Self.writeSkillFile(in: root.appendingPathComponent("shallow-skill", isDirectory: true))
+        try Self.writeSkillFile(
+            in: root.appendingPathComponent("a", isDirectory: true).appendingPathComponent("b", isDirectory: true))
+
+        let discovered = SkillDiscovery(roots: [root]).discover()
+        #expect(discovered.map(\.id) == ["shallow-skill"])
+    }
+
+    /// A `SKILL.md` placed directly at `root` (`root/SKILL.md`, not inside
+    /// any subdirectory) is not discovered -- discovery only enumerates
+    /// `root`'s immediate subdirectories as skill-directory candidates, and
+    /// `root` itself is never one of its own candidates.
+    @Test func aSkillFileDirectlyAtTheRootItselfIsNotDiscovered() throws {
+        let root = try Self.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try Self.writeSkillFile(in: root.appendingPathComponent("shallow-skill", isDirectory: true))
+        try "---\nname: root-level\ndescription: test fixture.\n---\nBody.\n"
+            .write(to: root.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
+
+        let discovered = SkillDiscovery(roots: [root]).discover()
+        #expect(discovered.map(\.id) == ["shallow-skill"])
+    }
+
     // MARK: - Multi-level shadow chain
 
     @Test func threeRootShadowChainAccumulatesShadowedCandidatesInPrecedenceOrder() throws {
