@@ -182,14 +182,14 @@ struct FrontmatterDecoderTests {
         #expect(frontmatter.notes.contains { $0.contains("'arguments'") })
     }
 
-    @Test func nullTopLevelArgumentsRecordsNoMismatchNote() throws {
-        let frontmatter = try decodeFrontmatter("name: x\ndescription: d\narguments: ~")
-        #expect(frontmatter.argumentsRaw == nil)
-        #expect(frontmatter.notes.isEmpty)
-    }
-
-    @Test func nullArgumentsUnderMetadataRecordsNoMismatchNote() throws {
-        let frontmatter = try decodeFrontmatter("name: x\ndescription: d\nmetadata:\n  arguments: ~")
+    @Test(
+        "null arguments (top-level or under metadata.*) record no mismatch note",
+        arguments: [
+            "name: x\ndescription: d\narguments: ~",
+            "name: x\ndescription: d\nmetadata:\n  arguments: ~",
+        ])
+    func nullArgumentsRecordsNoMismatchNote(yaml: String) throws {
+        let frontmatter = try decodeFrontmatter(yaml)
         #expect(frontmatter.argumentsRaw == nil)
         #expect(frontmatter.notes.isEmpty)
     }
@@ -235,29 +235,27 @@ struct FrontmatterDecoderTests {
 
     // MARK: - arguments: both spellings, top-level
 
-    @Test func argumentsAcceptsSpaceSeparatedStringSpellingAtTopLevel() throws {
-        let frontmatter = try decodeFrontmatter(
-            "name: x\ndescription: d\narguments: message env")
-        #expect(frontmatter.arguments == ["message", "env"])
-    }
-
-    @Test func argumentsAcceptsYAMLListSpellingAtTopLevel() throws {
-        let frontmatter = try decodeFrontmatter(
-            "name: x\ndescription: d\narguments:\n  - message\n  - env")
+    @Test(
+        "arguments accepts both the space-separated string and YAML-list spellings at top level",
+        arguments: [
+            "name: x\ndescription: d\narguments: message env",
+            "name: x\ndescription: d\narguments:\n  - message\n  - env",
+        ])
+    func argumentsAcceptsBothSpellingsAtTopLevel(yaml: String) throws {
+        let frontmatter = try decodeFrontmatter(yaml)
         #expect(frontmatter.arguments == ["message", "env"])
     }
 
     // MARK: - arguments: both spellings, metadata.*
 
-    @Test func argumentsAcceptsSpaceSeparatedStringSpellingUnderMetadata() throws {
-        let frontmatter = try decodeFrontmatter(
-            "name: x\ndescription: d\nmetadata:\n  arguments: message env")
-        #expect(frontmatter.arguments == ["message", "env"])
-    }
-
-    @Test func argumentsAcceptsYAMLListSpellingUnderMetadata() throws {
-        let frontmatter = try decodeFrontmatter(
-            "name: x\ndescription: d\nmetadata:\n  arguments:\n    - message\n    - env")
+    @Test(
+        "arguments accepts both the space-separated string and YAML-list spellings under metadata.*",
+        arguments: [
+            "name: x\ndescription: d\nmetadata:\n  arguments: message env",
+            "name: x\ndescription: d\nmetadata:\n  arguments:\n    - message\n    - env",
+        ])
+    func argumentsAcceptsBothSpellingsUnderMetadata(yaml: String) throws {
+        let frontmatter = try decodeFrontmatter(yaml)
         #expect(frontmatter.arguments == ["message", "env"])
     }
 
