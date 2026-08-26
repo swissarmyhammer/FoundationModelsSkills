@@ -43,22 +43,23 @@ struct ReadResourceTests {
         "The path `\(path)` could not be read."
     }
 
-    /// Creates a fresh scratch root under the package's own `.build`
-    /// directory, whose real path is its path.
+    /// The package's own `.build` directory, whose real path is its path.
+    private static let buildScratchParent = FixtureLibrary.packageRoot()
+        .appendingPathComponent(".build", isDirectory: true)
+
+    /// The macOS temp directory. `SkillDiscovery` lists a root under it as
+    /// `/private/var/...`, and `resolvingSymlinksInPath()` resolves a path
+    /// that exists under it to `/var/...`, so a missing path under such a
+    /// root is the case ^2dzxvms fixed in `PathConfinement`.
+    private static let temporaryScratchParent = FileManager.default.temporaryDirectory
+
+    /// Creates a fresh scratch root under `parent`.
     ///
-    /// The macOS temp directory will not do here: `SkillDiscovery` lists it
-    /// as `/private/var/...`, and `PathConfinement` resolves a path that
-    /// exists to `/var/...` but leaves a path that does not exist (a dangling
-    /// link) untouched, so a dangling link under a temp root draws the
-    /// confinement corrective instead of the unreadable one this suite
-    /// tests. Tracked as ^2dzxvms.
-    ///
+    /// - Parameter parent: The directory to create the root in.
     /// - Returns: The created directory. The caller removes it.
     /// - Throws: Whatever `FileManager.createDirectory` throws.
-    private static func makeScratchRoot() throws -> URL {
-        let root = FixtureLibrary.packageRoot()
-            .appendingPathComponent(".build", isDirectory: true)
-            .appendingPathComponent("ReadResourceTests-\(UUID().uuidString)", isDirectory: true)
+    private static func makeScratchRoot(under parent: URL) throws -> URL {
+        let root = parent.appendingPathComponent("ReadResourceTests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         return root
     }
@@ -69,12 +70,15 @@ struct ReadResourceTests {
     ///   - id: The skill id to write and read.
     ///   - path: The resource path to read, relative to the skill directory.
     ///   - start: The first line to return, or `nil` for the default.
+    ///   - scratchParent: The directory to create the scratch root in.
+    ///     Defaults to the package's own `.build` directory.
     ///   - prepare: Populates the skill directory before the read.
     /// - Returns: The operation's output.
     private static func read(
-        id: String, path: String, start: Int? = nil, prepare: (URL) throws -> Void
+        id: String, path: String, start: Int? = nil, scratchParent: URL = Self.buildScratchParent,
+        prepare: (URL) throws -> Void
     ) async throws -> ReadResourceOutput {
-        let root = try Self.makeScratchRoot()
+        let root = try Self.makeScratchRoot(under: scratchParent)
         defer { try? FileManager.default.removeItem(at: root) }
         let skillDirectory = try ResourceTestSupport.writeMinimalSkillFile(id: id, in: root)
         try prepare(skillDirectory)
@@ -145,6 +149,26 @@ struct ReadResourceTests {
 
     @Test func readResourceOnADanglingSymlinkDrawsTheUnreadableCorrective() async throws {
         let output = try await Self.read(id: "dangling", path: "dangling-link") { skillDirectory in
+            try FileManager.default.createSymbolicLink(
+                at: skillDirectory.appendingPathComponent("dangling-link"),
+                withDestinationURL: skillDirectory.appendingPathComponent("missing.txt"))
+        }
+
+        #expect(output == .corrective(Self.unreadableMessage(path: "dangling-link")))
+    }
+
+    @Test func readResourceOnAMissingFileUnderATemporaryRootDrawsTheUnreadableCorrective() async throws {
+        let output = try await Self.read(
+            id: "temporary-missing", path: "references/missing.md", scratchParent: Self.temporaryScratchParent
+        ) { _ in }
+
+        #expect(output == .corrective(Self.unreadableMessage(path: "references/missing.md")))
+    }
+
+    @Test func readResourceOnADanglingSymlinkUnderATemporaryRootDrawsTheUnreadableCorrective() async throws {
+        let output = try await Self.read(
+            id: "temporary-dangling", path: "dangling-link", scratchParent: Self.temporaryScratchParent
+        ) { skillDirectory in
             try FileManager.default.createSymbolicLink(
                 at: skillDirectory.appendingPathComponent("dangling-link"),
                 withDestinationURL: skillDirectory.appendingPathComponent("missing.txt"))

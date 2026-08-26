@@ -22,14 +22,37 @@ internal enum PathConfinement {
         guard Self.isWellFormedRelativePath(relativePath) else { return nil }
 
         let resolvedDirectory = skillDirectory.resolvingSymlinksInPath().standardizedFileURL
-        let resolvedCandidate =
-            skillDirectory
-            .appendingPathComponent(relativePath)
-            .resolvingSymlinksInPath()
-            .standardizedFileURL
+        let resolvedCandidate = Self.resolvingSymlinksOfExistingPrefix(
+            skillDirectory.appendingPathComponent(relativePath))
 
         guard Self.isContained(resolvedCandidate, in: resolvedDirectory) else { return nil }
         return resolvedCandidate
+    }
+
+    /// Resolves the symlinks of the longest prefix of `url` that exists, and
+    /// appends the remaining components unchanged.
+    ///
+    /// `resolvingSymlinksInPath()` normalizes a path that exists (on macOS
+    /// it removes the `/private` prefix) but leaves a path that does not
+    /// exist -- a missing file, a dangling symbolic link -- untouched. The
+    /// skill directory always exists, so the candidate must be normalized
+    /// through the same call on a path that exists, or the two paths do not
+    /// share a prefix and every missing path reads as an escape.
+    ///
+    /// - Parameter url: The candidate URL.
+    /// - Returns: The resolved, standardized URL.
+    private static func resolvingSymlinksOfExistingPrefix(_ url: URL) -> URL {
+        var existing = url.standardizedFileURL
+        var trailingComponents: [String] = []
+        while !FileManager.default.fileExists(atPath: existing.path), existing.pathComponents.count > 1 {
+            trailingComponents.insert(existing.lastPathComponent, at: 0)
+            existing.deleteLastPathComponent()
+        }
+        var resolved = existing.resolvingSymlinksInPath().standardizedFileURL
+        for component in trailingComponents {
+            resolved.appendPathComponent(component)
+        }
+        return resolved.standardizedFileURL
     }
 
     /// Whether `path` is non-empty, genuinely relative, and free of `..`
