@@ -85,6 +85,21 @@ struct FrontmatterDecoderTests {
         #expect(frontmatter.metadata.isEmpty)
     }
 
+    @Test func metadataFloatDecodesAsDouble() throws {
+        let frontmatter = try decodeFrontmatter("name: x\ndescription: d\nmetadata:\n  ratio: 1.5")
+        #expect(frontmatter.metadata["ratio"] == .double(1.5))
+    }
+
+    // Yams reads every scalar shape it cannot classify as a string, so a
+    // bare timestamp lands on `.string`, never on `FrontmatterValue`'s
+    // "unrecognized YAML shape" throw -- that branch has no reachable input
+    // through Yams (see ^bqjkrpc).
+    @Test func metadataBareTimestampDecodesAsString() throws {
+        let frontmatter = try decodeFrontmatter(
+            "name: x\ndescription: d\nmetadata:\n  when: 2026-08-26T00:00:00Z")
+        #expect(frontmatter.metadata["when"] == .string("2026-08-26T00:00:00Z"))
+    }
+
     // MARK: - Extension boolean fields: top-level
 
     @Test(
@@ -261,6 +276,28 @@ struct FrontmatterDecoderTests {
 
     @Test func argumentsIsEmptyWhenAbsent() throws {
         let frontmatter = try decodeFrontmatter("name: x\ndescription: d")
+        #expect(frontmatter.arguments == [])
+    }
+
+    @Test func bareIntegerArgumentsDecodesAndTokenizesToEmpty() throws {
+        let frontmatter = try decodeFrontmatter("name: x\ndescription: d\narguments: 42")
+        #expect(frontmatter.arguments == [])
+    }
+
+    // `argumentsRaw` is a public stored property, so a caller can hold a
+    // shape `init(from:)` would have dropped -- tokenizing must still give
+    // an empty list rather than fail.
+    @Test(
+        "arguments tokenizes to empty for every non-string, non-list raw value",
+        arguments: [
+            FrontmatterValue.int(42),
+            .double(1.5),
+            .bool(true),
+            .dictionary(["key": .string("value")]),
+            .null,
+        ])
+    func nonTokenizableArgumentsRawTokenizesToEmpty(raw: FrontmatterValue) {
+        let frontmatter = SkillFrontmatter(argumentsRaw: raw)
         #expect(frontmatter.arguments == [])
     }
 
