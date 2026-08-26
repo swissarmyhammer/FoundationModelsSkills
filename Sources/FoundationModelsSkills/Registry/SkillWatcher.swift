@@ -18,6 +18,17 @@ import Foundation
 /// root's existence from scratch, escalating from an ancestor-only watch to
 /// the real recursive one the moment the root actually appears.
 ///
+/// Arming has a cost the caller should know about. The nearest existing
+/// ancestor of a missing root can be a busy directory -- `~` when
+/// `~/.skills` is absent, say -- and every entry created, removed, or
+/// renamed directly under it wakes this watcher for as long as the root is
+/// missing. Each wake-up is cheap: it stats the awaited path component
+/// (the child of the ancestor on the way to the root) and the ancestor
+/// itself, and only an event that created the awaited component, or
+/// removed the ancestor, schedules a rebuild and an `onChange` call.
+/// Unrelated activity under the ancestor costs those stats and nothing
+/// more.
+///
 /// Implemented over one `DispatchSource.makeFileSystemObjectSource` per
 /// watched directory and file rather than FSEvents, and rebuilt from
 /// scratch after every quiet period so entries created or removed during a
@@ -29,9 +40,9 @@ public final class SkillWatcher: @unchecked Sendable {
 
     /// The event mask every directory-level `DispatchSource` observes,
     /// whether it's a real watched-tree directory (`watchTree(at:)`) or a
-    /// missing root's nearest existing ancestor (`armRoots()`) -- both need
-    /// to notice an entry being created, removed, or renamed directly
-    /// under them.
+    /// missing root's nearest existing ancestor (`armAncestor(_:awaiting:)`)
+    /// -- both need to notice an entry being created, removed, or renamed
+    /// directly under them.
     ///
     /// `nonisolated(unsafe)` here (unlike `queueSpecificKey` above) because
     /// `DispatchSource.FileSystemEvent` itself isn't `Sendable`, even though
@@ -48,6 +59,20 @@ public final class SkillWatcher: @unchecked Sendable {
     ///
     /// Read and mutated only while running on `queue`.
     private var watchedSources: [String: DispatchSourceFileSystemObject] = [:]
+
+    /// For each armed ancestor (keyed by absolute path), the absolute paths
+    /// of the entries directly under it whose creation would bring a
+    /// missing root closer to existing. An ancestor event that created none
+    /// of them, and left the ancestor itself in place, is ignored.
+    ///
+    /// Read and mutated only while running on `queue`.
+    private var awaitedChildren: [String: Set<String>] = [:]
+
+    /// The number of descriptors `installSource(at:eventMask:onEvent:)`
+    /// opened whose cancel handler has not yet closed them.
+    ///
+    /// Read and mutated only while running on `queue`.
+    private var openDescriptorCount = 0
 
     /// The in-flight debounce timer, if a burst is currently being
     /// coalesced.
@@ -125,7 +150,7 @@ public final class SkillWatcher: @unchecked Sendable {
         stop()
     }
 
-    /// The number of currently open watch sources.
+    /// The number of currently stored watch sources.
     ///
     /// Internal, `@testable`-only: exists so a test can directly verify
     /// that a reentrant `stop()` call from within `onChange` leaves no
@@ -133,6 +158,19 @@ public final class SkillWatcher: @unchecked Sendable {
     /// timing.
     var watchedSourceCountForTesting: Int {
         queue.sync { watchedSources.count }
+    }
+
+    /// The number of descriptors opened for watch sources and not yet
+    /// closed by a cancel handler.
+    ///
+    /// Internal, `@testable`-only: exists so a test can verify that a
+    /// source replaced under the same path was cancelled (its descriptor
+    /// closed) rather than dropped un-cancelled. While watching, this
+    /// settles to `watchedSourceCountForTesting`; after `stop()` it settles
+    /// to zero. It settles rather than matches instantly because a cancel
+    /// handler runs asynchronously on `queue` after `cancel()`.
+    var openDescriptorCountForTesting: Int {
+        queue.sync { openDescriptorCount }
     }
 
     // MARK: - Queue reentrancy
@@ -167,27 +205,58 @@ public final class SkillWatcher: @unchecked Sendable {
         for root in roots {
             if FileManager.default.fileExists(atPath: root.path) {
                 watchTree(at: root)
-            } else if let ancestor = Self.nearestExistingAncestor(of: root), watchedSources[ancestor.path] == nil {
-                watchEntry(at: ancestor, eventMask: Self.directoryEventMask)
+            } else if let arming = Self.ancestorArming(for: root) {
+                armAncestor(arming.ancestor, awaiting: arming.awaitedChild)
             }
         }
     }
 
-    /// The nearest existing ancestor directory of `url`, walking up
-    /// `deletingLastPathComponent()` until one exists on disk.
+    /// Where a missing root's watch is armed: the nearest existing ancestor
+    /// directory, and the entry directly under it whose creation is the
+    /// next step toward the root existing.
+    private struct AncestorArming {
+        let ancestor: URL
+        let awaitedChild: URL
+    }
+
+    /// Resolves the nearest existing ancestor directory of `url`, walking up
+    /// `deletingLastPathComponent()` until one exists on disk, and the child
+    /// of that ancestor on the path to `url`.
     ///
-    /// - Parameter url: The (possibly nonexistent) path to find an existing
-    ///   ancestor for.
-    /// - Returns: The nearest existing ancestor, or `nil` when even the
-    ///   volume root doesn't exist (practically unreachable).
-    private static func nearestExistingAncestor(of url: URL) -> URL? {
+    /// - Parameter url: The nonexistent path to find an existing ancestor
+    ///   for.
+    /// - Returns: The arming point, or `nil` when even the volume root
+    ///   doesn't exist (practically unreachable).
+    private static func ancestorArming(for url: URL) -> AncestorArming? {
+        var awaitedChild = url
         var candidate = url.deletingLastPathComponent()
         while !FileManager.default.fileExists(atPath: candidate.path) {
             let parent = candidate.deletingLastPathComponent()
             guard parent.path != candidate.path else { return nil }
+            awaitedChild = candidate
             candidate = parent
         }
-        return candidate
+        return AncestorArming(ancestor: candidate, awaitedChild: awaitedChild)
+    }
+
+    /// Records `child` as awaited under `ancestor` and, unless `ancestor`
+    /// already has a source (from an earlier root, or from a watched tree it
+    /// belongs to), opens one whose events are filtered by
+    /// `handleAncestorEvent(at:)`.
+    ///
+    /// Always called on `queue`.
+    ///
+    /// - Parameters:
+    ///   - ancestor: The nearest existing ancestor of a missing root.
+    ///   - child: The entry directly under `ancestor` whose creation brings
+    ///     that root closer to existing.
+    private func armAncestor(_ ancestor: URL, awaiting child: URL) {
+        awaitedChildren[ancestor.path, default: []].insert(child.path)
+        guard watchedSources[ancestor.path] == nil else { return }
+        let ancestorPath = ancestor.path
+        installSource(at: ancestor, eventMask: Self.directoryEventMask) { [weak self] in
+            self?.handleAncestorEvent(at: ancestorPath)
+        }
     }
 
     /// Recursively opens a `DispatchSource` for `directory` and every entry
@@ -208,8 +277,26 @@ public final class SkillWatcher: @unchecked Sendable {
         }
     }
 
+    /// Opens one `DispatchSource` for a watched-tree entry at `url`,
+    /// observing `eventMask`; every event restarts the debounce timer.
+    ///
+    /// Always called on `queue`.
+    ///
+    /// - Parameters:
+    ///   - url: The file or directory to watch.
+    ///   - eventMask: The events to observe on `url`.
+    private func watchEntry(at url: URL, eventMask: DispatchSource.FileSystemEvent) {
+        installSource(at: url, eventMask: eventMask) { [weak self] in
+            self?.handleRawEvent()
+        }
+    }
+
     /// Opens one `DispatchSource` for `url`, observing `eventMask`, and
-    /// stores it in `watchedSources`.
+    /// stores it in `watchedSources` under `url.path`, cancelling any source
+    /// already stored there first so the earlier descriptor is closed rather
+    /// than leaked. That replacement happens when a missing root's ancestor
+    /// is armed and a later root's watched tree then reaches the same
+    /// directory.
     ///
     /// A path that cannot be opened (e.g. a broken symlink, or a
     /// permission error) is simply skipped, not treated as an error. Always
@@ -218,23 +305,28 @@ public final class SkillWatcher: @unchecked Sendable {
     /// - Parameters:
     ///   - url: The file or directory to watch.
     ///   - eventMask: The events to observe on `url`.
-    private func watchEntry(at url: URL, eventMask: DispatchSource.FileSystemEvent) {
+    ///   - onEvent: Called on `queue` for every event the source delivers.
+    private func installSource(
+        at url: URL, eventMask: DispatchSource.FileSystemEvent, onEvent: @escaping () -> Void
+    ) {
         let descriptor = open(url.path, O_EVTONLY)
         guard descriptor >= 0 else { return }
+        openDescriptorCount += 1
 
         let source = DispatchSource.makeFileSystemObjectSource(
             fileDescriptor: descriptor, eventMask: eventMask, queue: queue)
-        source.setEventHandler { [weak self] in
-            self?.handleRawEvent()
-        }
-        source.setCancelHandler {
+        source.setEventHandler(handler: onEvent)
+        source.setCancelHandler { [weak self] in
             close(descriptor)
+            self?.openDescriptorCount -= 1
         }
+        watchedSources[url.path]?.cancel()
         watchedSources[url.path] = source
         source.resume()
     }
 
-    /// Cancels and discards every currently open source.
+    /// Cancels and discards every currently open source, and forgets every
+    /// awaited child, so the next `armRoots()` starts from nothing.
     ///
     /// Always called on `queue`.
     private func cancelAllWatchedSources() {
@@ -242,9 +334,28 @@ public final class SkillWatcher: @unchecked Sendable {
             source.cancel()
         }
         watchedSources.removeAll()
+        awaitedChildren.removeAll()
     }
 
     // MARK: - Event handling
+
+    /// Filters an event on an armed ancestor: restarts the debounce timer
+    /// only when an awaited child now exists (so a missing root moved
+    /// closer to existing and the rebuild can escalate) or the ancestor
+    /// itself is gone (so the rebuild must re-arm higher up). Anything else
+    /// is unrelated activity in a directory this watcher never wanted to
+    /// watch for its own sake, and is ignored.
+    ///
+    /// Always called on `queue`, from an ancestor source's event handler.
+    ///
+    /// - Parameter ancestorPath: The armed ancestor's absolute path.
+    private func handleAncestorEvent(at ancestorPath: String) {
+        let fileManager = FileManager.default
+        let ancestorVanished = !fileManager.fileExists(atPath: ancestorPath)
+        let childAppeared = (awaitedChildren[ancestorPath] ?? []).contains { fileManager.fileExists(atPath: $0) }
+        guard ancestorVanished || childAppeared else { return }
+        handleRawEvent()
+    }
 
     /// Restarts the shared debounce timer.
     ///

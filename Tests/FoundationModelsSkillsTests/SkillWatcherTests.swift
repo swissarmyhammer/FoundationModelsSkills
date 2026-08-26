@@ -10,7 +10,10 @@ import Testing
 /// nested two levels deep (mirroring `name/SKILL.md` and
 /// `name/_partials/*`) are still detected, events under an unfiltered `.git/`
 /// directory neither crash nor get suppressed, a nonexistent root is
-/// skipped silently, and `stop()` ends delivery.
+/// skipped silently, a root that appears after `start()` escalates from an
+/// ancestor watch to a real recursive one, an armed ancestor's unrelated
+/// activity stays quiet, a root listed before its own parent leaks no
+/// descriptor, and `stop()` ends delivery.
 struct SkillWatcherTests {
     /// How long a watcher under test waits for a quiet period before firing
     /// its coalesced callback. Short relative to the wait timeouts below so
@@ -179,6 +182,71 @@ struct SkillWatcherTests {
         _ = await Self.expectExactlyOneSignal(recorder, since: afterDelete)
     }
 
+    @Test func editingAFileUnderALateCreatedRootFiresAfterEscalation() async throws {
+        try await Self.withTempDirectory { privateDirectory in
+            let lateRoot = privateDirectory.appendingPathComponent("skills-arrive-later", isDirectory: true)
+            try await Self.withWatcher(over: [lateRoot]) { recorder in
+                try Self.writeSkillFile(id: "arrived-skill", in: lateRoot)
+                let afterCreate = await Self.expectExactlyOneSignal(recorder, since: 0)
+
+                // The flush above rebuilt the watch tree, so `lateRoot` is
+                // now watched recursively. An edit two levels under it never
+                // touches `privateDirectory`, so only the recursive watch
+                // can see it -- the ancestor watch alone cannot.
+                try Self.writeSkillFile(id: "arrived-skill", in: lateRoot, bodySuffix: "edited")
+                _ = await Self.expectExactlyOneSignal(recorder, since: afterCreate)
+            }
+        }
+    }
+
+    @Test func unrelatedActivityUnderAnArmedAncestorProducesNoCallback() async throws {
+        try await Self.withTempDirectory { privateDirectory in
+            let lateRoot = privateDirectory.appendingPathComponent("skills-arrive-later", isDirectory: true)
+            try await Self.withWatcher(over: [lateRoot]) { recorder in
+                // `privateDirectory` is the armed ancestor. Activity directly
+                // under it that does not create `lateRoot` must not reach
+                // `onChange`.
+                let unrelated = privateDirectory.appendingPathComponent("unrelated", isDirectory: true)
+                try FileManager.default.createDirectory(at: unrelated, withIntermediateDirectories: true)
+                try "noise".write(to: unrelated.appendingPathComponent("noise.txt"), atomically: true, encoding: .utf8)
+                try FileManager.default.removeItem(at: unrelated)
+                let afterNoise = await Self.waitForCount(recorder, atLeast: 1, timeout: Self.noFurtherSignalWindow)
+                #expect(afterNoise == 0)
+
+                // Creating the awaited root itself still fires.
+                try Self.writeSkillFile(id: "arrived-skill", in: lateRoot)
+                _ = await Self.expectExactlyOneSignal(recorder, since: 0)
+            }
+        }
+    }
+
+    // MARK: - Overwritten source is cancelled, not leaked
+
+    @Test func rootListedBeforeItsOwnParentLeaksNoDescriptor() async throws {
+        try await Self.withTempDirectory { parent in
+            let missingChild = parent.appendingPathComponent("missing-child", isDirectory: true)
+            let (onChange, _) = Self.makeSignalRecorder()
+            let watcher = SkillWatcher(
+                roots: [missingChild, parent], debounceInterval: Self.testDebounceInterval, onChange: onChange)
+            watcher.start()
+
+            // Arming `missingChild` opens a source on `parent` first; the
+            // recursive watch of `parent` then replaces it. The replaced
+            // source must be cancelled so its cancel handler closes the
+            // descriptor -- one open descriptor per stored source, no more.
+            await Self.waitUntil(timeout: Self.expectedSignalTimeout) {
+                watcher.openDescriptorCountForTesting == watcher.watchedSourceCountForTesting
+            }
+            #expect(watcher.openDescriptorCountForTesting == watcher.watchedSourceCountForTesting)
+
+            watcher.stop()
+            await Self.waitUntil(timeout: Self.expectedSignalTimeout) {
+                watcher.openDescriptorCountForTesting == 0
+            }
+            #expect(watcher.openDescriptorCountForTesting == 0)
+        }
+    }
+
     // MARK: - Stop prevents further callbacks
 
     @Test func stopPreventsFurtherCallbacksAfterAChange() async throws {
@@ -280,15 +348,37 @@ struct SkillWatcherTests {
     private static func withWatchedTempRoot(
         _ body: (URL, SignalRecorder) async throws -> Void
     ) async throws {
-        let root = try WatcherTestSupport.makeTempDirectory()
-        defer { try? FileManager.default.removeItem(at: root) }
+        try await Self.withTempDirectory { root in
+            try await Self.withWatcher(over: [root]) { recorder in
+                try await body(root, recorder)
+            }
+        }
+    }
 
+    /// Makes a fresh temporary directory, hands it to `body`, then removes
+    /// it unconditionally.
+    ///
+    /// - Parameter body: The test body, given the directory.
+    /// - Throws: Whatever `body` or the temp-directory setup throws.
+    private static func withTempDirectory(_ body: (URL) async throws -> Void) async throws {
+        let directory = try WatcherTestSupport.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try await body(directory)
+    }
+
+    /// Starts a `SkillWatcher` over `roots`, hands its signal recorder to
+    /// `body`, then stops the watcher unconditionally.
+    ///
+    /// - Parameters:
+    ///   - roots: The roots to watch, in the order the watcher receives them.
+    ///   - body: The test body, given the recorder of coalesced signals.
+    /// - Throws: Whatever `body` throws.
+    private static func withWatcher(over roots: [URL], _ body: (SignalRecorder) async throws -> Void) async throws {
         let (onChange, recorder) = Self.makeSignalRecorder()
-        let watcher = SkillWatcher(roots: [root], debounceInterval: Self.testDebounceInterval, onChange: onChange)
+        let watcher = SkillWatcher(roots: roots, debounceInterval: Self.testDebounceInterval, onChange: onChange)
         watcher.start()
         defer { watcher.stop() }
-
-        try await body(root, recorder)
+        try await body(recorder)
     }
 
     /// Builds a `SkillWatcher.onChange` closure paired with the
@@ -335,13 +425,24 @@ struct SkillWatcherTests {
     /// - Returns: `recorder.count` at the moment polling stopped, whether
     ///   or not it reached `target`.
     private static func waitForCount(_ recorder: SignalRecorder, atLeast target: Int, timeout: Duration) async -> Int {
+        await Self.waitUntil(timeout: timeout) { await recorder.count >= target }
+        return await recorder.count
+    }
+
+    /// How long `waitUntil(timeout:_:)` sleeps between two evaluations of
+    /// its condition.
+    private static let pollInterval: Duration = .milliseconds(10)
+
+    /// Polls `condition` until it holds or `timeout` elapses.
+    ///
+    /// - Parameters:
+    ///   - timeout: How long to keep polling before giving up.
+    ///   - condition: The predicate to wait for.
+    private static func waitUntil(timeout: Duration, _ condition: () async -> Bool) async {
         let deadline = ContinuousClock.now.advanced(by: timeout)
-        var current = await recorder.count
-        while current < target, ContinuousClock.now < deadline {
-            try? await Task.sleep(for: .milliseconds(10))
-            current = await recorder.count
+        while await !condition(), ContinuousClock.now < deadline {
+            try? await Task.sleep(for: Self.pollInterval)
         }
-        return current
     }
 
     /// Builds a minimal but structurally valid `SKILL.md` body for `id`.

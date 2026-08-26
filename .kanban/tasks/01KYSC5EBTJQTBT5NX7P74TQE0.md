@@ -25,8 +25,24 @@ comments:
     - evidence: 7 files — Sources/FoundationModelsSkills/Listing/ParameterInference.swift, Sources/FoundationModelsSkills/Listing/SkillParameter.swift, Sources/FoundationModelsSkills/Registry/SkillsRegistry.swift, Sources/FoundationModelsSkills/Operations/UseSkill.swift, plan.md, Tests/FoundationModelsSkillsTests/ParameterInferenceTests.swift, Tests/FoundationModelsSkillsTests/SkillOperationsTests.swift
     - next: test, commit, review
   timestamp: 2026-08-26T12:43:43.528261+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01m0z1pk7kpkngg61w6fh502n3
+  text: |-
+    ### review — clean
+    - evidence: review sha HEAD~1..HEAD — 0 findings, 0 confirmed, 0 refuted; 6 files reviewed
+    - next: none — task moved to done
+  timestamp: 2026-08-26T12:46:11.699833+00:00
+- actor: claude-code
+  id: 01m0z1pmx1wgqcbjrrgxkqpcxg
+  text: |-
+    ### finish iteration 1 — review clean, task done
+    - implement: changed — 7 files (ParameterInference.swift, SkillParameter.swift, SkillsRegistry.swift, UseSkill.swift, plan.md, ParameterInferenceTests.swift, SkillOperationsTests.swift)
+    - test: green — swift test 330 passed, 0 failed
+    - commit: cdaecf0
+    - review: clean — 0 findings on HEAD~1..HEAD
+  timestamp: 2026-08-26T12:46:13.409655+00:00
+position_column: done
+position_ordinal: a780
 title: Decide and pin bare-token argument-hint optionality (§6.1)
 ---
 ## What
