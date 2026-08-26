@@ -415,7 +415,7 @@ struct SkillsRegistryTests {
             skillMarkdown: """
                 ---
                 name: arity-mismatch
-                description: A registry test fixture whose arguments: and argument-hint: disagree in count.
+                description: "A registry test fixture whose arguments: and argument-hint: disagree in count."
                 arguments: message channel urgency
                 argument-hint: "<message> [channel]"
                 ---
@@ -438,6 +438,80 @@ struct SkillsRegistryTests {
         #expect(diagnostic.message.contains("argument-hint:"))
         #expect(diagnostic.message.contains("arguments:"))
         #expect(diagnostic.provenance.root.path == root.path)
+    }
+
+    // MARK: - Frontmatter decode notes fold into the registry surface
+
+    /// Writes a `SKILL.md` under `root` whose frontmatter carries the given
+    /// extension-field lines -- the shared writer for the two decode-note
+    /// fixtures (a mistyped `metadata.*` value, and a field spelled both
+    /// top-level and under `metadata.*`), which differ only in those lines.
+    ///
+    /// - Parameters:
+    ///   - id: The skill id -- both the subdirectory name and `name:`.
+    ///   - extensionFrontmatter: The extension-field YAML lines to place
+    ///     after `description:`, top-level indentation.
+    ///   - root: The directory to write the skill's own subdirectory
+    ///     and `SKILL.md` under.
+    /// - Throws: Whatever `writeSkillFixture(id:skillMarkdown:in:)` throws.
+    private static func writeDecodeNoteSkill(id: String, extensionFrontmatter: String, in root: URL) throws {
+        try writeSkillFixture(
+            id: id,
+            skillMarkdown: """
+                ---
+                name: \(id)
+                description: A registry test fixture whose frontmatter draws a decoder note.
+                \(extensionFrontmatter)
+                ---
+                Body text, unused by this fixture's own tests.
+                """,
+            in: root)
+    }
+
+    @Test func aMistypedMetadataExtensionValueProducesARegistryAdvisoryNamingTheKeyAndExpectedType() throws {
+        let root = try Self.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try Self.writeDecodeNoteSkill(
+            id: "mistyped-metadata",
+            extensionFrontmatter: """
+                metadata:
+                  preload: "true"
+                """,
+            in: root)
+
+        let registry = SkillsRegistry(roots: [root])
+
+        let diagnostic = try #require(
+            registry.diagnostics.first { $0.skillID == "mistyped-metadata" && $0.severity == .advisory })
+        #expect(diagnostic.message == "metadata.preload is present but is not a boolean; ignoring.")
+        #expect(diagnostic.provenance.rootIndex == 0)
+        #expect(diagnostic.provenance.root.path == root.path)
+        #expect(registry.metadata().contains { $0.id == "mistyped-metadata" })
+        #expect(registry.preloadedBodies().isEmpty)
+    }
+
+    @Test func aFieldSpelledBothTopLevelAndUnderMetadataProducesARegistryConflictAdvisory() throws {
+        let root = try Self.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try Self.writeDecodeNoteSkill(
+            id: "both-spellings",
+            extensionFrontmatter: """
+                preload: true
+                metadata:
+                  preload: false
+                """,
+            in: root)
+
+        let registry = SkillsRegistry(roots: [root])
+
+        let diagnostic = try #require(
+            registry.diagnostics.first { $0.skillID == "both-spellings" && $0.severity == .advisory })
+        #expect(
+            diagnostic.message
+                == "'preload' is set both top-level and under metadata.preload; using the top-level value.")
+        #expect(diagnostic.provenance.rootIndex == 0)
+        #expect(diagnostic.provenance.root.path == root.path)
+        #expect(registry.preloadedBodies().contains("Body text, unused by this fixture's own tests."))
     }
 
     // MARK: - commandListing() description truncation

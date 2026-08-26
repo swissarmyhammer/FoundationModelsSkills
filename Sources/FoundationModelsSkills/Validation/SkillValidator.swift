@@ -78,6 +78,7 @@ public struct ValidatedSkill: Sendable, Equatable {
 /// | shadowed id | advisory | none |
 /// | `SKILL.md` body over 500 lines | advisory | none |
 /// | unknown top-level keys | advisory | none |
+/// | decoder notes (mistyped `metadata.*` value, both-spellings conflict, quoting-fallback retry) | advisory, one per note | none |
 public enum SkillValidator {
     /// The result of validating one discovered skill's decode outcome.
     public struct Result: Sendable, Equatable {
@@ -152,6 +153,9 @@ public enum SkillValidator {
         let body: String
         let shadowedCandidateCount: Int
         let provenance: SkillDiagnostic.Provenance
+        /// `DecodedSkill.notes` -- every diagnostic-worthy note the decoder
+        /// recorded, surfaced by `decoderNoteDiagnostics`.
+        let notes: [String]
     }
 
     /// What a rule's diagnostic does to a skill's eligibility, beyond simply
@@ -194,7 +198,10 @@ public enum SkillValidator {
 
     /// Runs every `rules` entry over one decoded skill, folding each raised
     /// diagnostic's `consequence` into the resulting `ValidatedSkill`'s
-    /// eligibility flags.
+    /// eligibility flags, then appends one advisory per decoder note
+    /// (`decoderNoteDiagnostics`) -- the notes come last because they are
+    /// not a `Rule` (a rule raises at most one diagnostic; notes raise one
+    /// each) and never change eligibility.
     ///
     /// - Parameters:
     ///   - id: The canonical id (directory name).
@@ -209,7 +216,8 @@ public enum SkillValidator {
     ) -> Result {
         let context = RuleContext(
             id: id, frontmatter: decodedSkill.frontmatter, body: decodedSkill.body,
-            shadowedCandidateCount: shadowedCandidates.count, provenance: provenance)
+            shadowedCandidateCount: shadowedCandidates.count, provenance: provenance,
+            notes: decodedSkill.notes)
 
         var diagnostics: [SkillDiagnostic] = []
         var isModelVisibleEligible = true
@@ -223,6 +231,7 @@ public enum SkillValidator {
             case .hide: isHidden = true
             }
         }
+        diagnostics.append(contentsOf: decoderNoteDiagnostics(context))
 
         let skill = ValidatedSkill(
             id: id, frontmatter: decodedSkill.frontmatter, body: decodedSkill.body,
@@ -482,5 +491,24 @@ public enum SkillValidator {
             severity: .advisory, skillID: context.id, provenance: context.provenance,
             message: "unrecognized top-level frontmatter key(s): "
                 + "\(context.frontmatter.unknownTopLevelKeys.joined(separator: ", ")).")
+    }
+
+    // MARK: - Decoder notes
+
+    /// Every `DecodedSkill.notes` entry -- a mistyped `metadata.*`
+    /// extension value, a field spelled both top-level and under
+    /// `metadata.*`, or a quoting-fallback retry on `description:` -- draws
+    /// its own `.advisory` diagnostic carrying the note text verbatim, in
+    /// note order (plan.md §4/#27). Informational only: the decoder already
+    /// applied the note's consequence (ignored the value, kept the top-level
+    /// one, or retried), so eligibility is unaffected.
+    ///
+    /// - Parameter context: The rule context.
+    /// - Returns: One diagnostic per note; empty when there are no notes.
+    private static func decoderNoteDiagnostics(_ context: RuleContext) -> [SkillDiagnostic] {
+        context.notes.map { note in
+            SkillDiagnostic(
+                severity: .advisory, skillID: context.id, provenance: context.provenance, message: note)
+        }
     }
 }

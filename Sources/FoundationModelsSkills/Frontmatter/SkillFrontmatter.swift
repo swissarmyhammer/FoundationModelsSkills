@@ -153,10 +153,14 @@ public struct SkillFrontmatter: Sendable, Equatable {
     /// determinism -- collected, never fatal (plan.md §4).
     public var unknownTopLevelKeys: [String]
     /// Diagnostic-worthy notes accumulated while decoding this frontmatter,
-    /// currently just the "present both top-level and under metadata.*"
-    /// conflict case. `FrontmatterDecoder` folds these into a
+    /// of two kinds: a `metadata.*` extension value present with the wrong
+    /// type (ignored -- `noteMetadataTypeMismatch`; the top-level
+    /// `arguments:` shape check records the same kind), and a field present
+    /// both top-level and under `metadata.*` (top-level wins --
+    /// `resolvedExtensionField`). `FrontmatterDecoder` folds these into a
     /// `DecodedSkill`'s own `notes` (which may add a quoting-fallback-retry
-    /// note of its own).
+    /// note of its own), and `SkillValidator` surfaces each one as an
+    /// `.advisory` diagnostic.
     public var notes: [String]
 
     /// The tokenized `allowed-tools:` value -- whitespace-separated, empty

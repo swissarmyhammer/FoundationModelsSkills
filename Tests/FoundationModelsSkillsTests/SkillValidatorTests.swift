@@ -11,9 +11,10 @@ import Testing
 /// the model surface, kept user-invocable), `description`/`compatibility`
 /// over-limit (kept as data), unparseable YAML (skip), the retired `partial:
 /// true` (hidden from every surface), a shadowed id and an oversized body
-/// (both advisory), and unknown top-level keys (advisory) -- plus a
-/// diagnostics snapshot over the real `broken/` and `spec-clean` fixtures,
-/// asserting layer provenance on every diagnostic.
+/// (both advisory), unknown top-level keys (advisory), and decoder notes
+/// (advisory, one per note) -- plus a diagnostics snapshot over the real
+/// `broken/` and `spec-clean` fixtures, asserting layer provenance on every
+/// diagnostic.
 struct SkillValidatorTests {
     // MARK: - Test helpers
 
@@ -28,13 +29,15 @@ struct SkillValidatorTests {
     ///   - body: The render-pipeline body to validate.
     ///   - rootIndex: The synthetic winning root's position.
     ///   - shadowedCandidates: Lower-precedence candidates this id shadowed.
+    ///   - notes: The decoder notes to carry on the `DecodedSkill`.
     /// - Returns: `SkillValidator`'s result.
     private func validate(
         id: String = "my-skill",
         frontmatter: SkillFrontmatter,
         body: String = "Body text.\n",
         rootIndex: Int = 0,
-        shadowedCandidates: [DiscoveredSkill.ShadowedCandidate] = []
+        shadowedCandidates: [DiscoveredSkill.ShadowedCandidate] = [],
+        notes: [String] = []
     ) -> SkillValidator.Result {
         let root = URL(fileURLWithPath: "/fixture-root")
         let skillDirectory = root.appendingPathComponent(id, isDirectory: true)
@@ -42,7 +45,7 @@ struct SkillValidatorTests {
             id: id, skillDirectory: skillDirectory,
             skillFileURL: skillDirectory.appendingPathComponent("SKILL.md"),
             rootIndex: rootIndex, root: root, shadowedCandidates: shadowedCandidates)
-        let decodedSkill = DecodedSkill(frontmatter: frontmatter, body: body, notes: [])
+        let decodedSkill = DecodedSkill(frontmatter: frontmatter, body: body, notes: notes)
         return SkillValidator.validate(discovered: discovered, outcome: .decoded(decodedSkill))
     }
 
@@ -338,6 +341,48 @@ struct SkillValidatorTests {
         #expect(result.diagnostics.isEmpty)
     }
 
+    // MARK: - Decoder notes: advisory only, one per note
+
+    /// The two decoder note kinds `SkillFrontmatter.init(from:)` records: a
+    /// `metadata.*` extension value of the wrong type, and a field spelled
+    /// both top-level and under `metadata.*`.
+    private static let decoderNoteCases: [String] = [
+        "metadata.preload is present but is not a boolean; ignoring.",
+        "'preload' is set both top-level and under metadata.preload; using the top-level value.",
+    ]
+
+    @Test("each decoder note draws one advisory carrying the note verbatim", arguments: decoderNoteCases)
+    private func eachDecoderNoteDrawsOneAdvisoryDiagnosticCarryingTheNote(_ note: String) throws {
+        let result = validate(
+            frontmatter: SkillFrontmatter(name: "my-skill", description: "A description."),
+            rootIndex: 1, notes: [note])
+        #expect(result.diagnostics.count == 1)
+        let diagnostic = try #require(result.diagnostics.first)
+        #expect(diagnostic.severity == .advisory)
+        #expect(diagnostic.skillID == "my-skill")
+        #expect(diagnostic.message == note)
+        #expect(diagnostic.provenance.rootIndex == 1)
+        #expect(diagnostic.provenance.root == URL(fileURLWithPath: "/fixture-root"))
+        #expect(result.skill?.isModelVisibleEligible == true)
+        #expect(result.skill?.isUserInvocableEligible == true)
+        #expect(result.skill?.isHidden == false)
+    }
+
+    @Test func everyDecoderNoteDrawsItsOwnAdvisoryInNoteOrder() {
+        let result = validate(
+            frontmatter: SkillFrontmatter(name: "my-skill", description: "A description."),
+            notes: Self.decoderNoteCases)
+        #expect(result.diagnostics.map(\.message) == Self.decoderNoteCases)
+        #expect(result.diagnostics.allSatisfy { $0.severity == .advisory })
+    }
+
+    @Test func decoderNotesFollowEveryRuleTableDiagnostic() {
+        let result = validate(
+            frontmatter: SkillFrontmatter(name: "wrong-name", description: "A description."),
+            notes: [Self.decoderNoteCases[0]])
+        #expect(result.diagnostics.map(\.severity) == [.warning, .advisory])
+    }
+
     // MARK: - Diagnostic provenance carries the winning layer
 
     @Test func diagnosticProvenanceMatchesTheDiscoveredWinningLayer() throws {
@@ -361,16 +406,18 @@ struct SkillValidatorTests {
         #expect(result.skill?.isHidden == false)
     }
 
-    @Test func brokenBadColonDescriptionFixtureDecodesCleanlyViaRetryProducingNoValidatorDiagnostics()
-        throws
-    {
+    @Test func brokenBadColonDescriptionFixtureDecodesViaRetryProducingOnlyTheRetryAdvisory() throws {
         // The unquoted-colon description is a *decoder*-level concern (the
         // quoting-fallback retry, covered by FrontmatterDecoderTests) --
         // once decoded, this fixture's name matches its directory and its
-        // description is present, so SkillValidator itself has nothing to
-        // report.
-        let (result, _) = try validateFixture(root: Self.brokenRoot, id: "bad-colon-description")
-        #expect(result.diagnostics.isEmpty)
+        // description is present, so the only diagnostic is the decoder's
+        // own retry note, surfaced as an advisory.
+        let (result, discovered) = try validateFixture(root: Self.brokenRoot, id: "bad-colon-description")
+        #expect(result.diagnostics.count == 1)
+        let diagnostic = try #require(result.diagnostics.first)
+        #expect(diagnostic.severity == .advisory)
+        #expect(diagnostic.message.contains("quoting-fallback retry"))
+        #expect(diagnostic.provenance.root == discovered.root)
         #expect(result.skill != nil)
     }
 

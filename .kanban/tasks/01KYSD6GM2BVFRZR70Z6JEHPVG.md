@@ -26,8 +26,31 @@ comments:
     - evidence: `swift test` — 333 tests in 23 suites passed, 0 failed, exit 0. One env-gated skip (`SKILLS_INTEGRATION_TESTS`) in `HotReloadLiveTests`, the same pre-existing gate the prior task ledgers record as permitted by the `test-integrity` rule. The only warning is the SwiftPM build-graph note about the `mlx-swift_Cmlx.bundle` node; it is not a compiler warning from this package's code.
     - next: commit
   timestamp: 2026-08-26T13:03:10.961773+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01m0z2p44ds4rgch8hc3h412b8
+  text: |-
+    ### commit — changed
+    - evidence: b28b245 docs(^6jehpvg): sweep residual stale docs and scaffold-era comments
+    - next: review
+  timestamp: 2026-08-26T13:03:24.813169+00:00
+- actor: claude-code
+  id: 01m0z2sk3qx4ysd46hjdy0swb6
+  text: |-
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` — 0 findings, 0 confirmed, 0 refuted; 4 files reviewed, 4 `.kanban/` files excluded by `.reviewignore`. No prior findings on the card.
+    - next: done
+  timestamp: 2026-08-26T13:05:18.455566+00:00
+- actor: claude-code
+  id: 01m0z2ssp1sj7k2mbw34c31t8q
+  text: |-
+    ### finish iteration 1 — review clean, task moved to done
+    - implement: changed — 5 files (plan.md, Examples/skills-demo/SkillsDemoMain.swift, Sources/FoundationModelsSkills/FoundationModelsSkills.swift, Sources/FoundationModelsSkills/Registry/SkillsRegistry.swift, Sources/FoundationModelsSkills/Render/RenderPipeline.swift)
+    - test: green — `swift test` 333 passed, 0 failed; one env-gated skip (pre-existing)
+    - commit: b28b245
+    - review: clean — 0 findings on `review sha HEAD~1..HEAD`
+  timestamp: 2026-08-26T13:05:25.185166+00:00
+position_column: done
+position_ordinal: a980
 title: 'Sweep residual stale docs: positional CLI examples, scaffold-era comments'
 ---
 ## What

@@ -6,13 +6,14 @@ import Yams
 /// frontmatter, its render-pipeline body (the text after the frontmatter
 /// fence, byte-for-byte from `FrontmatterDocument.split` -- plan.md §5), and
 /// any diagnostic-worthy notes accumulated along the way. Notes combine
-/// `SkillFrontmatter.notes` (top-level/`metadata.*` conflicts) with
-/// `FrontmatterDecoder`'s own quoting-fallback-retry note, when one fired.
+/// `SkillFrontmatter.notes` (mistyped `metadata.*` values and
+/// top-level/`metadata.*` conflicts) with `FrontmatterDecoder`'s own
+/// quoting-fallback-retry note, when one fired.
 ///
 /// Consumed by the downstream `SkillsRegistry` validator, which layers
 /// agentskills.io + Claude semantics (required `description`, `name ==
-/// directoryName`, shadowing, etc.) on top -- this type carries no such
-/// judgment itself.
+/// directoryName`, shadowing, etc.) on top and surfaces every note as an
+/// `.advisory` diagnostic -- this type carries no such judgment itself.
 public struct DecodedSkill: Sendable, Equatable {
     /// The decoded frontmatter fields.
     public var frontmatter: SkillFrontmatter
@@ -33,8 +34,9 @@ public struct DecodedSkill: Sendable, Equatable {
     ///     frontmatter fence (or the whole text, when there was no
     ///     frontmatter block).
     ///   - notes: Diagnostic-worthy notes, combining `SkillFrontmatter`'s own
-    ///     top-level/`metadata.*` conflict notes with `FrontmatterDecoder`'s
-    ///     quoting-fallback-retry note, when one fired.
+    ///     mistyped-`metadata.*` and top-level/`metadata.*` conflict notes
+    ///     with `FrontmatterDecoder`'s quoting-fallback-retry note, when one
+    ///     fired.
     public init(frontmatter: SkillFrontmatter, body: String, notes: [String]) {
         self.frontmatter = frontmatter
         self.body = body

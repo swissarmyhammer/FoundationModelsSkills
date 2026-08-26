@@ -9,7 +9,8 @@ public struct SkillDiagnostic: Sendable, Equatable {
     /// How serious a diagnostic is, from least to most consequential.
     ///
     /// `advisory` findings never change how a skill loads (a shadowed id, an
-    /// oversized body, unknown top-level keys). `warning` findings accompany
+    /// oversized body, unknown top-level keys, a decoder note such as a
+    /// mistyped `metadata.*` value). `warning` findings accompany
     /// a rule violation whose skill still loads, possibly with changed
     /// visibility (`name` irregularities, an over-limit `description` or
     /// `compatibility`, a missing `description`, the retired `partial: true`
