@@ -25,8 +25,31 @@ comments:
     - evidence: `swift test` — 370 tests in 25 suites passed, 0 failed. One gated skip is the known `HotReloadLiveTests` case (^tb86z9q). No compiler warnings on project code.
     - next: commit
   timestamp: 2026-08-26T14:38:57.412853+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01m0z85gazppp9rkwn83wn2v4k
+  text: |-
+    ### commit — changed
+    - evidence: 360d2c1 test(run-script): cover ScriptProcessRunner's failed-to-spawn branch (^bv0dzcc)
+    - next: review HEAD~1..HEAD
+  timestamp: 2026-08-26T14:39:11.711409+00:00
+- actor: claude-code
+  id: 01m0z87shmgjnf7p9cms2jactn
+  text: |-
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` — 0 findings (7 validators attempted, 0 confirmed, 0 refuted); 1 file reviewed, `.kanban/` excluded by `.reviewignore`
+    - next: task moved to done
+  timestamp: 2026-08-26T14:40:26.676491+00:00
+- actor: claude-code
+  id: 01m0z885f02308t55w5613313a
+  text: |-
+    ### finish iteration 1 — review clean, task moved to done
+    - implement: changed — Tests/FoundationModelsSkillsTests/RunScriptTests.swift (new failed-to-spawn test, `@testable import`, `failedToSpawnTimeoutSeconds`, helper returns the script URL)
+    - test: green — `swift test` 370 passed, 0 failed, 1 known gated skip (^tb86z9q)
+    - commit: 360d2c1
+    - review: clean — `review sha HEAD~1..HEAD`, 0 findings
+  timestamp: 2026-08-26T14:40:38.880263+00:00
+position_column: done
+position_ordinal: b280
 title: 'Add test for ScriptProcessRunner: the failed-to-spawn branch'
 ---
 `Sources/FoundationModelsSkills/Resources/ScriptProcessRunner.swift`
