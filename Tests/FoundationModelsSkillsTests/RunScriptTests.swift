@@ -2,16 +2,18 @@ import Darwin
 import Foundation
 import FoundationModels
 import FoundationModelsMetadataRegistry
-import FoundationModelsSkills
 import Operations
 import Testing
+
+@testable import FoundationModelsSkills
 
 /// Tests for the `run script` operation (plan.md §7.3.1): the triple gate,
 /// unknown/model-hidden id correctives, the two path guards (`scripts/`
 /// prefix, then confinement), the direct-exec eligibility check
 /// (executable bit + shebang), process-group timeout kill, the
-/// `generatedContent` round trip, and a golden result against the static
-/// `release-notes` fixture.
+/// `ScriptProcessRunner` failed-to-spawn branch, the `generatedContent`
+/// round trip, and a golden result against the static `release-notes`
+/// fixture.
 struct RunScriptTests {
     // MARK: - Fixture root (mirrors ResourceOpsTests)
 
@@ -21,6 +23,11 @@ struct RunScriptTests {
     /// value equal to `RunScript.defaultTimeoutSeconds` could not pass by
     /// accident.
     private static let sampleTimeoutSeconds = 5
+
+    /// The timeout for the failed-to-spawn test. A spawn that fails gives a
+    /// result at once, so a short timeout makes a hang fail the test fast
+    /// instead of waiting for `RunScript.defaultTimeoutSeconds`.
+    private static let failedToSpawnTimeoutSeconds: TimeInterval = 1
 
     /// Builds a `SkillsToolContext` over `roots` under `policy`, via the
     /// shared `ResourceTestSupport.makeContext(roots:policy:)` --
@@ -254,6 +261,33 @@ struct RunScriptTests {
         #expect(kill(childPID, 0) == -1, "the backgrounded grandchild should have died with the whole process group")
     }
 
+    // MARK: - ScriptProcessRunner: the failed-to-spawn branch
+
+    /// `RunScript` gates on the executable bit and on a shebang line before
+    /// it calls the runner, so a script that passes both gates and still
+    /// fails to exec is the one shape that reaches `ScriptProcessRunner`'s
+    /// `posix_spawn` failure branch. A shebang naming an interpreter that
+    /// does not exist makes the kernel refuse the exec, so `posix_spawn`
+    /// itself fails and the runner gives back `failedToSpawn`.
+    @Test(.timeLimit(.minutes(1)))
+    func scriptProcessRunnerReportsFailedToSpawnWhenTheInterpreterDoesNotExist() async throws {
+        let root = try HotReloadTestSupport.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let scriptURL = try Self.writeExecutableShebangScript(
+            named: "no-interpreter.sh", inSkillID: "no-interpreter", under: root,
+            contents: "#!/nonexistent/interpreter\necho hi\n")
+
+        let outcome = await ScriptProcessRunner.run(
+            executableURL: scriptURL, arguments: [], workingDirectory: root,
+            timeout: Self.failedToSpawnTimeoutSeconds)
+
+        #expect(outcome.status == .failed)
+        #expect(outcome.exitCode == nil)
+        #expect(outcome.durationMs == 0)
+        #expect(outcome.lines == 0)
+        #expect(outcome.output.isEmpty)
+    }
+
     // MARK: - Golden result
 
     @Test func goldenRunScriptResultAgainstTheReleaseNotesFixture() async throws {
@@ -374,17 +408,21 @@ struct RunScriptTests {
     ///   - directory: The root the skill lives under.
     ///   - contents: The script's full text, shebang included. Defaults to
     ///     a minimal `echo hi` script.
+    /// - Returns: The written script's URL, for a test that runs it
+    ///   directly rather than through `RunScript`.
     /// - Throws: `UnsafeFixtureFileName` if `name` is not a plain file name;
     ///   otherwise whatever `FileManager.createDirectory`, `String.write`,
     ///   or `FileManager.setAttributes` throws.
+    @discardableResult
     private static func writeExecutableShebangScript(
         named name: String, inSkillID id: String, under directory: URL, contents: String = "#!/bin/sh\necho hi\n"
     )
-        throws
+        throws -> URL
     {
         guard !name.contains("/"), !name.contains("..") else { throw UnsafeFixtureFileName() }
         let scriptURL = try Self.scriptsDirectory(inSkillID: id, under: directory).appendingPathComponent(name)
         try contents.write(to: scriptURL, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
+        return scriptURL
     }
 }
