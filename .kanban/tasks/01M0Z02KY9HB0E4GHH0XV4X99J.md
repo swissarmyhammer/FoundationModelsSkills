@@ -27,8 +27,31 @@ comments:
     - evidence: `swift test` — 361 tests in 24 suites passed, 0 failed; the one skip is the gated `HotReloadLiveTests` (known, ^tb86z9q); the only warning is the SwiftPM build-system note about the mlx bundle, not a source warning
     - next: commit
   timestamp: 2026-08-26T13:56:29.201151+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01m0z5qwbsenj5n0bpqx12qhh3
+  text: |-
+    ### commit — changed
+    - evidence: 274be6c test(operations): cover UseSkill's UnknownSkillError hot-reload race branch
+    - next: review
+  timestamp: 2026-08-26T13:56:48.121065+00:00
+- actor: claude-code
+  id: 01m0z5y3bgtjcmh6nggd3pp575
+  text: |-
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` — 0 findings (7 attempted, 1 refuted); .kanban files excluded by .reviewignore
+    - next: done
+  timestamp: 2026-08-26T14:00:11.888080+00:00
+- actor: claude-code
+  id: 01m0z5y9nadnt004gfq0w9ewjn
+  text: |-
+    ### finish iteration 1 — review clean, task in done
+    - implement: changed — Tests/FoundationModelsSkillsTests/SkillOperationsTests.swift (new race test, `makeCatalogRemovalPredicate`, `writeWidgetSkill`)
+    - test: green — `swift test` 361 passed, 0 failed (1 known gated skip, ^tb86z9q)
+    - commit: 274be6c
+    - review: clean — 0 findings on HEAD~1..HEAD
+  timestamp: 2026-08-26T14:00:18.346230+00:00
+position_column: done
+position_ordinal: ae80
 title: 'Add test for UseSkill: the UnknownSkillError hot-reload race branch'
 ---
 `Sources/FoundationModelsSkills/Operations/UseSkill.swift`
