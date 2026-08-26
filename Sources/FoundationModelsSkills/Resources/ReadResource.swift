@@ -307,16 +307,41 @@ private struct LineWindowScanner {
     /// The byte that ends a line.
     private static let newline = UInt8(ascii: "\n")
 
-    /// The longest UTF-8 encoding of one scalar, in bytes.
+    /// The byte length of a two-byte UTF-8 scalar.
+    private static let twoByteScalarLength = 2
+
+    /// The byte length of a three-byte UTF-8 scalar.
+    private static let threeByteScalarLength = 3
+
+    /// The longest UTF-8 encoding of one scalar, in bytes -- a four-byte
+    /// scalar.
     private static let maxScalarByteLength = 4
+
+    /// The lowest lead byte of a two-byte UTF-8 scalar (`110xxxxx`).
+    private static let twoByteLeadStart: UInt8 = 0xC0
+
+    /// The highest lead byte of a two-byte UTF-8 scalar.
+    private static let twoByteLeadEnd: UInt8 = 0xDF
+
+    /// The lowest lead byte of a three-byte UTF-8 scalar (`1110xxxx`).
+    private static let threeByteLeadStart: UInt8 = 0xE0
+
+    /// The highest lead byte of a three-byte UTF-8 scalar.
+    private static let threeByteLeadEnd: UInt8 = 0xEF
+
+    /// The lowest lead byte of a four-byte UTF-8 scalar (`11110xxx`).
+    private static let fourByteLeadStart: UInt8 = 0xF0
+
+    /// The highest lead byte of a four-byte UTF-8 scalar.
+    private static let fourByteLeadEnd: UInt8 = 0xF7
 
     /// Each multi-byte UTF-8 lead-byte range with the scalar length it
     /// opens. A byte outside every range that is not a continuation byte is
     /// a one-byte scalar.
     private static let multiByteLeadRanges: [(leadBytes: ClosedRange<UInt8>, scalarLength: Int)] = [
-        (0xC0...0xDF, 2),
-        (0xE0...0xEF, 3),
-        (0xF0...0xF7, 4),
+        (twoByteLeadStart...twoByteLeadEnd, twoByteScalarLength),
+        (threeByteLeadStart...threeByteLeadEnd, threeByteScalarLength),
+        (fourByteLeadStart...fourByteLeadEnd, maxScalarByteLength),
     ]
 
     /// The window whose lines are retained.

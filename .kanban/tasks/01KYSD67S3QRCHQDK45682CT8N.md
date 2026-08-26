@@ -104,7 +104,30 @@ comments:
     - Decision: keep the design in the tree now (the implementer's `ReadResource.swift` with the 1,000,000-byte content budget, the file-private `LineWindowScanner`, and the eight new tests). That tree was green: 325 tests passed.
     - This session deleted its stray `Sources/FoundationModelsSkills/Resources/LineWindowReader.swift` (nothing referenced it) and aligns `README.md` to the one chosen design. The `stuck` tag is removed. The loop continues from the test step.
   timestamp: 2026-08-26T12:31:49.432431+00:00
-position_column: doing
+- actor: claude-code
+  id: 01m0z14wj6myh0qbsag64k2hky
+  text: |-
+    ### review — findings
+    - evidence: review sha HEAD~1..HEAD — 3 findings: Sources/FoundationModelsSkills/Resources/ReadResource.swift:317, :318, :319 (code-hygiene/magic-numbers-swift — the `multiByteLeadRanges` table literals)
+    - next: implement names each lead-byte range and scalar length as a constant; task stays in review
+  timestamp: 2026-08-26T12:36:31.430525+00:00
+- actor: claude-code
+  id: 01m0z16303qmgxt68f4481gznk
+  text: |-
+    ### implement — changed
+    - evidence: 1 file — Sources/FoundationModelsSkills/Resources/ReadResource.swift: the three `multiByteLeadRanges` rows now use named constants (`twoByteLeadStart...twoByteLeadEnd`, `twoByteScalarLength`, and so on); the hex lead bytes and the scalar lengths are each a documented `static let`
+    - next: test, commit, review
+  timestamp: 2026-08-26T12:37:10.787782+00:00
+- actor: claude-code
+  id: 01m0z16jv45a32d67hvqf62ndc
+  text: |-
+    ### finish iteration 2 — review: findings (3, all now fixed and checked)
+    - implement: no-change by this session on the chosen design (blocker resolved; stray LineWindowReader.swift removed; README aligned to the byte-budget design)
+    - test: green — swift test, 325 tests in 23 suites passed, 0 warnings
+    - commit: e175bdc fix(resources): stream read resource with a content byte budget instead of a 1 MB refusal
+    - review: findings — ReadResource.swift:317, :318, :319 code-hygiene/magic-numbers-swift; fixed by named constants, test green again (325 passed)
+  timestamp: 2026-08-26T12:37:27.012937+00:00
+position_column: review
 position_ordinal: '80'
 title: 'ReadResource: page large text resources instead of 1 MB hard refusal'
 ---
@@ -114,14 +137,25 @@ New defect introduced by the bounded-read fix (ef80be5): `read resource` now sta
 Fix: keep memory bounded WITHOUT refusing large text — read incrementally (streaming line scan) up to the requested `start`/`end` window plus enough to compute `totalLines` cheaply (or report `totalLines` as a lower bound when scanning is capped, with the cap documented). Preserve the stat-first refusal only for the non-UTF-8/binary corrective path (its byte size can come from stat, no full materialization). Choose and document exact semantics on the op; note them in README's op table if they deviate from §7.3's letter.
 
 ## Acceptance Criteria
-- [ ] A 5 MB UTF-8 text fixture pages successfully with correct slice content for windows at the start, middle, and end
-- [ ] Memory stays bounded (no full-file `Data(contentsOf:)` for text reads — verify by code inspection/greppable absence + a large-file test that completes quickly)
-- [ ] Binary refusal still stat-based, no full read
-- [ ] Chosen semantics documented on the op and in README
+- [x] A 5 MB UTF-8 text fixture pages successfully with correct slice content for windows at the start, middle, and end
+- [x] Memory stays bounded (no full-file `Data(contentsOf:)` for text reads — verify by code inspection/greppable absence + a large-file test that completes quickly)
+- [x] Binary refusal still stat-based, no full read
+- [x] Chosen semantics documented on the op and in README
 
 ## Tests
-- [ ] Extend `Tests/FoundationModelsSkillsTests/ResourceOpsTests.swift` — large-text paging matrix; binary refusal unchanged
-- [ ] `swift test` — exit 0
+- [x] Extend `Tests/FoundationModelsSkillsTests/ResourceOpsTests.swift` — large-text paging matrix; binary refusal unchanged
+- [x] `swift test` — exit 0
 
 ## Workflow
 - Use `/tdd` — write failing tests first, then implement to make them pass.
+
+## Review Findings (2026-08-26 07:33)
+
+> Scope: `review sha HEAD~1..HEAD` — reviewed the diffs only — lines this change added or modified. 4 file(s) reviewed, 28 not reviewed.
+
+> 28 file(s) not reviewed — excluded by an ignore rule:
+> - `.kanban/ (from .reviewignore)` — 28 file(s)
+
+- [x] `Sources/FoundationModelsSkills/Resources/ReadResource.swift:317` `code-hygiene/magic-numbers-swift` — Magic numbers should be replaced by named constants.
+- [x] `Sources/FoundationModelsSkills/Resources/ReadResource.swift:318` `code-hygiene/magic-numbers-swift` — Magic numbers should be replaced by named constants.
+- [x] `Sources/FoundationModelsSkills/Resources/ReadResource.swift:319` `code-hygiene/magic-numbers-swift` — Magic numbers should be replaced by named constants.
