@@ -27,8 +27,31 @@ comments:
     - evidence: `swift test` — 372 passed, 0 failed in 25 suites; 1 skip is the gated live-model test (^tb86z9q, known); no source warnings
     - next: commit
   timestamp: 2026-08-26T14:46:03.262130+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01m0z8jegg6t6mmsdwqrek2xvq
+  text: |-
+    ### commit — changed
+    - evidence: c707233 test(watcher): cover deep ancestor walk and unreadable directory (^05a9vxr)
+    - next: review
+  timestamp: 2026-08-26T14:46:15.824997+00:00
+- actor: claude-code
+  id: 01m0z8q3q6jy9sebf3vs0bbjkp
+  text: |-
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` — 0 findings, 0 confirmed, 2 refuted; 1 file reviewed
+    - next: done
+  timestamp: 2026-08-26T14:48:48.614353+00:00
+- actor: claude-code
+  id: 01m0z8q6mq72jp27sg1qc4j2dd
+  text: |-
+    ### finish iteration 1 — review clean, task moved to done
+    - implement: changed — Tests/FoundationModelsSkillsTests/SkillWatcherTests.swift (2 tests, 4 helpers); lines 234-237 and 414 of SkillWatcher.swift now covered
+    - test: green — `swift test` 372 passed, 0 failed; 1 known gated skip (^tb86z9q)
+    - commit: c707233
+    - review: clean — 0 findings, 2 refuted
+  timestamp: 2026-08-26T14:48:51.607842+00:00
+position_column: done
+position_ordinal: b380
 title: 'Add tests for SkillWatcher: deep ancestor walk and unreadable directory'
 ---
 `Sources/FoundationModelsSkills/Registry/SkillWatcher.swift`
