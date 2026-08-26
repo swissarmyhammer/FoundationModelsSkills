@@ -11,9 +11,12 @@ import Testing
 /// `name/_partials/*`) are still detected, events under an unfiltered `.git/`
 /// directory neither crash nor get suppressed, a nonexistent root is
 /// skipped silently, a root that appears after `start()` escalates from an
-/// ancestor watch to a real recursive one, an armed ancestor's unrelated
-/// activity stays quiet, a root listed before its own parent leaks no
-/// descriptor, and `stop()` ends delivery.
+/// ancestor watch to a real recursive one, a root nested several levels
+/// below its nearest existing ancestor is still armed at that ancestor, an
+/// armed ancestor's unrelated activity stays quiet, an unreadable directory
+/// inside a root neither throws nor silences its readable siblings, a root
+/// listed before its own parent leaks no descriptor, and `stop()` ends
+/// delivery.
 struct SkillWatcherTests {
     /// How long a watcher under test waits for a quiet period before firing
     /// its coalesced callback. Short relative to the wait timeouts below so
@@ -220,6 +223,51 @@ struct SkillWatcherTests {
         }
     }
 
+    @Test func rootNestedSeveralLevelsBelowItsNearestExistingAncestorIsArmedThere() async throws {
+        try await Self.withTempDirectory { privateDirectory in
+            // Only `privateDirectory` exists. `ancestorArming(for:)` must walk
+            // up past `a/b/c` -- three missing components -- to find it, not
+            // stop at the root's (equally missing) direct parent.
+            let deepRoot = privateDirectory
+                .appendingPathComponent("a", isDirectory: true)
+                .appendingPathComponent("b", isDirectory: true)
+                .appendingPathComponent("c", isDirectory: true)
+                .appendingPathComponent("skills", isDirectory: true)
+            try await Self.withWatcher(over: [deepRoot]) { recorder in
+                // Creating the whole chain at once makes `a` appear directly
+                // under the armed ancestor, which is the awaited child.
+                try Self.writeSkillFile(id: "deep-skill", in: deepRoot)
+                let afterCreate = await Self.expectExactlyOneSignal(recorder, since: 0)
+
+                // The flush above escalated to a real recursive watch of
+                // `deepRoot`; an edit four levels below `privateDirectory`
+                // is only visible through that watch.
+                try Self.writeSkillFile(id: "deep-skill", in: deepRoot, bodySuffix: "edited")
+                _ = await Self.expectExactlyOneSignal(recorder, since: afterCreate)
+            }
+        }
+    }
+
+    // MARK: - Unreadable directory inside a root
+
+    @Test(.disabled(if: isRoot, "root reads a mode-0o000 directory, so the unreadable branch is unreachable"))
+    func unreadableDirectoryInsideARootIsSkippedAndReadableSiblingsStillReport() async throws {
+        try await Self.withTempDirectory { root in
+            let lockedDirectory = root.appendingPathComponent("locked", isDirectory: true)
+            try FileManager.default.createDirectory(at: lockedDirectory, withIntermediateDirectories: true)
+            try Self.setPosixPermissions(Self.unreadableMode, of: lockedDirectory)
+            defer { try? Self.setPosixPermissions(Self.ownerAccessMode, of: lockedDirectory) }
+
+            // `start()` lists `root`, reaches `locked`, and must treat its
+            // failed listing as "no entries" rather than throwing or
+            // abandoning the rest of the tree.
+            try await Self.withWatcher(over: [root]) { recorder in
+                try Self.writeSkillFile(id: "readable-skill", in: root)
+                _ = await Self.expectExactlyOneSignal(recorder, since: 0)
+            }
+        }
+    }
+
     // MARK: - Overwritten source is cancelled, not leaked
 
     @Test func rootListedBeforeItsOwnParentLeaksNoDescriptor() async throws {
@@ -307,6 +355,28 @@ struct SkillWatcherTests {
     }
 
     // MARK: - Test helpers
+
+    /// The file mode that refuses every read, so a directory listing fails.
+    private static let unreadableMode = 0o000
+
+    /// The file mode restored on teardown so the temp directory can be
+    /// removed.
+    private static let ownerAccessMode = 0o700
+
+    /// Whether the test process is root. Root reads a mode-`0o000`
+    /// directory, so the unreadable-directory test cannot reach the branch
+    /// it exists to cover and is skipped there.
+    private static var isRoot: Bool { geteuid() == 0 }
+
+    /// Sets the POSIX permission bits of `item`.
+    ///
+    /// - Parameters:
+    ///   - mode: The permission bits to apply.
+    ///   - item: The file or directory to change.
+    /// - Throws: Whatever `FileManager.setAttributes` throws.
+    private static func setPosixPermissions(_ mode: Int, of item: URL) throws {
+        try FileManager.default.setAttributes([.posixPermissions: mode], ofItemAtPath: item.path)
+    }
 
     /// A mutable reference cell holding the `SkillWatcher` under test, so
     /// its own `onChange` closure can call back into it.
