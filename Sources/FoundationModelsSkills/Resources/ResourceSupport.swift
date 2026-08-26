@@ -12,9 +12,11 @@ extension StringProtocol {
     /// This text split into lines by `\n`, without counting a final
     /// trailing newline as an extra, phantom empty line.
     ///
-    /// Shared by `ReadResource` (over a decoded `String`) and
-    /// `ScriptProcessRunner` (over captured process output), so the two
-    /// can never drift on what counts as a line.
+    /// Used by `ScriptProcessRunner` over captured process output.
+    /// `ReadResource` applies the same rule -- a line ends at `\n`, and a
+    /// trailing newline adds no empty final line -- but at the byte level
+    /// of its streaming scan, since it never holds a whole file as one
+    /// `String`.
     internal var splitIntoLines: [SubSequence] {
         var lines = split(separator: "\n", omittingEmptySubsequences: false)
         if lines.last?.isEmpty == true {

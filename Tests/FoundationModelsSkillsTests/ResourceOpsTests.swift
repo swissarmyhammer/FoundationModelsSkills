@@ -125,32 +125,210 @@ struct ResourceOpsTests {
         #expect(json.contains("\(byteSize) bytes"))
     }
 
-    // MARK: - Bounded read: oversized resources refuse from stat'd size alone (§7.3)
+    // MARK: - Large text paging: streaming line scan, bounded memory (§7.3)
 
-    @Test func readResourceOnAnOversizedFileRefusesFromItsStatedSizeWithoutReadingIt() async throws {
+    /// The line count of the large text fixture.
+    private static let largeFixtureLineCount = 100_000
+
+    /// The byte width of one large-fixture line, its newline included.
+    private static let largeFixtureLineWidth = 52
+
+    /// The byte size the large text fixture must reach: 5 MB.
+    private static let largeFixtureMinimumByteSize = 5_000_000
+
+    /// The content byte budget one `read resource` call returns, mirrored
+    /// from `ReadResource`.
+    private static let contentByteBudget = 1_000_000
+
+    /// The byte size of one line in the budget-cut fixture. Three lines of
+    /// this size fit the budget; four do not.
+    private static let budgetFixtureLineByteSize = 300_000
+
+    /// The line count of the budget-cut fixture.
+    private static let budgetFixtureLineCount = 10
+
+    /// The byte size of the single-line fixture: twice the content budget.
+    private static let oversizedLineByteSize = 2 * Self.contentByteBudget
+
+    /// The line count of ASCII text that stands before the invalid bytes in
+    /// the late-binary fixture. With `lateBinaryPrefixLineWidth`, the prefix
+    /// is over the content budget, so the invalid bytes are found after the
+    /// first chunk of the scan and after the requested window.
+    private static let lateBinaryPrefixLineCount = 12_000
+
+    /// The byte width of one late-binary prefix line, its newline included.
+    private static let lateBinaryPrefixLineWidth = 100
+
+    /// The repeat count of the multi-byte sample in the chunk-straddle
+    /// fixture. The sample is 9 bytes, so a chunk boundary that is not a
+    /// multiple of 9 splits one character.
+    private static let multiByteSampleRepeatCount = 30_000
+
+    /// The line count of the chunk-straddle fixture: over the content
+    /// budget in total, so the old whole-file read refused it.
+    private static let multiByteFixtureLineCount = 5
+
+    /// The label that opens large-fixture line `number`.
+    private static func lineLabel(_ number: Int) -> String {
+        String(format: "Line %06d", number)
+    }
+
+    /// The large text fixture: `largeFixtureLineCount` lines, each one a
+    /// label padded with `x` to `largeFixtureLineWidth` bytes with its
+    /// newline.
+    private static func makeLargeFixtureBytes() -> Data {
+        var text = ""
+        text.reserveCapacity(Self.largeFixtureLineCount * Self.largeFixtureLineWidth)
+        for number in 1...Self.largeFixtureLineCount {
+            let label = Self.lineLabel(number)
+            let padding = String(repeating: "x", count: Self.largeFixtureLineWidth - 1 - label.count)
+            text += label + padding + "\n"
+        }
+        return Data(text.utf8)
+    }
+
+    /// Writes `id/SKILL.md` and one resource file `fileName` that holds
+    /// `bytes`, under a fresh temp root.
+    ///
+    /// - Returns: The temp root. The caller removes it.
+    private static func writeSkillWithResource(id: String, fileName: String, bytes: Data) throws -> URL {
         let root = try HotReloadTestSupport.makeTempDirectory()
-        defer { try? FileManager.default.removeItem(at: root) }
+        let skillDirectory = try ResourceTestSupport.writeMinimalSkillFile(id: id, in: root)
+        try bytes.write(to: skillDirectory.appendingPathComponent(fileName))
+        return root
+    }
 
-        let skillDirectory = try ResourceTestSupport.writeMinimalSkillFile(id: "oversized", in: root)
-        // Comfortably over the 1,000,000-byte read limit -- large enough
-        // that fully materializing it (the pre-fix behavior) would be a
-        // real, measurable cost, but still fast to write in a test.
-        let oversizedData = Data(repeating: 0x41, count: 2_000_000)
-        let fileURL = skillDirectory.appendingPathComponent("huge.txt")
-        try oversizedData.write(to: fileURL)
-        let statedSize = try #require(
-            FileManager.default.attributesOfItem(atPath: fileURL.path)[.size] as? Int)
-        #expect(statedSize == 2_000_000)
-
+    /// Dispatches one `read resource` call over `root`, from line `start`.
+    private static func readResource(root: URL, id: String, path: String, start: Int) async throws -> String {
         let tool = try Self.makeTool(roots: [root])
         let arguments = GeneratedContent(
-            properties: ["op": "read resource", "id": "oversized", "path": "huge.txt"])
+            properties: ["op": "read resource", "id": id, "path": path, "start": start])
+        return try await tool.call(arguments: arguments)
+    }
 
-        let json = try await tool.call(arguments: arguments)
+    @Test func readResourceOnAFiveMegabyteTextPagesTheFirstWindow() async throws {
+        let bytes = Self.makeLargeFixtureBytes()
+        #expect(bytes.count >= Self.largeFixtureMinimumByteSize)
+        let root = try Self.writeSkillWithResource(id: "large", fileName: "large.txt", bytes: bytes)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let json = try await Self.readResource(root: root, id: "large", path: "large.txt", start: 1)
+
+        #expect(!Self.isCorrective(json))
+        #expect(json.contains("\"start\":1"))
+        #expect(json.contains("\"end\":500"))
+        #expect(json.contains("\"totalLines\":\(Self.largeFixtureLineCount)"))
+        #expect(json.contains(Self.lineLabel(1)))
+        #expect(json.contains(Self.lineLabel(500)))
+        #expect(!json.contains(Self.lineLabel(501)))
+    }
+
+    @Test func readResourceOnAFiveMegabyteTextPagesAMiddleWindow() async throws {
+        let root = try Self.writeSkillWithResource(
+            id: "large", fileName: "large.txt", bytes: Self.makeLargeFixtureBytes())
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let json = try await Self.readResource(root: root, id: "large", path: "large.txt", start: 50_001)
+
+        #expect(json.contains("\"start\":50001"))
+        #expect(json.contains("\"end\":50500"))
+        #expect(json.contains("\"totalLines\":\(Self.largeFixtureLineCount)"))
+        #expect(json.contains(Self.lineLabel(50_001)))
+        #expect(json.contains(Self.lineLabel(50_500)))
+        #expect(!json.contains(Self.lineLabel(50_000)))
+        #expect(!json.contains(Self.lineLabel(50_501)))
+    }
+
+    @Test func readResourceOnAFiveMegabyteTextPagesTheLastWindow() async throws {
+        let root = try Self.writeSkillWithResource(
+            id: "large", fileName: "large.txt", bytes: Self.makeLargeFixtureBytes())
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let json = try await Self.readResource(root: root, id: "large", path: "large.txt", start: 99_501)
+
+        #expect(json.contains("\"start\":99501"))
+        #expect(json.contains("\"end\":\(Self.largeFixtureLineCount)"))
+        #expect(json.contains("\"totalLines\":\(Self.largeFixtureLineCount)"))
+        #expect(json.contains(Self.lineLabel(99_501)))
+        #expect(json.contains(Self.lineLabel(Self.largeFixtureLineCount)))
+        #expect(!json.contains(Self.lineLabel(99_500)))
+    }
+
+    @Test func readResourceBeyondTheLastLineReturnsAnEmptyWindowWithTheRealTotal() async throws {
+        let root = try Self.writeSkillWithResource(
+            id: "large", fileName: "large.txt", bytes: Self.makeLargeFixtureBytes())
+        defer { try? FileManager.default.removeItem(at: root) }
+        let start = Self.largeFixtureLineCount + 1
+
+        let json = try await Self.readResource(root: root, id: "large", path: "large.txt", start: start)
+
+        #expect(!Self.isCorrective(json))
+        #expect(json.contains("\"content\":\"\""))
+        #expect(json.contains("\"start\":\(start)"))
+        #expect(json.contains("\"end\":\(Self.largeFixtureLineCount)"))
+        #expect(json.contains("\"totalLines\":\(Self.largeFixtureLineCount)"))
+    }
+
+    @Test func readResourceCutsAWindowAtTheContentByteBudgetAndReportsTheLastLineReturned() async throws {
+        var bytes = Data()
+        for _ in 1...Self.budgetFixtureLineCount {
+            bytes.append(Data(repeating: 0x42, count: Self.budgetFixtureLineByteSize - 1))
+            bytes.append(0x0A)
+        }
+        let root = try Self.writeSkillWithResource(id: "wide", fileName: "wide.txt", bytes: bytes)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let json = try await Self.readResource(root: root, id: "wide", path: "wide.txt", start: 1)
+
+        #expect(!Self.isCorrective(json))
+        #expect(json.contains("\"start\":1"))
+        #expect(json.contains("\"end\":3"))
+        #expect(json.contains("\"totalLines\":\(Self.budgetFixtureLineCount)"))
+    }
+
+    @Test func readResourceOnASingleOversizedLineDrawsACorrectiveNamingTheLine() async throws {
+        let bytes = Data(repeating: 0x41, count: Self.oversizedLineByteSize)
+        let root = try Self.writeSkillWithResource(id: "oversized", fileName: "huge.txt", bytes: bytes)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let json = try await Self.readResource(root: root, id: "oversized", path: "huge.txt", start: 1)
 
         #expect(Self.isCorrective(json))
         #expect(json.contains("exceeding"))
-        #expect(json.contains("\(statedSize) bytes"))
+        #expect(json.contains("Line 1 of"))
+        #expect(json.contains("\(Self.contentByteBudget)-byte"))
+    }
+
+    @Test func readResourceRefusesNonUTF8BytesFoundAfterTheFirstChunkWithTheStatedSize() async throws {
+        var bytes = Data()
+        for _ in 1...Self.lateBinaryPrefixLineCount {
+            bytes.append(Data(repeating: 0x61, count: Self.lateBinaryPrefixLineWidth - 1))
+            bytes.append(0x0A)
+        }
+        #expect(bytes.count > Self.contentByteBudget)
+        bytes.append(contentsOf: [0xFF, 0xFE, 0x0A])
+        let root = try Self.writeSkillWithResource(id: "late-binary", fileName: "mixed.bin", bytes: bytes)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let json = try await Self.readResource(root: root, id: "late-binary", path: "mixed.bin", start: 1)
+
+        #expect(Self.isCorrective(json))
+        #expect(json.contains("not valid UTF-8"))
+        #expect(json.contains("\(bytes.count) bytes"))
+    }
+
+    @Test func readResourceKeepsMultiByteCharactersThatStraddleReadChunks() async throws {
+        let line = String(repeating: "é€😀", count: Self.multiByteSampleRepeatCount)
+        let text = Array(repeating: line, count: Self.multiByteFixtureLineCount).joined(separator: "\n")
+        #expect(text.utf8.count > Self.contentByteBudget)
+        let root = try Self.writeSkillWithResource(id: "wide-chars", fileName: "chars.txt", bytes: Data(text.utf8))
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let json = try await Self.readResource(root: root, id: "wide-chars", path: "chars.txt", start: 1)
+
+        #expect(!Self.isCorrective(json))
+        #expect(json.contains(line))
+        #expect(json.contains("\"totalLines\":\(Self.multiByteFixtureLineCount)"))
     }
 
     // MARK: - Confinement matrix (plan.md §13)

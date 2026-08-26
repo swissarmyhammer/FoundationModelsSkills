@@ -83,7 +83,7 @@ optionals), return-don't-throw with corrective messages on invalid input:
 | `list skill` | `filter?` | The model-visible catalog (optionally filtered), catalog order, no ranking. |
 | `use skill` | `id` (req), `arguments?` | Renders the §5 pipeline with `arguments`; unknown/hidden `id` returns a corrective carrying the current id list. |
 | `list resource` | `id` (req) | Enumerates every file under the skill's directory except `SKILL.md`, capped at 100 rows. |
-| `read resource` | `id` (req), `path` (req), `start?`, `end?` | Returns a file verbatim, sliced by line, at most 500 lines/call — never rendered. |
+| `read resource` | `id` (req), `path` (req), `start?`, `end?` | Returns a file verbatim, sliced by line, at most 500 lines and 1,000,000 content bytes per call — never rendered. Streamed in 64 KiB chunks, never loaded whole; `totalLines` is exact. See "Known deviations" for the byte budget's exact semantics. |
 | `run script` | `id` (req), `path` (req, under `scripts/`), `arguments?`, `timeout?` | Execs the file directly (executable bit + shebang required) under the triple gate (host policy, per-skill `allowed-tools: Script(<glob>)` grant, host trust posture), own process group, `SIGKILL` on timeout. |
 
 Verb aliases: `find`/`discover` → `search`; `call`/`invoke`/`get` → `use`. (`run` is claimed by
@@ -104,6 +104,17 @@ defaults it to `isModelVisible`; `SkillsCLI` supplies a different predicate (id 
 
 ## Known deviations
 
+- **`read resource` adds a per-call content byte budget.** Plan.md §7.3 states one cap: "at
+  most 500 lines per call; `totalLines` tells the model to page via `start`/`end`". The
+  implementation keeps that cap and adds a second one, 1,000,000 content bytes per call, so
+  the memory one call retains is bounded whatever the line lengths are. The file is streamed
+  in 64 KiB chunks and never loaded whole; every call scans to the end of the file, so
+  `totalLines` is exact. When the next line of the window would push the content over the
+  byte budget, the window stops at the last line that fits and `end` reports it — the model
+  pages on from `end + 1` as before. A single line that alone exceeds the budget is refused
+  with a corrective that names the line, since no window can return it. The §7.3 non-UTF-8
+  corrective is unchanged: the scan stops at the first invalid byte, and the byte size it
+  reports comes from `stat`, so a binary asset is never materialized.
 - **Op-level correctives don't count toward upstream's retry cap.** Plan.md §7/decision #22:
   "upstream's retry cap (default 2) stops loops." `OperationTool.call(arguments:)`
   (`../FoundationModelsOperationTool/Sources/Operations/OperationTool.swift`) only tracks

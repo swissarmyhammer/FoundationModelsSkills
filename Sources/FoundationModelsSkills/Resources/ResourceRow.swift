@@ -71,7 +71,9 @@ public struct ReadResourceResult: Encodable, Sendable, Equatable {
     /// The first line returned (1-based).
     public let start: Int
 
-    /// The last line returned.
+    /// The last line returned -- fewer than requested when the file ended or
+    /// the per-call content byte budget cut the window short; `start - 1`
+    /// when no line was returned. Paging continues from `end + 1`.
     public let end: Int
 
     /// The file's total line count, for paging via `start`/`end`.

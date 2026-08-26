@@ -1,0 +1,1 @@
+{"id":"01M0Z0KEYSSQFK2TKAPK8PC97S","timestamp":"2026-08-26T12:27:00.441465Z","op":"create","item_id":"01M0Z0KEYSWX6YZ7T03REW2WWS","forward_patch":"--- original\n+++ modified\n@@ -0,0 +1,2 @@\n+color: '008672'\n+tag_name: stuck\n","reverse_patch":"--- original\n+++ modified\n@@ -1,2 +0,0 @@\n-color: '008672'\n-tag_name: stuck\n","transaction_id":null}
