@@ -577,6 +577,66 @@ struct SkillsRegistryTests {
         #expect(listingEntry.description == shortDescription)
     }
 
+    // MARK: - An unreadable SKILL.md drops the skill with a `.skip` diagnostic
+
+    /// The file mode that refuses every read.
+    private static let unreadableMode = 0o000
+
+    /// Whether the test process is root. Root reads a mode-`0o000` file, so
+    /// the unreadable-`SKILL.md` fixture must take the directory form there.
+    private static var isRoot: Bool { geteuid() == 0 }
+
+    /// Writes a discoverable `SKILL.md` under `root` for `id`, then makes
+    /// it unreadable -- mode `0o000` normally, or a directory of the same
+    /// name when the process is root and a file mode cannot refuse a read.
+    /// Either form is a `SKILL.md` that discovery accepts and that
+    /// `String(contentsOf:encoding:)` fails on.
+    ///
+    /// - Parameters:
+    ///   - id: The skill id -- the subdirectory name.
+    ///   - root: The directory to write the skill's own subdirectory under.
+    /// - Throws: Whatever `writeSkillFixture(id:skillMarkdown:in:)` or the
+    ///   `FileManager` mutations throw.
+    private static func writeUnreadableSkill(id: String, in root: URL) throws {
+        try writeSkillFixture(
+            id: id,
+            skillMarkdown: """
+                ---
+                name: \(id)
+                description: A registry test fixture whose SKILL.md cannot be read.
+                ---
+                Body text, never read by this fixture's own test.
+                """,
+            in: root)
+        let skillFileURL = root.appendingPathComponent(id, isDirectory: true).appendingPathComponent("SKILL.md")
+        guard isRoot else {
+            try FileManager.default.setAttributes([.posixPermissions: unreadableMode], ofItemAtPath: skillFileURL.path)
+            return
+        }
+        try FileManager.default.removeItem(at: skillFileURL)
+        try FileManager.default.createDirectory(at: skillFileURL, withIntermediateDirectories: false)
+    }
+
+    @Test func anUnreadableSkillFileDropsThatSkillWithASkipDiagnosticAndLeavesTheHealthySiblingLoaded() throws {
+        let root = try Self.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try Self.writeUnreadableSkill(id: "unreadable", in: root)
+        try Self.writePreloadedModelHiddenSkill(in: root)
+
+        let registry = SkillsRegistry(roots: [root])
+
+        let loadedIDs = Set(registry.metadata().map(\.id))
+        #expect(!loadedIDs.contains("unreadable"))
+        #expect(loadedIDs.contains("preloaded-model-hidden"))
+
+        let unreadableDiagnostics = registry.diagnostics.filter { $0.skillID == "unreadable" }
+        #expect(unreadableDiagnostics.count == 1)
+        let diagnostic = try #require(unreadableDiagnostics.first)
+        #expect(diagnostic.severity == .skip)
+        #expect(diagnostic.message.hasPrefix("SKILL.md could not be read:"))
+        #expect(diagnostic.provenance.root.path == root.path)
+    }
+
     // MARK: - No directory-convention literal in registry source
 
     @Test func registrySourceNamesNoDotfolderConventionLiteral() throws {

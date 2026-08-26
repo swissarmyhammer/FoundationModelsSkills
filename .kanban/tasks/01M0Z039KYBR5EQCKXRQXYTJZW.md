@@ -1,8 +1,33 @@
 ---
 assignees:
 - claude-code
-position_column: todo
-position_ordinal: 8c80
+comments:
+- actor: claude-code
+  id: 01m0z6h6nvxwmbh4kv25vxcdqg
+  text: |-
+    Research notes:
+    - `SkillDiscovery.discover()` accepts a candidate when `FileManager.fileExists(atPath:)` is true for `SKILL.md`. A directory named `SKILL.md` also passes this check.
+    - `SkillsRegistry.validate(discovered:diagnostics:)` (lines 484-497) catches the read error, appends a `.skip` diagnostic with message prefix "SKILL.md could not be read:", and returns `nil`.
+    - `Tests/FoundationModelsSkillsTests/ReadResourceTests.swift` already has the pattern for an unreadable file: `unreadableMode = 0o000`, `isRoot` from `geteuid() == 0`, and `FileManager.setAttributes([.posixPermissions:])`.
+    - `SkillsRegistryTests.swift` has the helpers `writeSkillFixture(id:skillMarkdown:in:)` and `makeTempDirectory()`. The new test uses them.
+    - Plan: write a real `SKILL.md`, then set its mode to `0o000`. When the process is root, replace the file with a directory named `SKILL.md`. Put a second healthy skill in the same root.
+  timestamp: 2026-08-26T14:10:37.883703+00:00
+- actor: claude-code
+  id: 01m0z6j78qnzfz2vt9aw9yfd4g
+  text: |-
+    ### implement — changed
+    - evidence: 1 file — Tests/FoundationModelsSkillsTests/SkillsRegistryTests.swift. Added `unreadableMode`, `isRoot`, `writeUnreadableSkill(id:in:)`, and the test `anUnreadableSkillFileDropsThatSkillWithASkipDiagnosticAndLeavesTheHealthySiblingLoaded`. `swift test --filter SkillsRegistryTests`: 22 tests passed.
+    - next: test, commit, review
+  timestamp: 2026-08-26T14:11:11.255940+00:00
+- actor: claude-code
+  id: 01m0z7t5shfzdzjp3m2pv7hb16
+  text: |-
+    ### test — green
+    - evidence: `swift test` — 369 tests in 25 suites passed, 0 failed, 0 warnings. 1 skipped: the env-gated live-model test (tracked as ^tb86z9q). A first full run hung behind a stale `swift-test` process; after that process was killed, the rerun passed.
+    - next: commit
+  timestamp: 2026-08-26T14:33:00.465231+00:00
+position_column: doing
+position_ordinal: '80'
 title: 'Add test for SkillsRegistry.validate: the unreadable SKILL.md diagnostic'
 ---
 `Sources/FoundationModelsSkills/Registry/SkillsRegistry.swift`

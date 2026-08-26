@@ -22,8 +22,35 @@ comments:
     - evidence: 1 file — Tests/FoundationModelsSkillsTests/FrontmatterDecoderTests.swift (4 new tests: metadataFloatDecodesAsDouble, metadataBareTimestampDecodesAsString, bareIntegerArgumentsDecodesAndTokenizesToEmpty, nonTokenizableArgumentsRawTokenizesToEmpty x5 cases). `swift test --filter FrontmatterDecoderTests`: 32 tests passed.
     - next: test
   timestamp: 2026-08-26T14:06:57.781886+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01m0z6bjvk12nfbd0h9zgpwthf
+  text: |-
+    ### test — green
+    - evidence: `swift test` — 368 tests in 25 suites passed, 0 failed; 1 skip is the known gated live-model test (^tb86z9q); the one build warning is the pre-existing mlx bundle build-system message, not from this change.
+    - next: commit
+
+    ### commit — changed
+    - evidence: 2b5bc0b test(frontmatter): cover the .double decode branch and the non-tokenizing arguments default
+    - next: review
+  timestamp: 2026-08-26T14:07:33.747985+00:00
+- actor: claude-code
+  id: 01m0z6dfekzrdb185t1syywbp6
+  text: |-
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` — 0 findings, 0 confirmed, 0 refuted; 1 file reviewed (Tests/FoundationModelsSkillsTests/FrontmatterDecoderTests.swift), 4 .kanban files excluded by .reviewignore. No prior review findings on the card.
+    - next: move to done
+  timestamp: 2026-08-26T14:08:35.795699+00:00
+- actor: claude-code
+  id: 01m0z6dm9fys0np0vhc55kge0q
+  text: |-
+    ### finish iteration 1 — review clean, task moved to done
+    - implement: changed — 1 file, Tests/FoundationModelsSkillsTests/FrontmatterDecoderTests.swift (4 new tests); lines 45-48 of SkillFrontmatter.swift recorded as unreachable
+    - test: green — swift test, 368 passed, 0 failed (1 known gated skip ^tb86z9q)
+    - commit: 2b5bc0b
+    - review: clean — review sha HEAD~1..HEAD, 0 findings
+  timestamp: 2026-08-26T14:08:40.751404+00:00
+position_column: done
+position_ordinal: b080
 title: 'Add tests for SkillFrontmatter: the .double decode branch and the non-tokenizing default'
 ---
 `Sources/FoundationModelsSkills/Frontmatter/SkillFrontmatter.swift`
