@@ -25,12 +25,11 @@ import Testing
 /// `FoundationModelsMetadataRegistry`'s `@_exported import
 /// FoundationModelsRanker`), which adapts Apple's own on-device
 /// `SystemLanguageModel` to the same `AgentSession` seam `RoutedAgentSession`
-/// implements for Router. This suite drives that conformer instead, wrapped
-/// in ``GuidedSelectionSession`` (its doc comment says why the wrapper is
-/// necessary) -- `SelectionConfig.model`'s closure ignores the `Grammar`
-/// argument (a plain `LanguageModelSession` relies on its own native guided
-/// generation, not an externally supplied grammar; see
-/// `LanguageModelSessionSupport.swift`'s doc comment), so this file never
+/// implements for Router. This suite drives that conformer directly --
+/// `SelectionConfig.model`'s closure returns a bare `LanguageModelSession`
+/// and ignores the `Grammar` argument (a plain `LanguageModelSession` relies
+/// on its own native guided generation, not an externally supplied grammar;
+/// see `LanguageModelSessionSupport.swift`'s doc comment), so this file never
 /// needs to name `Grammar` and therefore never needs to `import
 /// FoundationModelsRouter` at all. The scenario itself -- the MCP-style
 /// add/remove burst against a real selection session -- is unchanged; only
@@ -82,7 +81,7 @@ struct HotReloadLiveTests {
         try Self.writeSkillFile(id: "toolA", in: root, descriptionSuffix: "reads a file from disk")
 
         let config = SelectionConfig(model: { instructions, _ in
-            GuidedSelectionSession(session: LanguageModelSession(model: .default, instructions: instructions))
+            LanguageModelSession(model: .default, instructions: instructions)
         })
         // `watch: true` -- the twin's whole point is to drive a REAL reload
         // through the registry, not to read a catalog frozen at construction
@@ -139,41 +138,5 @@ struct HotReloadLiveTests {
         try FileManager.default.createDirectory(at: skillDirectory, withIntermediateDirectories: true)
         try "---\nname: \(id)\ndescription: \(descriptionSuffix)\n---\nBody text for \(id).\n"
             .write(to: skillDirectory.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
-    }
-}
-
-/// Wraps a live `LanguageModelSession` so that `SelectionTier`'s selection
-/// call really reaches the session's native guided generation.
-///
-/// **Why the wrapper is necessary (^tb86z9q):** `AgentSession` declares only
-/// `respond(to:)` and `fork()` as protocol requirements. Its typed
-/// `respond(to:generating:)` is an extension method with no requirement
-/// behind it, so a call through `any AgentSession` -- which is how
-/// `SelectionTier` holds every session -- is statically dispatched to that
-/// extension default: plain `respond(to:)`, then `GeneratedContent(json:)`
-/// over the raw text. `LanguageModelSessionSupport.swift`'s guided override
-/// is never reached through the existential. The on-device model, asked in
-/// free text, answers `[toolA]` (no response format, no `{"ids": ...}`
-/// object), which is the "cannot be completed into valid JSON" failure.
-///
-/// This wrapper puts the guided call behind the one method the protocol
-/// does dispatch dynamically: its `respond(to:)` asks the session for a
-/// `Selection` through native guided generation and hands back that value's
-/// own JSON, so the extension default's decode step receives a
-/// schema-conforming object. `fork()` keeps `AgentSession`'s default
-/// (returns `self`), matching the plain-`LanguageModelSession` conformance.
-struct GuidedSelectionSession: AgentSession {
-    /// The live session every call is forwarded to.
-    let session: LanguageModelSession
-
-    /// Asks `session` for a `Selection` through native guided generation
-    /// and returns that selection as JSON text.
-    ///
-    /// - Parameter prompt: the selection intent.
-    /// - Returns: the `Selection`'s `generatedContent` rendered as JSON.
-    /// - Throws: whatever `LanguageModelSession.respond(to:generating:)`
-    ///   throws.
-    func respond(to prompt: String) async throws -> String {
-        try await session.respond(to: prompt, generating: Selection.self).generatedContent.jsonString
     }
 }
