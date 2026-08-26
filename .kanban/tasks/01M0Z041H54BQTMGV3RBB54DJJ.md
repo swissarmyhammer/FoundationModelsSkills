@@ -13,8 +13,38 @@ comments:
     - evidence: 1 file — Tests/FoundationModelsSkillsTests/ResourceIDLookupTests.swift (new, 2 tests; `swift test --filter ResourceIDLookupTests` passed 2 of 2)
     - next: run the full test suite, then commit and review
   timestamp: 2026-08-26T14:52:23.592868+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01m0z9v8t1r5n22mt6at3pqsqa
+  text: |-
+    ### test — green
+    - evidence: swift test — 374 tests in 26 suites passed, 0 failed; 1 gated live-model test skipped (^tb86z9q). The first full run hung; a stale swift-test process (pid 25147) was killed and the run was repeated.
+    - next: commit
+  timestamp: 2026-08-26T15:08:33.473108+00:00
+- actor: claude-code
+  id: 01m0z9v9frzx2xpcssa7zh8k6q
+  text: |-
+    ### commit — changed
+    - evidence: f2f0db5 test(resources): cover the empty-catalog corrective of ResourceIDLookup
+    - next: review HEAD~1..HEAD
+  timestamp: 2026-08-26T15:08:34.168464+00:00
+- actor: claude-code
+  id: 01m0z9xmaftwmf89z8dr946r5j
+  text: |-
+    ### review — clean
+    - evidence: review sha HEAD~1..HEAD — 0 findings (7 attempted, 0 confirmed, 0 refuted); 1 file reviewed: Tests/FoundationModelsSkillsTests/ResourceIDLookupTests.swift
+    - next: move to done
+  timestamp: 2026-08-26T15:09:50.799399+00:00
+- actor: claude-code
+  id: 01m0z9y2799men36w7jbaryda2
+  text: |-
+    ### finish iteration 1 — review clean, task moved to done
+    - implement: changed — new file Tests/FoundationModelsSkillsTests/ResourceIDLookupTests.swift (2 tests through ListResource and ReadResource against an empty catalog)
+    - test: green — swift test, 374 tests in 26 suites passed, 0 failed; 1 gated live-model test skipped (^tb86z9q)
+    - commit: f2f0db5
+    - review: clean — review sha HEAD~1..HEAD, 0 findings
+  timestamp: 2026-08-26T15:10:05.033594+00:00
+position_column: done
+position_ordinal: b480
 title: 'Add test for ResourceSupport.unusableIDMessage: the empty-catalog message'
 ---
 `Sources/FoundationModelsSkills/Resources/ResourceSupport.swift`

@@ -151,6 +151,22 @@ struct ArgumentSubstitutionTests {
         #expect(result.hasPrefix("$message"))
     }
 
+    // MARK: - ${VAR} whose name is not a special variable stays literal
+
+    @Test func unresolvedSpecialVariableStaysLiteralAndIsNotQuarantined() throws {
+        // Pins the fallback branch of the `.specialVariable` case: a `${VAR}` token whose
+        // name is not a `specialVariables` key is original text, not untrusted input, so
+        // it passes through verbatim inside the surrounding `.original` span and never
+        // becomes a `.quarantined` one. `SpecialVariable.resolve` returns a non-optional
+        // `String`, so a missing table key is the only way into that branch -- no entry
+        // can hand `nil` back.
+        let body = "before ${NOT_A_REAL_VARIABLE} after"
+        let substituted = try pass.render(QuarantinedText(original: body), request: request(text: body))
+
+        #expect(substituted.spans == [.original(body)])
+        #expect(substituted.flattened == body)
+    }
+
     // MARK: - Missing positional/named references substitute empty
 
     @Test func missingPositionalReferenceSubstitutesEmpty() throws {
