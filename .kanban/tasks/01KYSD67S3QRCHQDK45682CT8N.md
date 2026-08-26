@@ -167,14 +167,14 @@ New defect introduced by the bounded-read fix (ef80be5): `read resource` now sta
 Fix: keep memory bounded WITHOUT refusing large text — read incrementally (streaming line scan) up to the requested `start`/`end` window plus enough to compute `totalLines` cheaply (or report `totalLines` as a lower bound when scanning is capped, with the cap documented). Preserve the stat-first refusal only for the non-UTF-8/binary corrective path (its byte size can come from stat, no full materialization). Choose and document exact semantics on the op; note them in README's op table if they deviate from §7.3's letter.
 
 ## Acceptance Criteria
-- [ ] A 5 MB UTF-8 text fixture pages successfully with correct slice content for windows at the start, middle, and end
-- [ ] Memory stays bounded (no full-file `Data(contentsOf:)` for text reads — verify by code inspection/greppable absence + a large-file test that completes quickly)
-- [ ] Binary refusal still stat-based, no full read
-- [ ] Chosen semantics documented on the op and in README
+- [x] A 5 MB UTF-8 text fixture pages successfully with correct slice content for windows at the start, middle, and end
+- [x] Memory stays bounded (no full-file `Data(contentsOf:)` for text reads — verify by code inspection/greppable absence + a large-file test that completes quickly)
+- [x] Binary refusal still stat-based, no full read
+- [x] Chosen semantics documented on the op and in README
 
 ## Tests
-- [ ] Extend `Tests/FoundationModelsSkillsTests/ResourceOpsTests.swift` — large-text paging matrix; binary refusal unchanged
-- [ ] `swift test` — exit 0
+- [x] Extend `Tests/FoundationModelsSkillsTests/ResourceOpsTests.swift` — large-text paging matrix; binary refusal unchanged
+- [x] `swift test` — exit 0
 
 ## Workflow
 - Use `/tdd` — write failing tests first, then implement to make them pass.
@@ -186,6 +186,6 @@ Fix: keep memory bounded WITHOUT refusing large text — read incrementally (str
 > 28 file(s) not reviewed — excluded by an ignore rule:
 > - `.kanban/ (from .reviewignore)` — 28 file(s)
 
-- [ ] `Sources/FoundationModelsSkills/Resources/ReadResource.swift:317` `code-hygiene/magic-numbers-swift` — Magic numbers should be replaced by named constants.
-- [ ] `Sources/FoundationModelsSkills/Resources/ReadResource.swift:318` `code-hygiene/magic-numbers-swift` — Magic numbers should be replaced by named constants.
-- [ ] `Sources/FoundationModelsSkills/Resources/ReadResource.swift:319` `code-hygiene/magic-numbers-swift` — Magic numbers should be replaced by named constants.
+- [x] `Sources/FoundationModelsSkills/Resources/ReadResource.swift:317` `code-hygiene/magic-numbers-swift` — Magic numbers should be replaced by named constants.
+- [x] `Sources/FoundationModelsSkills/Resources/ReadResource.swift:318` `code-hygiene/magic-numbers-swift` — Magic numbers should be replaced by named constants.
+- [x] `Sources/FoundationModelsSkills/Resources/ReadResource.swift:319` `code-hygiene/magic-numbers-swift` — Magic numbers should be replaced by named constants.
