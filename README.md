@@ -145,7 +145,11 @@ defaults it to `isModelVisible`; `SkillsCLI` supplies a different predicate (id 
   consumer-controlled content) renders Stencil-trusted; every user/project layer renders through
   Extras' untrusted path (tag/filter whitelist, include-depth/output-size/iteration budgets). This
   bounds the *template* pass only — shell injection and scripts are separately gated and never
-  granted by Stencil trust.
+  granted by Stencil trust. The budgets are per *render*: a body renders as one template, with
+  every substituted argument value and shell output handed to Stencil as an opaque context value
+  rather than as template text — so `{% if %}…{% endif %}` may straddle a `$N` splice, a spliced
+  value can never become template syntax, and a splice *inside* a variable, tag, or comment
+  (`{{ $1 }}`, `{% if $1 %}`, `{# $1 #}`) is a rendering error.
 - **Server-side providers see the transcript.** A rendered skill body — with all environment
   variables exposed and shell output inlined — travels off-device if a session routes to a cloud
   provider. The search agent sees only metadata, not rendered bodies, which limits exposure during

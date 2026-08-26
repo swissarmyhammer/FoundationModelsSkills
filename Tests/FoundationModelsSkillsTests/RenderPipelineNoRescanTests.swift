@@ -125,4 +125,74 @@ struct RenderPipelineNoRescanTests {
         #expect(!FileManager.default.fileExists(atPath: shellProbe.path))
         #expect(!result.contains("/should-never-appear"))
     }
+
+    // MARK: - Shared budgets: N splices never multiply the single-render limits (^q1mywft)
+
+    /// The number of `$0` splices the budget fixtures repeat -- enough that
+    /// the per-span loop sums below cross one of Extras' untrusted limits in
+    /// aggregate while each span alone stays well under every limit.
+    private static let spliceCount = 50
+
+    /// Builds a body of `spliceCount` repetitions of `$0` followed by
+    /// `fragment`, so pass 1 splits it into `spliceCount` `.original` spans
+    /// separated by `.quarantined` argument values.
+    private static func repeatedSpliceBody(fragment: String) -> String {
+        String(repeating: "$0\(fragment)", count: spliceCount)
+    }
+
+    /// One `{% for %}` per span of 3000 empty iterations: 3000 sits far
+    /// under the 100k iteration limit, 50 x 3000 = 150k does not.
+    private static let iterationBudgetFragment = "{% for i in 1...3000 %}{% endfor %}"
+
+    /// One `{% for %}` per span of 1500 x 16 bytes = 24 KiB: 24 KiB sits far
+    /// under the 1 MiB output limit and 1500 iterations far under the 100k
+    /// iteration limit; 50 x 24 KiB = 1.2 MiB crosses the output limit
+    /// while 50 x 1500 = 75k iterations still does not cross the other.
+    private static let outputBudgetFragment = "{% for i in 1...1500 %}0123456789abcdef{% endfor %}"
+
+    @Test(
+        "a 50-splice untrusted body draws every span's loops from ONE shared budget",
+        arguments: [
+            (name: "iteration budget", fragment: RenderPipelineNoRescanTests.iterationBudgetFragment),
+            (name: "output budget", fragment: RenderPipelineNoRescanTests.outputBudgetFragment),
+        ])
+    func fiftySpliceUntrustedBodyCannotExceedTheSingleRenderBudgets(name: String, fragment: String) throws {
+        let skillDirectory = try makeTempDirectory()
+        let body = Self.repeatedSpliceBody(fragment: fragment)
+
+        #expect(throws: TemplateEngineError.self, "\(name)") {
+            try realPipeline().renderBody(request(text: body, arguments: ["x"], skillDirectory: skillDirectory))
+        }
+    }
+
+    @Test func singleSpliceBodyUnderTheBudgetsRendersSoTheBudgetFixtureIsValidTemplateText() throws {
+        let skillDirectory = try makeTempDirectory()
+
+        let result = try realPipeline().renderBody(
+            request(text: "$0\(Self.iterationBudgetFragment)", arguments: ["x"], skillDirectory: skillDirectory))
+
+        #expect(result == "x\n\nARGUMENTS: x")
+    }
+
+    // MARK: - Empty quarantined spans never split an original span
+
+    @Test func emptyArgumentSubstitutionNoLongerSplitsTheOriginalSpanAroundIt() throws {
+        let skillDirectory = try makeTempDirectory()
+        let body = "{% if flag %}$1{% endif %}"
+
+        let substituted = try ArgumentSubstitution().render(
+            QuarantinedText(original: body), request: request(text: body, skillDirectory: skillDirectory))
+
+        #expect(substituted.spans == [.original("{% if flag %}{% endif %}")])
+    }
+
+    @Test func emptyShellOutputNoLongerSplitsTheOriginalSpanAroundIt() throws {
+        let skillDirectory = try makeTempDirectory()
+        let body = "before !`true`after"
+
+        let injected = try ShellInjection().render(
+            QuarantinedText(original: body), request: request(text: body, skillDirectory: skillDirectory))
+
+        #expect(injected.spans == [.original("before after")])
+    }
 }

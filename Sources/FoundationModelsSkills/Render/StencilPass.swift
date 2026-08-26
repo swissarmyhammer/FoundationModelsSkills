@@ -79,18 +79,49 @@ public struct StencilPass: RenderPass {
         self.wellKnownValues = wellKnownValues ?? .current(layers: layers)
     }
 
-    /// Renders `text`'s `.original` spans as Stencil templates through
-    /// Extras' `TemplateEngine`, leaving every `.quarantined` span untouched.
+    /// The context-key prefix under which `render(_:request:)` hands each
+    /// `.quarantined` span's text to Stencil as an opaque value; the span's
+    /// ordinal is appended (`<prefix>0`, `<prefix>1`, ...).
+    ///
+    /// Public so a test can prove a spliced value spelled exactly like one
+    /// of these references still renders literal. A skill author can name a
+    /// declared argument this way too, and loses nothing by it: the
+    /// quarantine keys are set last, so they always win, and the value they
+    /// resolve to is text the same render already spliced in.
+    public static let quarantinedSpanContextKeyPrefix = "stencilPassQuarantinedSpan"
+
+    /// Renders `text` as ONE Stencil template through Extras'
+    /// `TemplateEngine`, with every `.quarantined` span handed to Stencil as
+    /// an opaque context value rather than as template text.
     ///
     /// A `.quarantined` span (an earlier pass's substituted argument value
-    /// or shell output) is never handed to `TemplateEngine` at all, so
+    /// or shell output) never reaches the template parser at all: the
+    /// template Stencil sees carries a `{{ <key> }}` reference in its place,
+    /// and the span's text sits in the context under that key. So
     /// `{{ HOME }}`/`{% include %}` syntax it happens to contain stays
     /// literal -- plan.md §5's no-re-scan contract, enforced for pass 3 the
-    /// same way pass 2 enforces it for `` !`command` ``. Each `.original`
-    /// span renders as its own independent template; a Stencil construct
-    /// (e.g. `{% if %}...{% endif %}`) cannot legitimately span across a
-    /// quarantined splice, since substituted data must never drive new
-    /// template structure.
+    /// same way pass 2 enforces it for `` !`command` `` -- while the
+    /// `.original` text on either side of it still parses as one template,
+    /// so a `{% if %}...{% endif %}` block may straddle a splice.
+    ///
+    /// One template also means one render call, and so ONE set of
+    /// `Trust.untrusted` budgets (output size, iteration count, include
+    /// depth) for the whole text. `TemplateEngine` allots fresh budgets per
+    /// `render` call, so rendering N spans as N templates would hand an
+    /// untrusted body N times every limit -- and a body can mint spans for
+    /// free with a run of `$N` references. Rendering once closes that gap
+    /// without any budget-in seam on Extras' side. The spliced text counts
+    /// toward the output budget like any other rendered text.
+    ///
+    /// A splice inside a Stencil delimiter pair -- a variable (`{{ $1 }}`,
+    /// `{{$1}}`, `{{ "$1" }}`), a tag (`{% if $1 %}`), or a comment
+    /// (`{# $1 #}`) -- is a rendering error this pass raises itself, before
+    /// Stencil ever parses the template. Substituted data must never drive
+    /// template structure, and Stencil's lexer is not quote-aware, so the
+    /// `{{ <key> }}` reference standing where the data was would otherwise
+    /// render garbage rather than fail. A bare `{` immediately before a
+    /// splice stays literal (`{$1}` renders `{value}`); see
+    /// `template(for:injectingQuarantinedSpansInto:)`.
     ///
     /// - Parameters:
     ///   - text: The input text to render -- pass 2's output (body renders)
@@ -100,19 +131,113 @@ public struct StencilPass: RenderPass {
     ///     `winningLayer` selects the trust mode, `arguments`/
     ///     `argumentNames` populate the explicit context's declared skill
     ///     arguments.
-    /// - Returns: `text` with every `.original` span rendered as a Stencil
-    ///   template.
+    /// - Returns: The rendered text as a single `.quarantined` span: every
+    ///   byte of it is this pass's own output, which no later pass may scan
+    ///   (`RenderPass`'s contract; this pass is last in both pass-sets, so
+    ///   in practice the pipeline flattens it straight away).
     /// - Throws: `TemplateEngineError.renderingFailed` when Stencil fails to
-    ///   parse or render an `.original` span, or when the resolved
+    ///   parse or render the template, or when the resolved
     ///   `Trust.untrusted` validation rejects it (a disallowed tag/filter,
     ///   an include-depth bomb, an output-size bomb, or an iteration bomb).
     public func render(_ text: QuarantinedText, request: RenderRequest) throws -> QuarantinedText {
         let engine = TemplateEngine(partials: Self.partialsStack(layers: layers))
-        let context = templateContext(for: request)
-        let trust = resolvedTrust(for: request.winningLayer)
-        return try text.mappingOriginalSpans { spanText in
-            [.original(try engine.render(spanText, context: context, trust: trust))]
+        var context = templateContext(for: request)
+        let template = try Self.template(for: text, injectingQuarantinedSpansInto: &context)
+        let rendered = try engine.render(template, context: context, trust: resolvedTrust(for: request.winningLayer))
+        return QuarantinedText(spans: [.quarantined(rendered)])
+    }
+
+    /// Stencil's three delimiter pairs -- variable, tag, comment -- as
+    /// `(opener, closer)`; `endsInsideOpenDelimiter(_:)` reads them to tell
+    /// whether template text stops partway through one.
+    private static let delimiterPairs: [(opener: String, closer: String)] = [
+        (opener: "{{", closer: "}}"), (opener: "{%", closer: "%}"), (opener: "{#", closer: "#}"),
+    ]
+
+    /// Builds the single template `render(_:request:)` hands to Stencil:
+    /// `text`'s `.original` spans verbatim, and a `{{ <key> }}` reference in
+    /// place of each `.quarantined` span, whose text lands in `context`
+    /// under that key.
+    ///
+    /// A splice that would land inside an open delimiter pair -- template
+    /// text so far that has opened a `{{`, `{%`, or `{#` and not yet closed
+    /// it -- is refused here, as a `TemplateEngineError.renderingFailed`.
+    /// Substituted data inside a variable, tag, or comment could only ever
+    /// name a variable, steer a tag, or vanish, and Stencil's lexer is not
+    /// quote-aware, so letting the reference through would render garbage
+    /// (`{{ $1 }}` became `{{ {{ key }} }}`, an empty variable followed by
+    /// a literal ` }}`) rather than fail.
+    ///
+    /// A run of bare `{` at the very end of the text before a splice is
+    /// moved out of the template and onto the front of the spliced value.
+    /// It is always literal text there: any `{` that opened real syntax
+    /// would be part of an open delimiter, refused above. Leaving it in the
+    /// template would fuse with the reference's own `{{` (`{$1}` becoming
+    /// `{{{ key }}}`), which Stencil reads as a garbled variable; moving it
+    /// renders `{value}`.
+    ///
+    /// - Parameters:
+    ///   - text: The pass's input.
+    ///   - context: The render's context; receives one `.string` entry per
+    ///     `.quarantined` span, keyed by `quarantinedSpanContextKeyPrefix`
+    ///     plus the span's ordinal. Set after every other rung, so nothing
+    ///     else can shadow a key.
+    /// - Returns: The template text.
+    /// - Throws: `TemplateEngineError.renderingFailed` when a `.quarantined`
+    ///   span sits inside an open Stencil delimiter pair.
+    private static func template(for text: QuarantinedText, injectingQuarantinedSpansInto context: inout TemplateContext)
+        throws -> String
+    {
+        var template = ""
+        var quarantinedSpanCount = 0
+        for span in text.spans {
+            switch span {
+            case .original(let spanText):
+                template += spanText
+            case .quarantined(let spliced):
+                guard !Self.endsInsideOpenDelimiter(template) else {
+                    throw TemplateEngineError.renderingFailed(
+                        message:
+                            "a substituted value sits inside a Stencil variable, tag, or comment; substituted data can never form template syntax"
+                    )
+                }
+                let key = "\(quarantinedSpanContextKeyPrefix)\(quarantinedSpanCount)"
+                quarantinedSpanCount += 1
+                context.set(key: key, to: .string(Self.movingTrailingBraces(from: &template, ontoFrontOf: spliced)))
+                template += "{{ \(key) }}"
+            }
         }
+        return template
+    }
+
+    /// Reports whether `template` ends partway through one of
+    /// `delimiterPairs`: some opener occurs after every closer.
+    ///
+    /// - Parameter template: The template text built so far.
+    /// - Returns: `true` when the last opener in `template` is not followed
+    ///   by any closer.
+    private static func endsInsideOpenDelimiter(_ template: String) -> Bool {
+        let lastOpener = delimiterPairs.compactMap { template.range(of: $0.opener, options: .backwards)?.lowerBound }.max()
+        let lastCloser = delimiterPairs.compactMap { template.range(of: $0.closer, options: .backwards)?.lowerBound }.max()
+        guard let lastOpener else { return false }
+        return lastCloser.map { $0 < lastOpener } ?? true
+    }
+
+    /// Strips every trailing `{` from `template`, and returns `value` with
+    /// the stripped braces prepended.
+    ///
+    /// - Parameters:
+    ///   - template: The template text built so far; trailing braces are
+    ///     removed from it.
+    ///   - value: The spliced value about to follow `template`.
+    /// - Returns: `value`, prefixed with whatever `template` lost.
+    private static func movingTrailingBraces(from template: inout String, ontoFrontOf value: String) -> String {
+        var moved = ""
+        while template.last == "{" {
+            template.removeLast()
+            moved.append("{")
+        }
+        return moved + value
     }
 
     /// Resolves `layer`'s `Trust` by the plan.md decision #29 mapping.
@@ -282,16 +407,21 @@ extension StencilPass {
 
         /// Recovers a bare dotfolder name (e.g. `"myagent"`) from `layers`'
         /// highest-precedence `.project`-sourced layer's root directory name
-        /// (`<workingDirectory>/.myagent`), mirroring
-        /// `DotfolderStack.projectDotfolderName`.
+        /// (`<workingDirectory>/.myagent`).
         ///
+        /// The same derivation Extras' `TemplateEngine` applies to a
+        /// `DotfolderStack`'s own layers, with one deliberate difference:
+        /// Extras takes the *first* `.project` layer, because
+        /// `DotfolderStack.init` appends exactly one; this takes the *last*.
         /// `layers` is ordered lowest precedence first (the same convention
         /// every other layer-ordered method in this package follows), so the
         /// *last* matching layer -- not the first -- is the winning one.
         /// This matters for `SkillsRegistry.init(roots:)`'s unlabeled
         /// convenience, which tags every root `.project`: picking the first
         /// match there would silently resolve the lowest-precedence root's
-        /// name instead of the intended project root's.
+        /// name instead of the intended project root's. For a stack-derived
+        /// layer list (`SkillsRegistry.init(stack:)`) the two agree, since
+        /// only one `.project` layer exists.
         ///
         /// - Parameter layers: The host-supplied layer roots to search.
         /// - Returns: The dotfolder name, or `nil` when `layers` carries no

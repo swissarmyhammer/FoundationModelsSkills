@@ -60,6 +60,84 @@ struct StencilPassTests {
         try pass.render(QuarantinedText(original: text), request: request).flattened
     }
 
+    /// Runs the REAL `ArgumentSubstitution` pass over `text` first, so the
+    /// `QuarantinedText` handed to `pass.render` carries genuine
+    /// `.quarantined` argument spans, then flattens `pass`'s output.
+    private func renderAfterArgumentSubstitution(_ text: String, using pass: StencilPass, request: RenderRequest)
+        throws -> String
+    {
+        let substituted = try ArgumentSubstitution().render(QuarantinedText(original: text), request: request)
+        return try pass.render(substituted, request: request).flattened
+    }
+
+    // MARK: - Straddling blocks: one template per render, splices as opaque values (^q1mywft)
+
+    /// The suffix pass 1 appends when a body omits `$ARGUMENTS` and one
+    /// argument, `VAL`, is supplied -- every straddling expectation below
+    /// carries it, since the whole substituted text renders as one template.
+    private static let suppliedArgumentsSuffix = "\n\nARGUMENTS: VAL"
+
+    @Test func stencilBlockStraddlingAnArgumentSpliceRendersAsOneTemplate() throws {
+        let pass = StencilPass(wellKnownValues: Self.fixtureWellKnownValues)
+        let text = "{% if flag %}yes $0 end{% endif %}"
+
+        let rendered = try renderAfterArgumentSubstitution(
+            text, using: pass, request: request(text: text, arguments: ["VAL"], argumentNames: ["flag"]))
+
+        #expect(rendered == "yes VAL end" + Self.suppliedArgumentsSuffix)
+    }
+
+    @Test(
+        "a bare brace before a splice, and a closed variable before one, both stay intact",
+        arguments: [
+            (body: "{$0}", expected: "{VAL}"),
+            (body: "see {$0} here", expected: "see {VAL} here"),
+            (body: "{{ hostname }}$0", expected: "fixture-hostVAL"),
+        ])
+    func textAdjacentToASpliceRendersIntact(body: String, expected: String) throws {
+        let pass = StencilPass(wellKnownValues: Self.fixtureWellKnownValues)
+
+        let rendered = try renderAfterArgumentSubstitution(
+            body, using: pass, request: request(text: body, arguments: ["VAL"]))
+
+        #expect(rendered == expected + Self.suppliedArgumentsSuffix)
+    }
+
+    @Test(
+        "a splice inside a Stencil variable, tag, or comment is a rendering error",
+        arguments: [
+            "{{$0}}",
+            "{{ $0 }}",
+            "{{ \"$0\" }}",
+            "{%$0%}",
+            "{% if $0 %}yes{% else %}no{% endif %}",
+            "{# $0 #}",
+            "{{ hostname }} then {{ $0 }}",
+            "{{{$0}}}",
+        ])
+    func spliceInsideADelimiterPairIsARenderingError(body: String) throws {
+        let pass = StencilPass(wellKnownValues: Self.fixtureWellKnownValues)
+
+        #expect(throws: TemplateEngineError.self, "\(body)") {
+            try renderAfterArgumentSubstitution(body, using: pass, request: request(text: body, arguments: ["VAL"]))
+        }
+    }
+
+    @Test func splicedValueSpelledLikeTheQuarantineContextKeyStaysLiteral() throws {
+        // A model-supplied value must never resolve as a template variable,
+        // not even one spelled like the pass's own quarantine placeholder.
+        // `$ARGUMENTS` splices the raw, as-typed text (a `$0` would
+        // shell-tokenize the spaced value into three positions).
+        let pass = StencilPass(wellKnownValues: Self.fixtureWellKnownValues)
+        let text = "$ARGUMENTS and $ARGUMENTS"
+        let argument = "{{ \(StencilPass.quarantinedSpanContextKeyPrefix)0 }}"
+
+        let rendered = try renderAfterArgumentSubstitution(
+            text, using: pass, request: request(text: text, arguments: [argument]))
+
+        #expect(rendered == "\(argument) and \(argument)")
+    }
+
     // MARK: - Ladder precedence
 
     @Test func explicitContextValueBeatsEnvironmentVariableBeatsWellKnownValueForTheSameKey() throws {
@@ -293,6 +371,28 @@ struct StencilPassTests {
             ])
 
         #expect(try registry.call(id: "dotfolder-probe") == "high-precedence")
+    }
+
+    @Test func dotfolderNameRendersFromTheStackConstructorEndToEnd() throws {
+        // `SkillsRegistry.init(stack:)` takes its layers from a real
+        // `DotfolderStack`, whose `.project` layer is `<workingDirectory>/.<name>`
+        // -- so `{{ dotfolder_name }}` must render as that stack's own name.
+        let workingDirectory = try Self.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: workingDirectory) }
+        let userDirectory = try Self.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: userDirectory) }
+        let stackName = "probe-stack"
+        try Self.writeMinimalSkillFile(
+            id: "dotfolder-probe", body: "{{ dotfolder_name }}",
+            in: workingDirectory.appendingPathComponent(".\(stackName)", isDirectory: true))
+
+        // An empty environment keeps `<NAME>_DEFAULTS_DIR`/`XDG_CONFIG_HOME`
+        // from repointing the stack's layers at real host directories.
+        let stack = DotfolderStack(
+            name: stackName, workingDirectory: workingDirectory, userDirectory: userDirectory, environment: [:])
+        let registry = SkillsRegistry(stack: stack)
+
+        #expect(try registry.call(id: "dotfolder-probe") == stackName)
     }
 
     // MARK: - Partial include, over host-supplied roots, nearest wins

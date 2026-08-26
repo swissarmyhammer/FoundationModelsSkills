@@ -28,8 +28,31 @@ comments:
     - evidence: `swift test` — 338 tests in 23 suites passed, 0 failed; `swift build --build-tests` has no compiler warnings (one pre-existing SwiftPM bundle warning for `mlx-swift_Cmlx.bundle`, not from source). One gated test (`HotReloadLiveTests`, skipped unless `SKILLS_INTEGRATION_TESTS=1`) fails with the same error on HEAD without this change; filed as a new task.
     - next: commit
   timestamp: 2026-08-26T13:11:30.089389+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01m0z35fmz1ydv1hbxzhz9c8af
+  text: |-
+    ### commit — changed
+    - evidence: 2b921bc feat(validation): surface frontmatter decode notes as advisory diagnostics
+    - next: review
+  timestamp: 2026-08-26T13:11:48.127766+00:00
+- actor: claude-code
+  id: 01m0z3a4j4afxn7hbkca4ast8k
+  text: |-
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` — 0 findings, 6 files reviewed (7 validator runs, 0 failed); no prior findings sections
+    - next: done
+  timestamp: 2026-08-26T13:14:20.612555+00:00
+- actor: claude-code
+  id: 01m0z3a6gw29qah6x3cyekwrxm
+  text: |-
+    ### finish iteration 1 — review clean, task moved to done
+    - implement: changed — 6 files (SkillValidator, SkillDiagnostic, SkillFrontmatter, FrontmatterDecoder, SkillValidatorTests, SkillsRegistryTests)
+    - test: green — `swift test` 338 passed, 0 failed
+    - commit: 2b921bc
+    - review: clean — 0 findings on HEAD~1..HEAD
+  timestamp: 2026-08-26T13:14:22.620147+00:00
+position_column: done
+position_ordinal: aa80
 title: Surface frontmatter decode notes as registry diagnostics
 ---
 ## What

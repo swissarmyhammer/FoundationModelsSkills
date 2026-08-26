@@ -31,11 +31,22 @@ public struct QuarantinedText: Sendable, Equatable {
     /// This text's spans, in order.
     public var spans: [Span]
 
-    /// Wraps `spans` directly.
+    /// Wraps `spans`, normalized: every empty span is dropped, and adjacent
+    /// `.original` spans are joined into one.
+    ///
+    /// An empty `.quarantined` span -- a `$N` past the supplied argument
+    /// count, a declared name with no value, a shell command with no output
+    /// -- carries no text for a later pass to protect, so keeping it would
+    /// only split the `.original` text around it into two spans. That split
+    /// is what let an untrusted body mint spans for free: a body of
+    /// repeated `$1` with no arguments would otherwise reach pass 3 as N
+    /// separate templates. Dropping the empty span here, and re-joining the
+    /// `.original` text on either side, keeps a span boundary meaningful:
+    /// one exists only where substituted text actually sits.
     ///
     /// - Parameter spans: The spans to wrap, in order.
     public init(spans: [Span]) {
-        self.spans = spans
+        self.spans = Self.normalized(spans)
     }
 
     /// Wraps `text` as a single `.original` span -- the render pipeline's
@@ -43,7 +54,27 @@ public struct QuarantinedText: Sendable, Equatable {
     ///
     /// - Parameter text: The render request's source text.
     public init(original text: String) {
-        spans = text.isEmpty ? [] : [.original(text)]
+        self.init(spans: [.original(text)])
+    }
+
+    /// Drops every empty span in `spans` and joins each run of adjacent
+    /// `.original` spans into one -- `init(spans:)`'s normalization.
+    ///
+    /// Adjacent `.quarantined` spans stay distinct: each is one splice, and
+    /// nothing downstream depends on two splices reading as one.
+    ///
+    /// - Parameter spans: The spans to normalize, in order.
+    /// - Returns: The normalized spans.
+    private static func normalized(_ spans: [Span]) -> [Span] {
+        var result: [Span] = []
+        for span in spans where !span.text.isEmpty {
+            if case .original(let text) = span, case .original(let previous)? = result.last {
+                result[result.count - 1] = .original(previous + text)
+            } else {
+                result.append(span)
+            }
+        }
+        return result
     }
 
     /// This text's spans concatenated, discarding provenance.
@@ -70,13 +101,44 @@ public struct QuarantinedText: Sendable, Equatable {
     ///   replaced by `transform`'s output, in the same relative order.
     /// - Throws: Whatever `transform` throws.
     public func mappingOriginalSpans(_ transform: (String) throws -> [Span]) rethrows -> QuarantinedText {
-        try QuarantinedText(
-            spans: spans.flatMap { span -> [Span] in
-                switch span {
-                case .original(let text): return try transform(text)
-                case .quarantined: return [span]
-                }
-            })
+        try mappingOriginalSpans { text, _ in try transform(text) }
+    }
+
+    /// Runs `transform` over every `.original` span's text together with
+    /// the character that precedes that span in the flattened text, replacing
+    /// the span with the spans `transform` returns; every `.quarantined` span
+    /// passes through untouched -- `transform` never sees its text.
+    ///
+    /// The preceding character is the last character of whatever span --
+    /// `.original` or `.quarantined` -- sits immediately before this one in
+    /// `spans`, or `nil` for the very first span. It exists for a grammar
+    /// whose match depends on what comes *before* a match site (a
+    /// start-of-line or after-whitespace anchor, as `ShellInjection`'s
+    /// inline form has): scanning a span in isolation would read every span
+    /// start as a text start, so a splice could turn a mid-word site into a
+    /// line-start one. Handing the pass the real preceding character lets it
+    /// anchor against the flattened text without ever scanning the
+    /// `.quarantined` text that character came from.
+    ///
+    /// - Parameter transform: Splits one `.original` span's text, given the
+    ///   character preceding it in the flattened text, into the spans that
+    ///   replace it.
+    /// - Returns: A new `QuarantinedText` with every `.original` span
+    ///   replaced by `transform`'s output, in the same relative order.
+    /// - Throws: Whatever `transform` throws.
+    public func mappingOriginalSpans(
+        _ transform: (_ text: String, _ precedingCharacter: Character?) throws -> [Span]
+    ) rethrows -> QuarantinedText {
+        var precedingCharacter: Character?
+        var mapped: [Span] = []
+        for span in spans {
+            switch span {
+            case .original(let text): mapped += try transform(text, precedingCharacter)
+            case .quarantined: mapped.append(span)
+            }
+            precedingCharacter = span.text.last ?? precedingCharacter
+        }
+        return QuarantinedText(spans: mapped)
     }
 }
 
@@ -102,8 +164,14 @@ struct SpanBuilder {
     /// Flushes any pending literal run, then appends `value` as its own
     /// `.quarantined` span.
     ///
+    /// An empty `value` appends nothing and leaves the pending literal run
+    /// intact, so the literal text on either side of an empty substitution
+    /// stays one `.original` span -- the same rule `QuarantinedText.init(spans:)`
+    /// enforces, applied here before the split is ever made.
+    ///
     /// - Parameter value: The substituted value to quarantine.
     mutating func appendQuarantined(_ value: String) {
+        guard !value.isEmpty else { return }
         flushLiteral()
         spans.append(.quarantined(value))
     }

@@ -178,6 +178,13 @@ bust). One ordered pipeline, each pass single-shot and **not re-scanned** by lat
    user/project → `.untrusted` (tag/filter whitelist; include-depth 8, so unbounded
    include recursion is impossible by construction; 1 MiB output and 100k-iteration
    budgets). *(decision #29; amends #2's `{{ env.* }}` spelling)*
+   **One template per render.** The whole body (or metadata value) renders as one
+   Stencil template: text passes 1–2 spliced in is handed to Stencil as an opaque context
+   value, never as template text. So the untrusted budgets are per *render*, not per
+   splice; a `{% if %}…{% endif %}` block may straddle a `$N` splice; a spliced value can
+   never form template syntax; and a splice *inside* a variable, tag, or comment
+   (`{{ $1 }}`, `{% if $1 %}`, `{# $1 #}`) is a rendering error, since substituted data
+   must never drive template structure.
 
 Templated: `description`, all `metadata` values, and the body. The **directory-name id stays
 literal**. Argument frontmatter: `arguments:` (named positional list) + `argument-hint:`

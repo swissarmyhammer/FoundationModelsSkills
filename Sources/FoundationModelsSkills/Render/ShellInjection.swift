@@ -5,14 +5,17 @@ import Foundation
 /// Recognizes two forms, both single-shot over the *original* input text (never re-scanning
 /// substituted output, satisfying `RenderPass`'s no-re-scan contract the same way
 /// `ArgumentSubstitution` does): inline `` !`command` ``, matched only when the `!` sits at the
-/// very start of `text` or immediately after a whitespace character (a mid-word `` foo!`cmd` ``
-/// never matches, so it is left untouched, verbatim); and fenced ` ```! ` blocks, whose entire
-/// fenced region -- opening fence line through closing fence line -- is replaced by its
-/// contents' execution. Every match is resolved from one left-to-right scan
-/// (`Self.injectionPattern.matches(in:range:)`) computed once against the pass's input, so a
-/// shell command's own output -- even output shaped like `$0`, another `` !`command` ``, or
-/// `{{ HOME }}`, none of which this pass or an earlier one ever sees again -- is spliced in after
-/// matching has already finished and can never trigger a second match.
+/// very start of the flattened text or immediately after a whitespace character (a mid-word
+/// `` foo!`cmd` `` never matches, so it is left untouched, verbatim); and fenced ` ```! ` blocks,
+/// whose entire fenced region -- opening fence line through closing fence line -- is replaced by
+/// its contents' execution. Both anchors read the *flattened* text, not the span: a `$1` splice
+/// directly before a `!` or a fence never turns a mid-word site into a text-start one, because
+/// each `.original` span is scanned together with the character that precedes it (see
+/// `injectedSpans(in:precededBy:request:)`). Every match is resolved from one left-to-right
+/// scan (`Self.injectionPattern.matches(in:options:range:)`) computed once against the pass's
+/// input, so a shell command's own output -- even output shaped like `$0`, another
+/// `` !`command` ``, or `{{ HOME }}`, none of which this pass or an earlier one ever sees again --
+/// is spliced in after matching has already finished and can never trigger a second match.
 ///
 /// Each recognized command runs via `/bin/sh -c`, with `RenderRequest.skillDirectory` as its
 /// working directory and the host process's environment fully inherited (plan.md decision #28's
@@ -67,99 +70,107 @@ public struct ShellInjection: RenderPass {
     /// - Throws: Whatever `Foundation.Process.run()` throws when a command fails to launch (e.g.
     ///   `request.skillDirectory` does not exist).
     public func render(_ text: QuarantinedText, request: RenderRequest) throws -> QuarantinedText {
-        try text.mappingOriginalSpans { spanText in
-            try Self.injectedSpans(in: spanText, request: request)
+        try text.mappingOriginalSpans { spanText, precedingCharacter in
+            try Self.injectedSpans(in: spanText, precededBy: precedingCharacter, request: request)
         }
     }
 
     /// Scans one `.original` span's `text` left to right for every recognized injection,
     /// building the span list that replaces it.
     ///
+    /// The scan runs over `precedingCharacter` + `text`, with the match range restricted to
+    /// `text` itself: the carried character is visible to the grammar's lookbehind and
+    /// start-of-line anchor (`.withTransparentBounds`, plus `.withoutAnchoringBounds` so `^` does
+    /// not simply bind to the range's own start) but is never part of a match, never re-emitted,
+    /// and never scanned for an injection of its own. That is how the grammar reads the flattened
+    /// text's `abc$1!`cmd`` as mid-word -- the `c` that ends the argument value precedes the `!`
+    /// -- while still reading a `$1` value that ends in whitespace, or a newline before a fence,
+    /// as the anchor it is.
+    ///
     /// - Parameters:
     ///   - text: One `.original` span's text to scan.
+    ///   - precedingCharacter: The character immediately before `text` in the flattened text,
+    ///     or `nil` when `text` starts the flattened text.
     ///   - request: The render request this pass runs under.
     /// - Returns: The spans that replace `text`: literal runs as `.original`, every command's
     ///   output (or `disabledMarker`) as its own `.quarantined` span.
     /// - Throws: Whatever `resolvedOutput(forCommand:request:)` throws.
-    private static func injectedSpans(in text: String, request: RenderRequest) throws -> [QuarantinedText.Span] {
+    private static func injectedSpans(
+        in text: String, precededBy precedingCharacter: Character?, request: RenderRequest
+    ) throws -> [QuarantinedText.Span] {
+        let scanned = precedingCharacter.map { String($0) + text } ?? text
+        let contentStart = precedingCharacter == nil ? scanned.startIndex : scanned.index(after: scanned.startIndex)
         var builder = SpanBuilder()
-        var lastEnd = text.startIndex
-        let fullRange = NSRange(text.startIndex..<text.endIndex, in: text)
+        var lastEnd = contentStart
+        let contentRange = NSRange(contentStart..<scanned.endIndex, in: scanned)
 
-        for match in Self.injectionPattern.matches(in: text, range: fullRange) {
-            guard let matchRange = Range(match.range, in: text) else { continue }
-            builder.appendOriginal(text[lastEnd..<matchRange.lowerBound])
+        for match in Self.injectionPattern.matches(in: scanned, options: Self.spanScanOptions, range: contentRange) {
+            guard let matchRange = Range(match.range, in: scanned) else { continue }
+            builder.appendOriginal(scanned[lastEnd..<matchRange.lowerBound])
             lastEnd = matchRange.upperBound
-
-            switch Self.classify(match, in: text) {
-            case .inline(let prefix, let command):
-                builder.appendOriginal(prefix)
-                builder.appendQuarantined(try Self.resolvedOutput(forCommand: command, request: request))
-            case .fenced(let command):
-                builder.appendQuarantined(try Self.resolvedOutput(forCommand: command, request: request))
-            }
+            let command = Self.command(from: match, in: scanned)
+            builder.appendQuarantined(try Self.resolvedOutput(forCommand: command, request: request))
         }
-        builder.appendOriginal(text[lastEnd...])
+        builder.appendOriginal(scanned[lastEnd...])
         return builder.finish()
     }
 
     // MARK: - Injection classification
 
-    /// One recognized injection, discriminated from an `injectionPattern` match by
-    /// `classify(_:in:)`.
-    private enum Injection {
-        /// `` !`command` `` -- carries the whitespace/start-of-text `prefix` the match consumed
-        /// (re-emitted verbatim ahead of the command's output, since only the `` !`...` `` syntax
-        /// itself is replaced) alongside the captured `command` text.
-        case inline(prefix: String, command: String)
-        /// A fenced ` ```! ` block -- the entire fenced region (both fence lines and everything
-        /// between them) is replaced by `command`'s output; there is no prefix to preserve.
-        case fenced(command: String)
-    }
-
-    /// The named capture group names `injectionPattern`'s regex string and `classify(_:in:)`'s
+    /// The named capture group names `injectionPattern`'s regex string and `command(from:in:)`'s
     /// `NamedCaptureGroup.text(from:name:in:)` lookups share.
     ///
     /// Defined once here so the group names embedded in the regex pattern and the strings used
     /// to look those groups back up can never drift out of sync.
     private enum GroupName {
-        static let prefix = "prefix"
         static let inlineCommand = "inlineCommand"
         static let fencedCommand = "fencedCommand"
     }
 
-    /// Classifies one `injectionPattern` match into an `Injection` by checking which
-    /// alternative's named capture group participated.
+    /// Extracts the command text from one `injectionPattern` match, whichever alternative's
+    /// named capture group participated.
+    ///
+    /// Both alternatives replace their entire match with the command's output -- the inline
+    /// form's anchor is a zero-width lookbehind, so no prefix text is ever consumed -- which is
+    /// why the two need no further discrimination here.
     ///
     /// - Parameters:
     ///   - match: One match produced by `injectionPattern` against `text`.
     ///   - text: The text `match` was matched against, needed to extract named-group substrings.
-    /// - Returns: The injection `match` represents.
-    private static func classify(_ match: NSTextCheckingResult, in text: String) -> Injection {
-        if let command = NamedCaptureGroup.text(from: match, name: GroupName.inlineCommand, in: text) {
-            let prefix = NamedCaptureGroup.text(from: match, name: GroupName.prefix, in: text) ?? ""
-            return .inline(prefix: prefix, command: command)
-        }
-        if let command = NamedCaptureGroup.text(from: match, name: GroupName.fencedCommand, in: text) {
-            return .fenced(command: command)
+    /// - Returns: The command text `match` captured.
+    private static func command(from match: NSTextCheckingResult, in text: String) -> String {
+        for groupName in [GroupName.inlineCommand, GroupName.fencedCommand] {
+            if let command = NamedCaptureGroup.text(from: match, name: groupName, in: text) {
+                return command
+            }
         }
         preconditionFailure("ShellInjection.injectionPattern matched but no known alternative captured.")
     }
 
     /// The single-pass injection grammar (plan.md §5.2).
     ///
-    /// Two alternatives: inline `` !`command` `` -- whose leading `(?<prefix>^|\s)` requires the
-    /// `!` to sit at the very start of the text or immediately after whitespace (a mid-word
-    /// `` foo!`cmd` `` has no whitespace/start immediately before its `!`, so it never matches
-    /// either alternative) -- and a fenced ` ```! ` block, anchored to its own lines via
-    /// `.anchorsMatchLines` so `^`/`$` bind per line rather than only at the whole text's start
-    /// and end. The fenced content capture (`[\s\S]*?`) matches across newlines without needing
-    /// `.dotMatchesLineSeparators`, and its closing fence tolerates trailing horizontal
-    /// whitespace before end-of-line.
+    /// Two alternatives: inline `` !`command` `` -- whose leading `(?<![^\s])` lookbehind
+    /// requires that no non-whitespace character precede the `!`, i.e. that it sit at the very
+    /// start of the flattened text or immediately after whitespace (a mid-word `` foo!`cmd` `` has
+    /// a letter immediately before its `!`, so it never matches either alternative) -- and a
+    /// fenced ` ```! ` block, anchored to its own lines via `.anchorsMatchLines` so `^`/`$` bind
+    /// per line rather than only at the whole text's start and end. The fenced content capture
+    /// (`[\s\S]*?`) matches across newlines without needing `.dotMatchesLineSeparators`, and its
+    /// closing fence tolerates trailing horizontal whitespace before end-of-line.
     private static let injectionPattern = try! NSRegularExpression(
         pattern:
-            #"(?<\#(GroupName.prefix)>^|\s)!`(?<\#(GroupName.inlineCommand)>[^`\n]+)`|^```!\n(?<\#(GroupName.fencedCommand)>[\s\S]*?)\n```[ \t]*$"#,
+            #"(?<![^\s])!`(?<\#(GroupName.inlineCommand)>[^`\n]+)`|^```!\n(?<\#(GroupName.fencedCommand)>[\s\S]*?)\n```[ \t]*$"#,
         options: [.anchorsMatchLines])
+
+    /// The matching options `injectedSpans(in:precededBy:request:)` scans each span under.
+    ///
+    /// `.withTransparentBounds` lets the inline form's lookbehind see the carried preceding
+    /// character outside the match range; `.withoutAnchoringBounds` stops `^` from matching at
+    /// the range's own start, so the fenced form's line anchor binds only at the flattened text's
+    /// true start or after a real newline -- one the carried character may itself supply.
+    private static let spanScanOptions: NSRegularExpression.MatchingOptions = [
+        .withTransparentBounds, .withoutAnchoringBounds,
+    ]
 
     // MARK: - Execution
 

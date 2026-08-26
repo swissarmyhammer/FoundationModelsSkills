@@ -96,6 +96,80 @@ struct ShellInjectionTests {
         #expect(result == expected, "\(name)")
     }
 
+    // MARK: - Span-boundary grammar: the flattened text decides, not the span (^q1mywft)
+
+    /// A pipeline of the REAL passes 1 and 2 -- pass 1 splits the body into
+    /// `.original`/`.quarantined` spans around every `$ARGUMENTS` splice, so
+    /// pass 2 scans span edges that sit mid-word, after whitespace, or after
+    /// a newline in the flattened text. Pass 3 stays identity: nothing below
+    /// carries Stencil syntax, and the span matrix is this pass's own.
+    private func passOneAndTwoPipeline() -> RenderPipeline {
+        RenderPipeline(
+            argumentSubstitution: ArgumentSubstitution(), shellInjection: ShellInjection(),
+            stencil: IdentityRenderPass())
+    }
+
+    @Test(
+        "span-boundary grammar: only a line start or whitespace in the FLATTENED text enables an injection",
+        arguments: [
+            (
+                name: "mid-word after a splice does not execute",
+                body: "abc$ARGUMENTS!`printf pwned`", argument: "X", expected: "abcX!`printf pwned`"
+            ),
+            (
+                name: "directly after a splice at the body start does not execute",
+                body: "$ARGUMENTS!`printf pwned`", argument: "X", expected: "X!`printf pwned`"
+            ),
+            (
+                name: "after a space that follows a splice executes",
+                body: "$ARGUMENTS !`printf ran`", argument: "X", expected: "X ran"
+            ),
+            (
+                name: "after a newline that follows a splice executes",
+                body: "$ARGUMENTS\n!`printf ran`", argument: "X", expected: "X\nran"
+            ),
+            (
+                name: "whitespace carried in from the spliced value itself executes",
+                body: "$ARGUMENTS!`printf ran`", argument: "X ", expected: "X ran"
+            ),
+            (
+                name: "the very start of the body still executes ahead of a splice",
+                body: "!`printf ran` $ARGUMENTS", argument: "X", expected: "ran X"
+            ),
+            (
+                name: "a fenced block on the line after a splice executes",
+                body: "$ARGUMENTS\n```!\nprintf fenced\n```", argument: "X", expected: "X\nfenced"
+            ),
+            (
+                name: "a fenced opener directly after a splice is not at a line start and does not execute",
+                body: "$ARGUMENTS```!\nprintf nope\n```", argument: "X", expected: "X```!\nprintf nope\n```"
+            ),
+        ])
+    func spanBoundaryGrammarFollowsTheFlattenedText(name: String, body: String, argument: String, expected: String)
+        throws
+    {
+        let workingDirectory = try makeTempDirectory()
+        var renderRequest = request(text: body, workingDirectory: workingDirectory)
+        renderRequest.arguments = [argument]
+
+        let result = try passOneAndTwoPipeline().renderBody(renderRequest)
+
+        #expect(result == expected, "\(name)")
+    }
+
+    @Test func midWordInjectionAfterAPositionalSpliceNeverSpawnsAProcess() throws {
+        let workingDirectory = try makeTempDirectory()
+        let probeFile = workingDirectory.appendingPathComponent("pwned.txt")
+        let body = "abc$1!`touch pwned.txt`"
+        var renderRequest = request(text: body, workingDirectory: workingDirectory)
+        renderRequest.arguments = ["first", "second"]
+
+        let result = try passOneAndTwoPipeline().renderBody(renderRequest)
+
+        #expect(result == "abcsecond!`touch pwned.txt`\n\nARGUMENTS: first second")
+        #expect(!FileManager.default.fileExists(atPath: probeFile.path))
+    }
+
     // MARK: - Execution
 
     @Test func executesInlineCommandAndInlinesItsOutput() throws {
