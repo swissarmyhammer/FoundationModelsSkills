@@ -240,11 +240,14 @@ struct SkillOperationsTests {
 
     // MARK: - Missing-argument check consults SkillParameter.required directly (^dw132bc)
 
+    /// The id (and directory name) of the single skill every temp-root case
+    /// in this file writes.
+    private static let widgetSkillID = "widget"
+
     /// Writes a single skill (id `"widget"`) under a fresh private temp
-    /// directory with the given frontmatter fragments, then builds a
-    /// `SkillsToolContext` over just that root -- isolated from the shared
-    /// `project/.skills` fixture library so each case here exercises exactly
-    /// one parameter source (`arguments:`, `argument-hint:`, or body
+    /// directory with the given frontmatter fragments -- isolated from the
+    /// shared `project/.skills` fixture library so each case here exercises
+    /// exactly one parameter source (`arguments:`, `argument-hint:`, or body
     /// inference) without another source's default bleeding in.
     ///
     /// - Parameters:
@@ -253,24 +256,38 @@ struct SkillOperationsTests {
     ///   - argumentHintLine: The raw `argument-hint:` frontmatter line
     ///     (including the trailing newline), or `""` to omit it entirely.
     ///   - body: The skill body text.
-    /// - Returns: The context, plus a cleanup closure the caller must invoke
-    ///   (via `defer`) once done.
+    /// - Returns: The temp root the skill directory sits directly under. The
+    ///   caller removes it once done.
     /// - Throws: Whatever `WatcherTestSupport.makeTempDirectory()`,
     ///   `FileManager.createDirectory`, or `String.write` throws.
+    private static func writeWidgetSkill(
+        argumentsLine: String = "", argumentHintLine: String = "", body: String = "Body text.\n"
+    ) throws -> URL {
+        let root = try WatcherTestSupport.makeTempDirectory()
+        let skillDirectory = root.appendingPathComponent(widgetSkillID, isDirectory: true)
+        try FileManager.default.createDirectory(at: skillDirectory, withIntermediateDirectories: true)
+        let frontmatter =
+            "---\nname: \(widgetSkillID)\ndescription: Does a widget thing.\n\(argumentsLine)\(argumentHintLine)---\n\(body)"
+        try frontmatter.write(
+            to: skillDirectory.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
+        return root
+    }
+
+    /// Writes a single `widget` skill via `writeWidgetSkill`, then builds a
+    /// static (`watch: false`) `SkillsToolContext` over just that root.
+    ///
+    /// - Parameters:
+    ///   - argumentsLine: Forwarded to `writeWidgetSkill`.
+    ///   - argumentHintLine: Forwarded to `writeWidgetSkill`.
+    ///   - body: Forwarded to `writeWidgetSkill`.
+    /// - Returns: The context, plus a cleanup closure the caller must invoke
+    ///   (via `defer`) once done.
+    /// - Throws: Whatever `writeWidgetSkill` throws.
     private static func makeTempContext(
         argumentsLine: String = "", argumentHintLine: String = "", body: String = "Body text.\n"
     ) throws -> (context: SkillsToolContext, cleanup: () -> Void) {
-        let root = try WatcherTestSupport.makeTempDirectory()
-        let skillDirectory = root.appendingPathComponent("widget", isDirectory: true)
-        try FileManager.default.createDirectory(at: skillDirectory, withIntermediateDirectories: true)
-        let frontmatter =
-            "---\nname: widget\ndescription: Does a widget thing.\n\(argumentsLine)\(argumentHintLine)---\n\(body)"
-        try frontmatter.write(
-            to: skillDirectory.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
-
-        let registry = SkillsRegistry(roots: [root])
-        let searcher = MetadataSearcher(items: registry.metadata().filter(\.isModelVisible))
-        let context = SkillsToolContext(registry: registry, searchAgent: SkillSearchAgent(searcher: searcher))
+        let root = try writeWidgetSkill(argumentsLine: argumentsLine, argumentHintLine: argumentHintLine, body: body)
+        let context = FixtureLibrary.makeSkillsToolContext(registry: SkillsRegistry(roots: [root]))
         return (context, { try? FileManager.default.removeItem(at: root) })
     }
 
@@ -409,6 +426,87 @@ struct SkillOperationsTests {
         }
         #expect(result.body.contains("Value: production"))
         #expect(result.body.contains("ARGUMENTS: production extra-flag"))
+    }
+
+    // MARK: - Hot-reload race: the id vanishes between the lookup and the call (^xv4x99j)
+
+    /// How long the injected race hook waits for the watcher-driven rebuild
+    /// to drop the deleted skill from the live catalog before it gives up.
+    /// Generous relative to `SkillWatcher`'s default 200ms debounce (mirrors
+    /// `SkillsRegistryReloadTests.expectedSignalTimeout`).
+    private static let reloadRaceTimeout: TimeInterval = 10
+
+    /// How long the injected race hook sleeps between two reads of the live
+    /// catalog while it waits for the rebuild.
+    private static let reloadRacePollInterval: TimeInterval = 0.01
+
+    /// Builds the visibility predicate that plays the hot reload's part in
+    /// the race `UseSkill.execute(in:)` guards against.
+    ///
+    /// `execute(in:)` calls `context.visibilityPredicate` exactly once
+    /// between its `metadata()` snapshot and its `registry.call(id:
+    /// arguments:)`, which is the only injection point the operation offers
+    /// without a test double for the concrete `SkillsRegistry`. The
+    /// predicate therefore deletes the skill directory and blocks until the
+    /// watcher's rebuild has removed the id from the live catalog -- the
+    /// predicate is synchronous, so blocking is the only way to hold the
+    /// operation until the reload lands; the rebuild runs on the watcher's
+    /// own dispatch queue, never on the cooperative pool this thread
+    /// belongs to. It always answers `true`, so the lookup passes and the
+    /// race reaches the `call`.
+    ///
+    /// The predicate is idempotent: `unusableIDMessage` runs it a second
+    /// time over the pre-race snapshot, and by then the directory is gone
+    /// and the catalog already rebuilt, so that call returns at once.
+    ///
+    /// - Parameters:
+    ///   - registry: The live, `watch: true` registry whose catalog the
+    ///     hook waits on.
+    ///   - skillDirectory: The directory of the skill to delete.
+    /// - Returns: The predicate to install as `SkillsToolContext.visibilityPredicate`.
+    private static func makeCatalogRemovalPredicate(
+        registry: SkillsRegistry, skillDirectory: URL
+    ) -> @Sendable (SkillMetadata) -> Bool {
+        { entry in
+            try? FileManager.default.removeItem(at: skillDirectory)
+            let deadline = Date().addingTimeInterval(reloadRaceTimeout)
+            while registry.metadata().contains(where: { $0.id == entry.id }), Date() < deadline {
+                Thread.sleep(forTimeInterval: reloadRacePollInterval)
+            }
+            return true
+        }
+    }
+
+    @Test func useSkillWhoseIDVanishesBetweenTheLookupAndTheCallReturnsTheUnusableIDCorrective() async throws {
+        // Lines 139-144 of `UseSkill.swift`: `registry.call(id:arguments:)`
+        // throws `UnknownSkillError` because a hot reload removed the id
+        // after the `metadata()` snapshot already found it. The operation
+        // must catch that error and answer with the same corrective an id
+        // that was unusable at lookup time gets -- built from the pre-race
+        // snapshot, so `widget` still lists as usable there.
+        let root = try Self.writeWidgetSkill()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let registry = SkillsRegistry(roots: [root], watch: true)
+        #expect(registry.metadata().map(\.id) == [Self.widgetSkillID])
+
+        let searcher = MetadataSearcher(items: registry.metadata())
+        let context = SkillsToolContext(
+            registry: registry,
+            searchAgent: SkillSearchAgent(searcher: searcher),
+            visibilityPredicate: Self.makeCatalogRemovalPredicate(
+                registry: registry, skillDirectory: root.appendingPathComponent(Self.widgetSkillID, isDirectory: true)))
+
+        let output = try await UseSkill(id: Self.widgetSkillID, arguments: []).execute(in: context)
+
+        // The race really happened: the live catalog no longer holds the id.
+        let liveIDs = registry.metadata().map(\.id)
+        #expect(liveIDs.isEmpty, "the reload must land before the call; live ids: \(liveIDs)")
+        guard case .corrective(let message) = output else {
+            Issue.record("expected a corrective outcome, got \(output)")
+            return
+        }
+        let id = Self.widgetSkillID
+        #expect(message == "The skill id `\(id)` is not currently usable. Currently usable ids: \(id).")
     }
 
     // MARK: - Resolver: canonical + forgiving spellings
