@@ -1,10 +1,11 @@
-/// The `FoundationModelsSkills` module's placeholder root.
+/// The `FoundationModelsSkills` module's namespace root.
 ///
-/// This is scaffolding only: the fused FM adapter (Layer 4) and
-/// `SkillsRegistry` (Layer 3) land in subsequent tasks, built on the
-/// `FoundationModelsExtras` substrate (Layers 1-2) and
-/// `FoundationModelsMetadataRegistry`'s `MetadataSearcher<SkillMetadata>`
-/// (plan.md §3, §9 decision #26).
+/// The module ships the fused FM adapter (Layer 4, `SkillsTool`) and
+/// `SkillsRegistry` (Layer 3), built on the `FoundationModelsExtras`
+/// substrate (Layers 1-2) and `FoundationModelsMetadataRegistry`'s
+/// `MetadataSearcher<SkillMetadata>` (plan.md §3, §9 decision #26). This
+/// enum declares no members; it exists to carry the module-level
+/// documentation below.
 ///
 /// **iOS posture (plan.md §8): unsupported, not stubbed.** The plan calls for
 /// a graceful iOS "unavailable on platform" stub -- `#if os(iOS)` guards

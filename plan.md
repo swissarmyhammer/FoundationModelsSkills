@@ -422,8 +422,13 @@ the same visibility rules as the user surface (it is a user, not a model).
 Skills bundle optional `scripts/`, `references/`, and `assets/` directories — the
 agentskills.io **tier-3** story. Three further ops expose them **lazily**: enumerated on
 demand, read on demand, never eagerly loaded (the client guide's rule). They *build* at
-M6 but are specified here to the same standard as the core three. All three see only the
-**model-visible** catalog and share the §7 corrective/no-throw contract.
+M6 but are specified here to the same standard as the core three. All three gate on the
+context's visibility predicate (`SkillsToolContext.visibilityPredicate`) and share the §7
+corrective/no-throw contract. *(Recorded resolution: the shipped ops do not hardcode the
+model-visible catalog. `SkillsTool.make` defaults the predicate to `isModelVisible`, so the
+model surface is the model-visible catalog; `SkillsCLI` supplies the user-surface predicate
+-- id membership in `registry.commandListing()` -- so the same ops present the user-facing
+surface to the CLI. See README "Visibility".)*
 
 | op | parameters | behavior |
 |---|---|---|
@@ -757,7 +762,7 @@ Examples/
 - **`skills-demo`** is one binary, three modes (the NotesTool dual-use shape):
   - **default — CLI** (§7.2) over the library: `skills-demo skill list`,
     `skills-demo skill search "commit my changes"`,
-    `skills-demo skill use commit --arguments "fix parser"`.
+    `skills-demo skill use --id commit --arguments "fix parser"`.
   - **`--chat`** — a root `LanguageModelSession` with the fused tool + preloaded
     bodies (gated on model availability); scripted prompts drive the
     `search skill` → `use skill` round trip end to end.

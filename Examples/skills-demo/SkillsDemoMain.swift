@@ -7,8 +7,8 @@ import OperationsCLI
 /// of the full stack, in three modes.
 ///
 /// - Default -- CLI (§7.2): `skills-demo skill list`, `skills-demo skill
-///   search "commit my changes"`, `skills-demo skill use commit --arguments
-///   "fix parser"`, over the fixture library.
+///   search "commit my changes"`, `skills-demo skill use --id commit
+///   --arguments "fix parser"`, over the fixture library.
 /// - `--chat` -- scripted live-model validation via `ChatMode`, gated on
 ///   `SystemLanguageModel` availability (or `SKILLS_DEMO_FORCE_UNAVAILABLE`).
 /// - `--watch` -- live reload events via `WatchMode`.

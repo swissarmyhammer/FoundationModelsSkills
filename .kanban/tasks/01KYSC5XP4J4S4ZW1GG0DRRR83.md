@@ -52,6 +52,12 @@ comments:
     - review: clean — `review sha HEAD~1..HEAD`, 0 findings, 7 validators attempted, 0 failed
     - new work filed: `^tb86z9q` (gated `HotReloadLiveTests` fails on a clean tree too)
   timestamp: 2026-08-26T12:58:37.292063+00:00
+- actor: claude-code
+  id: 01m0z2e063zzrdyjaynmxvq1rp
+  text: |-
+    ### commit — amended
+    - The kanban state this card wrote after 85a5d72 (the moves to `review` and `done`, the step comments) was folded into the same commit with `git commit --amend --no-edit`, as the `commit` skill instructs for `.kanban/` changes that appear after a commit. The commit is now 7463cf4 with the same subject. No push.
+  timestamp: 2026-08-26T12:58:58.627836+00:00
 position_column: done
 position_ordinal: a880
 title: 'SkillWatcher: cancel overwritten sources, disclose busy-ancestor cost'

@@ -1,24 +1,6 @@
 import Foundation
 import FoundationModelsExtras
 
-// Review fix (^8jqwxc5, round 5): `RenderRequest.policy` and
-// `IdentityRenderPass.init` were missing the blank `///` line + elaboration
-// their sibling properties/inits carry -- added both. Also did a fresh
-// line-by-line audit of every other `///` doc comment in this file against
-// the round-4 sweep's checklist (summary sentence, blank separator,
-// elaboration where warranted, `- Throws:`/`- Parameters:`/`- Returns:`
-// coverage); no other violations found.
-// Review fix (^8jqwxc5, round 4): every doc comment in this file was swept
-// for the project's doc-comment convention -- a single-sentence summary
-// line ending in a period, a blank `///` line, then elaboration -- and
-// every throws-declaring function/method now carries a `- Throws:`
-// section. Not just the flagged lines: the whole file, so a round 5
-// doesn't surface stragglers.
-// Review fix (^8jqwxc5): both flags were originally named
-// `disableShellExecution`/`disableScriptExecution`, which reads as an
-// imperative rather than a state assertion. Renamed to
-// `isShellExecutionDisabled`/`isScriptExecutionDisabled` to follow the
-// boolean assertion naming pattern.
 /// Policy flags that gate side-effecting render-pipeline passes.
 ///
 /// Set once at `SkillsRegistry` construction so every render path --

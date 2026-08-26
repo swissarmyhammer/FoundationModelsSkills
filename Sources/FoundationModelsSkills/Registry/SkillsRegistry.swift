@@ -6,7 +6,7 @@ import FoundationModelsExtras
 /// summaries, and whether it is currently eligible for the model-facing
 /// surface (plan.md §6, §7.1).
 ///
-/// Seeds a future `SkillSearchAgent`'s `MetadataSearcher<SkillMetadata>` --
+/// Seeds `SkillSearchAgent`'s `MetadataSearcher<SkillMetadata>` --
 /// a caller building that catalog filters on `isModelVisible` itself
 /// (plan.md §10's public API sketch), since `metadata()` returns every
 /// catalog entry regardless of surface, model-hidden ones included.
@@ -90,8 +90,8 @@ public struct UnknownSkillError: Error, Sendable, Equatable {
     ///
     /// Lets a caller retry against the live catalog or build its own
     /// corrective message (plan.md §7's "carrying the current id list",
-    /// realized generically here -- a model-facing operation layer, a
-    /// later task, converts this into its own corrective text).
+    /// realized generically here -- the model-facing operations in
+    /// `Operations/` convert this into their own corrective text).
     public var validIDs: [String]
 
     /// Creates an `UnknownSkillError`.

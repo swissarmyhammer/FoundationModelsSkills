@@ -1,6 +1,33 @@
 ---
-position_column: todo
-position_ordinal: '8580'
+comments:
+- actor: claude-code
+  id: 01m0z2k2x8f2xxzzx424pf4qka
+  text: |-
+    Research: the greps found the six items on the card and no other. The recorded resolution for §7.3 is in README "Visibility": the ops gate on `SkillsToolContext.visibilityPredicate`; `SkillsTool.make` sets `isModelVisible` as the default; `SkillsCLI` supplies the user-surface predicate. One more stale word in `SkillsRegistry.swift:9` ("a future `SkillSearchAgent`") had the same cause and was corrected. The word "scaffold" in `RenderPipeline.swift` describes `IdentityRenderPass`, a live test double. It is not stale, so it stays.
+
+    Changes:
+    - `plan.md:760` — `skill use --id commit`.
+    - `plan.md:425-431` — §7.3 now states the visibility-predicate behavior and the recorded resolution.
+    - `Examples/skills-demo/SkillsDemoMain.swift:10-11` — `skill use --id commit`.
+    - `Sources/FoundationModelsSkills/FoundationModelsSkills.swift:1-8` — the scaffold text is replaced with the shipped-module description.
+    - `Sources/FoundationModelsSkills/Registry/SkillsRegistry.swift:9,93-94` — the "future"/"later task" text is replaced.
+    - `Sources/FoundationModelsSkills/Render/RenderPipeline.swift:4-21` — the review-log comments are removed.
+
+    Verification: the three acceptance greps return no hit; `swift build` is clean.
+
+    ### implement — changed
+    - evidence: 5 files — plan.md, Examples/skills-demo/SkillsDemoMain.swift, Sources/FoundationModelsSkills/FoundationModelsSkills.swift, Sources/FoundationModelsSkills/Registry/SkillsRegistry.swift, Sources/FoundationModelsSkills/Render/RenderPipeline.swift
+    - next: test
+  timestamp: 2026-08-26T13:01:45.256849+00:00
+- actor: claude-code
+  id: 01m0z2npkhccmgc9tsbkbenex1
+  text: |-
+    ### test — green
+    - evidence: `swift test` — 333 tests in 23 suites passed, 0 failed, exit 0. One env-gated skip (`SKILLS_INTEGRATION_TESTS`) in `HotReloadLiveTests`, the same pre-existing gate the prior task ledgers record as permitted by the `test-integrity` rule. The only warning is the SwiftPM build-graph note about the `mlx-swift_Cmlx.bundle` node; it is not a compiler warning from this package's code.
+    - next: commit
+  timestamp: 2026-08-26T13:03:10.961773+00:00
+position_column: doing
+position_ordinal: '80'
 title: 'Sweep residual stale docs: positional CLI examples, scaffold-era comments'
 ---
 ## What
@@ -12,13 +39,13 @@ Documentation residue the M7 sweep and the #21 plan amendment missed — each a 
 4. Scaffold-era comments that survived the sweep: `Sources/FoundationModelsSkills/FoundationModelsSkills.swift:1-9` ("placeholder root … scaffolding only … land in subsequent tasks" — README points HERE for the iOS posture, so it is user-visible); `Registry/SkillsRegistry.swift:93` ("a model-facing operation layer, a later task" — it shipped); `Render/RenderPipeline.swift:4-21` stray `// Review fix (^8jqwxc5, round 4/5)` review-log comments.
 
 ## Acceptance Criteria
-- [ ] No positional-id CLI example remains anywhere (`grep -rn "skill use [a-z]" plan.md Examples/ README.md` shows only `--id` forms)
-- [ ] plan.md §7.3 wording matches the shipped surface-predicate behavior
-- [ ] No "placeholder"/"scaffolding only"/"later task"/review-log comments remain in Sources/ (greppable)
+- [x] No positional-id CLI example remains anywhere (`grep -rn "skill use [a-z]" plan.md Examples/ README.md` shows only `--id` forms)
+- [x] plan.md §7.3 wording matches the shipped surface-predicate behavior
+- [x] No "placeholder"/"scaffolding only"/"later task"/review-log comments remain in Sources/ (greppable)
 
 ## Tests
-- [ ] Documentation-only change; verification is the greps above + `swift build` clean
-- [ ] `swift test` — exit 0 (no behavior change)
+- [x] Documentation-only change; verification is the greps above + `swift build` clean
+- [x] `swift test` — exit 0 (no behavior change)
 
 ## Workflow
 - Doc-only task; TDD not applicable — verify via the grep criteria.
