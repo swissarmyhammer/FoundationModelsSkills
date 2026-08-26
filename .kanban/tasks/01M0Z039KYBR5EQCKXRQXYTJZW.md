@@ -26,8 +26,31 @@ comments:
     - evidence: `swift test` — 369 tests in 25 suites passed, 0 failed, 0 warnings. 1 skipped: the env-gated live-model test (tracked as ^tb86z9q). A first full run hung behind a stale `swift-test` process; after that process was killed, the rerun passed.
     - next: commit
   timestamp: 2026-08-26T14:33:00.465231+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01m0z7tnprv6wry0s4hhydhg5m
+  text: |-
+    ### commit — changed
+    - evidence: 9336663 test(registry): cover the unreadable SKILL.md skip diagnostic
+    - next: review
+  timestamp: 2026-08-26T14:33:16.760048+00:00
+- actor: claude-code
+  id: 01m0z7xrxrbvptxne63e06yj7y
+  text: |-
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` — 0 findings, 7 validators attempted, 0 failed. Only Tests/FoundationModelsSkillsTests/SkillsRegistryTests.swift was in scope.
+    - next: task moved to done
+  timestamp: 2026-08-26T14:34:58.360073+00:00
+- actor: claude-code
+  id: 01m0z7xxvzb7bt4xz4935y5221
+  text: |-
+    ### finish iteration 1 — review clean, task in done
+    - implement: changed — Tests/FoundationModelsSkillsTests/SkillsRegistryTests.swift (unreadable SKILL.md test and fixture helpers)
+    - test: green — swift test, 369 passed, 0 failed, 0 warnings, 1 env-gated skip (^tb86z9q)
+    - commit: 9336663
+    - review: clean — 0 findings on HEAD~1..HEAD
+  timestamp: 2026-08-26T14:35:03.423754+00:00
+position_column: done
+position_ordinal: b180
 title: 'Add test for SkillsRegistry.validate: the unreadable SKILL.md diagnostic'
 ---
 `Sources/FoundationModelsSkills/Registry/SkillsRegistry.swift`
