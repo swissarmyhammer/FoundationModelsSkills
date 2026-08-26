@@ -31,8 +31,24 @@ comments:
     - evidence: 9 files — Sources/FoundationModelsSkills/Render/QuarantinedText.swift, Sources/FoundationModelsSkills/Render/ShellInjection.swift, Sources/FoundationModelsSkills/Render/StencilPass.swift, Tests/FoundationModelsSkillsTests/RenderPipelineNoRescanTests.swift, Tests/FoundationModelsSkillsTests/ShellInjectionTests.swift, Tests/FoundationModelsSkillsTests/StencilPassTests.swift, README.md, plan.md, .kanban task card. `swift test`: 349 tests in 23 suites passed, exit 0.
     - next: test, commit, review
   timestamp: 2026-08-26T13:30:33.086954+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01m0z4d99y3xqvy7yanvj8x0by
+  text: |-
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (commit 08527af) — 0 findings, 0 confirmed, 0 refuted; 6 files reviewed, 4 `.kanban/` files excluded by `.reviewignore`. No prior `## Review Findings` section on the card.
+    - next: move to done
+  timestamp: 2026-08-26T13:33:32.350450+00:00
+- actor: claude-code
+  id: 01m0z4df6krcg0yc4f90x66xvm
+  text: |-
+    ### finish iteration 1 — review clean, task moved to done
+    - implement: changed — 9 files (QuarantinedText, ShellInjection, StencilPass, three test files, README, plan, card)
+    - test: green — `swift test` 349 tests in 23 suites passed, 0 warnings; 1 env-gated live-model skip already tracked (^tb86z9q)
+    - commit: 08527af
+    - review: clean — `review sha HEAD~1..HEAD`, 0 findings
+  timestamp: 2026-08-26T13:33:38.387065+00:00
+position_column: done
+position_ordinal: ab80
 title: 'Harden span-based rendering: shared budgets, straddling blocks, span-edge grammar'
 ---
 ## What
