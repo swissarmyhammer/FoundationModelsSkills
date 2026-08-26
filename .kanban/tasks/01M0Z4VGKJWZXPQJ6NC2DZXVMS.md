@@ -27,8 +27,31 @@ comments:
     - evidence: `timeout 300 swift test` — 377 tests in 26 suites passed, 0 failed; one pre-existing env-gated skip (`SKILLS_INTEGRATION_TESTS`); no warning in project source. The first run hung in `swiftpm-testing-helper` after all tests passed; helpers were killed and the re-run completed in 9 s.
     - next: commit
   timestamp: 2026-08-26T15:48:00.064237+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01m0zc42g38tq5m6j90ryapfh9
+  text: |-
+    ### commit — changed
+    - evidence: 9748095 fix(resources): normalize a missing path through its existing prefix in PathConfinement (local commit, not pushed; includes the pending `.kanban` state of ^2045jq7 from the previous task)
+    - next: review
+  timestamp: 2026-08-26T15:48:19.075672+00:00
+- actor: claude-code
+  id: 01m0zc6mc18vng16ahe5wv8d69
+  text: |-
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` — 0 findings, 7 validator runs attempted, 0 failed; 2 files reviewed (PathConfinement.swift, ReadResourceTests.swift), 4 `.kanban` files excluded by `.reviewignore`
+    - next: done
+  timestamp: 2026-08-26T15:49:42.913353+00:00
+- actor: claude-code
+  id: 01m0zc6pc4cp6718z0ghx7hzm8
+  text: |-
+    ### finish iteration 1 — review clean, task moved to done
+    - implement: changed — PathConfinement.swift resolves the longest existing prefix of the candidate; ReadResourceTests.swift adds two temp-root tests
+    - test: green — `timeout 300 swift test`, 377 passed, 0 failed (first run hung in swiftpm-testing-helper after all tests passed; re-run completed in 9 s)
+    - commit: 9748095
+    - review: clean — 0 findings on HEAD~1..HEAD
+  timestamp: 2026-08-26T15:49:44.964135+00:00
+position_column: done
+position_ordinal: b780
 title: PathConfinement denies a missing path under a /private-prefixed skill root instead of the unreadable corrective
 ---
 `Sources/FoundationModelsSkills/Resources/PathConfinement.swift`
