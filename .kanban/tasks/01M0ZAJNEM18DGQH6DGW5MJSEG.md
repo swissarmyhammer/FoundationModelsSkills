@@ -42,8 +42,32 @@ comments:
     - note: the build prints one build-system warning, `missing creator for mutated node: (.build/out/Products/Debug/mlx-swift_Cmlx.bundle/Contents/MacOS)`. It comes from the `Cmlx` target of the `mlx-swift` dependency. It reproduces with this change stashed and after a full delete of `.build/out`, so no edit in this package removes it. Filed as a new task on the board.
     - next: commit, review
   timestamp: 2026-08-26T18:06:53.259761+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01m0zm2bk190anjwvpayxge6am
+  text: |-
+    ### commit — changed
+    - evidence: f23747c test(hot-reload): drop GuidedSelectionSession wrapper now that Ranker dispatches respond(to:generating:)
+    - next: review HEAD~1..HEAD
+  timestamp: 2026-08-26T18:07:11.457929+00:00
+- actor: claude-code
+  id: 01m0zm5nnyfz117dnxkf7m4nh7
+  text: |-
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (f23747c) — counts: 0 findings, 0 confirmed, 0 refuted, 7 attempted, 0 failed. 1 file reviewed (Tests/FoundationModelsSkillsTests/HotReloadLiveTests.swift); 4 `.kanban/` files excluded by `.reviewignore`. No prior `## Review Findings` section on the card.
+    - next: move to done
+  timestamp: 2026-08-26T18:09:00.094225+00:00
+- actor: claude-code
+  id: 01m0zm5wmtdmwqw8tj32a83nvm
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — Tests/FoundationModelsSkillsTests/HotReloadLiveTests.swift; FoundationModelsRanker resolved at `222e74a` (origin/main, fix present, no push necessary)
+    - test: green — `swift test` 377 passed, 0 failed; gated `HotReloadLiveTests` 1 passed with bare `LanguageModelSession`; dependency build warning filed as ^vwthc4s
+    - commit: changed — f23747c
+    - review: clean — 0 findings on `review sha HEAD~1..HEAD`
+    - task moved to done by the review verdict
+  timestamp: 2026-08-26T18:09:07.226155+00:00
+position_column: done
+position_ordinal: b980
 title: 'FoundationModelsRanker: AgentSession.respond(to:generating:) is not a protocol requirement, so the LanguageModelSession guided override is unreachable through `any AgentSession`'
 ---
 ## What
