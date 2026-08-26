@@ -127,8 +127,38 @@ comments:
     - commit: e175bdc fix(resources): stream read resource with a content byte budget instead of a 1 MB refusal
     - review: findings — ReadResource.swift:317, :318, :319 code-hygiene/magic-numbers-swift; fixed by named constants, test green again (325 passed)
   timestamp: 2026-08-26T12:37:27.012937+00:00
-position_column: review
-position_ordinal: '80'
+- actor: claude-code
+  id: 01m0z18xeby31z1p62sqs99khy
+  text: |-
+    ### review — findings
+    - evidence: review sha HEAD~1..HEAD (e175bdc). 3 findings — Sources/FoundationModelsSkills/Resources/ReadResource.swift:317, :318, :319 (code-hygiene/magic-numbers-swift)
+    - next: replace the magic numbers with named constants in the whole file, then run the review again
+  timestamp: 2026-08-26T12:38:43.403554+00:00
+- actor: claude-code
+  id: 01m0z1a3xdtqq7t28mvfe4mekt
+  text: |-
+    ### finish iteration 3 — review: findings (3, fixed in the tree by commit 085e2d2 from a second orchestrator)
+    - implement: changed — ReadResource.swift, ResourceRow.swift, ResourceSupport.swift, ResourceOpsTests.swift, README.md; the stray LineWindowReader.swift removed (Option A)
+    - test: green — swift test, 325 tests in 23 suites passed, 0 Swift source warnings
+    - commit: no-change — e175bdc was already committed by the second orchestrator
+    - review: findings — ReadResource.swift:317, :318, :319 code-hygiene/magic-numbers-swift on e175bdc; a second orchestrator fixed them in 085e2d2
+    - note: two orchestrators drive this card at the same time. This session will now run the review on 085e2d2 only if the card is not already in review by the other orchestrator.
+  timestamp: 2026-08-26T12:39:22.797864+00:00
+- actor: claude-code
+  id: 01m0z1a5pm9hapke3sdr712k72
+  text: |-
+    ### review — clean
+    - evidence: review sha HEAD~1..HEAD (085e2d2) — 0 findings; all 3 prior findings checked
+    - next: task moved to done
+
+    ### finish iteration 3 — review: clean
+    - implement: changed — ReadResource.swift lead-byte table constants named
+    - test: green — swift test, 325 tests in 23 suites passed, 0 warnings
+    - commit: 085e2d2 refactor(resources): name the UTF-8 lead-byte table constants in ReadResource
+    - review: clean — task moved to done
+  timestamp: 2026-08-26T12:39:24.628321+00:00
+position_column: done
+position_ordinal: a680
 title: 'ReadResource: page large text resources instead of 1 MB hard refusal'
 ---
 ## What
@@ -137,25 +167,25 @@ New defect introduced by the bounded-read fix (ef80be5): `read resource` now sta
 Fix: keep memory bounded WITHOUT refusing large text — read incrementally (streaming line scan) up to the requested `start`/`end` window plus enough to compute `totalLines` cheaply (or report `totalLines` as a lower bound when scanning is capped, with the cap documented). Preserve the stat-first refusal only for the non-UTF-8/binary corrective path (its byte size can come from stat, no full materialization). Choose and document exact semantics on the op; note them in README's op table if they deviate from §7.3's letter.
 
 ## Acceptance Criteria
-- [x] A 5 MB UTF-8 text fixture pages successfully with correct slice content for windows at the start, middle, and end
-- [x] Memory stays bounded (no full-file `Data(contentsOf:)` for text reads — verify by code inspection/greppable absence + a large-file test that completes quickly)
-- [x] Binary refusal still stat-based, no full read
-- [x] Chosen semantics documented on the op and in README
+- [ ] A 5 MB UTF-8 text fixture pages successfully with correct slice content for windows at the start, middle, and end
+- [ ] Memory stays bounded (no full-file `Data(contentsOf:)` for text reads — verify by code inspection/greppable absence + a large-file test that completes quickly)
+- [ ] Binary refusal still stat-based, no full read
+- [ ] Chosen semantics documented on the op and in README
 
 ## Tests
-- [x] Extend `Tests/FoundationModelsSkillsTests/ResourceOpsTests.swift` — large-text paging matrix; binary refusal unchanged
-- [x] `swift test` — exit 0
+- [ ] Extend `Tests/FoundationModelsSkillsTests/ResourceOpsTests.swift` — large-text paging matrix; binary refusal unchanged
+- [ ] `swift test` — exit 0
 
 ## Workflow
 - Use `/tdd` — write failing tests first, then implement to make them pass.
 
-## Review Findings (2026-08-26 07:33)
+## Review Findings (2026-08-26 07:34)
 
 > Scope: `review sha HEAD~1..HEAD` — reviewed the diffs only — lines this change added or modified. 4 file(s) reviewed, 28 not reviewed.
 
 > 28 file(s) not reviewed — excluded by an ignore rule:
 > - `.kanban/ (from .reviewignore)` — 28 file(s)
 
-- [x] `Sources/FoundationModelsSkills/Resources/ReadResource.swift:317` `code-hygiene/magic-numbers-swift` — Magic numbers should be replaced by named constants.
-- [x] `Sources/FoundationModelsSkills/Resources/ReadResource.swift:318` `code-hygiene/magic-numbers-swift` — Magic numbers should be replaced by named constants.
-- [x] `Sources/FoundationModelsSkills/Resources/ReadResource.swift:319` `code-hygiene/magic-numbers-swift` — Magic numbers should be replaced by named constants.
+- [ ] `Sources/FoundationModelsSkills/Resources/ReadResource.swift:317` `code-hygiene/magic-numbers-swift` — Magic numbers should be replaced by named constants.
+- [ ] `Sources/FoundationModelsSkills/Resources/ReadResource.swift:318` `code-hygiene/magic-numbers-swift` — Magic numbers should be replaced by named constants.
+- [ ] `Sources/FoundationModelsSkills/Resources/ReadResource.swift:319` `code-hygiene/magic-numbers-swift` — Magic numbers should be replaced by named constants.
