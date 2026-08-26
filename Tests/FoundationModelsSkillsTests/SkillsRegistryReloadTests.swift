@@ -308,17 +308,11 @@ struct SkillsRegistryReloadTests {
 
         let registry = SkillsRegistry(roots: [root], watch: true)
         let onReloadTally = ReloadTestSupport.EventTally()
-        let onReloadSubscription = Task {
-            guard let stream = registry.onReload else { return }
-            for await _ in stream { await onReloadTally.record() }
-        }
+        let onReloadSubscription = ReloadTestSupport.tally(registry.onReload, into: onReloadTally)
         defer { onReloadSubscription.cancel() }
 
         let commandUpdatesTally = ReloadTestSupport.EventTally()
-        let commandUpdatesSubscription = Task {
-            guard let stream = registry.commandUpdates else { return }
-            for await _ in stream { await commandUpdatesTally.record() }
-        }
+        let commandUpdatesSubscription = ReloadTestSupport.tally(registry.commandUpdates, into: commandUpdatesTally)
         defer { commandUpdatesSubscription.cancel() }
 
         for iteration in 1...5 {
@@ -342,10 +336,7 @@ struct SkillsRegistryReloadTests {
 
         let registry = SkillsRegistry(roots: [root], watch: true)
         let earlyTally = ReloadTestSupport.EventTally()
-        let earlySubscription = Task {
-            guard let stream = registry.commandUpdates else { return }
-            for await _ in stream { await earlyTally.record() }
-        }
+        let earlySubscription = ReloadTestSupport.tally(registry.commandUpdates, into: earlyTally)
         defer { earlySubscription.cancel() }
 
         try ReloadTestSupport.writeSkillFile(id: "late-subscriber-skill", in: root, descriptionSuffix: "v1")
@@ -355,10 +346,7 @@ struct SkillsRegistryReloadTests {
         // reload already happened -- must still observe every reload from
         // this point forward, independent of `earlySubscription`.
         let lateTally = ReloadTestSupport.EventTally()
-        let lateSubscription = Task {
-            guard let stream = registry.commandUpdates else { return }
-            for await _ in stream { await lateTally.record() }
-        }
+        let lateSubscription = ReloadTestSupport.tally(registry.commandUpdates, into: lateTally)
         defer { lateSubscription.cancel() }
 
         try ReloadTestSupport.writeSkillFile(id: "late-subscriber-skill", in: root, descriptionSuffix: "v2")
@@ -484,6 +472,11 @@ struct SkillsRegistryReloadTests {
     /// Starts a background task that iterates `registry.onReload` (when
     /// non-`nil`) and records every published metadata list into `recorder`.
     ///
+    /// The stream is subscribed on the caller's thread, before the task is
+    /// created, for the reason `ReloadTestSupport.tally(_:into:)` states: a
+    /// subscription made inside the task can register after the watcher's
+    /// first publication and lose it (^n89yw8p).
+    ///
     /// - Parameters:
     ///   - registry: The registry whose `onReload` stream to subscribe to.
     ///   - recorder: The recorder to feed.
@@ -492,8 +485,9 @@ struct SkillsRegistryReloadTests {
     private static func subscribe(
         _ registry: SkillsRegistry, to recorder: MetadataUpdateRecorder
     ) -> Task<Void, Never> {
-        Task {
-            guard let stream = registry.onReload else { return }
+        let stream = registry.onReload
+        return Task {
+            guard let stream else { return }
             for await metadata in stream {
                 await recorder.record(metadata)
             }

@@ -151,8 +151,9 @@ struct HotReloadTests {
     ///
     /// The pending window is made deterministic by `embedGate`: closed
     /// before the write, so `FakeEmbedder.embed(_:)` blocks the very first
-    /// time `MetadataSearcher.update(items:)` reaches it -- `waitUntilBlocked()`
-    /// confirms that block has genuinely started (proving the synchronous
+    /// time `MetadataSearcher.update(items:)` reaches it --
+    /// `waitUntilBlockedOrTimeout(_:timeout:)` confirms that block has
+    /// genuinely started (proving the synchronous
     /// keyword/trigram rebuild already happened, per `update(items:)`'s own
     /// documented ordering) before this method's own search runs
     /// concurrently against the same actor, which Swift's actor reentrancy
@@ -392,6 +393,12 @@ struct HotReloadTests {
     /// the plan.md §7.1 wiring a real host is responsible for, exercised
     /// here end to end.
     ///
+    /// The stream is subscribed on the caller's thread, before the task is
+    /// created. A subscription made inside the task registers only when the
+    /// task first runs, and under a loaded cooperative pool that can be
+    /// later than the watcher's first publication -- the publication is
+    /// then lost, and every wait on it times out (^n89yw8p).
+    ///
     /// - Parameters:
     ///   - registry: The registry whose `onReload` stream to subscribe to.
     ///   - agent: The search agent each publication is forwarded to.
@@ -401,8 +408,9 @@ struct HotReloadTests {
     private static func subscribe(
         _ registry: SkillsRegistry, forwardingTo agent: SkillSearchAgent, recordingInto recorder: ReloadTestSupport.EventTally
     ) -> Task<Void, Never> {
-        Task {
-            guard let stream = registry.onReload else { return }
+        let stream = registry.onReload
+        return Task {
+            guard let stream else { return }
             for await metadata in stream {
                 await agent.update(items: metadata)
                 await recorder.record()
@@ -485,10 +493,16 @@ struct HotReloadTests {
         _ = await ReloadTestSupport.poll({ embedder.embeddedTextCount }, until: { $0 >= target }, timeout: timeout)
     }
 
-    /// Races `gate.waitUntilBlocked()` against `timeout`, so a step waiting
-    /// for the embed catch-up to have genuinely started never hangs forever
-    /// if that assumption ever stops holding (e.g. a future upstream change
-    /// makes `MetadataSearcher.update(items:)` skip the embedder entirely).
+    /// Polls `gate.isBlocked` until it is `true` or `timeout` elapses, so a
+    /// step waiting for the embed catch-up to have genuinely started never
+    /// hangs forever if that assumption ever stops holding (e.g. a future
+    /// upstream change makes `MetadataSearcher.update(items:)` skip the
+    /// embedder entirely, or the reload publication never arrives).
+    ///
+    /// A poll, not a suspended continuation raced against a sleep: a task
+    /// group waits for every child before it returns, and a child parked on
+    /// a continuation nothing resumes ignores cancellation. That shape kept
+    /// the whole test process alive after the timeout won (^n89yw8p).
     ///
     /// - Parameters:
     ///   - gate: The gate to wait on.
@@ -496,19 +510,7 @@ struct HotReloadTests {
     /// - Returns: `true` if `gate` reported a blocked `embed(_:)` call
     ///   before `timeout`; `false` otherwise.
     private static func waitUntilBlockedOrTimeout(_ gate: EmbedGate, timeout: Duration) async -> Bool {
-        await withTaskGroup(of: Bool.self) { group in
-            group.addTask {
-                await gate.waitUntilBlocked()
-                return true
-            }
-            group.addTask {
-                try? await Task.sleep(for: timeout)
-                return false
-            }
-            let result = await group.next() ?? false
-            group.cancelAll()
-            return result
-        }
+        await ReloadTestSupport.poll({ await gate.isBlocked }, until: { $0 }, timeout: timeout)
     }
 
     // MARK: - Fixture embedder
@@ -591,8 +593,11 @@ struct HotReloadTests {
     private actor EmbedGate {
         private var isOpen = true
         private var openWaiters: [CheckedContinuation<Void, Never>] = []
-        private var isBlocked = false
-        private var blockedWaiters: [CheckedContinuation<Void, Never>] = []
+
+        /// Whether some `embed(_:)` call is currently blocked on this gate.
+        /// `waitUntilBlockedOrTimeout(_:timeout:)` polls it, so no caller
+        /// ever suspends on a continuation this gate might never resume.
+        private(set) var isBlocked = false
 
         /// Closes the gate: every subsequent `embed(_:)` call blocks in
         /// `waitUntilOpen()` until `open()` runs.
@@ -612,22 +617,12 @@ struct HotReloadTests {
         }
 
         /// Called by `FakeEmbedder.embed(_:)`: returns immediately while the
-        /// gate is open; otherwise marks the gate blocked (waking any
-        /// `waitUntilBlocked()` caller) and suspends until `open()` runs.
+        /// gate is open; otherwise marks the gate blocked (so a poll of
+        /// `isBlocked` observes it) and suspends until `open()` runs.
         func waitUntilOpen() async {
             guard !isOpen else { return }
             isBlocked = true
-            let waiting = blockedWaiters
-            blockedWaiters = []
-            for continuation in waiting { continuation.resume() }
             await withCheckedContinuation { openWaiters.append($0) }
-        }
-
-        /// Suspends the caller until some `embed(_:)` call is currently
-        /// blocked on this gate.
-        func waitUntilBlocked() async {
-            guard !isBlocked else { return }
-            await withCheckedContinuation { blockedWaiters.append($0) }
         }
     }
 

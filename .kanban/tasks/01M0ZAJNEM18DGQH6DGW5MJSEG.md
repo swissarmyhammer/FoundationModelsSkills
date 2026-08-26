@@ -1,6 +1,14 @@
 ---
 assignees:
 - claude-code
+comments:
+- actor: claude-code
+  id: 01m0zc7xycs1cy46h1fdzb8chk
+  text: |-
+    ### finish — skipped in this batch
+    - Reason: the acceptance criteria require a change in a different repository (`FoundationModelsRanker`, upstream) and then a `Package.resolved` move to that fix. This batch works only the current working tree, so it cannot complete the task.
+    - A person must make the upstream change first. After that, `/finish ^w5mjseg` can remove the `GuidedSelectionSession` wrapper in `Tests/FoundationModelsSkillsTests/HotReloadLiveTests.swift`.
+  timestamp: 2026-08-26T15:50:25.484877+00:00
 position_column: todo
 position_ordinal: '9380'
 title: 'FoundationModelsRanker: AgentSession.respond(to:generating:) is not a protocol requirement, so the LanguageModelSession guided override is unreachable through `any AgentSession`'

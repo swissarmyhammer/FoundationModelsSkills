@@ -22,6 +22,30 @@ enum ReloadTestSupport {
         }
     }
 
+    /// Starts a background task that iterates `stream` (when non-`nil`)
+    /// and records one event into `tally` per element.
+    ///
+    /// The caller evaluates `stream` on its own thread -- `registry.onReload`
+    /// or `registry.commandUpdates` passed as the argument -- so the
+    /// subscription is registered before the task is created. A subscription
+    /// made inside the task registers only when the task first runs, and
+    /// under a loaded cooperative pool that can be later than the watcher's
+    /// first publication; the publication is then lost, and every wait on
+    /// it times out (^n89yw8p).
+    ///
+    /// - Parameters:
+    ///   - stream: The already-subscribed stream to iterate, or `nil` for a
+    ///     `watch: false` registry.
+    ///   - tally: The tally each element is recorded into.
+    /// - Returns: The subscription task; the caller cancels it once done
+    ///   observing.
+    static func tally<Element: Sendable>(_ stream: AsyncStream<Element>?, into tally: EventTally) -> Task<Void, Never> {
+        Task {
+            guard let stream else { return }
+            for await _ in stream { await tally.record() }
+        }
+    }
+
     // MARK: - Generic polling
 
     /// Polls `getter`'s result until `predicate` accepts it or `timeout`
