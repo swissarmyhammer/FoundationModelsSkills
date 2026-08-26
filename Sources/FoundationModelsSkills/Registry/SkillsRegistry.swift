@@ -40,8 +40,9 @@ public struct SkillMetadata: Sendable, Equatable {
     /// structured form -- carries `SkillParameter.required` (and
     /// `.variadic`/`.name`) so a consumer like `UseSkill` can check
     /// requiredness directly instead of re-deriving it from a display
-    /// placeholder's bracket syntax, which misreads an unbracketed
-    /// `argument-hint:` token as required.
+    /// placeholder's bracket syntax -- `ParameterInference` is the single
+    /// owner of plan.md §6.1's optionality rules (including the bare-token
+    /// rule), and re-parsing the placeholder would duplicate them.
     public var parameterDetails: [SkillParameter]
 
     /// Whether this skill is currently eligible for the model-facing

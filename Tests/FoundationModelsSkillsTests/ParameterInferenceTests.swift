@@ -26,6 +26,8 @@ struct ParameterInferenceTests {
     // MARK: - Single source: argument-hint: only -- the `<a> [b] c...` grammar
 
     @Test func hintOnlyParsesRequiredOptionalAndBareVariadicGrammar() {
+        // `c...` is a bare (unbracketed) token: only `<x>` marks a hint
+        // token required (plan.md §6.1), so the bare variadic reads optional.
         let frontmatter = SkillFrontmatter(argumentHint: "<a> [b] c...")
         let result = ParameterInference.infer(frontmatter: frontmatter, body: "no dollar refs here")
 
@@ -33,7 +35,56 @@ struct ParameterInferenceTests {
             result.parameters == [
                 SkillParameter(name: "a", position: 0, required: true, variadic: false, placeholder: "<a>"),
                 SkillParameter(name: "b", position: 1, required: false, variadic: false, placeholder: "[b]"),
-                SkillParameter(name: "c", position: 2, required: true, variadic: true, placeholder: "c..."),
+                SkillParameter(name: "c", position: 2, required: false, variadic: true, placeholder: "c..."),
+            ])
+        #expect(result.diagnostics.isEmpty)
+    }
+
+    // MARK: - Single source: argument-hint: only -- bare tokens are optional (plan.md §6.1)
+
+    @Test func hintBareTokenWithoutBracketsIsOptional() {
+        // plan.md §6.1's bare-token rule: `argument-hint:` is display text,
+        // and only the explicit `<x>` form marks a token required. A bare
+        // word such as `env` must never block dispatch with a
+        // missing-argument corrective, so it reads `required: false`.
+        let frontmatter = SkillFrontmatter(argumentHint: "env")
+        let result = ParameterInference.infer(frontmatter: frontmatter, body: "")
+
+        #expect(
+            result.parameters == [
+                SkillParameter(name: "env", position: 0, required: false, variadic: false, placeholder: "env")
+            ])
+        #expect(result.diagnostics.isEmpty)
+    }
+
+    @Test func hintMalformedUnclosedBracketTokenIsOptional() {
+        // Deliberate: a malformed placeholder such as `[env` (an unclosed
+        // bracket) is not a well-formed `<x>` or `[x]` token, so it falls
+        // through to the bare-token rule and reads optional -- the same
+        // reading a bare word gets. The raw text is kept verbatim as the
+        // placeholder and as the name; no bracket is stripped.
+        let frontmatter = SkillFrontmatter(argumentHint: "[env <target")
+        let result = ParameterInference.infer(frontmatter: frontmatter, body: "")
+
+        #expect(
+            result.parameters == [
+                SkillParameter(name: "[env", position: 0, required: false, variadic: false, placeholder: "[env"),
+                SkillParameter(
+                    name: "<target", position: 1, required: false, variadic: false, placeholder: "<target"),
+            ])
+    }
+
+    @Test func hintBareTokenMergedWithArgumentsNameIsOptional() {
+        // The bare-token rule also holds through the `arguments:` merge:
+        // the hint token supplies optionality by position, so `arguments:
+        // env` + `argument-hint: env` reads optional, unlike `arguments:`
+        // alone (whose silent positions default to required).
+        let frontmatter = SkillFrontmatter(argumentsRaw: .string("env"), argumentHint: "env")
+        let result = ParameterInference.infer(frontmatter: frontmatter, body: "")
+
+        #expect(
+            result.parameters == [
+                SkillParameter(name: "env", position: 0, required: false, variadic: false, placeholder: "env")
             ])
         #expect(result.diagnostics.isEmpty)
     }
@@ -209,7 +260,7 @@ struct ParameterInferenceTests {
     @Test func hintParsesDegenerateEmptyBracketAndTooShortTokensWithoutCrashing() {
         // <> and [] are well-formed brackets around an empty name; a bare
         // "<" is too short (< 2 chars) to be recognized as either bracket
-        // form, so it falls through to the bare-token default.
+        // form, so it falls through to the bare-token rule (optional).
         let frontmatter = SkillFrontmatter(argumentHint: "<> [] <")
         let result = ParameterInference.infer(frontmatter: frontmatter, body: "")
 
@@ -217,7 +268,7 @@ struct ParameterInferenceTests {
             result.parameters == [
                 SkillParameter(name: "", position: 0, required: true, variadic: false, placeholder: "<>"),
                 SkillParameter(name: "", position: 1, required: false, variadic: false, placeholder: "[]"),
-                SkillParameter(name: "<", position: 2, required: true, variadic: false, placeholder: "<"),
+                SkillParameter(name: "<", position: 2, required: false, variadic: false, placeholder: "<"),
             ])
     }
 }

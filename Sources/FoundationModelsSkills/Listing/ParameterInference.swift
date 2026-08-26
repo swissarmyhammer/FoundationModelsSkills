@@ -123,10 +123,17 @@ public enum ParameterInference {
     /// §6.1): `<x>` required, `[x]` optional, a trailing `...` (on either
     /// bracket form, or on a bare unbracketed token) variadic.
     ///
-    /// A bare token with neither bracket defaults to `required: true` -- no
-    /// source marks it optional, so the conservative reading applies
-    /// (mirrors the default this file uses everywhere a source is silent on
-    /// optionality).
+    /// **Bare-token rule (plan.md §6.1):** a token with neither bracket form
+    /// -- a bare word such as `env`, or a malformed placeholder such as
+    /// `[env` (unclosed bracket) -- reads `required: false`. `argument-hint:`
+    /// is display text, and only the explicit `<x>` form marks a token
+    /// required; a display-only word must never block dispatch with a
+    /// missing-argument corrective. This is deliberately the opposite of
+    /// the `required: true` default `mergeArgumentsWithHint` and
+    /// `inferFromBody` use for a position **no** hint token describes: there
+    /// the source is silent, here the author wrote a token and declined to
+    /// mark it `<required>`. A malformed token's raw text is kept verbatim
+    /// as both `placeholder` and `name`; no bracket is stripped.
     ///
     /// - Parameter hint: The raw `argument-hint:` string, or `nil`.
     /// - Returns: One `HintToken` per whitespace-separated token, in order;
@@ -155,7 +162,8 @@ public enum ParameterInference {
     ]
 
     /// Parses one `argument-hint:` token (e.g. `"<message>"`, `"[env]"`,
-    /// `"files..."`) into a `HintToken`.
+    /// `"files..."`) into a `HintToken`, applying `parseHint`'s bare-token
+    /// rule to any token that is not a well-formed bracket pair.
     private static func parseHintToken(_ token: String) -> HintToken {
         var stripped = Substring(token)
         let variadic = stripped.hasSuffix("...")
@@ -170,7 +178,7 @@ public enum ParameterInference {
             required = bracket.required
             name = String(stripped.dropFirst().dropLast())
         } else {
-            required = true
+            required = false
             name = String(stripped)
         }
         return HintToken(placeholder: token, name: name, required: required, variadic: variadic)

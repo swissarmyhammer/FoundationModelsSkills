@@ -1,6 +1,32 @@
 ---
-position_column: todo
-position_ordinal: '8280'
+comments:
+- actor: claude-code
+  id: 01m0z1j04rnn1ztby9at6fr5s2
+  text: |-
+    Research and decision:
+    - Decision: a bare token -> optional. The hint is display text. Only `<x>` marks a token required. A display-only word must not block dispatch.
+    - A position with no hint token (`arguments:` past the hint arity, or body inference) stays required. The source is silent there.
+    - A malformed token (`[env`) falls through to the bare-token rule -> optional. The raw text stays as placeholder and name.
+    - The corrective names `SkillParameter.name` (from `arguments:` when present), not the hint inner text.
+
+    Changes:
+    - `Sources/FoundationModelsSkills/Listing/ParameterInference.swift`: `parseHintToken` bare branch now `required = false`; `parseHint` doc comment states the rule.
+    - `Sources/FoundationModelsSkills/Listing/SkillParameter.swift`, `Registry/SkillsRegistry.swift`, `Operations/UseSkill.swift`: doc comments aligned.
+    - `plan.md` §6.1: bare-token rule recorded.
+    - `Tests/.../ParameterInferenceTests.swift`: 3 new tests (bare token, malformed `[env`/`<target`, bare token merged with `arguments:`); 2 existing expectations updated (`c...`, `<`).
+    - `Tests/.../SkillOperationsTests.swift`: bare `env` missing -> success; new malformed `[env` -> success; new corrective-name test (`arguments: message` + `<msg>` -> names `message`, not `msg`).
+
+    `swift test`: 330 tests, 23 suites, 0 failures.
+  timestamp: 2026-08-26T12:43:41.080597+00:00
+- actor: claude-code
+  id: 01m0z1j2h819eg163sttwc9z6n
+  text: |-
+    ### implement — changed
+    - evidence: 7 files — Sources/FoundationModelsSkills/Listing/ParameterInference.swift, Sources/FoundationModelsSkills/Listing/SkillParameter.swift, Sources/FoundationModelsSkills/Registry/SkillsRegistry.swift, Sources/FoundationModelsSkills/Operations/UseSkill.swift, plan.md, Tests/FoundationModelsSkillsTests/ParameterInferenceTests.swift, Tests/FoundationModelsSkillsTests/SkillOperationsTests.swift
+    - next: test, commit, review
+  timestamp: 2026-08-26T12:43:43.528261+00:00
+position_column: doing
+position_ordinal: '80'
 title: Decide and pin bare-token argument-hint optionality (§6.1)
 ---
 ## What

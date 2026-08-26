@@ -244,7 +244,14 @@ Parameters merge three sources by position — precedence `arguments:` > `argume
 inference:
 - **`arguments:`** — authoritative names for `$name` and order.
 - **`argument-hint:`** — display + optionality (`<x>` required, `[x]` optional, trailing `...`
-  variadic).
+  variadic). **Bare-token rule:** a token with neither bracket form — a bare word (`env`) or a
+  malformed placeholder (`[env`, unclosed) — is **optional**. The hint is display text, and only
+  the explicit `<x>` form marks a token required; a display-only word must never block `use skill`
+  with a missing-argument corrective. A malformed token keeps its raw text verbatim as both
+  placeholder and name. This is distinct from a position **no** hint token describes (`arguments:`
+  past the hint's arity, or body inference), which stays required — there the source is silent.
+  The missing-argument corrective names the structured `SkillParameter.name` (`arguments:` when
+  present), never the hint token's inner text.
 - **Body inference** — when neither is present, scan the body for `$0`/`$N`/`$ARGUMENTS[N]` and
   synthesize positional params so the listing is never empty.
 

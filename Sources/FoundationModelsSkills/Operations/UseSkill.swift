@@ -183,10 +183,11 @@ public struct UseSkill: OperationDefinition {
     ///
     /// Consults `SkillParameter.required` directly (plan.md §6.1) rather
     /// than re-deriving requiredness from a display placeholder's bracket
-    /// syntax -- a skill whose `argument-hint:` token happens not to use
-    /// brackets (e.g. `argument-hint: env`) is still read correctly, since
-    /// `required` comes from the same structured inference that built the
-    /// placeholder, not from parsing the placeholder back out.
+    /// syntax -- `ParameterInference` owns the optionality rules, including
+    /// the bare-token rule (an unbracketed `argument-hint: env` is optional
+    /// and never draws this corrective). The returned name is
+    /// `SkillParameter.name`, which `arguments:` supplies authoritatively
+    /// when present -- never the hint token's inner text.
     ///
     /// - Parameters:
     ///   - parameters: The target skill's structured parameters, in

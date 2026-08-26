@@ -18,11 +18,12 @@ public struct SkillParameter: Sendable, Equatable {
 
     /// Whether this parameter must be supplied.
     ///
-    /// An `argument-hint:` token of `<x>` -> `true`; `[x]` -> `false`. A
-    /// position with no hint token (body-inferred, or a bare/unbracketed hint
-    /// token, or an `arguments:`-only position past the hint's arity)
-    /// defaults to `true` -- the conservative reading when no source
-    /// explicitly marks it optional.
+    /// An `argument-hint:` token of `<x>` -> `true`; `[x]` -> `false`; a
+    /// bare/unbracketed or malformed hint token (`env`, `[env`) -> `false`
+    /// (plan.md §6.1's bare-token rule: only `<x>` marks a hint token
+    /// required). A position with no hint token at all (body-inferred, or an
+    /// `arguments:`-only position past the hint's arity) defaults to `true`
+    /// -- the conservative reading when the source is silent.
     public var required: Bool
 
     /// Whether this is a trailing variadic parameter -- an `argument-hint:`

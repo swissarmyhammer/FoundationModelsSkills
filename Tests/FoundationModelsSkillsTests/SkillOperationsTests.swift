@@ -275,10 +275,8 @@ struct SkillOperationsTests {
     }
 
     @Test func useSkillWithAnUnbracketedHintAndTheArgumentSuppliedSucceeds() async throws {
-        // `argument-hint: env` (no brackets) still defaults to required --
-        // the same default `arguments:`-only and body-inferred parameters
-        // use -- but a satisfied required argument must never draw a
-        // corrective regardless of which source classified it.
+        // `argument-hint: env` (no brackets) reads optional (plan.md §6.1's
+        // bare-token rule); a supplied argument is substituted as usual.
         let (context, cleanup) = try Self.makeTempContext(
             argumentHintLine: "argument-hint: env\n", body: "Value: $0\n")
         defer { cleanup() }
@@ -292,13 +290,47 @@ struct SkillOperationsTests {
         #expect(result.body.contains("production"))
     }
 
-    @Test func useSkillWithAnUnbracketedHintAndTheArgumentMissingReturnsACorrective() async throws {
-        // Bare `argument-hint: env` has no source marking it optional, so
-        // `SkillParameter.required` defaults `true` -- the corrective must
-        // still fire, sourced from the structured flag, not from parsing
-        // the placeholder text back apart.
+    @Test func useSkillWithAnUnbracketedHintAndTheArgumentMissingSucceeds() async throws {
+        // plan.md §6.1's bare-token rule: `argument-hint:` is display text,
+        // and only `<x>` marks a token required. A bare `env` therefore
+        // reads optional, and omitting it must dispatch without a
+        // missing-argument corrective.
         let (context, cleanup) = try Self.makeTempContext(
             argumentHintLine: "argument-hint: env\n", body: "Value: $0\n")
+        defer { cleanup() }
+
+        let output = try await UseSkill(id: "widget", arguments: []).execute(in: context)
+
+        guard case .success = output else {
+            Issue.record("expected a result outcome, got \(output)")
+            return
+        }
+    }
+
+    @Test func useSkillWithAMalformedUnclosedBracketHintAndTheArgumentMissingSucceeds() async throws {
+        // Deliberate: a malformed placeholder such as `[env` (unclosed
+        // bracket) is neither `<x>` nor `[x]`, so it falls through to the
+        // bare-token rule and reads optional -- omitting it dispatches.
+        let (context, cleanup) = try Self.makeTempContext(
+            argumentHintLine: "argument-hint: \"[env\"\n", body: "Value: $0\n")
+        defer { cleanup() }
+
+        let output = try await UseSkill(id: "widget", arguments: []).execute(in: context)
+
+        guard case .success = output else {
+            Issue.record("expected a result outcome, got \(output)")
+            return
+        }
+    }
+
+    @Test func useSkillMissingArgumentCorrectiveNamesTheStructuredArgumentsNameNotTheHintText() async throws {
+        // The corrective names `SkillParameter.name`, which `arguments:`
+        // supplies authoritatively (plan.md §6.1) -- not the hint token's
+        // inner text. With `arguments: message` and `argument-hint: <msg>`,
+        // the message must say `message` and must not say `msg`.
+        let (context, cleanup) = try Self.makeTempContext(
+            argumentsLine: "arguments: message\n", argumentHintLine: "argument-hint: \"<msg>\"\n",
+            body: "Value: $0\n")
         defer { cleanup() }
 
         let output = try await UseSkill(id: "widget", arguments: []).execute(in: context)
@@ -307,7 +339,8 @@ struct SkillOperationsTests {
             Issue.record("expected a corrective outcome, got \(output)")
             return
         }
-        #expect(message.contains("env"))
+        #expect(message.contains("`message`"))
+        #expect(!message.contains("`msg`"))
     }
 
     @Test func useSkillWithABracketedOptionalHintAndTheArgumentMissingSucceeds() async throws {
