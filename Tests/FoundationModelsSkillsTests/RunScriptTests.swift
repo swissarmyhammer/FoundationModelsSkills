@@ -7,13 +7,20 @@ import Operations
 import Testing
 
 /// Tests for the `run script` operation (plan.md §7.3.1): the triple gate,
-/// unknown/model-hidden id correctives, the direct-exec eligibility check
-/// (executable bit + shebang), process-group timeout kill, and a golden
-/// result against the static `release-notes` fixture.
+/// unknown/model-hidden id correctives, the two path guards (`scripts/`
+/// prefix, then confinement), the direct-exec eligibility check
+/// (executable bit + shebang), process-group timeout kill, the
+/// `generatedContent` round trip, and a golden result against the static
+/// `release-notes` fixture.
 struct RunScriptTests {
     // MARK: - Fixture root (mirrors ResourceOpsTests)
 
     private static let projectSkillsRoot = FixtureLibrary.url(relativePath: "project/.skills")
+
+    /// A non-default `timeout` for the round-trip tests, chosen so a decoded
+    /// value equal to `RunScript.defaultTimeoutSeconds` could not pass by
+    /// accident.
+    private static let sampleTimeoutSeconds = 5
 
     /// Builds a `SkillsToolContext` over `roots` under `policy`, via the
     /// shared `ResourceTestSupport.makeContext(roots:policy:)` --
@@ -132,6 +139,42 @@ struct RunScriptTests {
             return
         }
         #expect(message.contains("deploy"))
+    }
+
+    // MARK: - Path guards: the `scripts/` prefix check precedes confinement
+
+    /// Both guards sit past gate 1 (host policy), the id lookup, and before
+    /// the grant check, so the fixture enables script execution (the default
+    /// `RenderPolicy()`) and grants every script via a bare `Script`. Each
+    /// guard reads the `path` string before any filesystem access, so no
+    /// script file needs to exist for either corrective to fire.
+    @Test(
+        "under a full grant, a path outside scripts/ draws the not-runnable corrective, and a scripts/-prefixed escape draws the confinement one",
+        arguments: [
+            (
+                name: "a script at the skill root, not under scripts/",
+                path: "hello.sh",
+                expected: "The path `hello.sh` is not runnable: `run script` only executes files under `scripts/`."
+            ),
+            (
+                name: "a scripts/-prefixed path that escapes the skill directory",
+                path: "scripts/../../outside.sh",
+                expected:
+                    "The path `scripts/../../outside.sh` is not accessible: it must resolve to a location inside the skill directory."
+            ),
+        ])
+    func pathGuardsFireInOrderUnderAFullGrant(name: String, path: String, expected: String) async throws {
+        let root = try HotReloadTestSupport.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try ResourceTestSupport.writeMinimalSkillFile(id: "path-guards", in: root, allowedTools: "Script")
+
+        let output = try await RunScript(id: "path-guards", path: path).execute(in: Self.makeContext(roots: [root]))
+
+        guard case .corrective(let message) = output else {
+            Issue.record("expected a corrective outcome, got \(output)")
+            return
+        }
+        #expect(message == expected, "\(name)")
     }
 
     // MARK: - Direct-exec eligibility: executable bit + shebang
@@ -267,6 +310,35 @@ struct RunScriptTests {
         // might otherwise trip.
         #expect(result.durationMs >= 200)
         #expect(result.durationMs < 2000)
+    }
+
+    // MARK: - generatedContent / init(_:) round trips
+
+    @Test func roundTripsThroughGeneratedContentWithArgumentsAndTimeoutPresent() throws {
+        let original = RunScript(
+            id: "release-notes", path: "scripts/build.sh", arguments: ["--verbose", "v2"],
+            timeout: Self.sampleTimeoutSeconds)
+
+        let decoded = try RunScript(original.generatedContent)
+
+        #expect(decoded.id == original.id)
+        #expect(decoded.path == original.path)
+        #expect(decoded.arguments == original.arguments)
+        #expect(decoded.timeout == original.timeout)
+    }
+
+    @Test func roundTripsThroughGeneratedContentWithNoArgumentsOrTimeout() throws {
+        let original = RunScript(id: "release-notes", path: "scripts/build.sh")
+
+        let content = original.generatedContent
+        let decoded = try RunScript(content)
+
+        #expect(decoded.id == original.id)
+        #expect(decoded.path == original.path)
+        #expect(decoded.arguments == nil)
+        #expect(decoded.timeout == nil)
+        #expect(!content.jsonString.contains("\"arguments\""))
+        #expect(!content.jsonString.contains("\"timeout\""))
     }
 
     // MARK: - Fixture helpers
