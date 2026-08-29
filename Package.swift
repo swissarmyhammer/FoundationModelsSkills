@@ -12,9 +12,9 @@ let testTargetName = packageName + "Tests"
 /// The GitHub organization URL base the swissarmyhammer-family sibling
 /// dependencies resolve under.
 ///
-/// Covers `FoundationModelsExtras`, `FoundationModelsOperationTool`, and
-/// `FoundationModelsMetadataRegistry` -- extracted so the org lives in one
-/// place instead of three dependency entries that could silently drift.
+/// Covers `FoundationModelsExtras` and `FoundationModelsMetadataRegistry` --
+/// extracted so the org lives in one place instead of dependency entries
+/// that could silently drift.
 /// Every sibling is wired as a *remote* dependency (`main` branch), never a
 /// local `path:` one, matching the family convention
 /// (`FoundationModelsRouter`, `FoundationModelsMetadataRegistry`) so this
@@ -24,24 +24,21 @@ let testTargetName = packageName + "Tests"
 /// the SwiftPM "Conflicting identity" warning a mixed path/URL reference to
 /// the same package produces when another dependency in the graph (e.g.
 /// `FoundationModelsMetadataRegistry -> FoundationModelsRouter ->
-/// FoundationModelsOperationTool`) already pulls it in remotely.
+/// FoundationModelsExtras`) already pulls it in remotely.
 let swissArmyHammerOrg = "git@github.com:swissarmyhammer/"
 
 /// Shared product dependencies needed by both the library target and its test
 /// target -- factored out so the two lists can't drift out of sync.
 let commonDependencies: [Target.Dependency] = [
     .product(name: "FoundationModelsExtras", package: "FoundationModelsExtras"),
-    // A remote dependency's package identity is the URL's last path
-    // component, not the manifest's own declared `Package(name:)` --
-    // `FoundationModelsOperationTool`'s manifest names itself
-    // `FoundationModelsOperations`, but every family consumer (this
-    // package, FoundationModelsRouter, FoundationModelsShelltool,
-    // FoundationModelsFileTool) keys off `FoundationModelsOperationTool`
-    // here, matching the URL.
-    .product(name: "Operations", package: "FoundationModelsOperationTool"),
+    // FM tool fusion: `OperationTool`/`@Operation` macro machinery. The
+    // Operations capability moved into the Extras package on 2026-08-29
+    // (the FoundationModelsOperationTool repository is retired), so these
+    // two products resolve from `FoundationModelsExtras` now.
+    .product(name: "Operations", package: "FoundationModelsExtras"),
     // Dual-use CLI driver (plan.md §7.2): assembles the same fused
     // `OperationTool` into an ArgumentParser command tree for `SkillsCLI`.
-    .product(name: "OperationsCLI", package: "FoundationModelsOperationTool"),
+    .product(name: "OperationsCLI", package: "FoundationModelsExtras"),
     .product(name: "FoundationModelsMetadataRegistry", package: "FoundationModelsMetadataRegistry"),
     .product(name: "Yams", package: "Yams"),
 ]
@@ -52,8 +49,8 @@ let commonDependencies: [Target.Dependency] = [
 /// split, layering is conceptual, not modular) that will host
 /// agentskills.io-style skill discovery, search, and invocation as a fused
 /// `OperationTool` on top of `FoundationModelsExtras` (dotfolder stack,
-/// templating), `FoundationModelsOperationTool` (`@Operation` macro fusion),
-/// and `FoundationModelsMetadataRegistry` (hybrid search) -- see plan.md §3
+/// templating, and the `Operations` `@Operation` macro fusion) and
+/// `FoundationModelsMetadataRegistry` (hybrid search) -- see plan.md §3
 /// for the full layered architecture this package builds toward.
 let package = Package(
     name: packageName,
@@ -77,12 +74,11 @@ let package = Package(
     dependencies: [
         // Layers 1-2 substrate: `DotfolderStack`, `FrontmatterDocument`,
         // `TemplateEngine` (plan.md §3, decision #29 -- imported, not built
-        // here).
+        // here) -- plus, since 2026-08-29, the `Operations` /
+        // `OperationsCLI` modules: `OperationTool`/`@Operation` macro
+        // fusion (decision #20) and `OperationCLIDriver` for the dual-use
+        // CLI (plan.md §7.2).
         .package(url: "\(swissArmyHammerOrg)FoundationModelsExtras.git", branch: "main"),
-        // FM tool fusion: `OperationTool`/`@Operation` macro machinery
-        // (decision #20) plus `OperationCLIDriver` for the dual-use CLI
-        // (plan.md §7.2).
-        .package(url: "\(swissArmyHammerOrg)FoundationModelsOperationTool.git", branch: "main"),
         // `SkillSearchAgent`'s hybrid retrieval (BM25 + trigram + cosine ->
         // RRF) and Router-backed selection session, via
         // `MetadataSearcher<SkillMetadata>` (plan.md decision #26).
