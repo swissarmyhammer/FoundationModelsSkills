@@ -115,6 +115,35 @@ struct DependencyGraphTests {
     /// history instead of a claim about today.
     private static let retirementMarker = "retired"
 
+    /// The README, relative to the package root.
+    private static let readmeFileName = "README.md"
+
+    /// The test file that holds the compiled copy of the README usage block,
+    /// relative to the package root.
+    ///
+    /// That file imports only `FoundationModels`, `FoundationModelsSkills`
+    /// and `Testing`. Its short import list is the compile guard itself, thus
+    /// the equality case lives here, where `Foundation` is already imported,
+    /// and never there.
+    private static let usageBlockCopyPath =
+        "Tests/FoundationModelsSkillsTests/ReadmeExampleTests.swift"
+
+    /// The line that opens the README's first Swift code fence.
+    private static let swiftFenceOpen = "```swift"
+
+    /// The line that closes a Markdown code fence.
+    private static let fenceClose = "```"
+
+    /// The comment that stands above the compiled copy of the usage block.
+    private static let usageBlockStartMarker = "// The README usage block starts here."
+
+    /// The comment that stands below the compiled copy of the usage block.
+    private static let usageBlockEndMarker = "// The README usage block ends here."
+
+    /// The prefix of an import line, which the README block carries and the
+    /// compiled copy does not, because a Swift file imports at its top.
+    private static let importLinePrefix = "import "
+
     @Test("Package.resolved holds none of the live-Router packages")
     func resolvesNoneOfTheLiveRouterPackages() throws {
         let found = try Self.resolvedIdentities().intersection(Self.removedIdentities).sorted()
@@ -198,6 +227,44 @@ struct DependencyGraphTests {
             its retirement: that repository is retired, and the Operations and OperationsCLI \
             modules come from FoundationModelsExtras now. Write the sentence in the past tense, \
             or name FoundationModelsExtras instead; found: \(offenders.joined(separator: ", "))
+            """
+        )
+    }
+
+    /// Proves that the README usage block and the copy the test target
+    /// compiles are the same text.
+    ///
+    /// `ReadmeExampleTests` holds a copy of the block, thus the block is
+    /// known to compile. That alone does not keep the two equal: an edit to
+    /// `README.md` alone leaves the suite green, because the compiled copy
+    /// still compiles. A reader would then copy code that nothing checks.
+    ///
+    /// This case closes that gap. It reads the README's first Swift fence and
+    /// the lines between the two markers in the test file, and compares them.
+    /// Together the two cases give the whole promise: the block compiles, and
+    /// the block a reader sees is the block that compiled.
+    ///
+    /// The two copies differ in two ways that carry no meaning, thus the
+    /// comparison removes both: the README block opens with its `import`
+    /// lines, which a Swift file writes at its top instead, and the compiled
+    /// copy is indented, because it sits inside a function.
+    @Test("the README usage block and the copy the tests compile are the same text")
+    func readmeUsageBlockMatchesItsCompiledCopy() throws {
+        let root = FixtureLibrary.packageRoot()
+        let published = try Self.readmeUsageBlock(under: root)
+        let compiled = try Self.compiledUsageBlockCopy(under: root)
+        #expect(
+            published == compiled,
+            """
+            The README usage block and the copy in \(Self.usageBlockCopyPath) must be the same \
+            text. One of the two changed alone. Make the same edit in both, thus the block a \
+            reader copies stays the block the test target compiles.
+
+            README:
+            \(published)
+
+            compiled copy:
+            \(compiled)
             """
         )
     }
@@ -295,6 +362,85 @@ struct DependencyGraphTests {
         /// section the record no longer holds.
         var description: String {
             "plan.md holds no heading line that begins with \"\(heading)\"."
+        }
+    }
+
+    /// Reads the README's first Swift code fence, without its `import` lines.
+    ///
+    /// - Parameter root: The package root.
+    /// - Returns: The block, one line for each line of the fence.
+    /// - Throws: ``MissingBlockError`` when the README holds no Swift fence,
+    ///   or an error when the README cannot be read. An absent block is a
+    ///   failure, and never an empty string: two empty strings are equal, and
+    ///   a case that compared them would prove nothing.
+    private static func readmeUsageBlock(under root: URL) throws -> String {
+        let readme = try String(
+            contentsOf: root.appendingPathComponent(Self.readmeFileName), encoding: .utf8)
+        let lines = readme.components(separatedBy: .newlines)
+        guard let open = lines.firstIndex(where: { $0.hasPrefix(Self.swiftFenceOpen) }) else {
+            throw MissingBlockError(what: "a \(Self.swiftFenceOpen) fence", file: Self.readmeFileName)
+        }
+        let body = lines[lines.index(after: open)...]
+        let close = body.firstIndex { $0.hasPrefix(Self.fenceClose) } ?? body.endIndex
+        return Self.dedented(body[..<close].filter { !$0.hasPrefix(Self.importLinePrefix) })
+    }
+
+    /// Reads the copy of the usage block that the test target compiles.
+    ///
+    /// The copy sits between ``usageBlockStartMarker`` and
+    /// ``usageBlockEndMarker`` inside a test function, thus the marker lines
+    /// themselves are left out and the body is dedented.
+    ///
+    /// - Parameter root: The package root.
+    /// - Returns: The copy, one line for each line between the markers.
+    /// - Throws: ``MissingBlockError`` when either marker is absent, or an
+    ///   error when the file cannot be read.
+    private static func compiledUsageBlockCopy(under root: URL) throws -> String {
+        let file = root.appendingPathComponent(Self.usageBlockCopyPath)
+        let lines = try String(contentsOf: file, encoding: .utf8).components(separatedBy: .newlines)
+        guard let start = lines.firstIndex(where: { $0.contains(Self.usageBlockStartMarker) }) else {
+            throw MissingBlockError(what: "the start marker", file: Self.usageBlockCopyPath)
+        }
+        let body = lines[lines.index(after: start)...]
+        guard let end = body.firstIndex(where: { $0.contains(Self.usageBlockEndMarker) }) else {
+            throw MissingBlockError(what: "the end marker", file: Self.usageBlockCopyPath)
+        }
+        return Self.dedented(body[..<end])
+    }
+
+    /// Removes the indent that every line of `lines` shares, and the blank
+    /// lines at each end.
+    ///
+    /// One copy of the block sits inside a function and the other sits in a
+    /// Markdown fence, thus the two carry different indents. The indent is
+    /// the only difference that carries no meaning, thus it comes off before
+    /// the comparison. A blank line inside the block keeps its place.
+    ///
+    /// - Parameter lines: The lines to align.
+    /// - Returns: The lines, joined by a newline.
+    private static func dedented(_ lines: some Sequence<String>) -> String {
+        var kept = Array(lines)
+        while kept.first?.trimmingCharacters(in: .whitespaces).isEmpty == true { kept.removeFirst() }
+        while kept.last?.trimmingCharacters(in: .whitespaces).isEmpty == true { kept.removeLast() }
+        let indents = kept
+            .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+            .map { $0.prefix { $0 == " " }.count }
+        let common = indents.min() ?? 0
+        return kept.map { String($0.dropFirst(min(common, $0.prefix { $0 == " " }.count))) }
+            .joined(separator: "\n")
+    }
+
+    /// Thrown when a block this suite compares is absent.
+    private struct MissingBlockError: Error, CustomStringConvertible {
+        /// What the reader looked for.
+        let what: String
+
+        /// The file it looked in, relative to the package root.
+        let file: String
+
+        /// Names what is absent and where, thus the failure says what to fix.
+        var description: String {
+            "\(file) holds no \(what), thus the two copies cannot be compared."
         }
     }
 
