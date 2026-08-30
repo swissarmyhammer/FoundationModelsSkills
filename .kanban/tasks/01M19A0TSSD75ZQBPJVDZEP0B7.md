@@ -79,6 +79,78 @@ comments:
     - evidence: 3 files — `.github/workflows/ci.yml`, `Tests/FoundationModelsSkillsTests/HotReloadLiveTests.swift`, `Tests/FoundationModelsSkillsTests/CIWorkflowTests.swift`. `swift test`: 397 tests in 30 suites passed, 0 failures. The only build warning is the mlx-swift "missing creator for mutated node", which the archived card ^vwthc4s accepted and which this change did not cause.
     - next: ready for `/review`.
   timestamp: 2026-08-30T14:41:18.105946+00:00
+- actor: claude-code
+  id: 01m19je0y680w2pzwj0f2tht84
+  text: |
+    ### review — findings
+    - evidence: 1 finding, 1 confirmed, 0 refuted, 7 validators attempted — `Tests/FoundationModelsSkillsTests/CIWorkflowTests.swift:117`. Scope: `review sha HEAD~1..HEAD` (b4e7ef6), local backend.
+    - next: add the mixed-case assertion to `passesTheLiveSuiteSelectors`, then `/review ^dzep0b7` again.
+
+    Acceptance-criteria check, done beside the engine run:
+
+    - **Suite header records the trade.** `Tests/FoundationModelsSkillsTests/HotReloadLiveTests.swift` states "The default developer run changed, and the change is deliberate", names the old environment gate, states that model availability is now the only gate, and gives the reason the card asks for: one add and one remove burst, and a live path nobody runs rots. It also points at `ci.yml` for the CI split. The criterion is met.
+    - **`inputValues(forKey:in:)` is case-insensitive correctly.** It lowercases both the file key and the asked key, thus `Integration-Skip:` and `INTEGRATION-PACKAGE-PATH:` both match the forbidden-input names. A comment line does not match, because the `#` stays in its key. The behaviour is right; the engine's finding is that no test proves it.
+    - **The split name works.** `removedEnvironmentGate` is `"SKILLS_INTEGRATION" + "_TESTS"`. The file's own text carries a quote, a plus and a space between the two parts, thus the walk reading `Tests/` does not report this file. The two parts join to exactly the removed name, and the value is a compile-time constant that the failure message prints, thus it cannot silently stop matching the real string.
+    - **The `ci.yml` header is truthful.** It no longer says the suite is unwired. It states that `test-skip` holds the suite out of the unit job, that `integration-filter` names that same suite and starts the integration job on the `[self-hosted, macOS]` pool, and that no other `integration-*` input is given.
+    - **`.enabled(if:)` gives a skip.** It is a Swift Testing condition trait: a false condition records the test as skipped with the given comment, never as a failure. `SystemLanguageModel.default.isAvailable` is the only gate on the one test case.
+  timestamp: 2026-08-30T14:51:00.934804+00:00
+- actor: claude-code
+  id: 01m19jtyecj79qwatpcejaexkw
+  text: |
+    ### finding addressed — case-insensitive read is now proven
+
+    The finding said the case-insensitive contract of `inputValues(forKey:in:)` had no assertion behind it. First, that gap was measured, not assumed: with `.lowercased()` removed from BOTH sides of the compare, the whole `CIWorkflowTests` suite still passed, 6 of 6. Nothing in the file held the contract.
+
+    The cause was removed for the whole file, not only for the line in the finding. Two assertions depend on the contract, and both are inside `passesTheLiveSuiteSelectors()`:
+
+    1. The required-input loop, which reads `test-skip` and `integration-filter`.
+    2. The forbidden-input loop, which must catch `integration-package-path`, `integration-skip`, and `integration-gate-env`. This is the load-bearing one: a case-sensitive read lets a forbidden input spelled `Integration-Skip:` go through with no report.
+
+    The compare lowercases both sides, thus the contract has two halves, and one test covers each half:
+
+    - `readsAnInputKeyThatTheFileSpellsInMixedCase()` reads a small in-test YAML fixture, `mixedCaseInputFixture`. The fixture spells all five keys in mixed case: `Test-Skip`, `INTEGRATION-FILTER`, `Integration-Package-Path`, `Integration-Skip`, `INTEGRATION-GATE-ENV`. That is every key the two loops above pass to the reader, thus each assertion has its key covered. Each line carries a different value, thus a match against the wrong line shows in the failure message.
+    - `readsAnInputKeyThatTheTestAsksForInMixedCase()` asks the real `ci.yml` for each required input in two spellings, the upper form and the title form. The spellings come from `key.uppercased()` and `key.capitalized`, thus they cannot drift from `requiredLiveSuiteInputs`.
+
+    **Mutation evidence — each test catches its own half, and nothing else does.**
+
+    | helper compare | file-side test | asked-side test |
+    |---|---|---|
+    | `trimmed[..<colon] == key` (both drops) | FAIL, 5 issues | FAIL, 4 issues |
+    | `trimmed[..<colon] == key.lowercased()` (file drop) | FAIL, 5 issues | pass |
+    | `trimmed[..<colon].lowercased() == key` (asked drop) | pass | FAIL, 4 issues |
+    | correct, both lowercased | pass | pass |
+
+    No existing assertion was weakened. The two loops of `passesTheLiveSuiteSelectors()` are unchanged.
+
+    Two small supporting edits:
+
+    - `lines(of:)` is new. `workflowLines()` now goes through it, and so does the fixture. Thus a fixture is cut into lines exactly as the real file is, and the split is written once.
+    - The suite header gained a paragraph. It said the suite pins properties of `ci.yml`; the two new cases pin the READER that those pins use, not the file, and the header now says so and gives the reason.
+
+    `swift test`: 399 tests in 30 suites passed, 0 failures. That is 397 plus the two new cases. The only build warning is the mlx-swift "missing creator for mutated node", which archived card ^vwthc4s accepted and which this change did not cause.
+  timestamp: 2026-08-30T14:58:04.364496+00:00
+- actor: claude-code
+  id: 01m19k7jnc1d50ddsnftcbyv0t
+  text: |
+    ### validator check — the new code against the rules that govern it
+
+    The rules were pulled before the edit and checked against it after. Notes for the next agent, because two of these are not obvious:
+
+    - **`magic-numbers-swift` is the sharpest hazard in this file, and the change avoids it.** Its `test_parent_classes` option is `["QuickSpec", "XCTestCase"]` only. A Swift Testing `@Test` in a `struct` suite gets NO test exemption, thus a bare numeric literal outside `[0, 1, -1, 100]` in a comparison is a finding. The two new cases hold no numeric literal at all.
+    - **`missing-docs-swift` reports `[open, public]` only**, thus a `private static` member needs no doc comment. Each new member has one anyway, because the file writes them everywhere.
+    - **`no-test-cheating` item 4 forbids a weakened assertion**, "an exact value turned into 'is not empty'". Both new cases compare an exact array: `values == [value]` and `values == [Self.liveSuiteSelector]`.
+    - **`no-hard-code` forbids a test helper that returns the expected answer** to make a downstream assertion pass. Both cases call the real `inputValues(forKey:in:)`.
+    - **`no-commented-code` counts a run of more than 5 comment lines.** The YAML sits in a string literal, not in a comment block. The longest comment run in the new code is 2 lines.
+    - **`dead-code-swift` indexes a test target and then `--report-exclude`s it**, thus the fixture cannot be reported dead.
+    - **`test-partitioning`** wants no environment variable and no external system. The new cases use neither. Reading `ci.yml` from the working tree is what all five older cases of this suite already do; it is the subject of the suite, not an external system.
+    - **`duplication`** could see the fixture beside the real `ci.yml`. Three scaffold lines are shared, `jobs:`, `ci:`, and `with:`; every key and every value differs. The carve-out fits: "similar shape, different intent". The intent really is different, because the fixture must hold mixed-case spellings that `ci.yml` must never hold. Note the rule also forbids answering such a row by editing `ci.yml`; the fix belongs in the changed code.
+
+    One rule reading worth writing down, because it looks like it limits this work and does not: `completeness/case-sensitivity-coverage` says a reviewer must "ask for **one** such test — not a positive x negative matrix, not a test per token position." That caps what a REVIEW may demand. It does not cap the author. Two cases are here because the compare lowercases both sides, and the mutation table above proves each case catches a regression the other misses. Neither is a spelling matrix: each loops over a table inside one test, and each has one behaviour and one name.
+
+    ### implement — changed
+    - evidence: 1 file — `/Users/wballard/github/swissarmyhammer/FoundationModelsSkills/Tests/FoundationModelsSkillsTests/CIWorkflowTests.swift`. `swift test`: 399 tests in 30 suites passed, 0 failures, was 397. `swift test --filter FoundationModelsSkillsTests.CIWorkflowTests`: 8 of 8 passed, was 6. `swift build --build-tests`: the only warning is the mlx-swift "missing creator for mutated node", which archived card ^vwthc4s accepted. 4 mutation runs prove each new case catches its own half of the contract.
+    - next: ready for `/review`.
+  timestamp: 2026-08-30T15:04:58.284880+00:00
 depends_on:
 - 01M19A09R1HSTQTHZJGV3640VH
 - 01M19AK51NF7PEDQSMWAVYCCBJ
@@ -145,3 +217,12 @@ Confirm the exact selector form against the `test-filter` input description in `
 
 ## Workflow
 - Use `/tdd` — write failing tests first, then implement to make them pass.
+
+## Review Findings (2026-08-30 09:42)
+
+> Scope: `review sha HEAD~1..HEAD` — reviewed the diffs only — lines this change added or modified. 3 file(s) reviewed, 2 not reviewed.
+
+> 2 file(s) not reviewed — excluded by an ignore rule:
+> - `.kanban/ (from .reviewignore)` — 2 file(s)
+
+- [x] `Tests/FoundationModelsSkillsTests/CIWorkflowTests.swift:117` `completeness/case-sensitivity-coverage` — The new `inputValues` function makes key matching case-insensitive (line 261: `.lowercased() == key.lowercased()`), correctly reflecting GitHub Actions' case-insensitive input names. However, the test only exercises lowercase keys—no assertion verifies that mixed-case spellings like `"Test-Skip"` or `"INTEGRATION-FILTER"` are also accepted, leaving the case-handling contract unproven. Add one assertion within `passesTheLiveSuiteSelectors` that verifies `inputValues(forKey: "Test-Skip", in: workflowLines)` returns the expected value, confirming case-insensitivity works.

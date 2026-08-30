@@ -22,6 +22,12 @@ import Testing
 /// before it. A later edit that points `uses:` somewhere else, adds a
 /// repository-local job that runs tests, drops a selector, or drops a
 /// trigger, makes this suite fail.
+///
+/// Two more cases pin the reader that the input assertions use, and not the
+/// workflow file: ``inputValues(forKey:in:)`` finds a key in whichever case
+/// the file spells it, and in whichever case a test asks for it. GitHub
+/// Actions does the same, thus a reader that keeps the case lets a forbidden
+/// input spelled `Integration-Skip:` go through this suite without a report.
 @Suite("CI workflow")
 struct CIWorkflowTests {
     /// The full `uses:` value that `ci.yml` must delegate to, pinned to the
@@ -70,6 +76,43 @@ struct CIWorkflowTests {
     /// The name is joined from two parts so that this file, which the walk
     /// itself reads, does not hold the whole name and report itself.
     private static let removedEnvironmentGate = "SKILLS_INTEGRATION" + "_TESTS"
+
+    /// A `with:` block that spells every input this suite reads in a case
+    /// that no lowercase text match finds.
+    ///
+    /// GitHub Actions resolves a `with:` key against the called workflow's
+    /// `inputs:` without regard to case. Thus `Integration-Skip:` reaches the
+    /// same input as `integration-skip:` does. This fixture is the proof that
+    /// ``inputValues(forKey:in:)`` reads such a line, because a reader that
+    /// misses it lets a forbidden input go through
+    /// ``passesTheLiveSuiteSelectors()`` without a report.
+    ///
+    /// The value on each line is different from the others. Thus a match
+    /// against the wrong line is visible in the failure message.
+    private static let mixedCaseInputFixture = """
+        jobs:
+          ci:
+            with:
+              Test-Skip: mixed-case-test-skip
+              INTEGRATION-FILTER: mixed-case-integration-filter
+              Integration-Package-Path: mixed-case-integration-package-path
+              Integration-Skip: mixed-case-integration-skip
+              INTEGRATION-GATE-ENV: mixed-case-integration-gate-env
+        """
+
+    /// The lowercase input name of each line of ``mixedCaseInputFixture``,
+    /// with the value that line carries.
+    ///
+    /// The list holds every name of ``requiredLiveSuiteInputs`` and of
+    /// ``forbiddenIntegrationInputs``. Thus each assertion of
+    /// ``passesTheLiveSuiteSelectors()`` has its key covered.
+    private static let mixedCaseFixtureExpectations = [
+        (input: "test-skip", value: "mixed-case-test-skip"),
+        (input: "integration-filter", value: "mixed-case-integration-filter"),
+        (input: "integration-package-path", value: "mixed-case-integration-package-path"),
+        (input: "integration-skip", value: "mixed-case-integration-skip"),
+        (input: "integration-gate-env", value: "mixed-case-integration-gate-env"),
+    ]
 
     @Test("ci.yml calls the shared swift-ci.yaml workflow at @main")
     func callsTheSharedWorkflow() throws {
@@ -137,6 +180,44 @@ struct CIWorkflowTests {
                 suite, and integration-gate-env cannot even be combined with it; found: \(values)
                 """
             )
+        }
+    }
+
+    @Test("an input key resolves in whichever case the workflow file spells it")
+    func readsAnInputKeyThatTheFileSpellsInMixedCase() {
+        let fixture = Self.lines(of: Self.mixedCaseInputFixture)
+        for (input, value) in Self.mixedCaseFixtureExpectations {
+            let values = Self.inputValues(forKey: input, in: fixture)
+            #expect(
+                values == [value],
+                """
+                GitHub Actions accepts a `with:` key in any case, thus "\(input)" must read the \
+                mixed-case line of the fixture. A reader that keeps the case of the file lets a \
+                forbidden input spelled "Integration-Skip:" go through the assertions above \
+                without a report; found: \(values)
+                """
+            )
+        }
+    }
+
+    @Test("an input key resolves in whichever case a test asks for it")
+    func readsAnInputKeyThatTheTestAsksForInMixedCase() throws {
+        let lines = try Self.workflowLines()
+
+        // ci.yml spells its own keys in lower case, thus this is the other
+        // half of the same contract: the asked key may carry any case.
+        for key in Self.requiredLiveSuiteInputs {
+            for spelling in [key.uppercased(), key.capitalized] {
+                let values = Self.inputValues(forKey: spelling, in: lines)
+                #expect(
+                    values == [Self.liveSuiteSelector],
+                    """
+                    An input name is case-insensitive on both sides, thus "\(spelling)" must read \
+                    the "\(key)" line of ci.yml. A reader that keeps the case of the asked key \
+                    makes each assertion above depend on one spelling; found: \(values)
+                    """
+                )
+            }
         }
     }
 
@@ -232,8 +313,19 @@ struct CIWorkflowTests {
     private static func workflowLines() throws -> [Substring] {
         let workflow = FixtureLibrary.packageRoot()
             .appendingPathComponent(".github/workflows/ci.yml")
-        let text = try String(contentsOf: workflow, encoding: .utf8)
-        return text.split(separator: "\n", omittingEmptySubsequences: false)
+        return Self.lines(of: try String(contentsOf: workflow, encoding: .utf8))
+    }
+
+    /// Cuts workflow text into lines.
+    ///
+    /// ``workflowLines()`` and the in-test fixtures both go through here, thus
+    /// a fixture has the same shape as the real file. An empty line stays,
+    /// because a reader must step over it as the file has it.
+    ///
+    /// - Parameter text: The text of a workflow file, or of a fixture.
+    /// - Returns: Each line of that text.
+    private static func lines(of text: String) -> [Substring] {
+        text.split(separator: "\n", omittingEmptySubsequences: false)
     }
 
     /// The value of every `key: value` line of a workflow file whose key
