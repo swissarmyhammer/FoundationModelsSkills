@@ -22,6 +22,13 @@ import Testing
 /// describes it are two different things, and a reader believes the text. Thus
 /// ``namesNoRemovedRouterPackage()`` reads the shipped files and fails when one
 /// of them still names the Router.
+///
+/// Two more cases guard `plan.md`, which that walk deliberately passes over.
+/// The walk cannot read the decision record, because the record keeps the
+/// Router in the decisions that named it when they were taken. Thus
+/// ``planRecordsTheRouterFreeDecision()`` and
+/// ``apiSketchShowsTheInjectedSessionFactory()`` read the record themselves,
+/// and pin what it must say now.
 @Suite("Dependency graph")
 struct DependencyGraphTests {
     /// The name of the removed Router package, spelled as prose and manifests
@@ -62,6 +69,37 @@ struct DependencyGraphTests {
 
     /// The resolution file, relative to the package root.
     private static let resolutionFileName = "Package.resolved"
+
+    /// The decision record, relative to the package root.
+    ///
+    /// ``prosePaths`` deliberately leaves this file out, because the record
+    /// keeps the Router in the decisions that named it when they were taken.
+    /// The two cases below read the file instead, and pin what it must say
+    /// now.
+    private static let planFileName = "plan.md"
+
+    /// The heading of the decision that records the Router removal.
+    ///
+    /// An edit that drops the decision, renumbers it, or gives it another name
+    /// fails ``planRecordsTheRouterFreeDecision()``.
+    private static let routerFreeDecisionHeading =
+        "30. **Router-free package; the host injects the selection session.**"
+
+    /// The text the public API sketch's heading line begins with.
+    private static let apiSketchHeading = "## 10. Public API sketch"
+
+    /// The one-call factory the public API sketch must show.
+    private static let injectedSessionFactory = "SkillsTool.make(registry:session:)"
+
+    /// The Router-era embedder wrapper the public API sketch must not show.
+    ///
+    /// The wrapper adapted a routed embedding model. No such model is in this
+    /// package's graph, thus a reader who copied the sketch could not build
+    /// the wrapper.
+    private static let removedEmbedderAdapterName = "RoutedEmbedderAdapter"
+
+    /// The prefix of a top-level section heading in the decision record.
+    private static let sectionHeadingPrefix = "## "
 
     @Test("Package.resolved holds none of the live-Router packages")
     func resolvesNoneOfTheLiveRouterPackages() throws {
@@ -109,6 +147,102 @@ struct DependencyGraphTests {
             \(offenders.joined(separator: ", "))
             """
         )
+    }
+
+    /// Proves that the decision record holds the decision that records the
+    /// Router removal.
+    ///
+    /// The record amends decision 17 and decision 26 in place, and an
+    /// amendment alone says only that something changed. The dated decision
+    /// says what changed and why. A later edit that removes it would leave two
+    /// amendments that point at nothing, thus this case pins the heading.
+    @Test("plan.md holds the dated decision that records the Router removal")
+    func planRecordsTheRouterFreeDecision() throws {
+        let plan = try Self.planText()
+        #expect(
+            plan.contains(Self.routerFreeDecisionHeading),
+            """
+            plan.md must hold the decision that records the Router removal, spelled \
+            "\(Self.routerFreeDecisionHeading)". Decision 17 and decision 26 both point at it.
+            """
+        )
+    }
+
+    /// Proves that the public API sketch shows the factory a host calls today.
+    ///
+    /// The sketch is the first code most readers copy. While the Router was in
+    /// the graph, it built the search context by hand, gave the selection tier
+    /// a routed model, and wrapped a routed embedding model. None of those
+    /// three compile now. The sketch must show the one-call factory that takes
+    /// the host's own session instead.
+    @Test("the public API sketch shows the injected-session factory")
+    func apiSketchShowsTheInjectedSessionFactory() throws {
+        let sketch = try Self.planSection(startingWith: Self.apiSketchHeading)
+        #expect(
+            sketch.contains(Self.injectedSessionFactory),
+            """
+            the public API sketch must show \(Self.injectedSessionFactory), the factory that takes \
+            the selection session from the host
+            """
+        )
+        #expect(
+            !sketch.contains(Self.removedEmbedderAdapterName),
+            """
+            the public API sketch must not show \(Self.removedEmbedderAdapterName): it is a \
+            Router-era type, thus a reader who copied the sketch could not build it
+            """
+        )
+    }
+
+    /// Reads `plan.md` from the package root.
+    ///
+    /// The read is deliberately unguarded, for the same reason as
+    /// ``resolvedIdentities()``: an absent record must fail the case, and
+    /// never make it pass on an empty string.
+    ///
+    /// - Returns: The whole decision record.
+    /// - Throws: An error when `plan.md` cannot be read.
+    private static func planText() throws -> String {
+        let plan = FixtureLibrary.packageRoot().appendingPathComponent(planFileName)
+        return try String(contentsOf: plan, encoding: .utf8)
+    }
+
+    /// Reads the one section of `plan.md` whose heading line begins with
+    /// `heading`.
+    ///
+    /// A section runs from its own heading line to the next top-level heading,
+    /// or to the end of the record. One section is read, and not the whole
+    /// file, because a "must not name" expectation over the whole record would
+    /// pass on text that lies somewhere else in it.
+    ///
+    /// - Parameter heading: The text the section's heading line begins with.
+    /// - Returns: The section, its heading line included.
+    /// - Throws: ``MissingSectionError`` when no heading line begins with
+    ///   `heading`, or an error when `plan.md` cannot be read.
+    private static func planSection(startingWith heading: String) throws -> String {
+        let lines = try planText().components(separatedBy: .newlines)
+        guard let start = lines.firstIndex(where: { $0.hasPrefix(heading) }) else {
+            throw MissingSectionError(heading: heading)
+        }
+        let body = lines[lines.index(after: start)...]
+        let end = body.firstIndex { $0.hasPrefix(sectionHeadingPrefix) } ?? body.endIndex
+        return lines[start..<end].joined(separator: "\n")
+    }
+
+    /// Thrown when ``planSection(startingWith:)`` finds no matching heading.
+    ///
+    /// An absent heading is a failure, and never an empty section: a case that
+    /// read nothing would pass its "must not name" expectation and prove
+    /// nothing.
+    private struct MissingSectionError: Error, CustomStringConvertible {
+        /// The heading text that no line began with.
+        let heading: String
+
+        /// Names the absent heading, thus the failure message says which
+        /// section the record no longer holds.
+        var description: String {
+            "plan.md holds no heading line that begins with \"\(heading)\"."
+        }
     }
 
     /// Reads every line at or under `base` that holds `name`.

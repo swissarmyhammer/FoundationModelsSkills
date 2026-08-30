@@ -60,8 +60,8 @@ leaf — not built here *(decision #29)*.
 ┌─ Layer 4  FM adapter (skills) ─────────────────────────────────────────────┐
 │   Skill operations — SearchSkill / ListSkill / UseSkill structs fused by   │
 │   FoundationModelsOperations.OperationTool into ONE core Tool              │
-│   SkillSearchAgent — MetadataSearcher over skill metadata (#26, separate   │
-│   Router session + rank-fusion retrieval; never the root session)          │
+│   SkillSearchAgent — MetadataSearcher over skill metadata (#26/#30, an     │
+│   injected selection session + rank-fusion; never the root session)        │
 │   preload injection (rendered bodies → root Instructions)                  │
 │   commandListing() — user `/` menu view (separate from the model surface)  │
 │   OperationCLIDriver — dual-use CLI from the same op declarations          │
@@ -320,12 +320,13 @@ struct UseSkillResult:    Encodable { let id: String; let body: String }  // bod
 *(decision #26; supersedes the bespoke search session)*. The registry's **skill metadata**
 (id, description, params; not full bodies — rendered as text blocks) seeds the searcher,
 which layers hybrid ranked retrieval (BM25 + trigram + cosine → RRF) under an LLM
-selection session on a Router model. Benefits: (a) the root session is never clogged with
-the whole catalog; (b) selection runs on a cheaper Router-selected model with
-fork-per-call prefix reuse, and its ids-only output is xgrammar-constrained to the
-current id set; (c) large catalogs are served by `.retrieval` mode (rank fusion, no
-session, no tokens) — superseding the earlier Spotlight-RAG idea. Returns candidate ids
-plus verbatim metadata blocks the root then feeds to `use skill`.
+selection session **the host injects** (#30 — the tier takes any `AgentSession`, and a
+standard `LanguageModelSession` conforms). Benefits: (a) the root session is never clogged
+with the whole catalog; (b) selection runs on the host's own session, not the root one,
+with fork-per-call prefix reuse, and its ids-only output is constrained by guided
+generation to the current id set; (c) large catalogs are served by `.retrieval` mode
+(rank fusion, no session, no tokens) — superseding the earlier Spotlight-RAG idea.
+Returns candidate ids plus verbatim metadata blocks the root then feeds to `use skill`.
 
 **Assembly.** The old many-knobbed builder (#15) dissolves: `OperationTool` init takes
 `(name:description:context:operations:)`, and the remaining knobs live in three places —
@@ -563,6 +564,12 @@ Revisit when Apple ships a supported per-process confinement API. *(decision #28
     dependency and its macOS 27+ floor (Extras shares that floor). No lightweight split
     for downstream consumers; `../FoundationModelsAgents` requires the Router directly
     anyway.
+    **Amended 2026-08-30 by #30:** the conclusion holds, the reason changed. The single
+    target still stands, but this package carries no routing dependency any more. The
+    macOS 27+ floor now comes from `FoundationModelsExtras` and FoundationModels v2, and
+    `FoundationModelsMetadataRegistry` declares the same floor. A lightweight split
+    would therefore still buy a downstream consumer nothing: every layer shares one
+    floor, and that floor is the core framework's own.
 18. ~~Tool arg schema → dynamic id enum~~ **Superseded by #22:** the fused schema is
     upstream's flat union (required `op` enum + optional fields); the skill `id` is a plain
     string validated at dispatch. Rationale: hot-reload safety + Apple's enum-enforcement
@@ -613,6 +620,15 @@ Revisit when Apple ships a supported per-process confinement API. *(decision #28
     in #12; note #22's dispatch-side rationale is unchanged (Apple's enum bug is about the
     *root* session's tool schema — the *search* session runs on Router, where xgrammar
     enum enforcement is real).
+    **Amended 2026-08-30 by #30:** the search dependency holds, the selection tier's
+    backing does not. The tier no longer names a Router model: it takes any
+    `AgentSession`, and `FoundationModelsRanker` — which `FoundationModelsMetadataRegistry`
+    re-exports — conforms `LanguageModelSession` to that protocol. **The host injects the
+    selection session**, thus this package builds no session of its own and depends on
+    `FoundationModelsMetadataRegistry` alone. The consequence this decision recorded is
+    gone with it: the macOS 27+ floor has another reason now (#17). Fork-per-call prefix
+    reuse and the ids-only output both stay; the output is constrained by the injected
+    session's own guided generation instead of by xgrammar.
 27. **agentskills.io compliance posture** (§4, §7.1, §8). Full spec field coverage:
     `name` + `description` required with the spec's exact limits; `license`,
     `compatibility`, `metadata`, and `allowed-tools` parsed (data until consumed).
@@ -672,6 +688,25 @@ Revisit when Apple ships a supported per-process confinement API. *(decision #28
     `c2pad49`**, asking for a body case that lets a provider render and still take a model
     turn (`FoundationModelsACPAgent` plan §6.3 has the full analysis). Amends #1, #2, #3, #5,
     #7, #16, #17, #19 in place.
+30. **Router-free package; the host injects the selection session.**
+    *(Decided 2026-08-30. Amends #17 and #26.)* This package does not depend on
+    `FoundationModelsRouter`, and no live routing package is in its resolved graph. Its
+    one search dependency is `FoundationModelsMetadataRegistry`, whose selection tier
+    takes any `AgentSession`. `FoundationModelsRanker`, which that package re-exports,
+    conforms `LanguageModelSession` to `AgentSession`. **Thus the fused `skills` tool
+    works on a standard `LanguageModelSession`, and needs no routing layer.**
+
+    Consequences: (a) the host supplies the selection session — as a live session the
+    tier forks for each call, or as a closure that makes one session for each assembled
+    prefix — and a host that supplies none gets keyword retrieval only; (b) the macOS 27+
+    floor comes from `FoundationModelsExtras` and FoundationModels v2, and no longer from
+    routing (#17); (c) `SkillsTool.make(registry:session:)` is the one-call door (§10),
+    while `SkillsTool.make(context:)` stays the low-level door for a host that tunes the
+    searcher itself.
+
+    Only this decision speaks in the present tense about the Router. #17 and #26 keep
+    their original text, because a decision record that rewrites its own history stops
+    being a record.
 
 **All open items resolved — the plan is decision-complete.**
 
@@ -687,29 +722,25 @@ let stack = DotfolderStack(
 )
 
 // Layer 3 — reloadable registry over the stack:
-let registry = try SkillsRegistry(
-  stack: stack,                                  // nearest-wins = full-replace by id (#3)
-  policy: .init(disableShellExecution: false),   // render policy lives with the pipeline (#25)
-  watch: true                                    // watch every layer root; reload add/remove/edit
+let registry = SkillsRegistry(
+  stack: stack,                                   // nearest-wins = full-replace by id (#3)
+  policy: .init(isShellExecutionDisabled: false), // render policy lives with the pipeline (#25)
+  watch: true                                     // watch every layer root; reload add/remove/edit
 )
 
-// Layer 4 — three ops over one context, fused into one core Tool:
-let context = SkillsToolContext(
-  registry: registry,
-  searchAgent: SkillSearchAgent(                 // thin wrapper over MetadataSearcher (#26)
-    searcher: MetadataSearcher(
-      items: registry.metadata().filter(\.isModelVisible),
-      selection: .init(model: profile.flash),    // FoundationModelsRouter
-      embedder: RoutedEmbedderAdapter(profile.embedding),
-      mode: .auto))
+// Layer 4 — the host makes the selection session; this package makes none (#30).
+// `FoundationModelsRanker` conforms `LanguageModelSession` to `AgentSession`,
+// thus a standard session goes straight in.
+let selection = LanguageModelSession(
+  model: .default,
+  instructions: "You choose skill ids from a catalog."
 )
-let skillsTool = OperationTool(
-  name: "skills",
-  description: "Search, list, and use skills from the local skill library",
-  context: context,
-  operations: [AnyOperation(SearchSkill.self),   // op: "search skill"
-               AnyOperation(ListSkill.self),     // op: "list skill"
-               AnyOperation(UseSkill.self)]      // op: "use skill"
+
+// One call fuses the ops over one context: SkillsTool.make(registry:session:).
+// It is `async throws` — a non-nil `embedder` builds the index while it runs.
+let skillsTool = try await SkillsTool.make(
+  registry: registry,                            // dereferenced live, per dispatch
+  session: selection                             // any AgentSession; omit for keyword-only
 )
 
 // Lean root session: one tool + preloaded bodies, NO full catalog inline:
@@ -721,16 +752,20 @@ let root = LanguageModelSession(
   }
 )
 
-// Reload: forward metadata to the searcher's update(items:); refresh preloaded bodies;
-// the fused tool's schema is id-free and its ops dereference the live registry per dispatch.
-registry.onReload { meta in context.searchAgent.update(items: meta) /* + refresh preload */ }
+// Reload: the factory follows `registry.onReload` itself (`followReloads` defaults to
+// true), thus it forwards each refreshed metadata list to the searcher. The fused tool's
+// schema is id-free and its ops dereference the live registry per dispatch, so a reload
+// is invisible to the root session. Only the preloaded bodies are the host's to refresh.
+// A host that pumps `onReload` itself passes `followReloads: false`.
 
 // User-facing command matching (independent of the session):
 for skill in registry.commandListing() { /* skill.id, .description, .parameters */ }
 
-// Dual-use CLI from the SAME declarations:
-let cli = OperationCLIDriver(tool: skillsTool)
-try await cli.run(CommandLine.arguments)  // skills skill use --id deploy --arguments production
+// Dual-use CLI from the SAME declarations, over the user-facing subset (§7.2):
+let cli = try SkillsCLI.makeDriver(registry: registry)
+let result = await cli.run(arguments: Array(CommandLine.arguments.dropFirst()))
+print(result.output)                             // exit with result.exitCode
+// e.g. skills skill use --id deploy --arguments production
 ```
 
 ## 11. Examples (`./Examples`)
@@ -852,9 +887,11 @@ replicate them (~a dozen lines each). The case, end to end over a temp root:
    reflect the change; the fused tool's schema is untouched throughout (id-free, §7).
 
 The `--watch` demo mode (§11) is the human-driven twin of this test. A separate gated
-integration case (the Router/MetadataRegistry tiny-model pattern) runs the same
-add/remove burst against a live selection session, asserting the rebuilt candidate set
-after reload.
+integration case runs the same add/remove burst against a live selection session,
+asserting the rebuilt candidate set after reload. That session is a plain
+`LanguageModelSession` over Apple's on-device model, which `FoundationModelsRanker`
+conforms to `AgentSession` (#30), and the one gate is
+`SystemLanguageModel.default.isAvailable`.
 
 ---
 
