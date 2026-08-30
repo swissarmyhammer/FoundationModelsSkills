@@ -46,6 +46,27 @@ enum FixtureLibrary {
             .appendingPathComponent("skill-library", isDirectory: true)
     }
 
+    /// The three-layer dotfolder stack over the fixture library:
+    /// `defaults/`, `user/`, and the `project/` working directory.
+    ///
+    /// Mirrors the `Examples/skills-demo` target's own `FixtureStack.make()`,
+    /// but from this test target, and with an empty environment. An empty
+    /// environment keeps `SKILLS_DEFAULTS_DIR` and `XDG_CONFIG_HOME` from
+    /// moving a layer onto a real host directory, thus the stack stays
+    /// hermetic (plan.md §11).
+    ///
+    /// - Parameter thisFile: Forwarded to `root(thisFile:)`.
+    /// - Returns: The fixture stack, ready for `SkillsRegistry(stack:)`.
+    static func stack(thisFile: String = #filePath) -> DotfolderStack {
+        let libraryRoot = root(thisFile: thisFile)
+        return DotfolderStack(
+            name: "skills",
+            workingDirectory: libraryRoot.appendingPathComponent("project", isDirectory: true),
+            defaultsDirectory: libraryRoot.appendingPathComponent("defaults", isDirectory: true),
+            userDirectory: libraryRoot.appendingPathComponent("user", isDirectory: true),
+            environment: [:])
+    }
+
     /// Resolves `relativePath` (e.g. `"defaults/base-style/SKILL.md"`)
     /// against `root(thisFile:)`.
     ///

@@ -38,8 +38,25 @@ comments:
     - evidence: 3 files — Sources/FoundationModelsSkills/SeamReexports.swift (new), Tests/FoundationModelsSkillsTests/SingleImportTests.swift (new), Tests/FoundationModelsSkillsTests/WatcherTestSupport.swift (added `withTempDirectory(_:)`). `swift build`: build complete, no new warning. `swift test`: 381 tests in 27 suites passed, 0 failures.
     - next: /review
   timestamp: 2026-08-30T12:59:48.276839+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01m19ccfmvp28170vwxa1np6bm
+  text: |
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (local backend) — 0 findings, 0 confirmed, 0 refuted, 7 validators attempted, 0 failed. 3 files reviewed; 4 `.kanban/` files excluded by `.reviewignore`. Acceptance criteria verified: `Tests/FoundationModelsSkillsTests/SingleImportTests.swift` imports only `FoundationModels`, `FoundationModelsSkills`, `Testing` — it names `MetadataSearcher`, `SkillSearchAgent`, `SelectionConfig`, `AgentSession`, and `DotfolderStack`, thus it compiles only while `Sources/FoundationModelsSkills/SeamReexports.swift` holds both `@_exported import` lines. No prior review section, and every checklist item was already checked.
+    - next: none — task moved to done.
+  timestamp: 2026-08-30T13:05:19.003355+00:00
+- actor: claude-code
+  id: 01m19cd2bb32wfpzd0zc0qg93n
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 3 files (SeamReexports.swift, SingleImportTests.swift, WatcherTestSupport.swift)
+    - test: green — swift test, 381 tests in 27 suites, 0 failures
+    - commit: cd57037
+    - review: clean — review sha HEAD~1..HEAD, 0 findings, 7 validators attempted, 0 failed
+    - next: task is in done; ^mx1rkqx is now unblocked
+  timestamp: 2026-08-30T13:05:38.155378+00:00
+position_column: done
+position_ordinal: bb80
 title: Re-export the search seam so one import is sufficient
 ---
 ## What
