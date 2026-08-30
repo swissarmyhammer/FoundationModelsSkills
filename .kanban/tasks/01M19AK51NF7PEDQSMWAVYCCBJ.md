@@ -40,8 +40,26 @@ comments:
     - warnings: the only build warnings come from the third-party `mlx-swift` checkout (4 `constexpr if is a C++17 extension` in Metal kernels) and the SwiftPM `missing creator for mutated node` line for the `mlx-swift_Cmlx` bundle. That second one is the warning ^vwthc4s already accepted. This package's own sources build clean.
     - next: /review
   timestamp: 2026-08-30T12:46:44.967812+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01m19bgy4jka7zkvx9y1k9xt1s
+  text: |
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (5d7db29) — 0 findings, 0 confirmed, 0 refuted, 7 validator attempts, 0 failed. 2 files reviewed; 4 `.kanban/` files excluded by `.reviewignore`.
+    - acceptance: both `SelectionConfig(model:)` call sites take one argument (HotReloadLiveTests.swift:83, HotReloadTests.swift:122). No prose says a selection closure takes a `Grammar` argument. The Router stays in the graph through the Registry dependency in Package.swift.
+    - next: task moved to done.
+  timestamp: 2026-08-30T12:50:16.338023+00:00
+- actor: claude-code
+  id: 01m19bhewwzjr26kg2x9v7424h
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 2 files (HotReloadLiveTests.swift, HotReloadTests.swift)
+    - test: green — swift test, 377 tests in 26 suites, 0 failures
+    - commit: 5d7db29
+    - review: clean — review sha HEAD~1..HEAD, 0 findings, 7 validators attempted, 0 failed
+    - next: task is in done; loop moves to the next ready task in scope
+  timestamp: 2026-08-30T12:50:33.500980+00:00
+position_column: done
+position_ordinal: ba80
 title: Bump the sibling packages to current main and repair the API drift
 ---
 ## What
