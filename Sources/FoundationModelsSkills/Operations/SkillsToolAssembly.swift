@@ -36,6 +36,9 @@ extension SkillsTool {
     ///   - embedder: The embedder that embeds every item's block at build
     ///     time, and the query at search time. Defaults to `nil`, which
     ///     leaves the cosine signal out.
+    ///   - followReloads: Whether the tool follows `registry.onReload`
+    ///     itself. Defaults to `true`. See `assemble(registry:mode:embedder:
+    ///     selection:followReloads:visibilityPredicate:)`.
     ///   - visibilityPredicate: Which catalog entries this tool presents.
     ///     Defaults to `SkillMetadata.isModelVisible`, the model-facing
     ///     surface.
@@ -46,6 +49,7 @@ extension SkillsTool {
         registry: SkillsRegistry,
         session: @escaping @Sendable (String) -> any AgentSession,
         embedder: (any TextEmbedding)? = nil,
+        followReloads: Bool = true,
         visibilityPredicate: @escaping @Sendable (SkillMetadata) -> Bool = { $0.isModelVisible }
     ) async throws -> OperationTool<SkillsToolContext> {
         try await assemble(
@@ -53,6 +57,7 @@ extension SkillsTool {
             mode: .auto,
             embedder: embedder,
             selection: SelectionConfig(model: session),
+            followReloads: followReloads,
             visibilityPredicate: visibilityPredicate)
     }
 
@@ -75,6 +80,9 @@ extension SkillsTool {
     ///   - embedder: The embedder that embeds every item's block at build
     ///     time, and the query at search time. Defaults to `nil`, which
     ///     leaves the cosine signal out.
+    ///   - followReloads: Whether the tool follows `registry.onReload`
+    ///     itself. Defaults to `true`. See `assemble(registry:mode:embedder:
+    ///     selection:followReloads:visibilityPredicate:)`.
     ///   - visibilityPredicate: Which catalog entries this tool presents.
     ///     Defaults to `SkillMetadata.isModelVisible`, the model-facing
     ///     surface.
@@ -85,6 +93,7 @@ extension SkillsTool {
         registry: SkillsRegistry,
         session: any AgentSession,
         embedder: (any TextEmbedding)? = nil,
+        followReloads: Bool = true,
         visibilityPredicate: @escaping @Sendable (SkillMetadata) -> Bool = { $0.isModelVisible }
     ) async throws -> OperationTool<SkillsToolContext> {
         try await assemble(
@@ -92,6 +101,7 @@ extension SkillsTool {
             mode: .auto,
             embedder: embedder,
             selection: SelectionConfig(session: session),
+            followReloads: followReloads,
             visibilityPredicate: visibilityPredicate)
     }
 
@@ -115,6 +125,9 @@ extension SkillsTool {
     ///   - embedder: The embedder that embeds every item's block at build
     ///     time, and the query at search time. Defaults to `nil`, which
     ///     leaves the cosine signal out.
+    ///   - followReloads: Whether the tool follows `registry.onReload`
+    ///     itself. Defaults to `true`. See `assemble(registry:mode:embedder:
+    ///     selection:followReloads:visibilityPredicate:)`.
     ///   - visibilityPredicate: Which catalog entries this tool presents.
     ///     Defaults to `SkillMetadata.isModelVisible`, the model-facing
     ///     surface.
@@ -124,6 +137,7 @@ extension SkillsTool {
     public static func make(
         registry: SkillsRegistry,
         embedder: (any TextEmbedding)? = nil,
+        followReloads: Bool = true,
         visibilityPredicate: @escaping @Sendable (SkillMetadata) -> Bool = { $0.isModelVisible }
     ) async throws -> OperationTool<SkillsToolContext> {
         try await assemble(
@@ -131,20 +145,16 @@ extension SkillsTool {
             mode: .retrieval,
             embedder: embedder,
             selection: nil,
+            followReloads: followReloads,
             visibilityPredicate: visibilityPredicate)
     }
 
-    /// The four assembly steps all three factories above share.
+    /// The assembly steps all three factories above share.
     ///
     /// Reads `registry.metadata()` and keeps the `visibilityPredicate`
     /// subset, builds the `MetadataSearcher` over that subset, wraps it in a
     /// `SkillSearchAgent` with the same predicate, and gives the resulting
     /// `SkillsToolContext` to `SkillsTool.make(context:)`.
-    ///
-    /// The searcher, the agent, and the context all get the same
-    /// `visibilityPredicate`. Thus one surface holds for the first search,
-    /// for every later hot reload, and for the `list skill` and `use skill`
-    /// operations.
     ///
     /// - Parameters:
     ///   - registry: The registry the assembled context wraps.
@@ -152,6 +162,8 @@ extension SkillsTool {
     ///   - embedder: The embedder to build the index with, or `nil`.
     ///   - selection: The selection tier configuration, or `nil` for no
     ///     selection tier.
+    ///   - followReloads: Whether the assembled context carries a
+    ///     `SkillsReloadFollower`.
     ///   - visibilityPredicate: Which catalog entries the assembled tool
     ///     presents.
     /// - Returns: The fused `skills` tool.
@@ -161,17 +173,66 @@ extension SkillsTool {
         mode: SearchMode,
         embedder: (any TextEmbedding)?,
         selection: SelectionConfig?,
+        followReloads: Bool,
         visibilityPredicate: @escaping @Sendable (SkillMetadata) -> Bool
     ) async throws -> OperationTool<SkillsToolContext> {
+        let context = await makeContext(
+            registry: registry,
+            mode: mode,
+            embedder: embedder,
+            selection: selection,
+            followReloads: followReloads,
+            visibilityPredicate: visibilityPredicate)
+        return try make(context: context)
+    }
+
+    /// Builds the `SkillsToolContext` `assemble(registry:mode:embedder:
+    /// selection:followReloads:visibilityPredicate:)` hands to
+    /// `SkillsTool.make(context:)`.
+    ///
+    /// The searcher, the agent, and the context all get the same
+    /// `visibilityPredicate`. Thus one surface holds for the first search,
+    /// for every later hot reload, and for the `list skill` and `use skill`
+    /// operations.
+    ///
+    /// The reload stream is taken before the seed catalog is read, and that
+    /// order matters: `registry.onReload` carries every publication from the
+    /// point of subscription forward, thus reading `metadata()` first would
+    /// drop a reload that lands between the two reads. A `watch: false`
+    /// registry answers `nil` there, and gets no follower.
+    ///
+    /// - Parameters:
+    ///   - registry: The registry the assembled context wraps.
+    ///   - mode: Which tier the searcher uses.
+    ///   - embedder: The embedder to build the index with, or `nil`.
+    ///   - selection: The selection tier configuration, or `nil` for no
+    ///     selection tier.
+    ///   - followReloads: Whether the assembled context carries a
+    ///     `SkillsReloadFollower`. A host that pumps `registry.onReload`
+    ///     itself passes `false`, thus no publication reaches the agent
+    ///     twice.
+    ///   - visibilityPredicate: Which catalog entries the assembled tool
+    ///     presents.
+    /// - Returns: The assembled context.
+    internal static func makeContext(
+        registry: SkillsRegistry,
+        mode: SearchMode,
+        embedder: (any TextEmbedding)?,
+        selection: SelectionConfig?,
+        followReloads: Bool,
+        visibilityPredicate: @escaping @Sendable (SkillMetadata) -> Bool
+    ) async -> SkillsToolContext {
+        let reloads = followReloads ? registry.onReload : nil
         let searcher = await MetadataSearcher(
             items: registry.metadata().filter(visibilityPredicate),
             mode: mode,
             embedder: embedder,
             selection: selection)
-        let context = SkillsToolContext(
+        let agent = SkillSearchAgent(searcher: searcher, visibilityPredicate: visibilityPredicate)
+        return SkillsToolContext(
             registry: registry,
-            searchAgent: SkillSearchAgent(searcher: searcher, visibilityPredicate: visibilityPredicate),
-            visibilityPredicate: visibilityPredicate)
-        return try make(context: context)
+            searchAgent: agent,
+            visibilityPredicate: visibilityPredicate,
+            reloadFollower: reloads.map { SkillsReloadFollower(reloads: $0, agent: agent) })
     }
 }
