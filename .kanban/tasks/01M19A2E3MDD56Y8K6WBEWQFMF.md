@@ -3,7 +3,7 @@ assignees:
 - claude-code
 depends_on:
 - 01M199ZVM11XKMQ5WWSET0AR2E
-- 01M19A1WVBB8AHK15V4K8109G9
+- 01M19AQSGXENFA8W70RPWK3XYZ
 position_column: todo
 position_ordinal: '8780'
 title: Show the just-a-tool path in the README and the demo
@@ -12,20 +12,27 @@ title: Show the just-a-tool path in the README and the demo
 
 The README usage block and `Examples/skills-demo` both show the hand assembly of `MetadataSearcher` -> `SkillSearchAgent` -> `SkillsToolContext`, and both need `import FoundationModelsMetadataRegistry`. Show the one-call path instead.
 
+Write every text in this task in ASD-STE100 Simplified Technical English.
+
 ### README
 
-Replace the usage block in `README.md:15-38`. The new block shows a host that already holds a `LanguageModelSession` and gives it to the tool:
+Replace the usage block in `README.md:15-38`. Keep the `DotfolderStack` construction — the block must be complete code, thus it cannot reference a `stack` it never builds. Task `^zde3s2t` re-exports `FoundationModelsExtras`, thus `DotfolderStack` needs no third import.
 
 ```swift
 import FoundationModels
 import FoundationModelsSkills
 
-// The host selects the layer roots. The usual way is a "skills" dotfolder stack.
+// The host selects the layer roots. The usual way is a "skills" dotfolder stack:
+let stack = DotfolderStack(
+    name: "skills",
+    workingDirectory: projectDirectory,
+    defaultsDirectory: shippedSkillsURL,
+    userDirectory: userConfigURL)
 let registry = SkillsRegistry(stack: stack, watch: true)
 
 // One fused tool for the full catalog: search, list, use, resources, scripts.
 // The session you supply runs the selection tier. Nothing is hardcoded.
-let skillsTool = try SkillsTool.make(
+let skillsTool = try await SkillsTool.make(
     registry: registry,
     session: { prefix in LanguageModelSession(model: .default, instructions: prefix) })
 
@@ -44,15 +51,15 @@ Keep the `Install` and `Documentation` sections as they are.
 
 ### Demo
 
-Change `Examples/skills-demo` to build its tool with the factory. Read `Examples/skills-demo/ChatMode.swift` and find each place that assembles the context by hand.
+The hand assembly is in `Examples/skills-demo/SkillsDemoAssembly.swift:21-23`. `ChatMode.swift:111` and `WatchMode.swift:22` only call `SkillsDemoAssembly.makeContext(registry:)`, thus changing the one assembly file is enough. Change it to the factory.
 
 ### Operations doc
 
-Correct `docs/operations.md` if it shows the hand assembly.
+`docs/operations.md` shows no hand assembly. Its one relevant line, 33, only names `SkillsTool.make`. Read it, and change it only if the new signature makes that line wrong. Do not make a change for its own sake.
 
 - [ ] Replace the README usage block and add the paragraph.
-- [ ] Change the demo to the factory.
-- [ ] Correct `docs/operations.md`.
+- [ ] Change `SkillsDemoAssembly.swift` to the factory.
+- [ ] Read `docs/operations.md:33` and correct it only if it is wrong.
 - [ ] Add the README compile test.
 
 ## Acceptance Criteria
@@ -61,7 +68,6 @@ Correct `docs/operations.md` if it shows the hand assembly.
 - [ ] `swift build` builds `skills-demo`, and `SkillsDemoTests` passes.
 - [ ] `swift run skills-demo --chat` still drives the same scripted `search skill` -> `use skill` round trip.
 - [ ] No document in the repository tells a host to import `FoundationModelsMetadataRegistry`.
-- [ ] Every text written in this task is ASD-STE100 Simplified Technical English.
 
 ## Tests
 

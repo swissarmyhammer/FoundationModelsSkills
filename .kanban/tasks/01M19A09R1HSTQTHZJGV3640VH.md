@@ -35,17 +35,19 @@ Write a header comment that says which suites the unit job runs, and that the `S
 
 The shared workflow runs on `[self-hosted, macOS]`. This package resolves three `git@github.com:swissarmyhammer/` dependencies over SSH, and `FoundationModelsMetadataRegistry` already resolves the same way on the same pool. Thus no new secret is needed.
 
+`.gitignore` holds seven lines and ignores nothing under `.github`. No ignore change is needed.
+
 Add `Tests/FoundationModelsSkillsTests/CIWorkflowTests.swift`. Copy the structure of `../FoundationModelsMetadataRegistry/Tests/FoundationModelsMetadataRegistryTests/CIWorkflowTests.swift`.
 
 - [ ] Add `.github/workflows/ci.yml` with its header comment.
-- [ ] Add `CIWorkflowTests` with the three test cases below.
+- [ ] Add `CIWorkflowTests` with the four test cases below.
 - [ ] Run the full test suite.
 
 ## Acceptance Criteria
 
 - [ ] `.github/workflows/ci.yml` exists and calls `swissarmyhammer/workflows/.github/workflows/swift-ci.yaml@main`.
 - [ ] `ci.yml` declares no repository-local job that runs tests. Every test run is delegated.
-- [ ] A push to a branch and a pull request both start the workflow.
+- [ ] `ci.yml` declares `on:` with `push` on `main`, `pull_request`, and `workflow_dispatch`.
 - [ ] `swift test` passes at the repository root, and it runs every unit test.
 
 ## Tests
@@ -53,6 +55,7 @@ Add `Tests/FoundationModelsSkillsTests/CIWorkflowTests.swift`. Copy the structur
 - [ ] New file `Tests/FoundationModelsSkillsTests/CIWorkflowTests.swift`. Locate `ci.yml` from the package root, in the same way the sibling suite does.
 - [ ] A test case asserts that `ci.yml` holds the `uses:` line for the shared workflow at `@main`.
 - [ ] A test case asserts that `ci.yml` declares exactly one job, and that the job has no `steps:` key. This pins the delegation.
+- [ ] A test case asserts that the `on:` block declares `push` with `branches: [main]`, `pull_request`, and `workflow_dispatch`. This makes the trigger acceptance criterion machine-checkable.
 - [ ] A test case asserts that `ci.yml` sets the `concurrency` group and `cancel-in-progress: true`.
 - [ ] `swift test` passes.
 
