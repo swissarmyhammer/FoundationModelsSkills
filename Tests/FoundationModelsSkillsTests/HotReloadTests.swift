@@ -119,7 +119,7 @@ struct HotReloadTests {
             [#"{"ids":["alpha"]}"#],
             [#"{"ids":["bravo"]}"#],
         ])
-        let config = SelectionConfig(model: { _, _ in sessionFactory.makeSession() })
+        let config = SelectionConfig(model: { _ in sessionFactory.makeSession() })
         let searcher = MetadataSearcher(
             items: registry.metadata().filter(\.isModelVisible), mode: .selection, selection: config)
         let agent = SkillSearchAgent(searcher: searcher)
@@ -702,9 +702,9 @@ struct HotReloadTests {
         }
 
         /// Creates and returns the next freshly-scripted session --
-        /// `SelectionConfig`'s `model` factory parameter (with `instructions`
-        /// and `grammar` both ignored, mirroring `HotReloadLiveTests`' own
-        /// `LanguageModelSession`-backed closure).
+        /// `SelectionConfig`'s `model` factory parameter. The closure
+        /// ignores the `instructions` text, because a scripted session
+        /// gives the same answers for all instructions.
         func makeSession() -> any AgentSession {
             lock.lock()
             let index = callIndex

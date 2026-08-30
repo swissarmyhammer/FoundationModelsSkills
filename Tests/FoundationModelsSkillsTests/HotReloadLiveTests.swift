@@ -26,11 +26,11 @@ import Testing
 /// FoundationModelsRanker`), which adapts Apple's own on-device
 /// `SystemLanguageModel` to the same `AgentSession` seam `RoutedAgentSession`
 /// implements for Router. This suite drives that conformer directly --
-/// `SelectionConfig.model`'s closure returns a bare `LanguageModelSession`
-/// and ignores the `Grammar` argument (a plain `LanguageModelSession` relies
-/// on its own native guided generation, not an externally supplied grammar;
-/// see `LanguageModelSessionSupport.swift`'s doc comment), so this file never
-/// needs to name `Grammar` and therefore never needs to `import
+/// `SelectionConfig.model`'s closure takes only the instructions text and
+/// returns a bare `LanguageModelSession` (a plain `LanguageModelSession`
+/// uses its own native guided generation, not an externally supplied
+/// grammar; see `LanguageModelSessionSupport.swift`'s doc comment), so this
+/// file never needs to name `Grammar` and therefore never needs to `import
 /// FoundationModelsRouter` at all. The scenario itself -- the MCP-style
 /// add/remove burst against a real selection session -- is unchanged; only
 /// which live model backs it differs.
@@ -80,7 +80,7 @@ struct HotReloadLiveTests {
         defer { try? FileManager.default.removeItem(at: root) }
         try Self.writeSkillFile(id: "toolA", in: root, descriptionSuffix: "reads a file from disk")
 
-        let config = SelectionConfig(model: { instructions, _ in
+        let config = SelectionConfig(model: { instructions in
             LanguageModelSession(model: .default, instructions: instructions)
         })
         // `watch: true` -- the twin's whole point is to drive a REAL reload
