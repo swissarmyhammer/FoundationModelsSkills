@@ -203,7 +203,7 @@ struct DependencyGraphTests {
     /// - Returns: The whole decision record.
     /// - Throws: An error when `plan.md` cannot be read.
     private static func planText() throws -> String {
-        let plan = FixtureLibrary.packageRoot().appendingPathComponent(planFileName)
+        let plan = FixtureLibrary.packageRoot().appendingPathComponent(Self.planFileName)
         return try String(contentsOf: plan, encoding: .utf8)
     }
 
@@ -220,12 +220,12 @@ struct DependencyGraphTests {
     /// - Throws: ``MissingSectionError`` when no heading line begins with
     ///   `heading`, or an error when `plan.md` cannot be read.
     private static func planSection(startingWith heading: String) throws -> String {
-        let lines = try planText().components(separatedBy: .newlines)
+        let lines = try Self.planText().components(separatedBy: .newlines)
         guard let start = lines.firstIndex(where: { $0.hasPrefix(heading) }) else {
             throw MissingSectionError(heading: heading)
         }
         let body = lines[lines.index(after: start)...]
-        let end = body.firstIndex { $0.hasPrefix(sectionHeadingPrefix) } ?? body.endIndex
+        let end = body.firstIndex { $0.hasPrefix(Self.sectionHeadingPrefix) } ?? body.endIndex
         return lines[start..<end].joined(separator: "\n")
     }
 
@@ -318,7 +318,7 @@ struct DependencyGraphTests {
     /// - Returns: the identity of each resolved package.
     /// - Throws: an error when `Package.resolved` cannot be read or decoded.
     private static func resolvedIdentities() throws -> Set<String> {
-        let file = FixtureLibrary.packageRoot().appendingPathComponent(resolutionFileName)
+        let file = FixtureLibrary.packageRoot().appendingPathComponent(Self.resolutionFileName)
         let contents = try Data(contentsOf: file)
         let resolution = try JSONDecoder().decode(Resolution.self, from: contents)
         return Set(resolution.pins.map(\.identity))

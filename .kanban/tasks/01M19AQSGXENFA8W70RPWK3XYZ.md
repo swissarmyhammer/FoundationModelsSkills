@@ -52,9 +52,36 @@ comments:
     - evidence: 2 files — plan.md, Tests/FoundationModelsSkillsTests/DependencyGraphTests.swift. `swift test`: 403 tests in 31 suites passed, 0 failures, 0 warnings. `swift build --build-tests` over the verbatim section 10 sketch: Build complete, 0 errors.
     - next: ready for /review
   timestamp: 2026-08-30T22:04:59.061074+00:00
+- actor: claude-code
+  id: 01m1abw596zp909tn2ey31htgb
+  text: |
+    ### review — findings
+    - evidence: 2 findings, 2 confirmed, 1 refuted — Tests/FoundationModelsSkillsTests/DependencyGraphTests.swift:206, Tests/FoundationModelsSkillsTests/DependencyGraphTests.swift:223 (scope: review sha HEAD~1..HEAD, backend local)
+    - acceptance criteria: verified independently, all four hold. Decision 17 hunk (@@ -563,6 +564,12 @@) and decision 26 hunk (@@ -613,6 +620,15 @@) are purely additive — zero deleted lines, the original wording is intact. The section 10 sketch was extracted verbatim and type-checked against the built modules with zero errors; every symbol matches the shipped API, including SkillsTool.make(registry:session:) at Sources/FoundationModelsSkills/Operations/SkillsToolAssembly.swift:92 and SkillsCLI.makeDriver(registry:) at Sources/FoundationModelsSkills/CLI/SkillsCLI.swift:32. plan.md holds nine Router mentions, all historical or amended; RoutedEmbedderAdapter and profile.flash have zero hits.
+    - guard tests: neither case can pass vacuously. planSection(startingWith:) throws MissingSectionError when the heading is absent instead of returning an empty string, planText() uses an unguarded throwing read, and each case pairs its negative assertion with a positive one.
+    - next: apply the two findings in DependencyGraphTests.swift, then request a new review pass.
+  timestamp: 2026-08-30T22:15:38.534202+00:00
+- actor: claude-code
+  id: 01m1abymxh60x3awypfpq85gw3
+  text: |-
+    ### findings addressed — static members qualified with `Self.`
+
+    Both findings are fixed, and the cause is removed from the whole file, not only the two flagged lines. Five unqualified static references were in static methods; all five now carry `Self.`:
+
+    - `:206` `planFileName` — the finding.
+    - `:223` `planText()` — the finding.
+    - `:228` `sectionHeadingPrefix` — same cause, same file, not flagged.
+    - `:321` `resolutionFileName` — same cause, same file, not flagged.
+
+    `removedIdentities`'s initializer at `:58` is left as it is. It is a static stored property, not a static method, thus it is outside the class of the two findings.
+
+    `swift test`: 403 tests in 31 suites pass, 0 failures.
+
+    **One correction to the record, for the next reader.** Each finding says the unqualified form "is not in scope" and "will not compile". That reason is not correct: Swift lets a static method name another static member of the same type without a qualifier, and the file compiled and passed 403 tests before this change. The remedy is still applied, because the explicit form is clearer and costs nothing. Only the stated reason is wrong, not the request.
+  timestamp: 2026-08-30T22:17:00.081135+00:00
 depends_on:
 - 01M19A1WVBB8AHK15V4K8109G9
-position_column: doing
+position_column: review
 position_ordinal: '80'
 title: Amend the plan.md decision record for the Router removal
 ---
@@ -93,3 +120,18 @@ Add one new dated decision that records the change itself: the package is Router
 
 ## Workflow
 - Use `/tdd` — write failing tests first, then implement to make them pass.
+
+## Review Findings (2026-08-30 17:06)
+
+> Scope: `review sha HEAD~1..HEAD` — reviewed the diffs only — lines this change added or modified. 1 file(s) reviewed, 7 not reviewed.
+
+> 6 file(s) not reviewed — excluded by an ignore rule:
+> - `.kanban/ (from .reviewignore)` — 6 file(s)
+
+> 1 file(s) not reviewed — no validator matched:
+> - `plan.md` — no validator matches this file
+
+- [x] `Tests/FoundationModelsSkillsTests/DependencyGraphTests.swift:206` `swift/idioms` — Static property access within a static method requires qualification with `Self.` or the type name; unqualified `planFileName` is not in scope. Change `planFileName` to `Self.planFileName` on line 206.
+- [x] `Tests/FoundationModelsSkillsTests/DependencyGraphTests.swift:223` `swift/idioms` — Static method call within a static method requires qualification with `Self.` or the type name; unqualified `planText()` is not in scope and will not compile. Change `try planText()` to `try Self.planText()` on line 223.
+
+Both are fixed. The cause is removed from the whole file: four unqualified static references in static methods now carry `Self.` — `:206` `planFileName`, `:223` `planText()`, `:228` `sectionHeadingPrefix`, and `:321` `resolutionFileName`. The last two were not flagged but share the cause. `removedIdentities`'s initializer at `:58` is a static stored property, not a static method, thus it is outside the class of these findings and is unchanged. `swift test`: 403 tests in 31 suites pass.
