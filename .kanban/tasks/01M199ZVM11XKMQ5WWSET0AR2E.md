@@ -41,10 +41,29 @@ comments:
     - evidence: 4 files — Sources/FoundationModelsSkills/Search/SkillsReloadFollower.swift (new), Sources/FoundationModelsSkills/Operations/SkillsToolContext.swift, Sources/FoundationModelsSkills/Operations/SkillsToolAssembly.swift, Tests/FoundationModelsSkillsTests/SkillsReloadFollowerTests.swift (new, 5 cases). `swift test` — 395 tests in 30 suites passed, 0 failures, 0 compiler warnings.
     - next: /review
   timestamp: 2026-08-30T13:58:19.718619+00:00
+- actor: claude-code
+  id: 01m19fwtj8tp6kz7va0kz3t8x2
+  text: |
+    ### review — clean
+    - scope: `review sha HEAD~1..HEAD` (a0280ed), backend local. 4 files reviewed, 4 .kanban files excluded by .reviewignore.
+    - evidence: counts 0 findings / 0 confirmed / 0 refuted, 7 validators attempted, 0 failed, 0 skipped. `swift build --build-tests` complete, no error and no new warning.
+    - acceptance criteria verified: the forwarding task in `SkillsReloadFollower.init` captures only `reloads` and `agent`, never `self`, thus `deinit` is reachable and cancels the task; `SkillsToolAssembly.makeContext` reads `registry.onReload` before it reads `registry.metadata()`, thus no publication drops between subscribe and seed; `registry.onReload` is a computed property that registers a new subscriber for each read, thus the factory does not take the stream away from a host; the Examples build their contexts by hand and never call the library factory, thus no double forward; `reloadFollower` is the last parameter of `SkillsToolContext.init` with a default of `nil`, and the build proves every current call site compiles with no change.
+    - next: none. Task moved to done.
+  timestamp: 2026-08-30T14:06:40.200874+00:00
+- actor: claude-code
+  id: 01m19fxjd5ec3x3tpyj21mn60j
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 4 files (SkillsReloadFollower.swift, SkillsToolContext.swift, SkillsToolAssembly.swift, SkillsReloadFollowerTests.swift)
+    - test: green — swift test, 395 tests in 30 suites, 0 failures
+    - commit: a0280ed
+    - review: clean — review sha HEAD~1..HEAD, 0 findings, 7 validators attempted, 0 failed
+    - next: task is in done; the ergonomics chain is complete
+  timestamp: 2026-08-30T14:07:04.613297+00:00
 depends_on:
 - 01M199XKPWKJAFZ3RN8MX1RKQX
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: be80
 title: Follow registry reloads automatically from the tool factory
 ---
 ## What

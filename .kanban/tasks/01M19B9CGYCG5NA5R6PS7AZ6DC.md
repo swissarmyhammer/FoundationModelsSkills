@@ -1,6 +1,22 @@
 ---
 assignees:
 - claude-code
+comments:
+- actor: claude-code
+  id: 01m19fzaf48hw67m1ttqkpk0dk
+  text: |-
+    ### finish — out of scope, tagged blocked-upstream
+
+    Two reasons this card is held out of the current batch.
+
+    1. **It edits a sibling repository.** Every step is in `FoundationModelsRouter/Package.swift`. The plan for this board is explicitly "verify only, do not edit siblings". A human must decide to do this work in that repository.
+
+    2. **`^02wba0s` probably makes it moot.** The whole reason `mlx-swift-lm` is in this package's graph is the Router branch. Once `FoundationModelsMetadataRegistry` drops its five unused dependency entries, `mlx-swift-lm` leaves the graph of `FoundationModelsSkills` completely, and there is no identity for two mirrors to compete over here.
+
+    Do `^02wba0s` first. Then check whether this card still describes a real problem for this package. It may still matter for `FoundationModelsRouter`'s own consumers, which is a decision for that repository.
+
+    The work-around stays available meanwhile: stop `sourcekit-lsp`, delete `.build/checkouts/mlx-swift-lm`, build, resume.
+  timestamp: 2026-08-30T14:08:02.020486+00:00
 position_column: todo
 position_ordinal: 8a80
 title: Align the mlx-swift-lm dependency URL across Router and MetadataRegistry
@@ -47,4 +63,4 @@ Both files are in sibling repositories, not in `FoundationModelsSkills`. Do the 
 ## Tests
 
 - [ ] `swift build` and `swift test` pass in `FoundationModelsSkills` after the change.
-- [ ] `swift test` passes in `FoundationModelsRouter` and `FoundationModelsMetadataRegistry`.
+- [ ] `swift test` passes in `FoundationModelsRouter` and `FoundationModelsMetadataRegistry`. #blocked-upstream

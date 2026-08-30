@@ -1,6 +1,29 @@
 ---
 assignees:
 - claude-code
+comments:
+- actor: claude-code
+  id: 01m19fz0gztkgacn6jwy1kwsj0
+  text: |-
+    ### finish — stuck, not started
+
+    The card's first step is "Verify the runner has Apple Intelligence. Stop and report if it does not." I cannot verify it, thus the card does not start.
+
+    What I tried:
+    - `gh api orgs/swissarmyhammer/actions/runners` gives HTTP 403: "You must be an org admin or have the runners and runner groups fine-grained permission." The token needs the `admin:org` scope.
+    - `gh api repos/swissarmyhammer/FoundationModelsSkills/actions/runners` gives an empty list, thus the pool is declared at org level, not at repository level.
+    - No `actions-runner` directory and no runner service is on this machine, thus this machine is not the pool.
+    - A `workflow_dispatch` probe run is not possible: `.github/workflows/ci.yml` is committed but not pushed.
+
+    A human must answer one question: **does the `[self-hosted, macOS]` pool have Apple Intelligence?**
+
+    - **Yes** → do the card as written.
+    - **No** → do not do the card as written. An `integration-filter` that matches a test which always skips either reports green having run nothing, or fails the shared action's "matched no test case" guard at `../workflows/.github/actions/swift-test/action.yml:87-89`.
+
+    There is a second decision in the card that a human should confirm, not only the runner fact: the card removes the `SKILLS_INTEGRATION_TESTS` gate, thus a plain `swift test` on any developer machine that has Apple Intelligence starts to run a live-model test by default. That reverses what the suite header records today. The card asks for that trade to be written down as deliberate. Confirm it is wanted.
+
+    An alternative that avoids both: keep the environment gate and pass the LEGACY `integration-gate-env: SKILLS_INTEGRATION_TESTS` input instead of `integration-filter`. The shared workflow still supports it. It keeps the default developer run unchanged, and it still needs the runner to have Apple Intelligence for the job to do anything.
+  timestamp: 2026-08-30T14:07:51.839645+00:00
 depends_on:
 - 01M19A09R1HSTQTHZJGV3640VH
 - 01M19AK51NF7PEDQSMWAVYCCBJ
