@@ -101,6 +101,20 @@ struct DependencyGraphTests {
     /// The prefix of a top-level section heading in the decision record.
     private static let sectionHeadingPrefix = "## "
 
+    /// The documentation directory, relative to the package root.
+    private static let documentationPath = "docs"
+
+    /// The retired repository that once held the `Operations` and
+    /// `OperationsCLI` modules.
+    ///
+    /// `FoundationModelsExtras` holds both modules since 2026-08-29, and
+    /// `Package.swift` says the repository is retired.
+    private static let retiredOperationsRepository = "FoundationModelsOperationTool"
+
+    /// The word that makes a mention of ``retiredOperationsRepository``
+    /// history instead of a claim about today.
+    private static let retirementMarker = "retired"
+
     @Test("Package.resolved holds none of the live-Router packages")
     func resolvesNoneOfTheLiveRouterPackages() throws {
         let found = try Self.resolvedIdentities().intersection(Self.removedIdentities).sorted()
@@ -145,6 +159,45 @@ struct DependencyGraphTests {
             \(Self.removedPackageName): nothing in this package depends on it any more, thus the \
             macOS 27 floor and the iOS posture both have another reason now; found: \
             \(offenders.joined(separator: ", "))
+            """
+        )
+    }
+
+    /// Proves that no documentation line gives the retired operation-tool
+    /// repository as a dependency that exists now.
+    ///
+    /// `Package.swift` says the repository is retired, and the `Operations`
+    /// and `OperationsCLI` modules resolve from `FoundationModelsExtras`. A
+    /// documentation sentence in the present tense disagrees with the
+    /// manifest, and a reader believes the documentation.
+    ///
+    /// History stays. One word tells the two kinds of sentence apart: a line
+    /// may name the repository when the same line also names its retirement.
+    /// Thus a sentence that records what happened passes, and a sentence that
+    /// gives the repository as a live dependency fails. This is a rule about
+    /// one line, not about the file, thus a new present-tense sentence
+    /// somewhere else in `docs/` fails even while the historical note stands.
+    ///
+    /// One consequence for a writer: keep the name and the word "retired" on
+    /// the SAME line. A sentence that wraps between the two fails, because
+    /// the line that holds the name then holds no retirement word. That is
+    /// the price of the per-line rule, and the failure message says what to
+    /// do.
+    @Test("no documentation line gives the retired operation-tool repository as a current dependency")
+    func namesNoRetiredOperationsRepositoryAsCurrent() {
+        let root = FixtureLibrary.packageRoot()
+        let offenders = Self.linesNaming(
+            Self.retiredOperationsRepository,
+            under: root.appendingPathComponent(Self.documentationPath),
+            in: root,
+            where: { !$0.contains(Self.retirementMarker) })
+        #expect(
+            offenders.isEmpty,
+            """
+            No line under docs/ may name \(Self.retiredOperationsRepository) without also naming \
+            its retirement: that repository is retired, and the Operations and OperationsCLI \
+            modules come from FoundationModelsExtras now. Write the sentence in the past tense, \
+            or name FoundationModelsExtras instead; found: \(offenders.joined(separator: ", "))
             """
         )
     }
@@ -254,15 +307,23 @@ struct DependencyGraphTests {
     ///   - name: The string that no line may hold.
     ///   - base: The file or directory to read.
     ///   - root: The package root, which each reported path is relative to.
-    /// - Returns: One `<path>:<line>` entry for each line that holds `name`.
+    ///   - isOffending: Which of the lines that hold `name` to report. The
+    ///     default reports every one of them. A caller that permits `name` in
+    ///     one kind of sentence gives a test that rejects the other kind.
+    /// - Returns: One `<path>:<line>` entry for each reported line.
     ///   `enumerated()` counts from zero and an editor counts from one, thus
     ///   each reported line number is one more than the offset.
-    private static func linesNaming(_ name: String, under base: URL, in root: URL) -> [String] {
+    private static func linesNaming(
+        _ name: String,
+        under base: URL,
+        in root: URL,
+        where isOffending: (String) -> Bool = { _ in true }
+    ) -> [String] {
         var offenders: [String] = []
         for file in Self.files(under: base) {
             guard let text = try? String(contentsOf: file, encoding: .utf8) else { continue }
             for (offset, line) in text.components(separatedBy: .newlines).enumerated()
-            where line.contains(name) {
+            where line.contains(name) && isOffending(line) {
                 offenders.append("\(Self.path(of: file, in: root)):\(offset + 1)")
             }
         }

@@ -24,11 +24,42 @@ comments:
     - A script compares the README fenced block, minus its two import lines, with the block held in the test, after dedent. The two are equal character for character.
     - next: `/review`.
   timestamp: 2026-08-30T22:35:40.364111+00:00
+- actor: claude-code
+  id: 01m1adaprgq96gv7fhhce3qmvt
+  text: |-
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (c6b5805) -> 0 findings, 0 confirmed, 0 refuted, 7 validator runs attempted, 0 failed, 0 skipped. 4 files reviewed. `README.md` matched no validator, thus the engine did not read it.
+    - probes on the three load-bearing claims, because the engine covers no Markdown:
+      - README block vs the test copy: `README.md:19-39` and `ReadmeExampleTests.swift:55-75` are equal line for line, all 21 lines. The AC asks that the test hold the exact code and compile. Both hold.
+      - `--watch` reloads: `SkillsRegistry.onReload` is a computed property that answers `broadcaster.subscribe()`, thus each read gives an independent stream. The factory takes its own subscription before it reads the seed catalog and holds a `SkillsReloadFollower`, whose task runs `agent.update(items:)` for each publication and lives as long as the tool. `WatchMode.run()` holds the tool across the loop with `withExtendedLifetime`. Reloads reach the searcher, and the print subscription steals no event.
+      - GPU-free: the block case makes a session but sends no prompt, and the selection closure runs only on a search. The search case uses the no-session `SkillsTool.make(registry:)` with `mode: .retrieval` and no embedder. No case needs an on-device model.
+    - no document names `import FoundationModelsMetadataRegistry`.
+    - open point for a person, not a finding: no test asserts that the two copies of the block stay equal. The equality was shown by a one-time script. If the README changes and the test does not, every test still passes. The Tests section asks only for a copy that compiles, thus this does not fail the card.
+    - next: none. Task moved to done.
+  timestamp: 2026-08-30T22:41:03.760650+00:00
+- actor: claude-code
+  id: 01m1adbhq22h9mesw5v2x6wr1k
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 5 files (README.md, ReadmeExampleTests.swift, SkillsDemoAssembly.swift, ChatMode.swift, WatchMode.swift)
+    - test: green — swift test, 405 tests in 32 suites, 0 failures, 0 warnings; `swift run skills-demo --chat` 2 of 2 OK on a live model
+    - commit: c6b5805
+    - review: clean — 0 findings, 7 validators attempted
+    - next: task is in done
+
+    The reviewer verified the three risky claims by hand, because no validator reads Markdown: the README block and the test copy are equal line for line; `SkillsRegistry.onReload` really is a multicast broadcaster, thus dropping WatchMode's hand pump did not break `--watch`; and both new cases stay GPU-free.
+
+    It also found a residual gap that is outside this card's written criteria: nothing *asserts* that the README block and the test copy stay equal, thus a later edit to one alone would not fail the suite. Filed as `^y61tx8e`.
+  timestamp: 2026-08-30T22:41:31.362161+00:00
+- actor: claude-code
+  id: 01m1adc2g1qyk0x8q8sapjn7bm
+  text: 'Correction to the comment above: the drift-guard task is `^n49hex3`, not `^y61tx8e`. I wrote the id before the board assigned one.'
+  timestamp: 2026-08-30T22:41:48.545627+00:00
 depends_on:
 - 01M199ZVM11XKMQ5WWSET0AR2E
 - 01M19AQSGXENFA8W70RPWK3XYZ
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: c380
 title: Show the just-a-tool path in the README and the demo
 ---
 ## What

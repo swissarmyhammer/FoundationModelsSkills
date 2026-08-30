@@ -19,8 +19,8 @@
   the operation never materializes a binary asset.
 - **Op-level correctives do not count toward upstream's retry cap.**
   Plan.md §7 / decision #22 says: "upstream's retry cap (default 2) stops
-  loops." `OperationTool.call(arguments:)` in
-  `FoundationModelsOperationTool` only counts *resolver-level* failures —
+  loops." `OperationTool.call(arguments:)`, in the `Operations` module of
+  `FoundationModelsExtras`, only counts *resolver-level* failures —
   an unknown op, a missing required parameter, an unparseable value —
   through `recordCorrective`. When dispatch reaches an operation's own
   `execute(in:)`, that call counts as a success and resets the counter
@@ -32,9 +32,11 @@
   or an enum that separates the two cases). `OperationTool.Output` is an
   opaque `String` at this time, thus the fused tool cannot see which
   channel an operation's own JSON came from. That is a protocol-level
-  change to `FoundationModelsOperationTool`, a separate package that
-  other consumers also depend on. It is out of this package's scope to
-  land alone. It is not yet coordinated upstream; this note tracks it.
+  change to the `Operations` module of `FoundationModelsExtras`, which
+  other consumers also use. (`FoundationModelsOperationTool` was retired
+  on 2026-08-29; it held that module until then.) It is out of this
+  package's scope to land alone. It is not yet coordinated upstream;
+  this note tracks it.
   `SkillOperationsTests.repeatedUnknownIDUseSkillDispatchesAreNeverCappedByUpstreamsRetryLimit`
   pins the current (uncapped) behavior, thus a future upstream repair
   shows here as a test failure, not silently.
