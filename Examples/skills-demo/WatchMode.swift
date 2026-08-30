@@ -5,9 +5,11 @@ import FoundationModelsSkills
 /// Drives `skills-demo --watch`: the human-driven twin of `HotReloadTests`,
 /// printing each reload event as it lands (plan.md §10, §11).
 ///
-/// Wires `registry.onReload -> context.searchAgent.update(items:)` exactly as
-/// plan.md §10 shows -- this is the one place in the package that seam is
-/// exercised outside a test.
+/// The tool `SkillsDemoAssembly.makeTool(registry:)` assembles follows
+/// `registry.onReload` itself, exactly as plan.md §10 shows, thus this mode
+/// forwards nothing by hand. It takes a second subscription of its own --
+/// `onReload` is a multicast stream, thus neither subscriber steals the
+/// other's events -- and prints what each reload carries.
 @MainActor
 enum WatchMode {
     /// Retains the `SIGTERM` handler for this process's lifetime; a local
@@ -19,18 +21,25 @@ enum WatchMode {
     /// refreshed preload size, and refreshed `/` listing, until `SIGTERM`.
     static func run() async {
         let registry = SkillsDemoAssembly.makeRegistry(watch: true)
-        let context = SkillsDemoAssembly.makeContext(registry: registry)
         guard let reloads = registry.onReload else {
             print("Watch mode requires a watched registry.")
             return
         }
 
-        print("Watching \(registry.roots.map(\.path).joined(separator: ", ")) for changes.")
-        Self.installTerminationHandler()
+        do {
+            // The tool follows the reloads itself, thus this loop only
+            // prints. Holding the tool for the full loop is what keeps that
+            // follower alive.
+            let tool = try await SkillsDemoAssembly.makeTool(registry: registry)
+            print("Watching \(registry.roots.map(\.path).joined(separator: ", ")) for changes.")
+            Self.installTerminationHandler()
 
-        for await metadata in reloads {
-            await context.searchAgent.update(items: metadata)
-            Self.printReloadEvent(metadata: metadata, registry: registry)
+            for await metadata in reloads {
+                Self.printReloadEvent(metadata: metadata, registry: registry)
+            }
+            withExtendedLifetime(tool) {}
+        } catch {
+            print("Watch mode failed to build the skills tool: \(error)")
         }
     }
 

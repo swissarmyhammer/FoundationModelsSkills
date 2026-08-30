@@ -1,11 +1,34 @@
 ---
 assignees:
 - claude-code
+comments:
+- actor: claude-code
+  id: 01m1acth5zgg6m90jega17z6w7
+  text: |-
+    Research notes for the next agent.
+
+    - `SkillsToolAssembly.swift` gives three `async throws` overloads: `make(registry:session:embedder:followReloads:visibilityPredicate:)` with a `@Sendable (String) -> any AgentSession` closure, the same with a live `any AgentSession`, and `make(registry:embedder:followReloads:visibilityPredicate:)` with no session (mode `.retrieval`). `followReloads` defaults to `true` in all three.
+    - The card says `ChatMode.swift` and `WatchMode.swift` only call `SkillsDemoAssembly.makeContext(registry:)`. That is not complete: `WatchMode.run()` also read `context.searchAgent` and pumped `registry.onReload -> searchAgent.update(items:)` by hand. `OperationTool` does not expose its context, thus the factory cannot give a context back. `WatchMode` now drops the hand pump -- the factory follows the reloads -- and keeps its own `onReload` subscription only to print. `SkillsRegistry.onReload` is a multicast broadcaster (`ReloadCoordinator.subscribe()`), thus the two subscriptions do not steal each other's events. Manual run of `--watch` plus a `touch` on a fixture file shows one reload event printed.
+    - `SkillsDemoAssembly.makeContext(registry:)` is now `makeTool(registry:) async throws -> OperationTool<SkillsToolContext>`. It gives the factory no session, thus the demo keeps its old retrieval-only behavior.
+    - `docs/operations.md:33` says "`SkillsTool.make` sets it to `isModelVisible` as the default." Each new overload defaults `visibilityPredicate` to `{ $0.isModelVisible }`, thus the line stays correct. No change made.
+    - `ReadmeExampleTests.swift` imports only `FoundationModels`, `FoundationModelsSkills`, and `Testing`. Two constraints come from that short list: `URL` cannot be named, thus the three layer-root URLs come from `FixtureLibrary.url(relativePath:)`; and there is no `JSONDecoder`, thus `rankedIDs(in:)` reads the ids out of the answer text with `firstRange(of:)`.
+    - The README block gives the factory a real `LanguageModelSession` closure. A search through that tool would call the on-device model, thus the block case asserts only that the tool and the session are built. The search case uses the no-session form the new README paragraph names, thus every case stays GPU-free.
+    - A script compared the README fenced block (minus its two import lines) with the block held in the test, after dedent: the two are equal character for character.
+  timestamp: 2026-08-30T22:32:13.759418+00:00
+- actor: claude-code
+  id: 01m1ad0tycxd2e83hkrz3cqaay
+  text: |-
+    ### implement — changed
+    - evidence: 5 files. New `Tests/FoundationModelsSkillsTests/ReadmeExampleTests.swift`. Changed `README.md`, `Examples/skills-demo/SkillsDemoAssembly.swift`, `Examples/skills-demo/ChatMode.swift`, `Examples/skills-demo/WatchMode.swift`. `docs/operations.md` read and left as it is. Commands: `swift build` (clean, 0 warnings), `swift build --build-tests` (clean, 0 warnings), `swift test` -> 405 tests in 32 suites passed, 0 failures. `swift run skills-demo --chat` with a live model -> `[OK]` for `search skill` and `[OK]` for `use skill`. `--watch` run by hand with a `touch` on a fixture file -> one reload event printed, and the fixture stays unchanged in git.
+    - RED step: both assertions in the new suite were shown to fail. A mutation of `fusedToolName` to `"skillz"` and `bestMatchSkillID` to `"deploy"` gave 3 failures, then the mutation was reverted. The two `SkillsTool.make` overloads the README now shows already existed (`^mx1rkqx`), thus the new suite could not start red on a missing API. It starts red only against a wrong README.
+    - A script compares the README fenced block, minus its two import lines, with the block held in the test, after dedent. The two are equal character for character.
+    - next: `/review`.
+  timestamp: 2026-08-30T22:35:40.364111+00:00
 depends_on:
 - 01M199ZVM11XKMQ5WWSET0AR2E
 - 01M19AQSGXENFA8W70RPWK3XYZ
-position_column: todo
-position_ordinal: '8780'
+position_column: doing
+position_ordinal: '80'
 title: Show the just-a-tool path in the README and the demo
 ---
 ## What
@@ -57,25 +80,25 @@ The hand assembly is in `Examples/skills-demo/SkillsDemoAssembly.swift:21-23`. `
 
 `docs/operations.md` shows no hand assembly. Its one relevant line, 33, only names `SkillsTool.make`. Read it, and change it only if the new signature makes that line wrong. Do not make a change for its own sake.
 
-- [ ] Replace the README usage block and add the paragraph.
-- [ ] Change `SkillsDemoAssembly.swift` to the factory.
-- [ ] Read `docs/operations.md:33` and correct it only if it is wrong.
-- [ ] Add the README compile test.
+- [x] Replace the README usage block and add the paragraph.
+- [x] Change `SkillsDemoAssembly.swift` to the factory.
+- [x] Read `docs/operations.md:33` and correct it only if it is wrong.
+- [x] Add the README compile test.
 
 ## Acceptance Criteria
 
-- [ ] The README usage block compiles as written, with `FoundationModels` and `FoundationModelsSkills` as its only imports.
-- [ ] `swift build` builds `skills-demo`, and `SkillsDemoTests` passes.
-- [ ] `swift run skills-demo --chat` still drives the same scripted `search skill` -> `use skill` round trip.
-- [ ] No document in the repository tells a host to import `FoundationModelsMetadataRegistry`.
+- [x] The README usage block compiles as written, with `FoundationModels` and `FoundationModelsSkills` as its only imports.
+- [x] `swift build` builds `skills-demo`, and `SkillsDemoTests` passes.
+- [x] `swift run skills-demo --chat` still drives the same scripted `search skill` -> `use skill` round trip.
+- [x] No document in the repository tells a host to import `FoundationModelsMetadataRegistry`.
 
 ## Tests
 
-- [ ] New file `Tests/FoundationModelsSkillsTests/ReadmeExampleTests.swift`. Its imports are only `FoundationModels`, `FoundationModelsSkills`, and `Testing`.
-- [ ] A test case holds the exact code of the README usage block, over the `Examples/skill-library` fixture stack, and asserts the tool is built. The test compiles, thus the README cannot drift into code that does not build.
-- [ ] A test case dispatches `search skill` through that tool and asserts on the ranked ids.
-- [ ] `SkillsDemoTests` still passes with no change to its assertions.
-- [ ] `swift test` passes.
+- [x] New file `Tests/FoundationModelsSkillsTests/ReadmeExampleTests.swift`. Its imports are only `FoundationModels`, `FoundationModelsSkills`, and `Testing`.
+- [x] A test case holds the exact code of the README usage block, over the `Examples/skill-library` fixture stack, and asserts the tool is built. The test compiles, thus the README cannot drift into code that does not build.
+- [x] A test case dispatches `search skill` through that tool and asserts on the ranked ids.
+- [x] `SkillsDemoTests` still passes with no change to its assertions.
+- [x] `swift test` passes.
 
 ## Workflow
 - Use `/tdd` — write failing tests first, then implement to make them pass.

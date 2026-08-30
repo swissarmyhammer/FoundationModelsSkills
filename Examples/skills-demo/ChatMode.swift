@@ -108,8 +108,7 @@ enum ChatMode {
     private static func runValidation() async {
         do {
             let registry = SkillsDemoAssembly.makeRegistry(watch: false)
-            let context = SkillsDemoAssembly.makeContext(registry: registry)
-            let tool = try SkillsTool.make(context: context)
+            let tool = try await SkillsDemoAssembly.makeTool(registry: registry)
             let session = LanguageModelSession(
                 tools: [tool],
                 instructions: Instructions {

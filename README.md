@@ -13,6 +13,9 @@ menu, and a CLI through the same rendering path. macOS 27 or later is
 necessary.
 
 ```swift
+import FoundationModels
+import FoundationModelsSkills
+
 // The host selects the layer roots. The usual way is a "skills" dotfolder stack:
 let stack = DotfolderStack(
     name: "skills",
@@ -22,11 +25,10 @@ let stack = DotfolderStack(
 let registry = SkillsRegistry(stack: stack, watch: true)
 
 // One fused tool for the full catalog: search, list, use, resources, scripts.
-let searcher = MetadataSearcher(items: registry.metadata().filter(\.isModelVisible))
-let context = SkillsToolContext(
+// The session you supply runs the selection tier. Nothing is hardcoded.
+let skillsTool = try await SkillsTool.make(
     registry: registry,
-    searchAgent: SkillSearchAgent(searcher: searcher))
-let skillsTool = try SkillsTool.make(context: context)
+    session: { prefix in LanguageModelSession(model: .default, instructions: prefix) })
 
 // A lean root session: one tool, preloaded bodies, no full catalog in context.
 let session = LanguageModelSession(
@@ -36,6 +38,12 @@ let session = LanguageModelSession(
         registry.preloadedBodies()
     })
 ```
+
+`SkillsTool.make` gives an `OperationTool`. That type conforms to the
+FoundationModels `Tool` protocol, thus it goes into any standard session with
+no adapter. The search tier uses the session that you give it, and this
+package makes no session of its own. A host that wants no model does not give
+the `session:` argument. Each search then uses keyword retrieval only.
 
 The compiled, always-current version of this example is
 [`Examples/skills-demo`](Examples/skills-demo). `swift build` builds it
