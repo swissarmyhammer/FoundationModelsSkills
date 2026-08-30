@@ -129,6 +129,31 @@ comments:
     - review: clean — review sha HEAD~1..HEAD, 0 findings, 7 validators attempted, 0 failed
     - next: task is in done; ^dzep0b7 is now unblocked, but it must first verify the self-hosted runner has Apple Intelligence
   timestamp: 2026-08-30T13:45:59.388212+00:00
+- actor: claude-code
+  id: 01m19magtmxgbxg0gd70vkqtkq
+  text: |-
+    ### first CI run: queued with no runner — an org admin action is necessary
+
+    Pushed `5627801` to `main` on 2026-08-30. Run `33319031407` started, and it is correct in every part this repository controls. It stayed `queued` for more than 10 minutes, and no runner took it.
+
+    Evidence:
+
+    - The run is on the correct sha, `5627801`, and the workflow started. Thus `ci.yml` is valid and its `on:` block is correct.
+    - The job asks for `["self-hosted", "macOS"]`. This is the same label set the shared workflow gives every sibling repository.
+    - `runner_name` and `runner_group_name` are both empty. Thus no runner was ever given to the job. It is not a busy runner and not a slow build.
+    - The pool is alive. `FoundationModelsRanker` completed a run at 15:04Z, nine minutes before this push, and `FoundationModelsMetadataRegistry` completed one at 14:29Z. Both were successful.
+    - Repository Actions settings are identical to the working sibling: `{"enabled": true, "allowed_actions": "all"}`.
+
+    The cause is outside this repository: `FoundationModelsSkills` does not have access to the organization runner group. A new repository must be added to that group's repository list.
+
+    **The fix, for an organization admin:** GitHub → organization `swissarmyhammer` → Settings → Actions → Runner groups → the macOS group → add `FoundationModelsSkills` to its repository access list. Then re-run `33319031407`.
+
+    This is a configuration gap, not a code failure. Do not change code for it. The same lack of permission stopped the earlier attempt to read the runner list: `gh api orgs/swissarmyhammer/actions/runners` gives HTTP 403 and asks for the `admin:org` scope.
+
+    Local evidence that the two CI commands are correct, run exactly as the shared action builds them:
+    - `swift test --filter FoundationModelsSkillsTests.HotReloadLiveTests` — 1 test passed.
+    - `swift test --skip FoundationModelsSkillsTests.HotReloadLiveTests` — 396 tests passed.
+  timestamp: 2026-08-30T15:24:03.284621+00:00
 position_column: done
 position_ordinal: bd80
 title: Add the CI workflow that delegates to the shared swift-ci workflow
