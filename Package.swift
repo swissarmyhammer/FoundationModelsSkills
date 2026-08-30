@@ -16,15 +16,15 @@ let testTargetName = packageName + "Tests"
 /// extracted so the org lives in one place instead of dependency entries
 /// that could silently drift.
 /// Every sibling is wired as a *remote* dependency (`main` branch), never a
-/// local `path:` one, matching the family convention
-/// (`FoundationModelsRouter`, `FoundationModelsMetadataRegistry`) so this
-/// package's CI can use the family's shared `swift-ci.yaml` reusable
-/// workflow, which only checks out the calling repo -- a `path:` dependency
-/// on an uncommitted sibling checkout would not exist there. It also avoids
-/// the SwiftPM "Conflicting identity" warning a mixed path/URL reference to
-/// the same package produces when another dependency in the graph (e.g.
-/// `FoundationModelsMetadataRegistry -> FoundationModelsRouter ->
-/// FoundationModelsExtras`) already pulls it in remotely.
+/// local `path:` one, matching the family convention (e.g.
+/// `FoundationModelsMetadataRegistry` reaches `FoundationModelsRanker` the
+/// same way) so this package's CI can use the family's shared `swift-ci.yaml`
+/// reusable workflow, which only checks out the calling repo -- a `path:`
+/// dependency on an uncommitted sibling checkout would not exist there. It
+/// also keeps the SwiftPM "Conflicting identity" warning away: that warning
+/// comes as soon as one package is reached by path here and by URL from
+/// anywhere else in the graph, and a remote reference here can never make
+/// that pair.
 let swissArmyHammerOrg = "git@github.com:swissarmyhammer/"
 
 /// Shared product dependencies needed by both the library target and its test
@@ -55,11 +55,12 @@ let commonDependencies: [Target.Dependency] = [
 let package = Package(
     name: packageName,
     // macOS 27+, no pre-27 fallback: the strictest floor in this package's own
-    // dependency graph. `FoundationModelsMetadataRegistry` depends on
-    // `FoundationModelsRouter`, which commits to macOS 27 / FoundationModels v2
-    // with no pre-27 fallback; that floor is inherited package-wide (plan.md
-    // decision #26, matching decision #17's "no target split" stance -- the
-    // whole package carries the Registry -> Router dependency and its floor).
+    // dependency graph. `FoundationModelsExtras` declares macOS 27, because
+    // FoundationModels v2 needs macOS 27 and there is no pre-27 fallback;
+    // `FoundationModelsMetadataRegistry` declares the same floor. It is
+    // inherited package-wide (plan.md decision #26, matching decision #17's
+    // "no target split" stance -- one target carries every dependency, thus it
+    // carries the strictest floor of all of them).
     // No `.iOS(...)` platform is declared here -- see the doc comment on the
     // `FoundationModelsSkills` namespace enum
     // (`Sources/FoundationModelsSkills/FoundationModelsSkills.swift`) for why.
@@ -80,7 +81,8 @@ let package = Package(
         // CLI (plan.md §7.2).
         .package(url: "\(swissArmyHammerOrg)FoundationModelsExtras.git", branch: "main"),
         // `SkillSearchAgent`'s hybrid retrieval (BM25 + trigram + cosine ->
-        // RRF) and Router-backed selection session, via
+        // RRF) and its `AgentSession`-backed selection session -- a plain
+        // `LanguageModelSession` conforms to `AgentSession` -- via
         // `MetadataSearcher<SkillMetadata>` (plan.md decision #26).
         .package(url: "\(swissArmyHammerOrg)FoundationModelsMetadataRegistry.git", branch: "main"),
         // YAML frontmatter decoding stays ours, with Yams, per Extras' no-YAML

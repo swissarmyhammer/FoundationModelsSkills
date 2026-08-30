@@ -12,21 +12,19 @@
 /// compiling out shell/script code paths -- but that stub is only possible
 /// at the manifest level when every dependency in the graph itself declares
 /// an iOS platform floor, since `Package.swift`'s `platforms:` list is
-/// package-wide, not per-target. It is not possible here: two of this
-/// package's three sibling dependencies are macOS-only.
+/// package-wide, not per-target. It is not possible here: both sibling
+/// dependencies of this package are macOS-only.
 ///
-/// - `FoundationModelsExtras` declares macOS only -- no iOS surface is
-///   planned for any of its three pillars (slash commands, `DotfolderStack`,
-///   Stencil templating).
-/// - `FoundationModelsMetadataRegistry` declares macOS 27 only, inherited
-///   from its own `FoundationModelsRouter` dependency, which commits to
-///   macOS 27 / FoundationModels v2 with no pre-27 or iOS fallback.
+/// - `FoundationModelsExtras` declares macOS 27 only. FoundationModels v2
+///   needs macOS 27, and no iOS surface is planned for the substrate that
+///   package ships (slash commands, `DotfolderStack`, Stencil templating, and
+///   the `Operations` `@Operation` macro fusion).
+/// - `FoundationModelsMetadataRegistry` declares macOS 27 only, for the same
+///   FoundationModels v2 reason, with no pre-27 or iOS fallback.
 ///
-/// Only `FoundationModelsOperationTool` (`Operations`) declares both macOS
-/// and iOS. Declaring an `.iOS(...)` floor on this package's own manifest
-/// would break resolution for the whole package, since two of its three
-/// path dependencies can never satisfy it. The deviation is recorded here
-/// explicitly, per plan.md §8, rather than silently dropped: **iOS is
-/// unsupported** because `FoundationModelsExtras` and
-/// `FoundationModelsMetadataRegistry` are macOS-only.
+/// Declaring an `.iOS(...)` floor on this package's own manifest would break
+/// resolution for the whole package, because neither sibling can satisfy it.
+/// The deviation is recorded here explicitly, per plan.md §8, rather than
+/// silently dropped: **iOS is unsupported** because `FoundationModelsExtras`
+/// and `FoundationModelsMetadataRegistry` are macOS-only.
 public enum FoundationModelsSkills {}

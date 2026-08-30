@@ -39,10 +39,35 @@ comments:
     - evidence: 1 file added — Tests/FoundationModelsSkillsTests/DependencyGraphTests.swift. Commands: `swift test --filter DependencyGraphTests` (RED, 1 failure), `swift package update` (24 identities -> 10), `swift build` (clean, no warning), `swift test` (400 tests in 31 suites, 0 failures, 0 warnings, 0 skipped). Package.resolved is not staged; .gitignore is unchanged.
     - next: /review
   timestamp: 2026-08-30T21:26:13.462300+00:00
+- actor: claude-code
+  id: 01m1a985mehra9t1vwkwzn51e6
+  text: |-
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (78df64a) — 0 findings, 0 confirmed, 0 refuted, 7 validators attempted, 0 failed. 1 file reviewed (`Tests/FoundationModelsSkillsTests/DependencyGraphTests.swift`); 2 `.kanban/` files excluded by `.reviewignore`.
+    - verified independently: `Package.resolved` holds 10 pins (foundationmodelsextras, foundationmodelsmetadataregistry, foundationmodelsranker, pathkit, spectre, stencil, swift-argument-parser, swift-syntax, ulid.swift, yams). None of the five deny-list identities is present. `swift-jinja` is also gone, and the test makes no claim about it.
+    - verified independently: the read at `DependencyGraphTests.swift:69` is an unguarded `try Data(contentsOf:)`, thus an absent file throws and the test fails. It does not skip. The doc comment says why the read stays unguarded.
+    - verified independently: the doc comment names the suite a live-resolution tripwire and gives the reason for a deny list and not an allow list -- every sibling is pinned to `branch: "main"`.
+    - verified independently: the test calls `FixtureLibrary.packageRoot()` at `DependencyGraphTests.swift:68`. It adds no second `#filePath` walk.
+    - verified independently: `.gitignore:4` still ignores `Package.resolved`, `git ls-files` shows it untracked, and the commit does not hold it.
+    - verified independently: `swift test --filter DependencyGraphTests` -> 1 test in 1 suite passed. The build gave no warning, thus no `mlx-swift` bundle warning.
+    - next: none. Task moved to done.
+  timestamp: 2026-08-30T21:29:46.382005+00:00
+- actor: claude-code
+  id: 01m1a98ycj83bbmmvhr04bsd02
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 1 file (DependencyGraphTests.swift); `swift package update` took the graph from 24 identities to 10
+    - test: green — swift test, 400 tests in 31 suites, 0 failures, 0 warnings, 0 skipped
+    - commit: 78df64a
+    - review: clean — 0 findings, 7 validators attempted; the reviewer read Package.resolved itself and confirmed all five deny-list identities are absent
+    - next: task is in done; ^k8109g9 is now unblocked
+
+    The Router is out of this package's graph. `swift build` no longer emits the mlx-swift bundle warning that docs/development.md records — ^k8109g9 deletes that note.
+  timestamp: 2026-08-30T21:30:11.730826+00:00
 depends_on:
 - 01M19AK51NF7PEDQSMWAVYCCBJ
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: c080
 title: Resolve a Router-free dependency graph and guard it with a test
 ---
 ## What

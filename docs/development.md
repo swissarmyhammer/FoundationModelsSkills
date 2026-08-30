@@ -42,25 +42,16 @@
 ## Development
 
 - **Sibling dependencies are remote, not local `path:`.**
-  `FoundationModelsExtras`, `FoundationModelsOperationTool`, and
-  `FoundationModelsMetadataRegistry` all pin to
-  `git@github.com:swissarmyhammer/<name>.git` (`main` branch) in
-  `Package.swift`. This matches the family convention that
-  `FoundationModelsRouter` and `FoundationModelsMetadataRegistry` use. A
-  local `path:` dependency here caused a SwiftPM "Conflicting identity"
-  warning for `FoundationModelsOperationTool`: this package pulled it in
-  two times, once by path and once transitively (through
-  `FoundationModelsMetadataRegistry -> FoundationModelsRouter`) by URL.
-  SwiftPM says this "will be escalated to an error in future versions."
-  Remote wiring for each sibling resolves the identity to a single
-  reference. It also matches the family's shared `swift-ci.yaml`
-  reusable workflow, which only checks out the calling repository — a
-  `path:` dependency on an uncommitted sibling checkout would not exist
-  there.
-- **The mlx `Cmlx.bundle` "missing creator for mutated node" build
-  warning is known toolchain noise.** This package's code and manifest do
-  not cause it. It comes from `mlx-swift`'s own bundle target (pulled in
-  transitively through `FoundationModelsMetadataRegistry ->
-  FoundationModelsRouter -> mlx-swift-lm -> mlx-swift`). It appears on
-  every `swift build` and `swift test`, independent of local changes. It
-  is an upstream toolchain / mlx-swift concern.
+  `FoundationModelsExtras` and `FoundationModelsMetadataRegistry` both pin
+  to `git@github.com:swissarmyhammer/<name>.git` (`main` branch) in
+  `Package.swift`. This matches the family convention: each sibling reaches
+  the next one the same way, for example
+  `FoundationModelsMetadataRegistry -> FoundationModelsRanker`. A local
+  `path:` dependency here caused a SwiftPM "Conflicting identity" warning:
+  this package pulled one and the same sibling in two times, once by path
+  and once transitively by URL. SwiftPM says this "will be escalated to an
+  error in future versions." Remote wiring for each sibling resolves the
+  identity to a single reference. It also matches the family's shared
+  `swift-ci.yaml` reusable workflow, which only checks out the calling
+  repository — a `path:` dependency on an uncommitted sibling checkout
+  would not exist there.
