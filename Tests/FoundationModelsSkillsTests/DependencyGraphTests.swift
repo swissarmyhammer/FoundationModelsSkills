@@ -259,11 +259,11 @@ struct DependencyGraphTests {
     ///   each reported line number is one more than the offset.
     private static func linesNaming(_ name: String, under base: URL, in root: URL) -> [String] {
         var offenders: [String] = []
-        for file in files(under: base) {
+        for file in Self.files(under: base) {
             guard let text = try? String(contentsOf: file, encoding: .utf8) else { continue }
             for (offset, line) in text.components(separatedBy: .newlines).enumerated()
             where line.contains(name) {
-                offenders.append("\(path(of: file, in: root)):\(offset + 1)")
+                offenders.append("\(Self.path(of: file, in: root)):\(offset + 1)")
             }
         }
         return offenders

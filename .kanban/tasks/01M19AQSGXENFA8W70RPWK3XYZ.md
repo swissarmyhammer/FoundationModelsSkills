@@ -79,10 +79,22 @@ comments:
 
     **One correction to the record, for the next reader.** Each finding says the unqualified form "is not in scope" and "will not compile". That reason is not correct: Swift lets a static method name another static member of the same type without a qualifier, and the file compiled and passed 403 tests before this change. The remedy is still applied, because the explicit form is clearer and costs nothing. Only the stated reason is wrong, not the request.
   timestamp: 2026-08-30T22:17:00.081135+00:00
+- actor: claude-code
+  id: 01m1ac7gazvq042k369mr7kb6q
+  text: |
+    ### review — clean
+
+    - evidence: 0 findings, 0 confirmed, 0 refuted, 7 validators attempted, 0 failed (scope: `review sha HEAD~1..HEAD` = a2767b5, backend local). Only `.kanban/` files were not read, because an ignore rule holds them.
+    - iteration 1 findings: both are closed in the code, not only on the card. `Tests/FoundationModelsSkillsTests/DependencyGraphTests.swift:206` reads `Self.planFileName` and `:223` reads `try Self.planText()`. Two more references of the same class also carry the qualifier now: `:228` `Self.sectionHeadingPrefix` and `:321` `Self.resolutionFileName`.
+    - nothing is weakened: the delta touches 4 lines in 1 source file. Each line adds only the `Self.` qualifier. No test case, no `#expect`, no guard, and no message changed. `swift test`: 403 tests in 31 suites pass, exit code 0.
+    - the rationale correction in the last comment is correct. A compile probe proves it: a `struct` with a `private static let` and two `private static func` members, all named without a qualifier, builds with `swiftc -swift-version 6` and runs. Thus "is not in scope" and "will not compile" are wrong statements about Swift. The request itself was good, and the remedy is applied.
+    - one correction to the last comment, for the next reader: the words "the cause is removed from the whole file" say too much. Two references of the same class stay unqualified at `:262` `files(under: base)` and `:266` `path(of: file, in: root)`, both in the static method `linesNaming(_:under:in:)`. `git blame` shows commit 4930c68 wrote them, thus they are outside this task and outside both review scopes. The review scope rule keeps unchanged lines out of a diff review, thus they are not a finding here.
+    - next: none. The task is in `done`.
+  timestamp: 2026-08-30T22:21:50.303875+00:00
 depends_on:
 - 01M19A1WVBB8AHK15V4K8109G9
-position_column: review
-position_ordinal: '80'
+position_column: done
+position_ordinal: c280
 title: Amend the plan.md decision record for the Router removal
 ---
 ## What
