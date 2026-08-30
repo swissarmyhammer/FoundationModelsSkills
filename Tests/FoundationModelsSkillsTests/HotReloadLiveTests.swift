@@ -4,74 +4,43 @@ import FoundationModelsMetadataRegistry
 import FoundationModelsSkills
 import Testing
 
-/// The gated, live-model twin of `HotReloadTests` (plan.md §13's last
-/// paragraph): the same add/remove burst, this time against a `.selection`-
-/// mode `MetadataSearcher` backed by a genuinely live model session, not a
-/// scripted fake.
+/// The live-model twin of `HotReloadTests` (plan.md §13's last paragraph):
+/// the same MCP-style add and remove burst, this time against a
+/// `.selection`-mode `MetadataSearcher` that a real model session backs, not
+/// a scripted fake.
 ///
-/// **Deviation from a literal Router-backed twin, disclosed:** plan.md's
-/// text names "a live Router selection session," mirroring
-/// `FoundationModelsMetadataRegistry`'s own gated
-/// `RouterIntegrationTests.swift`, which resolves tiny `mlx-community`
-/// models through `FoundationModelsRouter` + MLX + Hugging Face. Wiring that
-/// same machinery here would mean adding `FoundationModelsRouter`,
-/// `MLXHuggingFace`, `MLXLMCommon`, `HuggingFace`, and `Tokenizers` as new
-/// test-target-only dependencies -- several hundred lines of tiny-model
-/// resolution/download plumbing -- solely for one gated file this package
-/// has never otherwise needed. This package's real dependency graph already
-/// gives every `AgentSession` conformer a genuinely live alternative with
-/// zero new dependencies: `FoundationModelsRanker`'s
-/// `LanguageModelSession: AgentSession` conformance (re-exported here via
-/// `FoundationModelsMetadataRegistry`'s `@_exported import
-/// FoundationModelsRanker`), which adapts Apple's own on-device
-/// `SystemLanguageModel` to the same `AgentSession` seam `RoutedAgentSession`
-/// implements for Router. This suite drives that conformer directly --
-/// `SelectionConfig.model`'s closure takes only the instructions text and
-/// returns a bare `LanguageModelSession` (a plain `LanguageModelSession`
-/// uses its own native guided generation, not an externally supplied
-/// grammar; see `LanguageModelSessionSupport.swift`'s doc comment), so this
-/// file never needs to name `Grammar` and therefore never needs to `import
-/// FoundationModelsRouter` at all. The scenario itself -- the MCP-style
-/// add/remove burst against a real selection session -- is unchanged; only
-/// which live model backs it differs.
+/// The session is a plain `LanguageModelSession`, which
+/// `FoundationModelsRanker` makes conform to `AgentSession` and
+/// `FoundationModelsMetadataRegistry` re-exports. That conformer adapts
+/// Apple's own on-device `SystemLanguageModel` to the same `AgentSession`
+/// seam every other conformer implements, thus this suite needs no new
+/// dependency. `SelectionConfig.model`'s closure takes only the instructions
+/// text and returns the bare session, and the session then uses its own
+/// native guided generation instead of an externally supplied grammar (see
+/// `LanguageModelSessionSupport.swift`), thus this file never names `Grammar`
+/// and never imports `FoundationModelsRouter`.
 ///
-/// Gated exactly like `FoundationModelsMCPTests.E2ETests` (mirroring its
-/// two-part gate): the ``skillsIntegrationEnvVar`` environment variable must
-/// be `"1"`, and even then `SystemLanguageModel.default.isAvailable` must be
-/// `true` -- both surfaced as a Swift Testing skip, never a failure and never
-/// a silent no-op.
+/// **One gate: `SystemLanguageModel.default.isAvailable`.** A host with no
+/// on-device Apple Intelligence model reports each test here as a Swift
+/// Testing skip -- never a failure, and never a silent no-op.
+///
+/// **The default developer run changed, and the change is deliberate.** An
+/// environment variable used to gate this suite as well, thus a plain `swift
+/// test` never probed on-device model availability at all. Model
+/// availability is now the only gate, thus a plain `swift test` on a machine
+/// that has Apple Intelligence runs this suite by default. That is the trade,
+/// and it is taken on purpose: the suite is one add and one remove burst,
+/// thus it costs little, and a live path that nobody ever runs is a live path
+/// that rots. CI makes the same split by test target instead of by
+/// environment -- `.github/workflows/ci.yml` holds this suite out of the unit
+/// job with `test-skip`, and runs it, and only it, in the integration job
+/// with `integration-filter`.
 @Suite("Gated live-model hot-reload twin (plan.md §13)")
 struct HotReloadLiveTests {
-    /// The environment variable that must be set to exactly `"1"` to enable
-    /// this gated suite.
-    private static let skillsIntegrationEnvVar = "SKILLS_INTEGRATION_TESTS"
-
-    /// Whether ``skillsIntegrationEnvVar`` is set to `"1"` in this process's
-    /// environment.
-    private static var isIntegrationFlagSet: Bool {
-        ProcessInfo.processInfo.environment[skillsIntegrationEnvVar] == "1"
-    }
-
-    /// Whether it's safe to proceed past the model-availability gate.
-    ///
-    /// `true` whenever ``isIntegrationFlagSet`` is `false`, without ever
-    /// touching `SystemLanguageModel` -- so the default (ungated) `swift
-    /// test` run never probes on-device model availability at all, only this
-    /// suite's own environment-variable check. Only once
-    /// ``isIntegrationFlagSet`` is `true` does this actually consult
-    /// `SystemLanguageModel.default.isAvailable`.
-    private static var modelAvailabilityGatePasses: Bool {
-        !Self.isIntegrationFlagSet || SystemLanguageModel.default.isAvailable
-    }
-
     @Test(
         "an MCP-style add/remove burst stays searchable through a real .selection MetadataSearcher backed by the on-device model",
         .enabled(
-            if: Self.isIntegrationFlagSet,
-            "Set SKILLS_INTEGRATION_TESTS=1 to run this gated live-model test."
-        ),
-        .enabled(
-            if: Self.modelAvailabilityGatePasses,
+            if: SystemLanguageModel.default.isAvailable,
             "SystemLanguageModel is unavailable on this host (see SystemLanguageModel.default.isAvailable); this test requires an on-device Apple Intelligence model."
         )
     )
