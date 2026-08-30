@@ -43,11 +43,28 @@ comments:
     - evidence: 3 files — Sources/FoundationModelsSkills/Operations/SkillsToolAssembly.swift (new), Tests/FoundationModelsSkillsTests/SkillsToolAssemblyTests.swift (new), Tests/FoundationModelsSkillsTests/FixtureLibrary.swift (added `stack(thisFile:)`). `swift build`: build complete, no new warning. `swift test`: 386 tests in 28 suites passed, 0 failures, 0 warnings.
     - next: /review
   timestamp: 2026-08-30T13:20:30.370563+00:00
+- actor: claude-code
+  id: 01m19dqfr5q869q5y20da96ffc
+  text: |
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (backend local) — 0 findings, 0 confirmed, 0 refuted, 7 attempted, 0 failed. 3 files reviewed. Acceptance criteria checked: all three `make` overloads resolve (swift build --build-tests: exit 0, no ambiguity), the async `MetadataSearcher(items:mode:embedder:selection:)` initializer is the one called, the no-session overload passes `mode: .retrieval`, no `SystemLanguageModel` and no `.default` in the new source or test file, and `SkillsTool.make(context:)` is untouched.
+    - next: task moved to done.
+  timestamp: 2026-08-30T13:28:48.133901+00:00
+- actor: claude-code
+  id: 01m19dr7m4b2jccw8xe30n00aj
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 3 files (SkillsToolAssembly.swift, SkillsToolAssemblyTests.swift, FixtureLibrary.swift)
+    - test: green — swift test, 386 tests in 28 suites, 0 failures, 0 warnings
+    - commit: 5398846
+    - review: clean — review sha HEAD~1..HEAD, 0 findings, 7 validators attempted, 0 failed
+    - next: task is in done; ^et0ar2e is now unblocked
+  timestamp: 2026-08-30T13:29:12.580970+00:00
 depends_on:
 - 01M199WZNA6SCK8332HZDE3S2T
 - 01M19AK51NF7PEDQSMWAVYCCBJ
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: bc80
 title: Add a one-call SkillsTool factory that takes an injected session
 ---
 ## What

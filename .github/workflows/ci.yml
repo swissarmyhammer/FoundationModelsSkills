@@ -1,0 +1,35 @@
+name: CI
+
+# The org test contract (swissarmyhammer/workflows' README) applies here in
+# full. This repository satisfies it with the unit job alone, for now:
+#
+# - `swift test` at the root runs every suite of the single
+#   `FoundationModelsSkillsTests` target. All of them are unit tests: none
+#   needs a network, a GPU, or much wall-clock time.
+# - `HotReloadLiveTests` is the one exception. It is a gated, live-model
+#   suite: each of its tests stays disabled unless `SKILLS_INTEGRATION_TESTS`
+#   is `1` and an on-device model is available. The unit job sets no such
+#   variable, thus that suite reports as skipped and the unit job stays fast.
+# - This gated suite is NOT wired into CI yet. The shared workflow starts its
+#   integration job only when `integration-gate-env`, `integration-filter`,
+#   `integration-skip`, or `integration-package-path` is non-empty. This
+#   workflow passes none of them, so that job never runs. A later task adds
+#   the integration input that runs the gated suite.
+# - Every input of the shared workflow is optional, so the bare `uses:` below
+#   is a valid call. `CIWorkflowTests` pins the delegation from this side: the
+#   `uses:` target, the single job with no `steps:` of its own, the triggers,
+#   and the concurrency group.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    uses: swissarmyhammer/workflows/.github/workflows/swift-ci.yaml@main
