@@ -5,3 +5,4 @@ Package.resolved
 .validators/
 lcov.info
 .kanban/*.log
+.kanban/**/.trash/
