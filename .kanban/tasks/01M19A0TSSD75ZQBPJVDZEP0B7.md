@@ -151,11 +151,40 @@ comments:
     - evidence: 1 file — `/Users/wballard/github/swissarmyhammer/FoundationModelsSkills/Tests/FoundationModelsSkillsTests/CIWorkflowTests.swift`. `swift test`: 399 tests in 30 suites passed, 0 failures, was 397. `swift test --filter FoundationModelsSkillsTests.CIWorkflowTests`: 8 of 8 passed, was 6. `swift build --build-tests`: the only warning is the mlx-swift "missing creator for mutated node", which archived card ^vwthc4s accepted. 4 mutation runs prove each new case catches its own half of the contract.
     - next: ready for `/review`.
   timestamp: 2026-08-30T15:04:58.284880+00:00
+- actor: claude-code
+  id: 01m19kp2ny398eynyhj210naz6
+  text: |
+    ### review — clean
+    - evidence: 0 findings, 0 confirmed, 0 refuted, 7 validators attempted, 0 failed. Scope: `review sha HEAD~1..HEAD` (90009e5), local backend. 1 file reviewed, 2 excluded by `.reviewignore` (`.kanban/`).
+    - next: none. Card moves to done.
+
+    Iteration 2. The one finding of iteration 1, `Tests/FoundationModelsSkillsTests/CIWorkflowTests.swift:117` `completeness/case-sensitivity-coverage`, is closed. It was not accepted on the checkbox alone; it was measured again here:
+
+    - **The mutation was repeated independently.** Line 353 of `CIWorkflowTests.swift` was changed from `trimmed[..<colon].lowercased() == key.lowercased()` to `trimmed[..<colon] == key`, thus both sides drop the case fold. `readsAnInputKeyThatTheFileSpellsInMixedCase` failed with 5 issues, and `readsAnInputKeyThatTheTestAsksForInMixedCase` failed with 4. That is row 1 of the author's table, reproduced exactly. The file was then restored with `git checkout`, and `git status --porcelain` is empty.
+    - **Neither test is empty.** `requiredLiveSuiteInputs` holds 2 names and `mixedCaseFixtureExpectations` holds 5 rows, thus the two loops make 4 and 5 assertions. 5 plus 4 is the 9 issues the mutation run reported, thus every assertion is reached and every one depends on the contract.
+    - **Both halves of the contract are held.** The compare folds the case of the file key and of the asked key. The fixture covers the file half, and it spells all five keys that the two loops of `passesTheLiveSuiteSelectors()` pass to the reader. The `ci.yml` read covers the asked half, in an upper and a title spelling taken from `requiredLiveSuiteInputs`, thus the spellings cannot drift from the list.
+    - **The fix went past the line in the finding, as the rule asks.** The finding named one assertion inside `passesTheLiveSuiteSelectors`. The author removed the cause for the whole file instead, and covered the forbidden-input keys as well. Those are the load-bearing ones: a case-sensitive read lets `Integration-Skip:` through with no report.
+    - **No assertion was weakened.** The two loops of `passesTheLiveSuiteSelectors()` are unchanged in this commit, and each new case compares an exact array, not "is not empty".
+
+    `swift test --filter FoundationModelsSkillsTests.CIWorkflowTests`: 8 of 8 passed, was 6. Every prior checklist item of the card is marked.
+  timestamp: 2026-08-30T15:12:53.438680+00:00
+- actor: claude-code
+  id: 01m19kpmz493mwwrjccyhz51qm
+  text: |-
+    ### finish iteration 2 — clean
+    - implement: changed — 1 file (CIWorkflowTests.swift), the case-sensitivity finding closed
+    - test: green — swift test, 399 tests in 30 suites, 0 failures; CIWorkflowTests 8 of 8
+    - commit: 90009e5
+    - review: clean — 0 findings; the reviewer repeated the mutation run itself and got the claimed 5 and 4 issues
+    - next: task is in done
+
+    Iteration 1 was commit b4e7ef6, review outcome findings (1 confirmed).
+  timestamp: 2026-08-30T15:13:12.164064+00:00
 depends_on:
 - 01M19A09R1HSTQTHZJGV3640VH
 - 01M19AK51NF7PEDQSMWAVYCCBJ
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: bf80
 title: Run the gated live-model suite in the CI integration job
 ---
 ## What
