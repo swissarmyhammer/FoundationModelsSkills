@@ -17,6 +17,24 @@ comments:
 
     The work-around stays available meanwhile: stop `sourcekit-lsp`, delete `.build/checkouts/mlx-swift-lm`, build, resume.
   timestamp: 2026-08-30T14:08:02.020486+00:00
+- actor: claude-code
+  id: 01m1apq112bzhj4t5zv8r608g0
+  text: |-
+    ### moot — the premise no longer holds. Archiving.
+
+    This card said: "Two sibling packages declare the same SwiftPM package identity `mlx-swift-lm` with two different URLs." That is no longer true. Checked on 2026-08-30, after `^02wba0s`:
+
+    - `git show origin/main:Package.swift` in `FoundationModelsMetadataRegistry` declares **no** mlx package at all. Its whole `dependencies:` list is one entry, `FoundationModelsRanker`.
+    - `FoundationModelsRouter` is now the only declarer of `mlx-swift-lm`. One declarer cannot disagree with itself, thus there is no identity to give two URLs, and no reason for SwiftPM to keep two mirrors.
+    - `grep -c mlx Package.resolved` in this package gives 0. `mlx-swift-lm` left this package's graph completely when the Router branch went.
+    - `.build/repositories` holds no `mlx-swift-lm` mirror.
+
+    The `sourcekit-lsp` race that made this card is also out of reach for this package: `swift package update` here no longer removes a multi-gigabyte mlx checkout, because there is none.
+
+    **Nothing is left to do in this repository.** Whether `FoundationModelsRouter` prefers `https://` or `git@` for its own `mlx-swift-lm` pin is that repository's decision, and it is now a style question, not a conflict.
+
+    Archived rather than deleted, thus the measurement that made the card stays findable if two declarers ever appear again.
+  timestamp: 2026-08-31T01:25:04.674071+00:00
 position_column: todo
 position_ordinal: 8a80
 title: Align the mlx-swift-lm dependency URL across Router and MetadataRegistry
