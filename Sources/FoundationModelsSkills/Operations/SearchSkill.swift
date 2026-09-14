@@ -5,10 +5,10 @@ import Operations
 /// The outcome of a `search skill` operation: either the ranked matches or a
 /// corrective message (plan.md §7).
 ///
-/// A blank or whitespace-only `query` is the one condition
-/// `SearchSkill.execute(in:)` fails correctively on; every other query --
-/// including one matching nothing -- succeeds with an empty `matches`
-/// array.
+/// `SearchSkill.execute(in:)` fails correctively on two conditions only: a
+/// blank or whitespace-only `query`, and a catalog in which the context's
+/// visibility predicate accepts no skill. Every other query -- including one
+/// matching nothing -- succeeds with an empty `matches` array.
 public typealias SearchSkillOutput = CorrectiveOutcome<SearchSkillResult>
 
 /// Searches the calling context's visible skill catalog by query, ranked
@@ -17,8 +17,11 @@ public typealias SearchSkillOutput = CorrectiveOutcome<SearchSkillResult>
 /// Delegates to the shared `SkillSearchAgent`; a blank or whitespace-only
 /// `query` returns a corrective message instead of searching, since the
 /// underlying `MetadataSearcher` has nothing meaningful to rank against
-/// empty input. Every other query -- including one matching nothing --
-/// succeeds with an empty `matches` array.
+/// empty input. A visible catalog with no skill also returns a corrective
+/// message instead of searching, since a search over zero skills has no
+/// meaning, and a selection tier would still send the model a prompt. Every
+/// other query -- including one matching nothing -- succeeds with an empty
+/// `matches` array.
 public struct SearchSkill: OperationDefinition {
     /// The shared context this operation dispatches against.
     public typealias Context = SkillsToolContext
@@ -99,12 +102,15 @@ public struct SearchSkill: OperationDefinition {
     }
 
     /// Searches `context`'s visible catalog for `query`, or returns a
-    /// corrective for blank input.
+    /// corrective for blank input or an empty visible catalog.
     ///
-    /// - Parameter context: The shared context supplying the search agent
-    ///   and which entries `context.visibilityPredicate` accepts.
+    /// - Parameter context: The shared context supplying the registry, the
+    ///   search agent, and which entries `context.visibilityPredicate`
+    ///   accepts.
     /// - Returns: `.success(_:)` carrying the ranked results on success, or
-    ///   `.corrective(_:)` when `query` is blank.
+    ///   `.corrective(_:)` when `query` is blank or when
+    ///   `context.visibilityPredicate` accepts no skill in
+    ///   `context.registry`.
     /// - Throws: Nothing recoverable; the signature carries `throws` to
     ///   satisfy the `OperationDefinition` protocol requirement. Rethrows
     ///   whatever `SkillSearchAgent.search(query:limit:)` throws -- a
@@ -113,6 +119,13 @@ public struct SearchSkill: OperationDefinition {
     public func execute(in context: SkillsToolContext) async throws -> SearchSkillOutput {
         guard !query.isBlank else {
             return .corrective(Self.blankQueryMessage)
+        }
+        // A search over zero skills has no meaning. Stop here, before the
+        // search agent: a selection tier over an empty catalog still sends a
+        // prompt with no candidate, and the model's prose answer does not
+        // decode, thus the call would throw.
+        guard context.registry.metadata().contains(where: context.visibilityPredicate) else {
+            return .corrective(Self.emptyCatalogMessage)
         }
 
         let resolvedLimit = limit ?? Self.defaultLimit
@@ -135,6 +148,10 @@ public struct SearchSkill: OperationDefinition {
     /// The corrective message returned for a blank or whitespace-only
     /// `query`.
     private static let blankQueryMessage = "The `query` parameter must not be blank."
+
+    /// The corrective message returned when `context.visibilityPredicate`
+    /// accepts no skill in the registry's catalog.
+    private static let emptyCatalogMessage = "No skills are available."
 
     /// The limit passed to `SkillSearchAgent.search` to recover every
     /// genuine match, not just `resolvedLimit`'s display cap.

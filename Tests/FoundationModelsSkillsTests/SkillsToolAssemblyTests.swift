@@ -67,6 +67,29 @@ struct SkillsToolAssemblyTests {
         #expect(ids == [Self.alignedSkillID])
     }
 
+    // MARK: - An empty catalog asks the model nothing
+
+    /// Shows that `search skill` over a stack with no skill answers a
+    /// corrective, and that it does not send a prompt to the model.
+    ///
+    /// The factory builds the searcher in `.auto` mode with a selection
+    /// tier, thus the search takes the selection branch, as in production.
+    /// The session answers prose, as the real model did when it got an empty
+    /// candidate list. If the search reached the session, the decode of that
+    /// prose would throw, and the call would fail.
+    @Test func searchOverAnEmptyStackAnswersACorrectiveAndSendsNoPrompt() async throws {
+        let root = try HotReloadTestSupport.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let session = RecordingAgentSession(answer: Self.proseAnswer)
+
+        let tool = try await SkillsTool.make(registry: SkillsRegistry(roots: [root]), session: session)
+        let json = try await tool.call(
+            arguments: GeneratedContent(properties: ["op": "search skill", "query": "anything at all"]))
+
+        #expect(json == #""No skills are available.""#)
+        #expect(session.respondCallCount == 0)
+    }
+
     // MARK: - The embedder reaches the searcher
 
     /// Shows that a non-`nil` `embedder` reaches the searcher, and that its
@@ -114,9 +137,13 @@ struct SkillsToolAssemblyTests {
         SkillsRegistry(stack: FixtureLibrary.stack())
     }
 
-    /// The answer both `AgentSession` doubles give: the selection tier reads
-    /// it as the ids it must return.
+    /// The answer the two selection cases give to their `AgentSession`
+    /// doubles: the selection tier reads it as the ids it must return.
     private static let selectionAnswer = #"{"ids":["\#(alignedSkillID)"]}"#
+
+    /// A prose answer that is not JSON: the shape the real model gave when
+    /// the selection prompt held no candidate.
+    private static let proseAnswer = "There are no candidates to choose from."
 
     // MARK: - Dispatch
 
@@ -182,8 +209,9 @@ struct SkillsToolAssemblyTests {
         /// Creates a double that gives `answer` for every prompt.
         ///
         /// - Parameter answer: The text every `respond(to:)` call gives
-        ///   back. The selection tier reads it as JSON, thus it must carry
-        ///   the ids the case expects.
+        ///   back. The selection tier reads it as JSON, thus a case that
+        ///   expects a match gives the ids it expects, and a case that must
+        ///   not reach the model gives text that does not decode.
         init(answer: String) {
             self.answer = answer
         }
