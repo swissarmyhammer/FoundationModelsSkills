@@ -23,8 +23,24 @@ comments:
     - evidence: 2 files — Sources/FoundationModelsSkills/Operations/SearchSkill.swift, Tests/FoundationModelsSkillsTests/SkillsToolAssemblyTests.swift; swift test 408 passed, 0 failed, 0 warnings
     - next: /review. Open item outside this package: rerun the three SWE-bench instances to confirm the third completion item.
   timestamp: 2026-09-14T14:27:44.972707+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01m2g5ac2qgysb726g0seqfy7h
+  text: |-
+    ### review — clean
+    - evidence: review sha HEAD~1..HEAD. 2 files reviewed. 0 findings, 0 confirmed, 0 refuted (7 attempted, 0 failed). 4 files in .kanban/ are not reviewed because of .reviewignore.
+    - next: none. The task moved to done.
+  timestamp: 2026-09-14T14:32:12.631178+00:00
+- actor: claude-code
+  id: 01m2g5aqs64n0vw893m45dc139
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 2 files
+    - test: green — swift test, 408 passed
+    - commit: 027a1d2
+    - review: clean — 0 findings
+  timestamp: 2026-09-14T14:32:24.614411+00:00
+position_column: done
+position_ordinal: c680
 title: search skill throws when the stack holds no skill, and it kills the caller's turn
 ---
 ## The problem
