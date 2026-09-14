@@ -1,0 +1,3 @@
+color: d93f0b
+description: Work in a sibling repository; run from a session opened in that repository, not from /finish here
+tag_name: cross-repo
