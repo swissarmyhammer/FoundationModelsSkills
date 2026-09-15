@@ -8,6 +8,27 @@
 /// No case carries a URL or a credential, thus an event that a log line shows
 /// holds no secret.
 public enum MarketplaceEvent: Sendable, Hashable {
+    /// The store read the remote head of the marketplace and downloaded no
+    /// content (marketplace.md §8.1).
+    ///
+    /// - Parameters:
+    ///   - id: The display id of the marketplace.
+    ///   - current: The commit that `current` names, or `nil` when the
+    ///     marketplace has no snapshot yet.
+    ///   - latest: The commit that the remote head names.
+    case checked(id: String, current: String?, latest: String)
+
+    /// The remote holds a commit that the snapshot does not, and the store
+    /// did not install it: the automatic update is off, or the policy is a
+    /// dry run (marketplace.md §8.3).
+    ///
+    /// - Parameters:
+    ///   - id: The display id of the marketplace.
+    ///   - from: The commit that `current` names, or `nil` when the
+    ///     marketplace has no snapshot yet.
+    ///   - to: The commit that the remote head names.
+    case updateAvailable(id: String, from: String?, to: String)
+
     /// The store installed a new snapshot, and `current` now names it. The
     /// registry rebuilds its catalog.
     ///

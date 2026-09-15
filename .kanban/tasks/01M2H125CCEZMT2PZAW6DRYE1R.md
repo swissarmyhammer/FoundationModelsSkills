@@ -1,10 +1,32 @@
 ---
 assignees:
 - claude-code
+comments:
+- actor: claude-code
+  id: 01m2k8ajbzhq8n278s20dx9kmc
+  text: |-
+    Research: marketplace.md §8.1 to §8.3 and decisions 13 and 15 give the shape. §6.2 pins the event cases: `.checked(id:current:latest:)` and `.updateAvailable(id:from:to:)`. `MarketplaceEvent` held only `.updated` and `.failed`, thus both cases are new here. `current` and `from` are optional, as `.updated(from:)` already is: a cold marketplace holds no snapshot yet.
+
+    Design of the store:
+    - One `PassKind` (`.check` or `.update(force:)`) per request. `resolved(_:)` turns an update into a check when `checkOnly` is on, thus the dry run never fetches, also for an explicit `update()`.
+    - Coalescing: `inFlight[index]` holds the task of the pass that runs now, with an id. A new request joins it when `PassKind.answers(_:)` says the running pass answers it; an update answers a check, a check answers no update. The task takes itself out of the table before it ends, thus a joiner that wakes later starts a pass of its own and no loop spins.
+    - The interval loop sleeps on the injected clock, thus the package holds no interval. `stop()` cancels the loop and each pass that runs now.
+    - `fetchTimeout` runs the fetch and one clock sleep in a task group. The first to end wins; the sleep gives `MarketplaceTimeoutError`, which the failure path turns into `.failed` with `keptVersion`.
+
+    Test support (`MarketplaceUpdateTestSupport.swift`): a `ManualClock` (a `Clock` over a `Mutex`, with a sleep count and a wait for a sleeper), a `GatedGitTransport` that wraps another transport and holds a call until the test releases it or the task is cancelled, a `MarketplaceEventLog`, and a `TestSignal`. The gate wraps `RecordingGitTransport`, thus no count is written twice.
+  timestamp: 2026-09-15T19:22:28.095053+00:00
+- actor: claude-code
+  id: 01m2k8at32rv5cgf8vyjmpqdqt
+  text: |-
+    ### implement — changed
+    - evidence: 9 files — Sources/FoundationModelsSkills/Marketplace/{MarketplacePolicy,MarketplaceEvent,MarketplaceStore,MarketplaceStatus,MarketplaceTimeoutError}.swift, Tests/FoundationModelsSkillsTests/{MarketplaceUpdateTests,MarketplaceUpdateTestSupport,MarketplaceTestSupport,MarketplaceStoreTests}.swift. `swift test --filter MarketplaceUpdateTests`: 11 tests, 1 suite, all pass. `swift test`: 640 tests in 47 suites pass. `swift build --build-tests`: zero errors and zero warnings.
+    - discovery: `theStoreHoldsALeaseOnTheSnapshotItServesAndReleasesTheOneItLeaves` fails in about one of four full runs. I stashed this work and ran the full suite four times on the code before it: the same failure appeared. Thus it is older than this card. It is now task ^432j35x.
+    - next: /review
+  timestamp: 2026-09-15T19:22:36.002930+00:00
 depends_on:
 - 01M2H10AWYB2KQ6P0N4B43PG6M
-position_column: todo
-position_ordinal: '9080'
+position_column: doing
+position_ordinal: '80'
 title: Add update checks and automatic update to MarketplaceStore (no built-in times)
 ---
 ## What
@@ -19,22 +41,22 @@ In `Sources/FoundationModelsSkills/Marketplace/MarketplaceStore.swift` and `Mark
 - Interval: only when `checkInterval` is not `nil`, a loop checks at that interval until `stop()`. The internal init takes a clock (`any Clock<Duration>`), so tests use a manual clock.
 - `stop()` cancels the loop and any fetch in progress; `current` does not change. When `fetchTimeout` is set, a fetch that takes longer is cancelled and publishes `.failed` with `keptVersion`.
 
-- [ ] Policy fields and the environment switch
-- [ ] `check()` with coalescing
-- [ ] Update rules at `start()`: auto, off, `checkOnly`
-- [ ] The optional interval loop and `stop()`
-- [ ] `fetchTimeout` and cancellation
+- [x] Policy fields and the environment switch
+- [x] `check()` with coalescing
+- [x] Update rules at `start()`: auto, off, `checkOnly`
+- [x] The optional interval loop and `stop()`
+- [x] `fetchTimeout` and cancellation
 
 ## Acceptance Criteria
-- [ ] With the default policy, `start()` makes one remote-head call for each source, and no later call happens until a request comes
-- [ ] Two concurrent `check()` calls make one remote-head call
-- [ ] `autoUpdate: false`, the environment switch, and `checkOnly` publish `.updateAvailable` and never fetch
-- [ ] `stop()` during a fetch ends the fetch, and `current` does not change
-- [ ] A fetch longer than `fetchTimeout` fails with `keptVersion`
+- [x] With the default policy, `start()` makes one remote-head call for each source, and no later call happens until a request comes
+- [x] Two concurrent `check()` calls make one remote-head call
+- [x] `autoUpdate: false`, the environment switch, and `checkOnly` publish `.updateAvailable` and never fetch
+- [x] `stop()` during a fetch ends the fetch, and `current` does not change
+- [x] A fetch longer than `fetchTimeout` fails with `keptVersion`
 
 ## Tests
-- [ ] `Tests/FoundationModelsSkillsTests/MarketplaceUpdateTests.swift` with the counting `GitTransport` double, a blocking transport double, and a manual clock: default policy (no later calls); coalesced checks; auto-update fetch; `autoUpdate: false`; `checkOnly`; the environment switch; the interval loop advances only when the manual clock advances; `stop()` ends the loop; `stop()` during a blocked fetch (`current` unchanged); `fetchTimeout` with the manual clock
-- [ ] Run `swift test --filter MarketplaceUpdateTests`; then `swift test`; all green
+- [x] `Tests/FoundationModelsSkillsTests/MarketplaceUpdateTests.swift` with the counting `GitTransport` double, a blocking transport double, and a manual clock: default policy (no later calls); coalesced checks; auto-update fetch; `autoUpdate: false`; `checkOnly`; the environment switch; the interval loop advances only when the manual clock advances; `stop()` ends the loop; `stop()` during a blocked fetch (`current` unchanged); `fetchTimeout` with the manual clock
+- [x] Run `swift test --filter MarketplaceUpdateTests`; then `swift test`; all green
 
 ## Workflow
 - Use `/tdd` — write failing tests first, then implement to make them pass. #marketplace

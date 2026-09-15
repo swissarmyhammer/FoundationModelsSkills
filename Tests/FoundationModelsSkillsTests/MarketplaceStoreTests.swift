@@ -233,7 +233,7 @@ struct MarketplaceStoreTests {
     /// - Parameter body: The body of the skill.
     /// - Returns: The tree, one entry for each path.
     private static func skillTree(body: String) -> [String: GitFixtureRepository.Entry] {
-        ["skills/\(skillID)/SKILL.md": .file(ReloadTestSupport.skillFileContents(id: skillID, body: body))]
+        MarketplaceTestSupport.skillTree(body: body)
     }
 
     /// The tree of a fixture that has a Claude catalog with one plugin.

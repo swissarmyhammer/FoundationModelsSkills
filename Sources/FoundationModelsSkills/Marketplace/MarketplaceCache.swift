@@ -543,7 +543,7 @@ internal struct MarketplaceCache: Sendable {
     /// - Throws: The error of the delete.
     private func removeSnapshot(validatedSha sha: String) throws {
         let directory = snapshotDirectory(forValidatedSha: sha)
-        let descriptor = open(directory.path, O_RDONLY | O_DIRECTORY)
+        let descriptor = open(directory.path, O_RDONLY | O_DIRECTORY | O_CLOEXEC)
         guard descriptor >= 0 else {
             // Another writer of the same cache already deleted the folder.
             return
@@ -603,7 +603,7 @@ internal struct MarketplaceCache: Sendable {
     ///   the lock.
     /// - Throws: ``MarketplaceCacheError/cannotLock(path:code:)``.
     private func openWriterLock() throws -> Int32 {
-        let descriptor = open(lockFile.path, O_CREAT | O_RDWR, Self.lockFileMode)
+        let descriptor = open(lockFile.path, O_CREAT | O_RDWR | O_CLOEXEC, Self.lockFileMode)
         guard descriptor >= 0 else {
             throw MarketplaceCacheError.cannotLock(path: lockFile.path, code: errno)
         }
@@ -651,11 +651,23 @@ internal struct MarketplaceCache: Sendable {
     /// The lock is on the folder itself, so the layer root gets no extra file
     /// that skill discovery would see.
     ///
+    /// The open sets `O_CLOEXEC`: a marketplace skill can run a script or a
+    /// shell command that forks its own child processes (marketplace.md
+    /// §6.7, the `shellInjection` and `scripts` grants), and a child inherits
+    /// every open file descriptor of this process unless the descriptor is
+    /// close-on-exec. `flock(2)` belongs to the open file description, so an
+    /// inherited descriptor keeps the shared lock alive in the child even
+    /// after this process calls ``SnapshotLease/releaseNow()`` and closes its
+    /// own descriptor — the snapshot then looks leased forever to a reader in
+    /// this process, until the unrelated child exits. `O_CLOEXEC` keeps the
+    /// descriptor out of every child, so only an explicit
+    /// ``SnapshotLease/releaseNow()`` in this process ends the lease.
+    ///
     /// - Parameter directory: The snapshot folder.
     /// - Returns: The lease, which holds the lock until it is released.
     /// - Throws: ``MarketplaceCacheError/cannotLock(path:code:)``.
     private static func sharedLock(onDirectory directory: URL) throws -> SnapshotLease {
-        let descriptor = open(directory.path, O_RDONLY | O_DIRECTORY)
+        let descriptor = open(directory.path, O_RDONLY | O_DIRECTORY | O_CLOEXEC)
         guard descriptor >= 0 else {
             throw MarketplaceCacheError.cannotLock(path: directory.path, code: errno)
         }

@@ -73,6 +73,28 @@ public actor MarketplaceStore: MarketplaceLayerProviding {
     /// The git transport that fetches.
     private let transport: any GitTransport
 
+    /// The clock that the periodic check sleeps on, and that the fetch
+    /// timeout measures with.
+    ///
+    /// The package names no interval and no timeout of its own: the clock
+    /// runs only when the policy gives a value (marketplace.md §8.2 and
+    /// decision 13). A store test gives a manual clock.
+    private let clock: any Clock<Duration>
+
+    /// The pass that runs now for each marketplace, by list index.
+    ///
+    /// A second request for a marketplace joins the pass that is already
+    /// there, thus no second remote connection opens (marketplace.md §8.2).
+    private var inFlight: [Int: InFlightPass] = [:]
+
+    /// The id that the next pass gets. It tells a finished pass from the
+    /// pass that followed it.
+    private var nextPassID = 0
+
+    /// The task of the periodic check, or `nil` when the policy gives no
+    /// interval or when ``stop()`` ended it.
+    private var intervalLoop: Task<Void, Never>?
+
     /// What the store serves now, one entry for each entry of ``prepared``.
     ///
     /// A `Mutex` and not actor state, because ``marketplaceLayers()`` is
@@ -133,10 +155,13 @@ public actor MarketplaceStore: MarketplaceLayerProviding {
     ///   - cacheDirectory: The cache directory.
     ///   - policy: What the host lets the store do.
     ///   - transport: The git transport that fetches.
+    ///   - clock: The clock of the periodic check and of the fetch timeout.
+    ///     The default is a `ContinuousClock`.
     internal init(
         sources: [MarketplaceSource], cacheDirectory: URL, policy: MarketplacePolicy,
-        transport: any GitTransport
+        transport: any GitTransport, clock: any Clock<Duration> = ContinuousClock()
     ) {
+        self.clock = clock
         let identity = MarketplaceIdentity.validate(sources)
         let refused = identity.contains { $0.severity == .error }
         let preparation =
@@ -208,35 +233,262 @@ public actor MarketplaceStore: MarketplaceLayerProviding {
 
     // MARK: - Syncing
 
-    /// Brings every git marketplace to its remote head one time
-    /// (marketplace.md §7.5).
+    /// One pass over a marketplace, as the policy resolved it.
+    private enum PassKind: Equatable {
+        /// Read the remote head and report it. The pass fetches nothing.
+        case check
+
+        /// Read the remote head, and install it when it differs from the
+        /// snapshot on the disk.
+        ///
+        /// - Parameter force: Whether to materialize again even with no
+        ///   remote change.
+        case update(force: Bool)
+
+        /// Whether a pass that runs now also answers a new request.
+        ///
+        /// An update reads the remote head as a check does, thus it answers a
+        /// check. A check installs nothing, thus it answers no update.
+        ///
+        /// - Parameter other: The pass that a caller asks for.
+        /// - Returns: `true` when the caller waits for this pass.
+        func answers(_ other: PassKind) -> Bool {
+            switch other {
+            case .check:
+                return true
+            case .update:
+                return self == other
+            }
+        }
+    }
+
+    /// What one pass over a marketplace gave.
+    private struct PassResult: Sendable {
+        /// What the store now knows about the marketplace.
+        let status: MarketplaceStatus
+
+        /// The event for the caller, or `nil` when nothing changed.
+        /// ``MarketplaceEvent/checked(id:current:latest:)`` goes to the
+        /// stream only.
+        let event: MarketplaceEvent?
+    }
+
+    /// One pass that runs now, so that a second request joins it.
+    private struct InFlightPass {
+        /// The id that tells this pass from the next one of the same
+        /// marketplace.
+        let id: Int
+
+        /// What the pass does.
+        let kind: PassKind
+
+        /// The task of the pass.
+        let task: Task<PassResult, Never>
+    }
+
+    /// Checks every git marketplace one time, installs what the policy lets
+    /// it install, and starts the periodic check of the host
+    /// (marketplace.md §7.5, §8.2, and §8.3).
     ///
-    /// The call fetches, materializes, and swaps `current` for each source
-    /// whose remote head differs from the snapshot on the disk. A source that
-    /// is already at its head does no fetch.
+    /// With the default policy the call fetches, materializes, and swaps
+    /// `current` for each source whose remote head differs from the snapshot
+    /// on the disk. A source that is already at its head does no fetch. With
+    /// the automatic update off, or with a dry-run policy, the call publishes
+    /// ``MarketplaceEvent/updateAvailable(id:from:to:)`` and fetches nothing.
+    ///
+    /// The periodic check runs only when the policy gives a
+    /// ``MarketplacePolicy/checkInterval``. Without one, the store makes no
+    /// later call until a request comes.
     public func start() async {
-        _ = await update()
+        await runPassOverEverySource()
+        startIntervalLoop()
+    }
+
+    /// Ends the periodic check and every fetch that runs now
+    /// (marketplace.md §8.2).
+    ///
+    /// The snapshot that `current` names does not change: a cancelled fetch
+    /// is a failure, and a failure keeps the last good snapshot.
+    public func stop() {
+        intervalLoop?.cancel()
+        intervalLoop = nil
+        for pass in inFlight.values {
+            pass.task.cancel()
+        }
+    }
+
+    /// Reads the remote head of every git marketplace, and downloads no
+    /// content (marketplace.md §8.1).
+    ///
+    /// The call publishes ``MarketplaceEvent/checked(id:current:latest:)``
+    /// for each marketplace, and
+    /// ``MarketplaceEvent/updateAvailable(id:from:to:)`` for each one whose
+    /// head differs from its snapshot. A pass that already runs for a
+    /// marketplace answers this call too, thus two concurrent calls open one
+    /// remote connection.
+    ///
+    /// - Returns: One status for each git source, in list order.
+    public func check() async -> [MarketplaceStatus] {
+        var statuses: [MarketplaceStatus] = []
+        for index in prepared.indices {
+            statuses.append(await result(of: .check, atIndex: index).status)
+        }
+        return statuses
     }
 
     /// Brings one marketplace, or every marketplace, to its remote head.
+    ///
+    /// With ``MarketplacePolicy/checkOnly`` the call is a dry run: it reads
+    /// the remote head, reports it, and fetches nothing (marketplace.md
+    /// §8.3).
     ///
     /// - Parameters:
     ///   - id: The pre-fetch key or the display id of one marketplace, or
     ///     `nil` for every marketplace. The default is `nil`.
     ///   - force: Whether to materialize again even when the remote head is
     ///     the snapshot that `current` names. The default is `false`.
-    /// - Returns: One event for each marketplace that installed a snapshot or
-    ///   failed, in list order. A marketplace that is already at its head
-    ///   gives no event.
+    /// - Returns: One event for each marketplace that installed a snapshot,
+    ///   reported an update of a dry run, or failed, in list order. A
+    ///   marketplace that is already at its head gives no event.
     @discardableResult
     public func update(_ id: String? = nil, force: Bool = false) async -> [MarketplaceEvent] {
         var events: [MarketplaceEvent] = []
         for index in prepared.indices where names(index: index, id: id) {
-            if let event = await sync(atIndex: index, force: force) {
+            if let event = await result(of: .update(force: force), atIndex: index).event {
                 events.append(event)
             }
         }
         return events
+    }
+
+    /// Runs the pass that the policy wants over every marketplace: an update
+    /// when the automatic update is on, else a check (marketplace.md §8.3).
+    private func runPassOverEverySource() async {
+        let kind: PassKind = policy.autoUpdate ? .update(force: false) : .check
+        for index in prepared.indices {
+            _ = await result(of: kind, atIndex: index)
+        }
+    }
+
+    /// Runs one pass over a marketplace, or joins the pass that already runs
+    /// for it (marketplace.md §8.2).
+    ///
+    /// The wait needs no debounce time: a second request holds the task of
+    /// the first, thus it opens no second remote connection.
+    ///
+    /// - Parameters:
+    ///   - kind: The pass that the caller asks for.
+    ///   - index: The marketplace.
+    /// - Returns: What the pass gave.
+    private func result(of kind: PassKind, atIndex index: Int) async -> PassResult {
+        let wanted = resolved(kind)
+        while let running = inFlight[index] {
+            if running.kind.answers(wanted) {
+                return await running.task.value
+            }
+            _ = await running.task.value
+        }
+        let id = nextPassID
+        nextPassID += 1
+        let task = Task<PassResult, Never> {
+            let outcome = await self.runPass(wanted, atIndex: index)
+            self.finishPass(id: id, atIndex: index)
+            return outcome
+        }
+        inFlight[index] = InFlightPass(id: id, kind: wanted, task: task)
+        return await task.value
+    }
+
+    /// The pass that the policy lets a request run.
+    ///
+    /// ``MarketplacePolicy/checkOnly`` is a dry run: an update request
+    /// becomes a check, thus the store downloads no content
+    /// (marketplace.md §8.3).
+    ///
+    /// - Parameter kind: The pass that the caller asks for.
+    /// - Returns: The pass that runs.
+    private func resolved(_ kind: PassKind) -> PassKind {
+        policy.checkOnly ? .check : kind
+    }
+
+    /// Does the work of one pass.
+    ///
+    /// - Parameters:
+    ///   - kind: What the pass does.
+    ///   - index: The marketplace.
+    /// - Returns: What the pass gave.
+    private func runPass(_ kind: PassKind, atIndex index: Int) async -> PassResult {
+        switch kind {
+        case .check:
+            return await checkHead(atIndex: index)
+        case .update(let force):
+            return await sync(atIndex: index, force: force)
+        }
+    }
+
+    /// Takes one finished pass out of the table, so that the next request
+    /// starts a pass of its own.
+    ///
+    /// - Parameters:
+    ///   - id: The pass that finished.
+    ///   - index: The marketplace.
+    private func finishPass(id: Int, atIndex index: Int) {
+        if inFlight[index]?.id == id {
+            inFlight[index] = nil
+        }
+    }
+
+    /// Reads the remote head of one marketplace and reports it, with no fetch
+    /// (marketplace.md §8.1).
+    ///
+    /// - Parameter index: The marketplace to check.
+    /// - Returns: The status, and
+    ///   ``MarketplaceEvent/updateAvailable(id:from:to:)`` when the head
+    ///   differs from the snapshot.
+    private func checkHead(atIndex index: Int) async -> PassResult {
+        let entry = prepared[index]
+        let current = entry.cache.currentSha()
+        do {
+            let latest = try await remoteHead(of: entry)
+            let identifier = displayID(atIndex: index)
+            eventSubscribers.publish(.checked(id: identifier, current: current, latest: latest))
+            let status = MarketplaceStatus(id: identifier, current: current, latest: latest)
+            guard status.updateAvailable else {
+                return PassResult(status: status, event: nil)
+            }
+            let event = MarketplaceEvent.updateAvailable(id: identifier, from: current, to: latest)
+            eventSubscribers.publish(event)
+            return PassResult(status: status, event: event)
+        } catch {
+            return failureResult(atIndex: index, error: error, current: current)
+        }
+    }
+
+    /// Starts the periodic check, when the host gave an interval
+    /// (marketplace.md §8.2 and decision 13).
+    ///
+    /// The package has no interval of its own: with no
+    /// ``MarketplacePolicy/checkInterval``, the store makes no check after
+    /// ``start()`` until a request comes. A second ``start()`` starts no
+    /// second loop.
+    private func startIntervalLoop() {
+        guard let interval = policy.checkInterval, intervalLoop == nil else {
+            return
+        }
+        let clock = self.clock
+        intervalLoop = Task { [weak self] in
+            while !Task.isCancelled {
+                do {
+                    try await clock.sleep(for: interval)
+                } catch {
+                    return
+                }
+                guard let self else {
+                    return
+                }
+                await self.runPassOverEverySource()
+            }
+        }
     }
 
     /// Whether an id names one marketplace.
@@ -262,16 +514,18 @@ public actor MarketplaceStore: MarketplaceLayerProviding {
     /// - Parameters:
     ///   - index: The marketplace to sync.
     ///   - force: Whether to materialize again even with no remote change.
-    /// - Returns: The event of the sync, or `nil` when nothing changed.
-    private func sync(atIndex index: Int, force: Bool) async -> MarketplaceEvent? {
+    /// - Returns: The status, and the event of the sync when something
+    ///   changed or the sync failed.
+    private func sync(atIndex index: Int, force: Bool) async -> PassResult {
         let entry = prepared[index]
+        let current = entry.cache.currentSha()
         do {
             try entry.cache.makeFolders()
             return try await entry.cache.withWriterLock {
                 try await installHead(ofIndex: index, force: force)
             }
         } catch {
-            return failure(atIndex: index, error: error)
+            return failureResult(atIndex: index, error: error, current: current)
         }
     }
 
@@ -283,34 +537,84 @@ public actor MarketplaceStore: MarketplaceLayerProviding {
     /// - Parameters:
     ///   - index: The marketplace to sync.
     ///   - force: Whether to materialize again even with no remote change.
-    /// - Returns: ``MarketplaceEvent/updated(id:from:to:)``, or `nil` when the
-    ///   remote head is already the snapshot that `current` names.
-    /// - Throws: ``GitTransportError``, ``SnapshotError``,
-    ///   ``MarketplaceCacheError``, or the error of a file read or write.
-    private func installHead(ofIndex index: Int, force: Bool) async throws -> MarketplaceEvent? {
+    /// - Returns: The status, and ``MarketplaceEvent/updated(id:from:to:)``.
+    ///   The event is `nil` when the remote head is already the snapshot that
+    ///   `current` names.
+    /// - Throws: ``GitTransportError``, ``MarketplaceTimeoutError``,
+    ///   ``SnapshotError``, ``MarketplaceCacheError``, or the error of a file
+    ///   read or write.
+    private func installHead(ofIndex index: Int, force: Bool) async throws -> PassResult {
         let entry = prepared[index]
         let previous = entry.cache.currentSha()
         let head = try await remoteHead(of: entry)
+        eventSubscribers.publish(
+            .checked(id: displayID(atIndex: index), current: previous, latest: head))
         guard force || head != previous else {
-            return nil
+            return PassResult(
+                status: MarketplaceStatus(
+                    id: displayID(atIndex: index), current: previous, latest: head),
+                event: nil)
         }
-        let fetched = try await transport.fetch(
-            url: entry.url, revision: entry.source.sha ?? entry.ref ?? Self.defaultRef,
-            intoBareRepository: entry.cache.repositoryDirectory, credentials: policy.credentials)
+        let fetched = try await fetch(entry: entry)
         let catalog = try materialize(entry: entry, commit: fetched)
         try entry.cache.installUnderWriterLock(
             snapshotAt: catalog.staged, sha: fetched, ref: entry.source.isPinned ? nil : entry.ref)
-        let displayID = catalog.resolved.name ?? entry.key
-        serve(atIndex: index, sha: fetched, displayID: displayID, catalogVersion: catalog.resolved.version)
+        let installedID = catalog.resolved.name ?? entry.key
+        serve(atIndex: index, sha: fetched, displayID: installedID, catalogVersion: catalog.resolved.version)
         record(
-            diagnostics: catalog.diagnostics + duplicateDisplayIDDiagnostics(displayID, atIndex: index),
+            diagnostics: catalog.diagnostics + duplicateDisplayIDDiagnostics(installedID, atIndex: index),
             atIndex: index)
-        try save(record: stateRecord(of: entry, sha: fetched, catalog: catalog.resolved, displayID: displayID),
+        try save(record: stateRecord(of: entry, sha: fetched, catalog: catalog.resolved, displayID: installedID),
             forFolder: entry.cache.folderName)
-        let event = MarketplaceEvent.updated(id: displayID, from: previous, to: fetched)
+        let event = MarketplaceEvent.updated(id: installedID, from: previous, to: fetched)
         eventSubscribers.publish(event)
         updateSubscribers.publish(())
-        return event
+        return PassResult(
+            status: MarketplaceStatus(id: installedID, current: fetched, latest: head), event: event)
+    }
+
+    /// Fetches the commit of one marketplace, and stops the fetch when it
+    /// takes longer than the fetch timeout of the policy.
+    ///
+    /// The package has no timeout of its own: with no
+    /// ``MarketplacePolicy/fetchTimeout`` the fetch runs until it ends, or
+    /// until ``stop()`` cancels it (marketplace.md §5.1).
+    ///
+    /// - Parameter entry: The marketplace to fetch.
+    /// - Returns: The 40-hex SHA of the fetched commit.
+    /// - Throws: ``GitTransportError``, or ``MarketplaceTimeoutError`` when
+    ///   the fetch took longer than the timeout.
+    private func fetch(entry: PreparedSource) async throws -> String {
+        let revision = entry.source.sha ?? entry.ref ?? Self.defaultRef
+        let transport = self.transport
+        let credentials = policy.credentials
+        let repository = entry.cache.repositoryDirectory
+        let url = entry.url
+        guard let timeout = policy.fetchTimeout else {
+            return try await transport.fetch(
+                url: url, revision: revision, intoBareRepository: repository,
+                credentials: credentials)
+        }
+        let clock = self.clock
+        return try await withThrowingTaskGroup(of: String?.self) { group in
+            group.addTask {
+                try await transport.fetch(
+                    url: url, revision: revision, intoBareRepository: repository,
+                    credentials: credentials)
+            }
+            group.addTask {
+                try await clock.sleep(for: timeout)
+                return nil
+            }
+            while let first = try await group.next() {
+                group.cancelAll()
+                guard let sha = first else {
+                    throw MarketplaceTimeoutError()
+                }
+                return sha
+            }
+            throw GitTransportError.cancelled
+        }
     }
 
     /// Reads the commit that one marketplace must hold.
@@ -374,7 +678,7 @@ public actor MarketplaceStore: MarketplaceLayerProviding {
     /// - Returns: ``MarketplaceEvent/failed(id:error:keptVersion:)``.
     private func failure(atIndex index: Int, error: any Error) -> MarketplaceEvent {
         let id = displayID(atIndex: index)
-        let text = String(describing: error)
+        let text = Self.text(of: error)
         let event = MarketplaceEvent.failed(
             id: id, error: text, keptVersion: prepared[index].cache.currentSha())
         record(
@@ -386,6 +690,34 @@ public actor MarketplaceStore: MarketplaceLayerProviding {
             atIndex: index)
         eventSubscribers.publish(event)
         return event
+    }
+
+    /// Records a failed pass and gives what its caller reads.
+    ///
+    /// - Parameters:
+    ///   - index: The marketplace that failed.
+    ///   - error: Why the pass failed.
+    ///   - current: The commit that `current` named before the pass.
+    /// - Returns: The status of the failure, and
+    ///   ``MarketplaceEvent/failed(id:error:keptVersion:)``.
+    private func failureResult(atIndex index: Int, error: any Error, current: String?) -> PassResult {
+        let event = failure(atIndex: index, error: error)
+        return PassResult(
+            status: MarketplaceStatus(
+                id: displayID(atIndex: index), current: current, latest: nil,
+                error: Self.text(of: error)),
+            event: event)
+    }
+
+    /// The text of one error, for an event and for a diagnostic.
+    ///
+    /// No error of the transport, of the cache, or of the writer holds a
+    /// credential.
+    ///
+    /// - Parameter error: The error of a pass.
+    /// - Returns: The text.
+    private static func text(of error: any Error) -> String {
+        String(describing: error)
     }
 
     // MARK: - The served layers

@@ -73,14 +73,32 @@ comments:
     - evidence: 5 files. Sources/FoundationModelsSkills/Marketplace/MarketplaceLocation.swift, MarketplaceStore.swift, MarketplaceCache.swift, SnapshotWriter.swift; Tests/FoundationModelsSkillsTests/MarketplaceCacheTests.swift, MarketplaceStoreTests.swift, MarketplaceTestSupport.swift (7 files in all). `swift build --build-tests`: 0 warnings, 0 errors. `swift test --filter 'MarketplaceCacheTests|MarketplaceStoreTests|MarketplaceSourceTests|SnapshotWriterTests'`: 80 tests in 4 suites, all passed. `swift test`: 629 tests in 46 suites, all passed, 0 failed, 0 skipped.
     - next: /review
   timestamp: 2026-09-15T18:52:44.655927+00:00
+- actor: claude-code
+  id: 01m2k6w47as0nztr5qt8zqs3mk
+  text: |
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (commit 15e7039); 0 findings, 0 confirmed, 0 refuted; 7 files reviewed, 2 files excluded by `.reviewignore`
+    - prior findings: all 4 items of the 2026-09-15 13:38 section are marked done. The `dropLast(while:)` item is satisfied by `lastIndex(where:)`, because that method does not exist in this toolchain and the new code makes no reversed copy.
+    - next: task moved to done
+  timestamp: 2026-09-15T18:57:06.282147+00:00
+- actor: claude-code
+  id: 01m2k6wex07r5fnmv0fcvzjryx
+  text: |-
+    ### finish iteration 2 — clean
+    - implement: changed — 7 files; one-pass trailing-separator removal, an explicit `releaseNow()` on the snapshot lease with a reader for it, and named size constants
+    - test: green — swift build --build-tests 0 warnings; swift test x2, 629 passed each run, 0 failed, 0 skipped
+    - commit: 15e7039 fix(marketplace): fix review findings for the marketplace store
+    - review: clean — 0 new findings; all 4 prior findings checked; task moved to done
+    - note: `dropLast(while:)` is not in this toolchain; `lastIndex(where:)` removes the same cause
+  timestamp: 2026-09-15T18:57:17.216478+00:00
 depends_on:
 - 01M2H0VAP3ASYS7ZX17BKJQ3NN
 - 01M2H0VP7PA387VXKDARNERBSJ
 - 01M2H0WGC194AK58EKJHWP85EW
 - 01M2H0W2TM0WRKHZP8FRAJZAYY
 - 01M2H0ZTENV1JH7AW6ABAXZHC5
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: d580
 title: 'Add the MarketplaceStore core: policy, git layers, sync, events, locks, credentials'
 ---
 ## What

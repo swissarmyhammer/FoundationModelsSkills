@@ -91,6 +91,23 @@ enum MarketplaceTestSupport {
     /// The `version` field ``makeMarketplaceLayer(root:id:sha:grants:catalogVersion:)``
     /// gives a catalog when the caller names none.
     static let defaultCatalogVersion = "1.0.0"
+
+    /// The skill id that a fixture repository holds.
+    static let fixtureSkillID = "alpha"
+
+    /// Makes the tree of one fixture commit: one skill under `skills`.
+    ///
+    /// `MarketplaceStoreTests` and `MarketplaceUpdateTests` both build this
+    /// tree, thus the helper is here.
+    ///
+    /// - Parameter body: The body of the skill.
+    /// - Returns: The tree, one entry for each path.
+    static func skillTree(body: String) -> [String: GitFixtureRepository.Entry] {
+        [
+            "skills/\(fixtureSkillID)/SKILL.md":
+                .file(ReloadTestSupport.skillFileContents(id: fixtureSkillID, body: body))
+        ]
+    }
 }
 
 /// A ``GitTransport`` that counts the calls of the store, records the
@@ -164,7 +181,14 @@ enum SnapshotLockProbe {
     /// - Returns: `true` when a lock holds the folder. A folder that does not
     ///   open gives `false`.
     static func isLocked(directory: URL) -> Bool {
-        let descriptor = open(directory.path, O_RDONLY | O_DIRECTORY)
+        // O_CLOEXEC keeps this probe descriptor out of a child process another
+        // test spawns while this call is open (RunScriptTests and
+        // ShellInjectionTests both run real scripts under a full parallel
+        // suite). Without it, an inherited descriptor can keep the exclusive
+        // probe lock alive in that unrelated child past this function's own
+        // `close(2)`, and a concurrent reader of the same snapshot then sees
+        // it as falsely locked.
+        let descriptor = open(directory.path, O_RDONLY | O_DIRECTORY | O_CLOEXEC)
         if descriptor < 0 {
             return false
         }
@@ -201,17 +225,21 @@ final class MarketplaceStoreFixture {
     ///     `MarketplacePolicy()`.
     ///   - transport: The git transport, or `nil` for the real
     ///     ``LibGit2Transport``. The default is `nil`.
+    ///   - clock: The clock of the periodic check and of the fetch timeout,
+    ///     or `nil` for the `ContinuousClock` of the store. The default is
+    ///     `nil`.
     /// - Throws: The error of a folder write.
     init(
         sources: [MarketplaceSource], cacheDirectory: URL? = nil,
-        policy: MarketplacePolicy = MarketplacePolicy(), transport: (any GitTransport)? = nil
+        policy: MarketplacePolicy = MarketplacePolicy(), transport: (any GitTransport)? = nil,
+        clock: (any Clock<Duration>)? = nil
     ) throws {
         ownsCacheDirectory = cacheDirectory == nil
         self.cacheDirectory = try cacheDirectory ?? WatcherTestSupport.makeTempDirectory()
         localRoot = try WatcherTestSupport.makeTempDirectory()
         store = MarketplaceStore(
             sources: sources, cacheDirectory: self.cacheDirectory, policy: policy,
-            transport: transport ?? LibGit2Transport())
+            transport: transport ?? LibGit2Transport(), clock: clock ?? ContinuousClock())
     }
 
     deinit {
