@@ -36,8 +36,24 @@ comments:
     - evidence: 2 files — Sources/FoundationModelsSkills/Marketplace/MarketplaceCache.swift, Tests/FoundationModelsSkillsTests/MarketplaceCacheTests.swift; `swift build --build-tests` 0 warnings; `swift test` 579 tests in 41 suites, 0 failures
     - next: /review
   timestamp: 2026-09-15T16:36:24.779619+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01m2jz63vcqsaxtbxecqgw4p1h
+  text: |-
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (commit e0adaa5) — 0 findings, 0 confirmed, 0 refuted, 7 validators attempted, 0 failed. 2 files reviewed; 4 `.kanban/` files skipped by the ignore rule.
+    - next: the task moves to done. No open finding is on the card.
+  timestamp: 2026-09-15T16:42:44.972445+00:00
+- actor: claude-code
+  id: 01m2jz6dsweev0jkk7835p1qrj
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 2 files; the ref check splits on `/` and applies the safe-component rule to each part; the sha rule does not change
+    - test: green — swift build --build-tests 0 warnings; swift test x4, 579 passed each run, 0 failed, 0 skipped
+    - commit: e0adaa5 fix(marketplace): check each ref name part on its own
+    - review: clean — 0 findings; task moved to done
+  timestamp: 2026-09-15T16:42:55.164949+00:00
+position_column: done
+position_ordinal: d080
 title: 'MarketplaceCache: let a ref name hold a slash again, one safe component at a time'
 ---
 ## Why
