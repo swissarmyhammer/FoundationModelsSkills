@@ -1,5 +1,15 @@
 import Foundation
 
+/// A value that the cache puts into a file path.
+internal enum MarketplacePathValue: String, Sendable {
+    /// The commit of a snapshot. It names a folder under `snapshots/`, and it
+    /// is the target of the `current` symlink.
+    case sha
+
+    /// The branch or the tag. It names a file under `refs/`.
+    case ref
+}
+
 /// Why the cache cannot finish a file operation (marketplace.md §7).
 internal enum MarketplaceCacheError: Error, Equatable, Sendable {
     /// The cache cannot open or lock a file. The path names the file, and the
@@ -9,6 +19,13 @@ internal enum MarketplaceCacheError: Error, Equatable, Sendable {
     /// The cache cannot put the new `current` symlink in place. The path names
     /// the symlink, and the code is the `errno` of `rename(2)`.
     case cannotSwap(path: String, code: Int32)
+
+    /// A value cannot go into a cache path, because it is empty, it holds a
+    /// path separator or a relative step, or it starts with a dot.
+    case unsafePathValue(kind: MarketplacePathValue, value: String)
+
+    /// A value is no commit, because it is not a hexadecimal object name.
+    case notACommit(value: String)
 }
 
 extension MarketplaceCacheError: CustomStringConvertible {
@@ -19,6 +36,10 @@ extension MarketplaceCacheError: CustomStringConvertible {
             #"Cannot lock "\#(path)": error code \#(code)."#
         case .cannotSwap(let path, let code):
             #"Cannot put the new snapshot link "\#(path)" in place: error code \#(code)."#
+        case .unsafePathValue(let kind, let value):
+            #"The \#(kind.rawValue) "\#(value)" cannot go into a cache path."#
+        case .notACommit(let value):
+            #"The sha "\#(value)" is no commit."#
         }
     }
 }
@@ -74,6 +95,94 @@ internal struct MarketplaceCache: Sendable {
 
     /// The permissions of the lock file. Only the owner writes it.
     private static let lockFileMode: mode_t = 0o644
+
+    // MARK: - Safe values in a path
+
+    /// The characters of a hexadecimal object name.
+    private static let hexDigits = Set("0123456789abcdefABCDEF")
+
+    /// The number of hex digits of a SHA-1 object name.
+    private static let sha1Length = 40
+
+    /// The number of hex digits of a SHA-256 object name.
+    private static let sha256Length = 64
+
+    /// The lengths that the object name of a commit can have.
+    private static let commitLengths: Set<Int> = [sha1Length, sha256Length]
+
+    /// The relative step that walks to the parent folder.
+    private static let relativeStep = ".."
+
+    /// The characters that make a value more than one name.
+    private static let pathSeparators: Set<Character> = ["/", "\\"]
+
+    /// The character that starts a hidden name.
+    private static let hiddenNamePrefix = "."
+
+    /// Checks a value before it goes into a cache path (marketplace.md §7.2).
+    ///
+    /// Each path of the cache is one name inside the folder of the
+    /// marketplace. Thus a value that is empty, that holds a separator or the
+    /// relative step, that starts with a dot, or that holds a control
+    /// character, can leave the cache folder, and the call refuses it.
+    ///
+    /// - Parameters:
+    ///   - value: The value to check.
+    ///   - kind: What the value names. The error tells it.
+    /// - Returns: The value, which is now safe in a path.
+    /// - Throws: ``MarketplaceCacheError/unsafePathValue(kind:value:)`` when
+    ///   the value can leave the cache folder.
+    static func validated(pathValue value: String, kind: MarketplacePathValue) throws -> String {
+        let safe =
+            !value.isEmpty
+            && !value.hasPrefix(hiddenNamePrefix)
+            && !value.contains(relativeStep)
+            && !value.contains(where: pathSeparators.contains)
+            && !value.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains)
+        guard safe else {
+            throw MarketplaceCacheError.unsafePathValue(kind: kind, value: value)
+        }
+        return value
+    }
+
+    /// Checks a commit before it names a snapshot folder or a symlink target.
+    ///
+    /// A commit is a hexadecimal object name, so it is safe in a path and it
+    /// holds no separator. The call proves both.
+    ///
+    /// - Parameter sha: The commit to check.
+    /// - Returns: The commit, which is now safe in a path.
+    /// - Throws: ``MarketplaceCacheError/unsafePathValue(kind:value:)`` or
+    ///   ``MarketplaceCacheError/notACommit(value:)``.
+    static func validated(sha: String) throws -> String {
+        let value = try validated(pathValue: sha, kind: .sha)
+        guard commitLengths.contains(value.count), value.allSatisfy(hexDigits.contains) else {
+            throw MarketplaceCacheError.notACommit(value: value)
+        }
+        return value
+    }
+
+    /// Checks a branch or a tag before it names a file under `refs/`.
+    ///
+    /// The ref is one file name, so it holds no separator. A ref name with a
+    /// `/` in it is refused.
+    ///
+    /// - Parameter ref: The branch or the tag to check.
+    /// - Returns: The ref, which is now safe in a path.
+    /// - Throws: ``MarketplaceCacheError/unsafePathValue(kind:value:)`` when
+    ///   the ref can leave the cache folder.
+    static func validated(ref: String) throws -> String {
+        try validated(pathValue: ref, kind: .ref)
+    }
+
+    /// Whether a name is the object name of a commit.
+    ///
+    /// - Parameter name: The name to read, such as a folder name that the
+    ///   file system gave.
+    /// - Returns: `true` when the name is a commit that is safe in a path.
+    private static func isCommit(name: String) -> Bool {
+        (try? validated(sha: name)) != nil
+    }
 
     // MARK: - Location
 
@@ -148,7 +257,18 @@ internal struct MarketplaceCache: Sendable {
     ///
     /// - Parameter sha: The commit of the snapshot.
     /// - Returns: `<folder>/snapshots/<sha>`.
-    func snapshotDirectory(forSha sha: String) -> URL {
+    /// - Throws: ``MarketplaceCacheError`` when `sha` is no commit that is
+    ///   safe in a path.
+    func snapshotDirectory(forSha sha: String) throws -> URL {
+        snapshotDirectory(forValidatedSha: try Self.validated(sha: sha))
+    }
+
+    /// The folder of one snapshot whose commit ``validated(sha:)`` already
+    /// checked.
+    ///
+    /// - Parameter sha: The checked commit of the snapshot.
+    /// - Returns: `<folder>/snapshots/<sha>`.
+    private func snapshotDirectory(forValidatedSha sha: String) -> URL {
         snapshotsDirectory.appendingPathComponent(sha, isDirectory: true)
     }
 
@@ -156,26 +276,34 @@ internal struct MarketplaceCache: Sendable {
 
     /// The commit that `current` names.
     ///
-    /// - Returns: The commit, or `nil` when there is no `current` symlink.
+    /// The symlink is a file that another program can write, so the call
+    /// checks its target in the same way as a value of a caller.
+    ///
+    /// - Returns: The commit, or `nil` when there is no `current` symlink, or
+    ///   when the target of the symlink is no commit.
     func currentSha() -> String? {
         guard
             let target = try? FileManager.default.destinationOfSymbolicLink(
-                atPath: currentLink.path)
+                atPath: currentLink.path),
+            let sha = try? Self.validated(sha: (target as NSString).lastPathComponent)
         else {
             return nil
         }
-        let sha = (target as NSString).lastPathComponent
-        return sha.isEmpty ? nil : sha
+        return sha
     }
 
     /// The snapshot folder that `current` names.
     ///
-    /// - Returns: The folder, or `nil` when there is no `current` symlink.
+    /// - Returns: The folder, or `nil` when there is no `current` symlink, or
+    ///   when the target of the symlink is no commit.
     func currentSnapshot() -> URL? {
-        currentSha().map { snapshotDirectory(forSha: $0) }
+        currentSha().map { snapshotDirectory(forValidatedSha: $0) }
     }
 
     /// The commits of the snapshots that the folder holds, in order.
+    ///
+    /// A name that is no commit is not a snapshot, so the call drops it and
+    /// cleanup never deletes it.
     ///
     /// - Returns: The commits, or an empty list before the first install.
     /// - Throws: The error of the folder read.
@@ -184,16 +312,19 @@ internal struct MarketplaceCache: Sendable {
         guard manager.fileExists(atPath: snapshotsDirectory.path) else {
             return []
         }
-        return try manager.contentsOfDirectory(atPath: snapshotsDirectory.path).sorted()
+        return try manager.contentsOfDirectory(atPath: snapshotsDirectory.path)
+            .filter { Self.isCommit(name: $0) }
+            .sorted()
     }
 
     /// The commit that a ref file names.
     ///
     /// - Parameter ref: The branch or the tag.
     /// - Returns: The commit, or `nil` when there is no file for that ref.
-    /// - Throws: The error of the file read.
+    /// - Throws: ``MarketplaceCacheError`` when `ref` is not safe in a path,
+    ///   else the error of the file read.
     func sha(forRef ref: String) throws -> String? {
-        let file = refsDirectory.appendingPathComponent(ref)
+        let file = refsDirectory.appendingPathComponent(try Self.validated(ref: ref))
         guard FileManager.default.fileExists(atPath: file.path) else {
             return nil
         }
@@ -211,6 +342,9 @@ internal struct MarketplaceCache: Sendable {
     /// to `snapshots/<sha>`, write `refs/<ref>`, make the `current.new`
     /// symlink and rename it over `current`, then clean up.
     ///
+    /// The call checks `sha` and `ref` before it makes one folder, so a value
+    /// that can leave the cache folder writes nothing at all.
+    ///
     /// - Parameters:
     ///   - temporary: The folder that holds the materialized snapshot. The
     ///     call moves it, so the caller must not read it afterwards. It must
@@ -221,15 +355,17 @@ internal struct MarketplaceCache: Sendable {
     /// - Throws: ``MarketplaceCacheError`` when the lock or the swap fails,
     ///   else the error of the file work.
     func install(snapshotAt temporary: URL, sha: String, ref: String?) throws {
+        let checkedSha = try Self.validated(sha: sha)
+        let checkedRef = try ref.map { try Self.validated(ref: $0) }
         try makeFolders()
         try withWriterLock {
             let previous = currentSha()
-            try publish(snapshotAt: temporary, sha: sha)
-            if let ref {
-                try write(sha: sha, toRef: ref)
+            try publish(snapshotAt: temporary, validatedSha: checkedSha)
+            if let checkedRef {
+                try write(sha: checkedSha, toValidatedRef: checkedRef)
             }
-            try swapCurrent(toSha: sha)
-            try removeUnusedSnapshots(keeping: [sha, previous].compactMap { $0 })
+            try swapCurrent(toValidatedSha: checkedSha)
+            try removeUnusedSnapshots(keeping: [checkedSha, previous].compactMap { $0 })
         }
     }
 
@@ -250,11 +386,11 @@ internal struct MarketplaceCache: Sendable {
     ///
     /// - Parameters:
     ///   - temporary: The staged folder.
-    ///   - sha: The commit of the snapshot.
+    ///   - sha: The checked commit of the snapshot.
     /// - Throws: The error of the move or of the delete.
-    private func publish(snapshotAt temporary: URL, sha: String) throws {
+    private func publish(snapshotAt temporary: URL, validatedSha sha: String) throws {
         let manager = FileManager.default
-        let destination = snapshotDirectory(forSha: sha)
+        let destination = snapshotDirectory(forValidatedSha: sha)
         guard !manager.fileExists(atPath: destination.path) else {
             try manager.removeItem(at: temporary)
             return
@@ -266,14 +402,12 @@ internal struct MarketplaceCache: Sendable {
     ///
     /// - Parameters:
     ///   - sha: The commit.
-    ///   - ref: The branch or the tag. It can hold a `/`, so the call makes
-    ///     the folders of the file.
-    /// - Throws: The error of the folder or of the file write.
-    private func write(sha: String, toRef ref: String) throws {
-        let file = refsDirectory.appendingPathComponent(ref)
-        try FileManager.default.createDirectory(
-            at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try sha.write(to: file, atomically: true, encoding: .utf8)
+    ///   - ref: The checked branch or tag. It is one name, so the file goes
+    ///     straight into `refs/`.
+    /// - Throws: The error of the file write.
+    private func write(sha: String, toValidatedRef ref: String) throws {
+        try sha.write(
+            to: refsDirectory.appendingPathComponent(ref), atomically: true, encoding: .utf8)
     }
 
     /// Makes `current` name one snapshot, in one atomic step.
@@ -282,10 +416,11 @@ internal struct MarketplaceCache: Sendable {
     /// `rename(2)` replaces the name in one operation. Deleting `current` and
     /// making it again would give a reader a window with no link.
     ///
-    /// - Parameter sha: The commit of the snapshot.
+    /// - Parameter sha: The checked commit of the snapshot. The target of the
+    ///   symlink holds it, so only a checked value goes in.
     /// - Throws: ``MarketplaceCacheError/cannotSwap(path:code:)`` when the
     ///   rename fails, else the error of the symlink.
-    private func swapCurrent(toSha sha: String) throws {
+    private func swapCurrent(toValidatedSha sha: String) throws {
         let manager = FileManager.default
         let staged = folder.appendingPathComponent(Self.stagedLinkName)
         // A link that an interrupted install left behind is not an error.
@@ -311,16 +446,17 @@ internal struct MarketplaceCache: Sendable {
     private func removeUnusedSnapshots(keeping kept: [String]) throws {
         let keptShas = Set(kept)
         for sha in try installedShas() where !keptShas.contains(sha) {
-            try removeSnapshot(sha: sha)
+            try removeSnapshot(validatedSha: sha)
         }
     }
 
     /// Deletes one snapshot, unless a reader holds a shared lock on it.
     ///
-    /// - Parameter sha: The commit of the snapshot.
+    /// - Parameter sha: The checked commit of the snapshot, which
+    ///   ``installedShas()`` gave.
     /// - Throws: The error of the delete.
-    private func removeSnapshot(sha: String) throws {
-        let directory = snapshotDirectory(forSha: sha)
+    private func removeSnapshot(validatedSha sha: String) throws {
+        let directory = snapshotDirectory(forValidatedSha: sha)
         let descriptor = open(directory.path, O_RDONLY | O_DIRECTORY)
         guard descriptor >= 0 else {
             // Another writer of the same cache already deleted the folder.
@@ -366,10 +502,11 @@ internal struct MarketplaceCache: Sendable {
     ///   - sha: The commit of the snapshot.
     ///   - body: The work to do with the snapshot folder.
     /// - Returns: What `body` gives.
-    /// - Throws: ``MarketplaceCacheError/cannotLock(path:code:)`` when the
-    ///   folder does not open or the lock fails, else what `body` throws.
+    /// - Throws: ``MarketplaceCacheError`` when `sha` is no commit, when the
+    ///   folder does not open, or when the lock fails, else what `body`
+    ///   throws.
     func withSnapshotInUse<Value>(sha: String, _ body: (URL) throws -> Value) throws -> Value {
-        let directory = snapshotDirectory(forSha: sha)
+        let directory = try snapshotDirectory(forSha: sha)
         let descriptor = open(directory.path, O_RDONLY | O_DIRECTORY)
         guard descriptor >= 0 else {
             throw MarketplaceCacheError.cannotLock(path: directory.path, code: errno)

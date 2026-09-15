@@ -191,7 +191,7 @@ struct MarketplaceCacheTests {
 
         try fixture.install(sha: sha)
 
-        #expect(fixture.cache.currentSnapshot() == fixture.cache.snapshotDirectory(forSha: sha))
+        #expect(try fixture.cache.currentSnapshot() == fixture.cache.snapshotDirectory(forSha: sha))
         #expect(try fixture.readCurrentMarker() == sha)
     }
 
@@ -257,6 +257,114 @@ struct MarketplaceCacheTests {
         }
 
         #expect(try Set(fixture.cache.installedShas()) == Set(shas))
+    }
+
+    // MARK: - Path safety
+
+    /// The values that must never reach a file path: an empty value, the
+    /// relative step, a relative step with a name after it, a value that
+    /// holds a separator, an absolute path, and a hidden name.
+    private static let unsafePathValues = ["", "..", "../x", "a/b", "/etc/passwd", ".hidden"]
+
+    /// A value with the length of a commit whose letters are not hex digits.
+    private static let notHexSha = String(repeating: "z", count: shaHexLength)
+
+    /// A hex value that is too short for a commit.
+    private static let shortSha = "abc"
+
+    @Test func aValidShaNamesAFolderUnderSnapshots() throws {
+        let fixture = try CacheFixture()
+        defer { fixture.remove() }
+        let sha = try #require(Self.exampleShas.first)
+
+        let directory = try fixture.cache.snapshotDirectory(forSha: sha)
+
+        #expect(directory.deletingLastPathComponent().path == fixture.cache.snapshotsDirectory.path)
+        #expect(directory.lastPathComponent == sha)
+    }
+
+    @Test(arguments: MarketplaceCacheTests.unsafePathValues)
+    func aSnapshotFolderRefusesAnUnsafeSha(value: String) throws {
+        let fixture = try CacheFixture()
+        defer { fixture.remove() }
+
+        #expect(throws: MarketplaceCacheError.unsafePathValue(kind: .sha, value: value)) {
+            try fixture.cache.snapshotDirectory(forSha: value)
+        }
+    }
+
+    @Test(arguments: [MarketplaceCacheTests.notHexSha, MarketplaceCacheTests.shortSha])
+    func aSnapshotFolderRefusesAValueThatIsNoCommit(value: String) throws {
+        let fixture = try CacheFixture()
+        defer { fixture.remove() }
+
+        #expect(throws: MarketplaceCacheError.notACommit(value: value)) {
+            try fixture.cache.snapshotDirectory(forSha: value)
+        }
+    }
+
+    @Test(arguments: MarketplaceCacheTests.unsafePathValues)
+    func aSharedLockRefusesAnUnsafeSha(value: String) throws {
+        let fixture = try CacheFixture()
+        defer { fixture.remove() }
+
+        #expect(throws: MarketplaceCacheError.unsafePathValue(kind: .sha, value: value)) {
+            try fixture.cache.withSnapshotInUse(sha: value) { _ in }
+        }
+    }
+
+    @Test(arguments: MarketplaceCacheTests.unsafePathValues)
+    func installRefusesAnUnsafeSha(value: String) throws {
+        let fixture = try CacheFixture()
+        defer { fixture.remove() }
+        let staged = try fixture.stageSnapshot(sha: try #require(Self.exampleShas.first))
+
+        #expect(throws: MarketplaceCacheError.unsafePathValue(kind: .sha, value: value)) {
+            try fixture.cache.install(snapshotAt: staged, sha: value, ref: Self.exampleRef)
+        }
+        #expect(!FileManager.default.fileExists(atPath: fixture.cache.folder.path))
+    }
+
+    @Test(arguments: MarketplaceCacheTests.unsafePathValues)
+    func installRefusesAnUnsafeRef(value: String) throws {
+        let fixture = try CacheFixture()
+        defer { fixture.remove() }
+        let sha = try #require(Self.exampleShas.first)
+        let staged = try fixture.stageSnapshot(sha: sha)
+
+        #expect(throws: MarketplaceCacheError.unsafePathValue(kind: .ref, value: value)) {
+            try fixture.cache.install(snapshotAt: staged, sha: sha, ref: value)
+        }
+        #expect(!FileManager.default.fileExists(atPath: fixture.cache.folder.path))
+    }
+
+    @Test(arguments: MarketplaceCacheTests.unsafePathValues)
+    func aRefLookupRefusesAnUnsafeRef(value: String) throws {
+        let fixture = try CacheFixture()
+        defer { fixture.remove() }
+
+        #expect(throws: MarketplaceCacheError.unsafePathValue(kind: .ref, value: value)) {
+            try fixture.cache.sha(forRef: value)
+        }
+    }
+
+    @Test func aRefLookupTakesAValidRef() throws {
+        let fixture = try CacheFixture()
+        defer { fixture.remove() }
+
+        #expect(try fixture.cache.sha(forRef: Self.exampleRef) == nil)
+    }
+
+    @Test func anUnsafeSymlinkTargetNamesNoSnapshot() throws {
+        let fixture = try CacheFixture()
+        defer { fixture.remove() }
+        let manager = FileManager.default
+        try manager.createDirectory(at: fixture.cache.folder, withIntermediateDirectories: true)
+        try manager.createSymbolicLink(
+            atPath: fixture.cache.currentLink.path, withDestinationPath: "snapshots/..")
+
+        #expect(fixture.cache.currentSha() == nil)
+        #expect(fixture.cache.currentSnapshot() == nil)
     }
 
     // MARK: - State

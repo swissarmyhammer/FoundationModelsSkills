@@ -40,6 +40,59 @@ comments:
     - evidence: 3 files — Sources/FoundationModelsSkills/Marketplace/MarketplaceCache.swift, Sources/FoundationModelsSkills/Marketplace/MarketplaceState.swift, Tests/FoundationModelsSkillsTests/MarketplaceCacheTests.swift. `swift test --filter MarketplaceCacheTests` = 15 tests, 1 suite, 0 failures. `swift test` = 568 tests, 41 suites, 0 failures. `swift build --build-tests` = 0 warnings.
     - next: /review
   timestamp: 2026-09-15T16:08:19.331857+00:00
+- actor: claude-code
+  id: 01m2jxmq2c6yayk185fvdbad63
+  text: |-
+    ### review — findings
+    - evidence: 4 findings, all confirmed. Scope `review sha HEAD~1..HEAD`. MarketplaceCache.swift:152, :196, :273, :295 — path traversal through the `sha` and `ref` values that go into the file paths.
+    - next: Make `sha` and `ref` valid before you use them in a path. Correct all of the file, not only the lines in the list. The task stays in the review column.
+  timestamp: 2026-09-15T16:15:46.252210+00:00
+- actor: claude-code
+  id: 01m2jxn3scqqrtw5y2hgyqpjss
+  text: |-
+    ### finish iteration 1 — findings
+    - implement: changed — 3 files (Marketplace/MarketplaceCache.swift, Marketplace/MarketplaceState.swift, Tests/FoundationModelsSkillsTests/MarketplaceCacheTests.swift)
+    - test: green — swift build --build-tests 0 warnings; swift test x2, 568 passed each run, 0 failed, 0 skipped
+    - commit: 8f242a3 feat(marketplace): add the marketplace cache and its state
+    - review: findings — 4 open, all path traversal in MarketplaceCache.swift (lines 152, 196, 273, 295): `sha` and `ref` go into a path or a symlink target with no check
+  timestamp: 2026-09-15T16:15:59.276687+00:00
+- actor: claude-code
+  id: 01m2jy5nm9m75e6xg8s7pjvrjv
+  text: |
+    Pulled the card back to `doing` and worked the four path-traversal findings with /tdd.
+
+    RED first: the new tests in `MarketplaceCacheTests.swift` failed with 40 issues, because `snapshotDirectory(forSha:)`, `sha(forRef:)`, `install`, and `withSnapshotInUse` took any value.
+
+    GREEN: one boundary check in `MarketplaceCache`, and a typed error.
+
+    - `MarketplacePathValue` names what a value is: `.sha` or `.ref`. The error tells it.
+    - `MarketplaceCacheError.unsafePathValue(kind:value:)` and `.notACommit(value:)` are the two new cases.
+    - `validated(pathValue:kind:)` refuses an empty value, a value that starts with a dot, a value that holds `..`, a value that holds `/` or `\`, and a value that holds a control character.
+    - `validated(sha:)` adds the commit rule: only hex digits, and the length of a SHA-1 or a SHA-256 object name.
+    - `validated(ref:)` is the path rule alone.
+
+    The cause is gone from the whole file, not only the four lines:
+
+    - `snapshotDirectory(forSha:)` throws now. A private `snapshotDirectory(forValidatedSha:)` builds the path, and only a checked value reaches it.
+    - `install` checks `sha` and `ref` first, before `makeFolders()`. Thus a bad value writes nothing at all. A test proves that the marketplace folder does not appear.
+    - `publish`, `write`, `swapCurrent`, and `removeSnapshot` take `validatedSha` or `toValidatedRef` labels, so the name of each call says that the value is checked. The symlink target holds a checked commit.
+    - `sha(forRef:)` checks the ref.
+    - `withSnapshotInUse(sha:)` goes through the throwing `snapshotDirectory(forSha:)`.
+    - `currentSha()` checks the symlink target too, because another program can write that file. A target that is no commit gives `nil`.
+    - `installedShas()` keeps only the names that are commits, so cleanup never touches a folder that is not a snapshot.
+
+    Two notes for the next agent:
+
+    - `write(sha:toValidatedRef:)` no longer makes the folders of the file, because a ref is one name now. A branch name with a `/` in it, such as `feature/login`, is refused. The card ordered one validator that refuses a path separator, so this is the ordered behavior; the follow-up work is task ^7ga9yde, which splits a ref on `/` and checks each part.
+    - The tests expect the exact error case, not only the error type, so a weakened assertion cannot pass.
+  timestamp: 2026-09-15T16:25:01.833500+00:00
+- actor: claude-code
+  id: 01m2jy5st3z06f0dmykfy2brc5
+  text: |
+    ### implement — changed
+    - evidence: 2 files — Sources/FoundationModelsSkills/Marketplace/MarketplaceCache.swift, Tests/FoundationModelsSkillsTests/MarketplaceCacheTests.swift. `swift build --build-tests` = 0 warnings, 0 errors. `swift test --filter MarketplaceCacheTests` = 24 tests, 1 suite, 0 failures. `swift test` = 577 tests, 41 suites, 0 failures. All 4 review findings are checked.
+    - next: /review
+  timestamp: 2026-09-15T16:25:06.115580+00:00
 depends_on:
 - 01M2H0R2AFRD111HR47N3YVH8R
 position_column: doing
@@ -76,3 +129,15 @@ Create `Sources/FoundationModelsSkills/Marketplace/MarketplaceState.swift` for t
 
 ## Workflow
 - Use `/tdd` — write failing tests first, then implement to make them pass. #marketplace
+
+## Review Findings (2026-09-15 11:10)
+
+> Scope: `review sha HEAD~1..HEAD` — reviewed the diffs only — lines this change added or modified. 3 file(s) reviewed, 4 not reviewed.
+
+> 4 file(s) not reviewed — excluded by an ignore rule:
+> - `.kanban/ (from .reviewignore)` — 4 file(s)
+
+- [x] `Sources/FoundationModelsSkills/Marketplace/MarketplaceCache.swift:152` `code-security/injection` — Path traversal in snapshotDirectory function. The `sha` parameter is passed directly to `appendingPathComponent` without validation. An attacker could provide a value like `../../../etc/passwd` to escape the snapshots directory. Validate that `sha` is a valid 40-character hexadecimal string before using it: `guard sha.count == 40 && sha.allSatisfy({ $0.isHexDigit }) else { throw MarketplaceCacheError(...) }`.
+- [x] `Sources/FoundationModelsSkills/Marketplace/MarketplaceCache.swift:196` `code-security/injection` — Path traversal in ref file path. The `ref` parameter is used directly with `appendingPathComponent` without validation in the `sha(forRef:)` function, allowing path traversal characters like `../` to escape the intended refs directory and read arbitrary files. Validate that `ref` does not contain path traversal sequences: `guard !ref.contains("..") && !ref.hasPrefix("/") else { throw MarketplaceCacheError(...) }`.
+- [x] `Sources/FoundationModelsSkills/Marketplace/MarketplaceCache.swift:273` `code-security/injection` — Path traversal in ref file path. The `ref` parameter is passed to `appendingPathComponent` without validation. An attacker could provide a value containing `../` to escape the intended refs directory and write files outside the cache. Validate that `ref` does not contain path traversal characters: `guard !ref.contains("..") && !ref.hasPrefix("/") else { throw MarketplaceCacheError(...) }`.
+- [x] `Sources/FoundationModelsSkills/Marketplace/MarketplaceCache.swift:295` `code-security/injection` — Path traversal in symlink target. The `sha` parameter is directly interpolated into the symlink destination path without validation. An attacker could provide a value like `../../../etc/passwd` to create a symlink pointing outside the cache directory. Validate that `sha` is a valid 40-character hexadecimal commit hash: `guard sha.count == 40 && sha.allSatisfy({ $0.isHexDigit }) else { throw MarketplaceCacheError(...) }`.
