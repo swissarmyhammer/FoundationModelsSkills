@@ -48,6 +48,16 @@ internal struct CredentialGate: Sendable {
             self.host = host
             self.port = components.port ?? (scheme == CredentialGate.httpsScheme ? CredentialGate.httpsDefaultPort : nil)
         }
+
+        /// Compares two origins by the scheme, the host, and the port.
+        ///
+        /// - Parameters:
+        ///   - lhs: One origin.
+        ///   - rhs: The other origin.
+        /// - Returns: `true` when all three parts are equal.
+        static func == (lhs: Origin, rhs: Origin) -> Bool {
+            lhs.scheme == rhs.scheme && lhs.host == rhs.host && lhs.port == rhs.port
+        }
     }
 
     /// The only scheme that gets a credential.

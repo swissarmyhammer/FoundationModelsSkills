@@ -118,12 +118,15 @@ struct CredentialGateTests {
     // MARK: - Redaction
 
     @Test func theTextOfACredentialShowsNeitherTheUserNameNorTheToken() {
-        var dumped = ""
-        dump(Self.credential, to: &dumped)
-
-        let texts = [String(describing: Self.credential), String(reflecting: Self.credential), dumped]
+        let texts = [String(describing: Self.credential), String(reflecting: Self.credential)]
 
         #expect(texts.allSatisfy { !$0.contains(Self.credential.token) && !$0.contains(Self.credential.username) })
+    }
+
+    @Test func theMirrorOfACredentialShowsNoChild() {
+        let mirror = Mirror(reflecting: Self.credential)
+
+        #expect(mirror.children.isEmpty)
     }
 }
 

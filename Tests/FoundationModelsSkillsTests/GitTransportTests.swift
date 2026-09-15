@@ -221,14 +221,14 @@ struct GitTransportTests {
         let tip = try fixture.commit(files: ["README.md": .file("first")])
         let destination = try Self.makeDestination()
         defer { Self.removeDestination(destination) }
-        let requests = CredentialRequestCounter()
+        let requests = CredentialRequestRecorder()
 
         let fetched = try await transport.fetch(
             url: fixture.url, revision: "main", intoBareRepository: destination,
             credentials: requests.provider(giving: Self.credential))
 
         #expect(fetched == tip)
-        #expect(await requests.count == 0)
+        #expect(await requests.requestedURLs.isEmpty)
     }
 
     @Test func theCredentialsCallbackGivesTheCredentialOneTime() throws {
@@ -322,23 +322,25 @@ struct GitTransportTests {
     }
 }
 
-/// Counts the requests that a credential provider gets.
-private actor CredentialRequestCounter {
-    /// The number of requests.
-    private(set) var count = 0
+/// Records each URL that a credential provider gets.
+private actor CredentialRequestRecorder {
+    /// The URL of each request, in order.
+    private(set) var requestedURLs: [URL] = []
 
-    /// Counts one request.
-    func recordRequest() {
-        count += 1
+    /// Records one request.
+    ///
+    /// - Parameter url: The URL that the provider got.
+    func record(url: URL) {
+        requestedURLs.append(url)
     }
 
-    /// Makes a provider that counts each request and gives `credential`.
+    /// Makes a provider that records each request and gives `credential`.
     ///
     /// - Parameter credential: The credential that the provider gives.
     /// - Returns: The provider.
     nonisolated func provider(giving credential: MarketplaceCredential) -> @Sendable (URL) async -> MarketplaceCredential? {
-        { _ in
-            await self.recordRequest()
+        { url in
+            await self.record(url: url)
             return credential
         }
     }

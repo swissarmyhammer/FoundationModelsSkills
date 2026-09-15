@@ -30,6 +30,41 @@ comments:
     - evidence: 1 file — /Users/wballard/github/swissarmyhammer/FoundationModelsSkills/Tests/FoundationModelsSkillsTests/GitTransportTests.swift; `swift build --build-tests` gives 0 warnings; `swift test` gives 549 tests in 39 suites, all passed
     - next: /review
   timestamp: 2026-09-15T15:00:29.948456+00:00
+- actor: claude-code
+  id: 01m2jst6rwh1xyjsyzt8304yxe
+  text: |-
+    ### review — findings
+    - evidence: 4 findings — Sources/FoundationModelsSkills/Marketplace/Git/CredentialGate.swift:29, Sources/FoundationModelsSkills/Marketplace/Git/CredentialGate.swift:33, Tests/FoundationModelsSkillsTests/CredentialGateTests.swift:122, Tests/FoundationModelsSkillsTests/GitTransportTests.swift:231
+    - scope: review sha HEAD~1..HEAD
+    - next: correct each finding, then run the review again
+  timestamp: 2026-09-15T15:08:51.868227+00:00
+- actor: claude-code
+  id: 01m2jstr66x8v8jws3hb7f2wpg
+  text: |-
+    ### finish iteration 1 — findings
+    - implement: changed — GitTreeFileSource.swift, CredentialGate.swift, MarketplaceCredential.swift, GitTransport.swift, LibGit2Transport.swift, GitTreeFileSourceTests.swift, CredentialGateTests.swift, GitFixtureRepository.swift, GitTransportTests.swift
+    - test: green — swift build --build-tests 0 warnings; swift test, 549 passed, 0 failed, 0 skipped
+    - commit: 8c50f37 feat(marketplace): read a fetched commit and gate HTTPS credentials
+    - review: findings — Sources/FoundationModelsSkills/Marketplace/Git/CredentialGate.swift:29, CredentialGate.swift:33, Tests/FoundationModelsSkillsTests/CredentialGateTests.swift:122, Tests/FoundationModelsSkillsTests/GitTransportTests.swift:231
+    - note: the first implementer agent was stopped, because the LSP `diagnostics` call does not return in this workspace (sourcekit-lsp is not installed). A second agent finished the step.
+  timestamp: 2026-09-15T15:09:09.702935+00:00
+- actor: claude-code
+  id: 01m2jt0nj5q4h20xgyj0x8b4y4
+  text: |
+    Corrected the four findings.
+
+    Findings 1 and 2 (`host` and `port` are assign-only): the origin check was already correct. `CredentialGate.Origin` compares the scheme, the host, and the port through the Equatable conformance, and `credential(forRequestURL:)` compares `Origin(url: requestURL) == origin`. The analyzer does not see a read through a synthesized `==`, thus it calls the two properties assign-only. A deletion is not possible, because the two properties are the comparison. The file now writes `==` out: `lhs.scheme == rhs.scheme && lhs.host == rhs.host && lhs.port == rhs.port`. The behavior does not change, and each property now has a visible read.
+
+    The test for the same host on another port already exists: `aRequestFromAnotherOriginIsRefused` takes `https://git.example.com:8443/owner/skills.git`, and `theDefaultPortWrittenOutIsTheSameOrigin` proves that `:443` written out is the same origin.
+
+    Finding 3 (`dump(...)` in `CredentialGateTests`): removed. The redaction test now keeps only `String(describing:)` and `String(reflecting:)`. A new test, `theMirrorOfACredentialShowsNoChild`, proves the `customMirror` of `MarketplaceCredential` directly, thus the coverage of the reflection path stays.
+
+    Finding 4 (`count == 0` in `GitTransportTests`): the private `CredentialRequestCounter` actor is now `CredentialRequestRecorder`, which keeps `requestedURLs`. The assertion is `#expect(await requests.requestedURLs.isEmpty)`. It also records which URL a provider got, thus it is not weaker.
+
+    ### implement — changed
+    - evidence: 3 files — Sources/FoundationModelsSkills/Marketplace/Git/CredentialGate.swift, Tests/FoundationModelsSkillsTests/CredentialGateTests.swift, Tests/FoundationModelsSkillsTests/GitTransportTests.swift; `swift build --build-tests` gives 0 warnings; `swift test` gives 550 tests in 39 suites, all passed
+    - next: /review
+  timestamp: 2026-09-15T15:12:23.621104+00:00
 depends_on:
 - 01M2H0RFR101FGE3GT88HD33M4
 - 01M2H0QNGBQDQWBB3H1NSGYGDN
@@ -62,3 +97,15 @@ marketplace.md §5.1 (the libgit2 call table and HTTPS rules) and §7.3 step 3. 
 
 ## Workflow
 - Use `/tdd` — write failing tests first, then implement to make them pass. #marketplace
+
+## Review Findings (2026-09-15 10:04)
+
+> Scope: `review sha HEAD~1..HEAD` — reviewed the diffs only — lines this change added or modified. 9 file(s) reviewed, 4 not reviewed.
+
+> 4 file(s) not reviewed — excluded by an ignore rule:
+> - `.kanban/ (from .reviewignore)` — 4 file(s)
+
+- [x] `Sources/FoundationModelsSkills/Marketplace/Git/CredentialGate.swift:29` `code-hygiene/dead-code-swift` — var.instance `host` is assignOnlyProperty.
+- [x] `Sources/FoundationModelsSkills/Marketplace/Git/CredentialGate.swift:33` `code-hygiene/dead-code-swift` — var.instance `port` is assignOnlyProperty.
+- [x] `Tests/FoundationModelsSkillsTests/CredentialGateTests.swift:122` `code-hygiene/disallowed-constructs-swift` — no_direct_standard_out_logs: Do not commit print(…), debugPrint(…), dump(…) or _printChanges(), which write to standard out in release. Log to a dedicated logging system, or silence one debug-only line with // swiftlint:disable:next no_direct_standard_out_logs and the reason after it.
+- [x] `Tests/FoundationModelsSkillsTests/GitTransportTests.swift:231` `code-hygiene/idioms-swift` — isEmpty: Prefer isEmpty over comparing count against zero.
