@@ -5,12 +5,22 @@ import Foundation
 /// The limits are counts, not times. ``MarketplacePolicy`` carries them, so a
 /// host that wants a different size or file count sets them there.
 public struct SnapshotLimits: Sendable, Hashable {
+    /// The number of bytes in one kibibyte.
+    private static let bytesInOneKibibyte = 1024
+
+    /// The number of kibibytes in one mebibyte.
+    private static let kibibytesInOneMebibyte = 1024
+
     /// The number of bytes in one mebibyte.
-    private static let bytesInOneMebibyte = 1024 * 1024
+    private static let bytesInOneMebibyte = bytesInOneKibibyte * kibibytesInOneMebibyte
+
+    /// The number of mebibytes that one snapshot may reach when the host names
+    /// none.
+    private static let defaultMaximumMebibytes = 64
 
     /// The size that one snapshot may reach when the host names none:
     /// 64 mebibytes.
-    public static let defaultMaximumBytes = 64 * bytesInOneMebibyte
+    public static let defaultMaximumBytes = defaultMaximumMebibytes * bytesInOneMebibyte
 
     /// The number of files that one snapshot may hold when the host names
     /// none.

@@ -108,10 +108,18 @@ internal enum MarketplaceLocation: Sendable, Hashable {
 
     /// Removes the trailing `/` characters of a path or a URL.
     ///
+    /// The standard library has `trimmingPrefix(while:)` but no suffix twin,
+    /// thus the call asks it for the last character that is no separator and
+    /// keeps the text up to that character. It makes no reversed copy.
+    ///
     /// - Parameter text: The path or the URL.
-    /// - Returns: The text with no trailing `/`.
+    /// - Returns: The text with no trailing `/`. A text of separators only
+    ///   gives the empty text.
     private static func trimmingTrailingSeparators(_ text: String) -> String {
-        String(text.reversed().drop { $0 == pathSeparator }.reversed())
+        guard let end = text.lastIndex(where: { $0 != pathSeparator }) else {
+            return ""
+        }
+        return String(text[...end])
     }
 
     /// The normalized URL: the git URL with no ref, or `file://` and the

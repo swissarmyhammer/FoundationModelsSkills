@@ -148,6 +148,31 @@ actor RecordingGitTransport: GitTransport {
     }
 }
 
+/// Tells whether a shared lock holds one snapshot folder (marketplace.md
+/// §7.6).
+///
+/// `MarketplaceCacheTests` proves the lease itself, and
+/// `MarketplaceStoreTests` proves which snapshot the store leases. Thus the
+/// probe is here, and not in one of the two suites.
+enum SnapshotLockProbe {
+    /// Whether a second open of one folder cannot take the exclusive lock.
+    ///
+    /// A `flock(2)` lock belongs to the open file and not to the process, thus
+    /// a second open in this process sees the shared lock of a lease.
+    ///
+    /// - Parameter directory: The snapshot folder to test.
+    /// - Returns: `true` when a lock holds the folder. A folder that does not
+    ///   open gives `false`.
+    static func isLocked(directory: URL) -> Bool {
+        let descriptor = open(directory.path, O_RDONLY | O_DIRECTORY)
+        if descriptor < 0 {
+            return false
+        }
+        defer { close(descriptor) }
+        return flock(descriptor, LOCK_EX | LOCK_NB) != 0
+    }
+}
+
 /// One ``MarketplaceStore`` over a temporary cache, plus the empty local
 /// layer root that a registry test puts above its marketplace layers.
 ///

@@ -32,6 +32,47 @@ comments:
     - evidence: 11 files. New: Sources/FoundationModelsSkills/Marketplace/MarketplaceStore.swift, MarketplacePolicy.swift, MarketplaceEvent.swift; Sources/FoundationModelsSkills/Registry/EventBroadcaster.swift; Tests/FoundationModelsSkillsTests/MarketplaceStoreTests.swift. Changed: Marketplace/MarketplaceCache.swift, MarketplaceLocation.swift, MarketplaceState.swift, SnapshotWriter.swift; Discovery/SkillDiscovery.swift; Registry/SkillsRegistry.swift; Tests/FoundationModelsSkillsTests/MarketplaceTestSupport.swift, GitFixtureRepository.swift. `swift test --filter MarketplaceStoreTests`: 10 tests, 10 passed. `swift test`: 626 tests in 46 suites, all passed. `swift build --build-tests`: zero warnings, zero errors.
     - next: /review
   timestamp: 2026-09-15T18:07:15.406604+00:00
+- actor: claude-code
+  id: 01m2k661g8v7t1735k966htsyh
+  text: |-
+    ### review — findings
+    - evidence: 4 findings — MarketplaceLocation.swift:114, MarketplaceStore.swift:57, SnapshotWriter.swift:9, SnapshotWriter.swift:13
+    - scope: review sha HEAD~1..HEAD (commit 3e045e3). The engine tried 14 checks; it confirmed 5 and refuted 0.
+    - note: the first attempt stopped because of a session rate limit. This is a new run.
+    - next: correct the 4 findings, then do the review again. The task stays in review.
+  timestamp: 2026-09-15T18:45:02.600427+00:00
+- actor: claude-code
+  id: 01m2k66jbwjvwsxzkfsbey90hy
+  text: |-
+    ### finish iteration 1 — findings
+    - implement: changed — 13 files; the MarketplaceStore actor with the policy, the git layers, the sync pipeline, the events, the locks, and the credentials; plus two repairs (SkillDiscovery reads a symlinked layer root; a `file://` URL that ends in `.git` is a git source)
+    - test: green — swift build --build-tests 0 warnings; swift test x3, 626 passed each run, 0 failed, 0 skipped
+    - commit: 3e045e3 feat(marketplace): add the MarketplaceStore core actor
+    - review: findings — 4 open: MarketplaceLocation.swift:114 (use `dropLast(while:)`), MarketplaceStore.swift:57 (`lease` is assign-only), SnapshotWriter.swift:9 and :13 (magic numbers)
+    - note: the first review agent stopped at a session rate limit; the review ran again and gave this result
+  timestamp: 2026-09-15T18:45:19.868055+00:00
+- actor: claude-code
+  id: 01m2k6kzf4qjxvpgeksv9ah6k7
+  text: |-
+    How this pass corrected the four findings.
+
+    1. `MarketplaceLocation.trimmingTrailingSeparators` — the finding names `String(text.dropLast(while: { $0 == pathSeparator }))`. That method does not exist: Swift 6.4 has `dropLast(_ k: Int)` only, and the compiler refuses the call ("no exact matches in call to instance method 'dropLast'"). The standard library has `trimmingPrefix(while:)` but no suffix twin. Thus the cause of the finding, the reverse/drop/reverse pattern, is gone in the same way the finding asks: the call now asks `lastIndex(where:)` for the last character that is no separator and keeps the text up to it. It reads the text one time and makes no reversed copy. This is the only such pattern in the file.
+
+    2. `MarketplaceStore.ServedMarketplace.lease` — the property now has a reader. `SnapshotLease` gets `releaseNow()`, which closes the folder and does nothing on a second call. `serve(atIndex:sha:displayID:catalogVersion:)` reads the lease that it replaces out of the `served` lock and releases it outside the lock. Thus the snapshot that the store leaves is free for the next cleanup at that moment, and not when the last reference goes away. `lease` is the only assign-only property of the file; every other stored property has a reader.
+
+    3 and 4. `SnapshotLimits` — `1024 * 1024` and `64 * …` were literals inside an expression, which is what the rule refuses. The file now names `bytesInOneKibibyte`, `kibibytesInOneMebibyte`, and `defaultMaximumMebibytes`, and each product is a product of named constants. The other literals of the file (`5_000`, `0o755`, and the zeros and ones) are each a direct initializer value or a permitted number.
+
+    Tests. `SnapshotLease.releaseNow()` is new production code, thus a failing test came first: the build refused `releaseNow` before the method existed. `MarketplaceCacheTests` gets `aLeaseHoldsItsSnapshotUntilItIsReleased` and `aSecondReleaseOfOneLeaseDoesNothing`. `MarketplaceStoreTests` gets `theStoreHoldsALeaseOnTheSnapshotItServesAndReleasesTheOneItLeaves`, which proves both halves of the lease behavior: the snapshot that the store serves refuses an exclusive lock, and the snapshot that it left takes one. The shared helper `SnapshotLockProbe.isLocked(directory:)` is in `MarketplaceTestSupport.swift`, because two suites use it.
+
+    `flock(2)` belongs to the open file and not to the process, thus a second open in the test process sees the lock of a lease. This is the same rule that `MarketplaceCache.removeSnapshot` depends on.
+  timestamp: 2026-09-15T18:52:39.268695+00:00
+- actor: claude-code
+  id: 01m2k6m4qfk6e50qa5jkqtxae0
+  text: |-
+    ### implement — changed
+    - evidence: 5 files. Sources/FoundationModelsSkills/Marketplace/MarketplaceLocation.swift, MarketplaceStore.swift, MarketplaceCache.swift, SnapshotWriter.swift; Tests/FoundationModelsSkillsTests/MarketplaceCacheTests.swift, MarketplaceStoreTests.swift, MarketplaceTestSupport.swift (7 files in all). `swift build --build-tests`: 0 warnings, 0 errors. `swift test --filter 'MarketplaceCacheTests|MarketplaceStoreTests|MarketplaceSourceTests|SnapshotWriterTests'`: 80 tests in 4 suites, all passed. `swift test`: 629 tests in 46 suites, all passed, 0 failed, 0 skipped.
+    - next: /review
+  timestamp: 2026-09-15T18:52:44.655927+00:00
 depends_on:
 - 01M2H0VAP3ASYS7ZX17BKJQ3NN
 - 01M2H0VP7PA387VXKDARNERBSJ
@@ -77,3 +118,15 @@ marketplace.md §6.1, §6.2, §7.3, §7.6. The actor that joins the parts, for g
 
 ## Workflow
 - Use `/tdd` — write failing tests first, then implement to make them pass. #marketplace
+
+## Review Findings (2026-09-15 13:38)
+
+> Scope: `review sha HEAD~1..HEAD` — reviewed the diffs only — lines this change added or modified. 13 file(s) reviewed, 4 not reviewed.
+
+> 4 file(s) not reviewed — excluded by an ignore rule:
+> - `.kanban/ (from .reviewignore)` — 4 file(s)
+
+- [x] `Sources/FoundationModelsSkills/Marketplace/MarketplaceLocation.swift:114` `reuse/reuse` — Custom trailing-separator removal reimplements the standard library's `dropLast(while:)` method. The reverse/drop/reverse pattern is less efficient and less readable than the built-in capability. Replace with `String(text.dropLast(while: { $0 == pathSeparator }))`.
+- [x] `Sources/FoundationModelsSkills/Marketplace/MarketplaceStore.swift:57` `code-hygiene/dead-code-swift` — var.instance `lease` is assignOnlyProperty.
+- [x] `Sources/FoundationModelsSkills/Marketplace/SnapshotWriter.swift:9` `code-hygiene/magic-numbers-swift` — Magic numbers should be replaced by named constants.
+- [x] `Sources/FoundationModelsSkills/Marketplace/SnapshotWriter.swift:13` `code-hygiene/magic-numbers-swift` — Magic numbers should be replaced by named constants.

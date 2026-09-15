@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 
 /// A value that the cache puts into a file path.
 internal enum MarketplacePathValue: String, Sendable {
@@ -673,20 +674,35 @@ internal struct MarketplaceCache: Sendable {
 /// another one, takes an exclusive lock before it deletes a snapshot, thus it
 /// never deletes a folder that a lease holds.
 ///
-/// The only stored property is an immutable `Int32`, which gives the class a
-/// plain `Sendable` conformance that the compiler checks.
+/// The only stored property is an immutable `let` of a `Mutex`, which gives
+/// the class a plain `Sendable` conformance that the compiler checks.
 internal final class SnapshotLease: Sendable {
-    /// The open folder that holds the lock.
-    private let descriptor: Int32
+    /// The open folder that holds the lock, or `nil` after the release.
+    private let heldDirectory: Mutex<Int32?>
 
     /// Takes over an open, already locked folder.
     ///
     /// - Parameter descriptor: The open folder, with its shared lock.
     fileprivate init(descriptor: Int32) {
-        self.descriptor = descriptor
+        heldDirectory = Mutex(descriptor)
+    }
+
+    /// Releases the lock now.
+    ///
+    /// A holder that replaces one lease with another calls this, thus the
+    /// snapshot that it leaves is free for the next cleanup at that moment,
+    /// and not when the last reference to the lease goes away. A second call
+    /// does nothing.
+    func releaseNow() {
+        heldDirectory.withLock { held in
+            if let descriptor = held {
+                close(descriptor)
+                held = nil
+            }
+        }
     }
 
     deinit {
-        close(descriptor)
+        releaseNow()
     }
 }

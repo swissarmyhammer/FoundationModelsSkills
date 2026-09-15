@@ -259,6 +259,37 @@ struct MarketplaceCacheTests {
         #expect(try Set(fixture.cache.installedShas()) == Set(shas))
     }
 
+    @Test func aLeaseHoldsItsSnapshotUntilItIsReleased() throws {
+        let fixture = try CacheFixture()
+        defer { fixture.remove() }
+        let held = try #require(Self.exampleShas.first)
+        try fixture.install(sha: held)
+        let directory = try fixture.cache.snapshotDirectory(forSha: held)
+        let taken = try fixture.cache.leaseCurrentSnapshot()
+        let lease = try #require(taken)
+
+        let lockedWhileHeld = SnapshotLockProbe.isLocked(directory: directory)
+        lease.releaseNow()
+
+        #expect(lockedWhileHeld)
+        #expect(!SnapshotLockProbe.isLocked(directory: directory))
+    }
+
+    @Test func aSecondReleaseOfOneLeaseDoesNothing() throws {
+        let fixture = try CacheFixture()
+        defer { fixture.remove() }
+        let held = try #require(Self.exampleShas.first)
+        try fixture.install(sha: held)
+        let directory = try fixture.cache.snapshotDirectory(forSha: held)
+        let taken = try fixture.cache.leaseCurrentSnapshot()
+        let lease = try #require(taken)
+
+        lease.releaseNow()
+        lease.releaseNow()
+
+        #expect(!SnapshotLockProbe.isLocked(directory: directory))
+    }
+
     // MARK: - Path safety
 
     /// The values that must never name a snapshot folder: an empty value, the

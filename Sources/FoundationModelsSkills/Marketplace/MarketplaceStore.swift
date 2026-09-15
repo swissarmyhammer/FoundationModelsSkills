@@ -393,8 +393,8 @@ public actor MarketplaceStore: MarketplaceLayerProviding {
     /// Replaces what the store serves for one marketplace, and takes a shared
     /// lock on the new snapshot.
     ///
-    /// The lease of the snapshot before this one is released here, thus the
-    /// next cleanup can delete that folder.
+    /// The lease of the snapshot before this one is released here, outside the
+    /// lock, thus the next cleanup can delete that folder.
     ///
     /// - Parameters:
     ///   - index: The marketplace.
@@ -405,11 +405,14 @@ public actor MarketplaceStore: MarketplaceLayerProviding {
     private func serve(atIndex index: Int, sha: String, displayID: String, catalogVersion: String?) {
         let entry = prepared[index]
         let lease = try? entry.cache.leaseCurrentSnapshot()
-        served.withLock { layers in
+        let superseded = served.withLock { layers -> SnapshotLease? in
             layers[index].layer.provenance = MarketplaceProvenance(
                 id: displayID, url: entry.source.url, sha: sha, catalogVersion: catalogVersion)
+            let previous = layers[index].lease
             layers[index].lease = lease
+            return previous
         }
+        superseded?.releaseNow()
     }
 
     /// The display id of one marketplace.

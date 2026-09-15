@@ -24,6 +24,10 @@ struct MarketplaceStoreTests {
     /// The skill id that most fixtures hold.
     private static let skillID = "alpha"
 
+    /// The name of the folder that holds one folder for each snapshot, under
+    /// the folder of one marketplace.
+    private static let snapshotsDirectoryName = "snapshots"
+
     /// The credential that the credentials test gives. The values are plain
     /// fixture text.
     private static let credential = MarketplaceCredential(username: "fixture-user", token: "fixture-token")
@@ -154,6 +158,26 @@ struct MarketplaceStoreTests {
 
         #expect(cache.store.marketplaceLayers().first?.provenance.sha == first)
         #expect(try cache.makeRegistry().call(id: Self.skillID).contains("alpha body"))
+    }
+
+    @Test func theStoreHoldsALeaseOnTheSnapshotItServesAndReleasesTheOneItLeaves() async throws {
+        let fixture = try GitFixtureRepository()
+        let first = try fixture.commit(files: Self.skillTree(body: "alpha body"))
+        let cache = try MarketplaceStoreFixture(sources: [MarketplaceSource(fixture.url)])
+        await cache.store.start()
+        let second = try fixture.commit(files: Self.skillTree(body: "alpha body v2"))
+
+        await cache.store.update()
+
+        let layer = try #require(cache.store.marketplaceLayers().first)
+        let snapshots = layer.layer.root.deletingLastPathComponent()
+            .appendingPathComponent(Self.snapshotsDirectoryName, isDirectory: true)
+        #expect(
+            SnapshotLockProbe.isLocked(
+                directory: snapshots.appendingPathComponent(second, isDirectory: true)))
+        #expect(
+            !SnapshotLockProbe.isLocked(
+                directory: snapshots.appendingPathComponent(first, isDirectory: true)))
     }
 
     // MARK: - Credentials and the display id
