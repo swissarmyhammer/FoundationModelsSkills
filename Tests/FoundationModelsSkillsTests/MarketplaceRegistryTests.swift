@@ -1,6 +1,7 @@
 import Foundation
 import FoundationModelsExtras
 import FoundationModelsSkills
+import Synchronization
 import Testing
 
 /// Tests for the marketplace half of `SkillsRegistry` (marketplace.md §4.1,
@@ -207,11 +208,11 @@ struct MarketplaceRegistryTests {
     /// A provider whose layer list the test replaces, and which publishes one
     /// update for each replacement.
     ///
-    /// `@unchecked Sendable`: `layers` is only ever read or written while
-    /// `lock` is held, and every other stored property is an immutable `let`.
-    private final class FakeMarketplaceProvider: MarketplaceLayerProviding, @unchecked Sendable {
-        private let lock = NSLock()
-        private var layers: [MarketplaceLayer]
+    /// Every stored property is an immutable `let` of a `Sendable` type: the
+    /// mutable layer list lives inside a `Mutex`, which gives the class a
+    /// plain `Sendable` conformance the compiler checks.
+    private final class FakeMarketplaceProvider: MarketplaceLayerProviding, Sendable {
+        private let layers: Mutex<[MarketplaceLayer]>
         private let continuation: AsyncStream<Void>.Continuation
 
         let layerUpdates: AsyncStream<Void>
@@ -220,7 +221,7 @@ struct MarketplaceRegistryTests {
         ///
         /// - Parameter layers: The starting layers, lowest precedence first.
         init(layers: [MarketplaceLayer]) {
-            self.layers = layers
+            self.layers = Mutex(layers)
             let made = AsyncStream<Void>.makeStream()
             layerUpdates = made.stream
             continuation = made.continuation
@@ -230,14 +231,14 @@ struct MarketplaceRegistryTests {
         ///
         /// - Returns: The layers.
         func marketplaceLayers() -> [MarketplaceLayer] {
-            lock.withLock { layers }
+            layers.withLock { $0 }
         }
 
         /// Replaces the layers and publishes one update.
         ///
         /// - Parameter layers: The new layers, lowest precedence first.
         func publish(layers: [MarketplaceLayer]) {
-            lock.withLock { self.layers = layers }
+            self.layers.withLock { $0 = layers }
             continuation.yield()
         }
     }

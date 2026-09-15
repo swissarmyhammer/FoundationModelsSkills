@@ -22,6 +22,36 @@ comments:
     - evidence: 5 files — Sources/FoundationModelsSkills/Marketplace/MarketplaceLayerProviding.swift (new), Sources/FoundationModelsSkills/Registry/SkillsRegistry.swift, Sources/FoundationModelsSkills/Validation/SkillValidator.swift, Sources/FoundationModelsSkills/Validation/SkillDiagnostic.swift, Tests/FoundationModelsSkillsTests/MarketplaceRegistryTests.swift (new). `swift test --filter MarketplaceRegistryTests` = 7 tests, 7 pass. `swift test` = 599 tests in 43 suites, all pass. `swift build --build-tests` = zero errors, zero warnings.
     - next: /review
   timestamp: 2026-09-15T17:08:02.777195+00:00
+- actor: claude-code
+  id: 01m2k0yb7815kqdnq8p469tcwx
+  text: |
+    ### review — findings
+    - evidence: 1 finding — Tests/FoundationModelsSkillsTests/MarketplaceRegistryTests.swift:212 — code-hygiene/disallowed-constructs-swift no_unchecked_sendable
+    - scope: review sha HEAD~1..HEAD (commit 9bccc05); 5 files read, 4 files not read (.reviewignore)
+    - next: correct the @unchecked Sendable type in the test file, then do the review again
+  timestamp: 2026-09-15T17:13:27.528602+00:00
+- actor: claude-code
+  id: 01m2k0yr06ntx37mftdxbdybav
+  text: |-
+    ### finish iteration 1 — findings
+    - implement: changed — 5 files (Marketplace/MarketplaceLayerProviding.swift new, Registry/SkillsRegistry.swift, Validation/SkillValidator.swift, Validation/SkillDiagnostic.swift, Tests/FoundationModelsSkillsTests/MarketplaceRegistryTests.swift new)
+    - test: green — swift build --build-tests 0 warnings; swift test x2, 599 passed each run, 0 failed, 0 skipped
+    - commit: 9bccc05 feat(marketplace): put marketplace layers below the local stack in the registry
+    - review: findings — 1 open, Tests/FoundationModelsSkillsTests/MarketplaceRegistryTests.swift:212, `@unchecked Sendable` on a test helper
+  timestamp: 2026-09-15T17:13:40.614110+00:00
+- actor: claude-code
+  id: 01m2k12scs9cm6ntvy8s5s9da5
+  text: |
+    Corrected the review finding with the real fix, not a disable comment. `FakeMarketplaceProvider` now holds its layer list in a `Mutex<[MarketplaceLayer]>` from the `Synchronization` module. Every stored property is an immutable `let` of a `Sendable` type, thus the class takes a plain `Sendable` conformance that the compiler checks. The `NSLock` and the `var layers` property are gone.
+
+    An `actor` was not possible: `MarketplaceLayerProviding.marketplaceLayers()` is a synchronous requirement.
+
+    I looked at the whole file for the same cause. This was the only `@unchecked Sendable` in it.
+
+    ### implement — changed
+    - evidence: 1 file — Tests/FoundationModelsSkillsTests/MarketplaceRegistryTests.swift. `swift build --build-tests` = zero errors, zero warnings. `swift test --filter MarketplaceRegistryTests` = 7 tests, 7 pass. `swift test` = 599 tests in 43 suites, all pass, 0 fail, 0 skip.
+    - next: /review
+  timestamp: 2026-09-15T17:15:53.113037+00:00
 depends_on:
 - 01M2H0PTG2XXMYBQX8BB3E76AX
 - 01M2H0R2AFRD111HR47N3YVH8R
@@ -55,3 +85,12 @@ marketplace.md §4.1, §4.2, §7.4, §9.1. The registry takes marketplace layers
 
 ## Workflow
 - Use `/tdd` — write failing tests first, then implement to make them pass. #marketplace
+
+## Review Findings (2026-09-15 12:10)
+
+> Scope: `review sha HEAD~1..HEAD` — reviewed the diffs only — lines this change added or modified. 5 file(s) reviewed, 4 not reviewed.
+
+> 4 file(s) not reviewed — excluded by an ignore rule:
+> - `.kanban/ (from .reviewignore)` — 4 file(s)
+
+- [x] `Tests/FoundationModelsSkillsTests/MarketplaceRegistryTests.swift:212` `code-hygiene/disallowed-constructs-swift` — no_unchecked_sendable: Instead of @unchecked Sendable, write a plain Sendable conformance or a @preconcurrency import. If the type really must be @unchecked Sendable, write // swiftlint:disable:next no_unchecked_sendable above it with the synchronization invariant that makes the type thread-safe.
