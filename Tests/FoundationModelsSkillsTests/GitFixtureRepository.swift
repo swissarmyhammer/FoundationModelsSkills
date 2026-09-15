@@ -29,16 +29,10 @@ final class GitFixtureRepository {
         /// A symbolic link (mode `120000`) to this target path.
         case symlink(target: String)
 
-        /// The bytes that the blob of this entry holds. A symbolic link
-        /// stores its target path as its blob.
-        var contents: String {
-            switch self {
-            case .file(let text), .executable(let text):
-                text
-            case .symlink(let target):
-                target
-            }
-        }
+        /// A submodule (mode `160000`) at the commit with this 40-hex SHA.
+        /// The commit is not in the fixture repository, as for a real
+        /// submodule.
+        case submodule(commit: String)
 
         /// The tree entry mode of this entry.
         var mode: git_filemode_t {
@@ -49,6 +43,8 @@ final class GitFixtureRepository {
                 GIT_FILEMODE_BLOB_EXECUTABLE
             case .symlink:
                 GIT_FILEMODE_LINK
+            case .submodule:
+                GIT_FILEMODE_COMMIT
             }
         }
     }
@@ -231,7 +227,7 @@ final class GitFixtureRepository {
 
     /// One node of a tree that the fixture writes.
     private indirect enum Node {
-        /// A blob, a symbolic link, or an executable file.
+        /// A file, an executable file, a symbolic link, or a submodule.
         case entry(Entry)
 
         /// A subtree, one node for each name.
@@ -279,7 +275,24 @@ final class GitFixtureRepository {
         case .directory(let children):
             (try writeTree(of: children), GIT_FILEMODE_TREE)
         case .entry(let entry):
-            (try writeBlob(contents: entry.contents), entry.mode)
+            (try writeObject(for: entry), entry.mode)
+        }
+    }
+
+    /// Gives the object id of one entry, and writes its blob when it has one.
+    ///
+    /// A file, an executable file, and a symbolic link each store their text
+    /// as a blob; a symbolic link stores its target path. A submodule names
+    /// its commit, which has no object in the repository.
+    ///
+    /// - Parameter entry: The entry.
+    /// - Returns: The id that the tree entry holds.
+    private func writeObject(for entry: Entry) throws -> git_oid {
+        switch entry {
+        case .file(let text), .executable(let text), .symlink(let text):
+            try writeBlob(contents: text)
+        case .submodule(let commit):
+            try Self.objectID(of: commit)
         }
     }
 

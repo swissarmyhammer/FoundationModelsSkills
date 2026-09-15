@@ -10,6 +10,12 @@ import libgit2
 /// Each call runs libgit2 on the thread of its task. The `transfer_progress`
 /// and `sideband_progress` callbacks read `Task.isCancelled`, and stop libgit2
 /// when the task is cancelled. There is no built-in timeout.
+///
+/// For a private HTTPS source, each call asks its `credentials` provider one
+/// time, before the first libgit2 call. The libgit2 `credentials` callback
+/// then gives that credential through a ``CredentialGate``: one time, and
+/// only to the origin of the source. Any other request stops libgit2, and the
+/// call throws ``GitTransportError/unreachable``.
 internal struct LibGit2Transport: GitTransport {
     /// The step in which a libgit2 call failed. The step decides which
     /// ``GitTransportError`` the failure becomes.
@@ -51,28 +57,42 @@ internal struct LibGit2Transport: GitTransport {
     /// or a negative libgit2 error code.
     internal static let libraryStartCount: Int32 = git_libgit2_init()
 
-    internal func remoteHead(url: String, ref: String) async throws -> String {
-        try Self.check(Self.libraryStartCount, phase: .localRepository)
-        var remote: OpaquePointer?
-        try Self.check(git_remote_create_detached(&remote, url), phase: .connecting)
-        defer { git_remote_free(remote) }
-        try Self.connect(remote)
-        return try Self.matchingHead(for: ref, in: Self.advertisedHeads(of: remote)).objectID
+    internal func remoteHead(
+        url: String, ref: String, credentials: (@Sendable (URL) async -> MarketplaceCredential?)?
+    ) async throws -> String {
+        var gate = await CredentialGate.resolved(forSourceURL: url, credentials: credentials)
+        try Self.check(status: Self.libraryStartCount, phase: .localRepository)
+        return try withUnsafeMutablePointer(to: &gate) { gate in
+            let remote = try Self.makeHandle(phase: .connecting) { remote in
+                git_remote_create_detached(&remote, url)
+            }
+            defer { git_remote_free(remote) }
+            try Self.connect(remote: remote, gate: gate)
+            return try Self.matchingHead(for: ref, in: Self.advertisedHeads(of: remote)).objectID
+        }
     }
 
-    internal func fetch(url: String, revision: String, intoBareRepository repositoryURL: URL) async throws -> String {
-        try Self.check(Self.libraryStartCount, phase: .localRepository)
+    internal func fetch(
+        url: String, revision: String, intoBareRepository repositoryURL: URL,
+        credentials: (@Sendable (URL) async -> MarketplaceCredential?)?
+    ) async throws -> String {
+        var gate = await CredentialGate.resolved(forSourceURL: url, credentials: credentials)
+        try Self.check(status: Self.libraryStartCount, phase: .localRepository)
         let repository = try Self.openOrCreateBareRepository(at: repositoryURL)
         defer { git_repository_free(repository) }
-        var remote: OpaquePointer?
-        try Self.check(git_remote_create_anonymous(&remote, repository, url), phase: .connecting)
-        defer { git_remote_free(remote) }
-        try Self.connect(remote)
-        let target = try Self.fetchTarget(for: revision, in: Self.advertisedHeads(of: remote))
-        try Self.check(
-            Self.fetchShallowFirst { depth in Self.fetch(refspec: target.refspec, from: remote, depth: depth) },
-            phase: .fetching)
-        return try Self.commitID(peeling: target.objectID, in: repository)
+        return try withUnsafeMutablePointer(to: &gate) { gate in
+            let remote = try Self.makeHandle(phase: .connecting) { remote in
+                git_remote_create_anonymous(&remote, repository, url)
+            }
+            defer { git_remote_free(remote) }
+            try Self.connect(remote: remote, gate: gate)
+            let target = try Self.fetchTarget(for: revision, in: Self.advertisedHeads(of: remote))
+            let status = Self.fetchShallowFirst { depth in
+                Self.fetch(refspec: target.refspec, from: remote, depth: depth, gate: gate)
+            }
+            try Self.check(status: status, phase: .fetching, credentialRefused: gate.pointee.hasRefused)
+            return try Self.commitID(peeling: target.objectID, in: repository)
+        }
     }
 
     // MARK: - Shallow fetch
@@ -87,7 +107,7 @@ internal struct LibGit2Transport: GitTransport {
     /// - Parameter attempt: One fetch at the depth it gets. It returns the
     ///   libgit2 status.
     /// - Returns: The status of the last attempt.
-    internal static func fetchShallowFirst(_ attempt: (_ depth: Int32) -> Int32) -> Int32 {
+    internal static func fetchShallowFirst(attempt: (_ depth: Int32) -> Int32) -> Int32 {
         let shallowStatus = attempt(shallowDepth)
         if shallowStatus == GIT_ENOTSUPPORTED.rawValue {
             return attempt(fullDepth)
@@ -99,14 +119,21 @@ internal struct LibGit2Transport: GitTransport {
     ///
     /// Tags are not followed, thus only the objects of `refspec` arrive.
     ///
+    /// - Parameters:
+    ///   - refspec: The refspec that names the object on the remote.
+    ///   - remote: The connected remote.
+    ///   - depth: The fetch depth.
+    ///   - gate: The credential gate of the call.
     /// - Returns: The libgit2 status.
-    private static func fetch(refspec: String, from remote: OpaquePointer?, depth: Int32) -> Int32 {
+    private static func fetch(
+        refspec: String, from remote: OpaquePointer, depth: Int32, gate: UnsafeMutablePointer<CredentialGate>
+    ) -> Int32 {
         var options = git_fetch_options()
         let initialized = git_fetch_options_init(&options, UInt32(GIT_FETCH_OPTIONS_VERSION))
         if initialized < GIT_OK.rawValue {
             return initialized
         }
-        options.callbacks = progressCallbacks()
+        options.callbacks = remoteCallbacks(gate: gate)
         options.depth = depth
         options.download_tags = GIT_REMOTE_DOWNLOAD_TAGS_NONE
         return withStringArray(holding: refspec) { refspecs in
@@ -126,7 +153,8 @@ internal struct LibGit2Transport: GitTransport {
         let objectID: String
     }
 
-    /// What ``fetch(url:revision:intoBareRepository:)`` downloads.
+    /// What ``fetch(url:revision:intoBareRepository:credentials:)``
+    /// downloads.
     private struct FetchTarget {
         /// The refspec that names the object on the remote.
         let refspec: String
@@ -135,17 +163,23 @@ internal struct LibGit2Transport: GitTransport {
         let objectID: String
     }
 
-    /// Connects `remote` in the fetch direction, with the progress callbacks.
-    private static func connect(_ remote: OpaquePointer?) throws {
-        var callbacks = progressCallbacks()
-        try check(git_remote_connect(remote, GIT_DIRECTION_FETCH, &callbacks, nil, nil), phase: .connecting)
+    /// Connects `remote` in the fetch direction, with the progress and the
+    /// credentials callbacks.
+    ///
+    /// - Parameters:
+    ///   - remote: The remote.
+    ///   - gate: The credential gate of the call.
+    private static func connect(remote: OpaquePointer, gate: UnsafeMutablePointer<CredentialGate>) throws {
+        var callbacks = remoteCallbacks(gate: gate)
+        let status = git_remote_connect(remote, GIT_DIRECTION_FETCH, &callbacks, nil, nil)
+        try check(status: status, phase: .connecting, credentialRefused: gate.pointee.hasRefused)
     }
 
     /// Lists the refs that the connected `remote` advertises.
-    private static func advertisedHeads(of remote: OpaquePointer?) throws -> [AdvertisedHead] {
+    private static func advertisedHeads(of remote: OpaquePointer) throws -> [AdvertisedHead] {
         var heads: UnsafeMutablePointer<UnsafePointer<git_remote_head>?>?
         var count = 0
-        try check(git_remote_ls(&heads, &count, remote), phase: .connecting)
+        try check(status: git_remote_ls(&heads, &count, remote), phase: .connecting)
         return UnsafeBufferPointer(start: heads, count: count).compactMap { head in
             head.map { AdvertisedHead(name: String(cString: $0.pointee.name), objectID: hex(of: $0.pointee.oid)) }
         }
@@ -196,14 +230,13 @@ internal struct LibGit2Transport: GitTransport {
     ///
     /// - Returns: The repository. The caller frees it.
     private static func openOrCreateBareRepository(at repositoryURL: URL) throws -> OpaquePointer {
-        var repository: OpaquePointer?
-        if git_repository_open_bare(&repository, repositoryURL.path) < GIT_OK.rawValue {
-            try check(git_repository_init(&repository, repositoryURL.path, bareRepositoryFlag), phase: .localRepository)
+        try makeHandle(phase: .localRepository) { repository in
+            let opened = git_repository_open_bare(&repository, repositoryURL.path)
+            if opened < GIT_OK.rawValue {
+                return git_repository_init(&repository, repositoryURL.path, bareRepositoryFlag)
+            }
+            return opened
         }
-        if let repository {
-            return repository
-        }
-        throw GitTransportError.libgit2(code: GIT_ERROR.rawValue, message: lastErrorMessage())
     }
 
     /// Looks up `objectID` in `repository`, and peels it to a commit.
@@ -213,25 +246,38 @@ internal struct LibGit2Transport: GitTransport {
     ///   bring the object.
     private static func commitID(peeling objectID: String, in repository: OpaquePointer) throws -> String {
         var target = git_oid()
-        try check(git_oid_fromstr(&target, objectID), phase: .localRepository)
-        var object: OpaquePointer?
-        try check(git_object_lookup(&object, repository, &target, GIT_OBJECT_ANY), phase: .fetching)
+        try check(status: git_oid_fromstr(&target, objectID), phase: .localRepository)
+        let object = try makeHandle(phase: .fetching) { object in
+            git_object_lookup(&object, repository, &target, GIT_OBJECT_ANY)
+        }
         defer { git_object_free(object) }
-        var commit: OpaquePointer?
-        try check(git_object_peel(&commit, object, GIT_OBJECT_COMMIT), phase: .localRepository)
+        let commit = try makeHandle(phase: .localRepository) { commit in
+            git_object_peel(&commit, object, GIT_OBJECT_COMMIT)
+        }
         defer { git_object_free(commit) }
         return hex(of: git_object_id(commit).pointee)
     }
 
     // MARK: - Callbacks
 
-    /// The remote callbacks: each progress callback stops libgit2 when the
-    /// current task is cancelled.
-    private static func progressCallbacks() -> git_remote_callbacks {
+    /// The remote callbacks of one call.
+    ///
+    /// Each progress callback stops libgit2 when the current task is
+    /// cancelled. The `credentials` callback asks `gate`, which the callbacks
+    /// carry as their payload.
+    ///
+    /// - Parameter gate: The credential gate of the call. It must stay valid
+    ///   while libgit2 uses the callbacks.
+    /// - Returns: The callbacks.
+    private static func remoteCallbacks(gate: UnsafeMutablePointer<CredentialGate>) -> git_remote_callbacks {
         var callbacks = git_remote_callbacks()
         git_remote_init_callbacks(&callbacks, UInt32(GIT_REMOTE_CALLBACKS_VERSION))
         callbacks.transfer_progress = { _, _ in LibGit2Transport.progressVerdict() }
         callbacks.sideband_progress = { _, _, _ in LibGit2Transport.progressVerdict() }
+        callbacks.credentials = { credential, requestURL, _, _, payload in
+            LibGit2Transport.credentialStatus(into: credential, requestURL: requestURL, gate: payload)
+        }
+        callbacks.payload = UnsafeMutableRawPointer(gate)
         return callbacks
     }
 
@@ -241,24 +287,60 @@ internal struct LibGit2Transport: GitTransport {
         Task.isCancelled ? GIT_EUSER.rawValue : continueTransfer
     }
 
+    /// Answers one libgit2 credential request: the work of the `credentials`
+    /// callback.
+    ///
+    /// The gate gives its credential one time, and only to the origin of the
+    /// source. The answer is then a new `git_credential_userpass_plaintext`
+    /// credential. Every other request gets `GIT_EUSER`, which stops libgit2,
+    /// thus a bad token does not make a loop.
+    ///
+    /// - Parameters:
+    ///   - credential: Where libgit2 wants the new credential. libgit2 owns
+    ///     and frees it.
+    ///   - requestURL: The URL that libgit2 asks for.
+    ///   - gate: The ``CredentialGate`` of the call, as the callback payload.
+    /// - Returns: `GIT_OK` with a credential, the status of
+    ///   `git_credential_userpass_plaintext_new`, or `GIT_EUSER` for a refusal.
+    internal static func credentialStatus(
+        into credential: UnsafeMutablePointer<UnsafeMutablePointer<git_credential>?>?,
+        requestURL: UnsafePointer<CChar>?,
+        gate: UnsafeMutableRawPointer?
+    ) -> Int32 {
+        guard let gate = gate?.assumingMemoryBound(to: CredentialGate.self), let credential,
+            let given = gate.pointee.credential(forRequestURL: requestURL.map { String(cString: $0) } ?? "")
+        else {
+            return GIT_EUSER.rawValue
+        }
+        return git_credential_userpass_plaintext_new(credential, given.username, given.token)
+    }
+
     // MARK: - Errors
 
     /// Maps a libgit2 failure to a ``GitTransportError``.
     ///
-    /// `GIT_EUSER` comes only from a progress callback that stopped for a
-    /// cancelled task, thus it is ``GitTransportError/cancelled`` in every
-    /// phase. `GIT_TIMEOUT` is ``GitTransportError/timedOut`` in every phase.
-    /// Any other failure while connecting is
-    /// ``GitTransportError/unreachable``. A missing object while fetching is
-    /// ``GitTransportError/refNotFound``.
+    /// `GIT_EUSER` comes from a callback that stopped libgit2. After a refused
+    /// credential request it is ``GitTransportError/unreachable``, the
+    /// authentication failure. Else it comes from a progress callback that
+    /// stopped for a cancelled task, thus it is
+    /// ``GitTransportError/cancelled`` in every phase. `GIT_TIMEOUT` is
+    /// ``GitTransportError/timedOut`` in every phase. Any other failure while
+    /// connecting is ``GitTransportError/unreachable``. A missing object while
+    /// fetching is ``GitTransportError/refNotFound``.
     ///
     /// - Parameters:
     ///   - code: The negative libgit2 status.
     ///   - message: The message of the last libgit2 error.
     ///   - phase: The step that failed.
+    ///   - credentialRefused: Whether the ``CredentialGate`` of the call
+    ///     refused a request. The default is `false`.
     /// - Returns: The error to throw.
-    internal static func transportError(code: Int32, message: String, phase: Phase) -> GitTransportError {
+    internal static func transportError(
+        code: Int32, message: String, phase: Phase, credentialRefused: Bool = false
+    ) -> GitTransportError {
         switch code {
+        case GIT_EUSER.rawValue where credentialRefused:
+            .unreachable
         case GIT_EUSER.rawValue:
             .cancelled
         case GIT_TIMEOUT.rawValue:
@@ -282,10 +364,37 @@ internal struct LibGit2Transport: GitTransport {
 
     /// Throws the mapped ``GitTransportError`` when `status` is a libgit2
     /// error code.
-    private static func check(_ status: Int32, phase: Phase) throws {
+    ///
+    /// - Parameters:
+    ///   - status: The code that the libgit2 call returned.
+    ///   - phase: The step of the call.
+    ///   - credentialRefused: Whether the ``CredentialGate`` of the call
+    ///     refused a request. The default is `false`.
+    internal static func check(status: Int32, phase: Phase, credentialRefused: Bool = false) throws {
         if status < GIT_OK.rawValue {
-            throw transportError(code: status, message: lastErrorMessage(), phase: phase)
+            throw transportError(
+                code: status, message: lastErrorMessage(), phase: phase, credentialRefused: credentialRefused)
         }
+    }
+
+    /// Runs one libgit2 call that makes an object, and gives the object.
+    ///
+    /// - Parameters:
+    ///   - phase: The step of the call, for the error.
+    ///   - call: The libgit2 call. It writes the object into its argument, and
+    ///     returns the libgit2 status.
+    /// - Returns: The object. The caller frees it.
+    /// - Throws: The mapped ``GitTransportError`` when the call fails or
+    ///   writes no object.
+    internal static func makeHandle(
+        phase: Phase, call: (_ handle: inout OpaquePointer?) -> Int32
+    ) throws -> OpaquePointer {
+        var handle: OpaquePointer?
+        try check(status: call(&handle), phase: phase)
+        guard let handle else {
+            throw GitTransportError.libgit2(code: GIT_ERROR.rawValue, message: lastErrorMessage())
+        }
+        return handle
     }
 
     /// The message of the last libgit2 error on this thread.

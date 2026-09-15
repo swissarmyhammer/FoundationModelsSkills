@@ -95,10 +95,26 @@ comments:
     - evidence: 3 files. Sources/FoundationModelsSkills/Marketplace/CatalogResolver.swift (a labeled first argument on each function, including `selectedItems(items:by:noun:nameOf:)` and all of `CatalogPath`); Tests/FoundationModelsSkillsTests/MarketplaceTestSupport.swift (`writeFile(text:to:)`); Tests/FoundationModelsSkillsTests/MarketplaceConfigTests.swift (13 call sites use `text:`). `swift test`: 517 tests in 37 suites passed, exit 0, 0 warnings, 0 errors, 0 failures. Both items of "Review Findings (2026-09-15 08:59)" are checked. No assertion changed. No commit.
     - next: the task stays in doing. Run /review.
   timestamp: 2026-09-15T14:09:41.934305+00:00
+- actor: claude-code
+  id: 01m2jpsj8jmsrkkb696ngreh9s
+  text: |-
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (commit 2b973ba). 0 findings (7 attempted, 0 failed, 0 skipped). The review examined 3 files. An ignore rule excluded 2 files below `.kanban/`. All 8 prior Review Findings items are checked.
+    - next: None. The task moved to `done`.
+  timestamp: 2026-09-15T14:16:05.138299+00:00
+- actor: claude-code
+  id: 01m2jpt0wn189nnzp2731t0zsh
+  text: |-
+    ### finish iteration 3 — clean
+    - implement: changed — 3 files (CatalogResolver.swift, MarketplaceTestSupport.swift, MarketplaceConfigTests.swift)
+    - test: green — swift test, 517 passed, 0 failed, 0 skipped, 0 warnings
+    - commit: 2b973ba refactor(marketplace): label the first argument of the catalog resolver helpers
+    - review: clean — 0 findings; all 6 prior findings checked; task moved to done
+  timestamp: 2026-09-15T14:16:20.117571+00:00
 depends_on:
 - 01M2H0R2AFRD111HR47N3YVH8R
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: cc80
 title: Parse marketplace catalogs (Claude, Codex, repository scan) over a CatalogFileSource
 ---
 ## What

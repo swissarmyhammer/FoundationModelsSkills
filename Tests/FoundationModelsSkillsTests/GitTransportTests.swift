@@ -15,13 +15,20 @@ struct GitTransportTests {
     /// marketplace store uses.
     private let transport: any GitTransport = LibGit2Transport()
 
+    /// The HTTPS source that the credentials callback tests serve.
+    private static let httpsSourceURL = "https://git.example.com/owner/skills.git"
+
+    /// The credential that the credentials callback tests give. The values are
+    /// plain fixture text.
+    private static let credential = MarketplaceCredential(username: "fixture-user", token: "fixture-token")
+
     // MARK: - remoteHead
 
     @Test func remoteHeadGivesTheTipOfABranch() async throws {
         let fixture = try GitFixtureRepository()
         let tip = try fixture.commit(files: ["README.md": .file("first")])
 
-        let head = try await transport.remoteHead(url: fixture.url, ref: "main")
+        let head = try await transport.remoteHead(url: fixture.url, ref: "main", credentials: nil)
 
         #expect(head == tip)
     }
@@ -32,7 +39,7 @@ struct GitTransportTests {
         try fixture.commit(files: ["README.md": .file("second")])
         try fixture.addLightweightTag(named: "v1.0.0", at: tagged)
 
-        let head = try await transport.remoteHead(url: fixture.url, ref: "v1.0.0")
+        let head = try await transport.remoteHead(url: fixture.url, ref: "v1.0.0", credentials: nil)
 
         #expect(head == tagged)
     }
@@ -43,7 +50,7 @@ struct GitTransportTests {
         try fixture.commit(files: ["README.md": .file("second")])
         try fixture.addAnnotatedTag(named: "v2.0.0", at: tagged)
 
-        let head = try await transport.remoteHead(url: fixture.url, ref: "v2.0.0")
+        let head = try await transport.remoteHead(url: fixture.url, ref: "v2.0.0", credentials: nil)
 
         #expect(head == tagged)
     }
@@ -52,7 +59,7 @@ struct GitTransportTests {
         let fixture = try GitFixtureRepository()
         let tip = try fixture.commit(files: ["README.md": .file("first")])
 
-        let head = try await transport.remoteHead(url: fixture.url, ref: "HEAD")
+        let head = try await transport.remoteHead(url: fixture.url, ref: "HEAD", credentials: nil)
 
         #expect(head == tip)
     }
@@ -62,7 +69,7 @@ struct GitTransportTests {
         try fixture.commit(files: ["README.md": .file("first")])
 
         await #expect(throws: GitTransportError.refNotFound) {
-            try await transport.remoteHead(url: fixture.url, ref: "missing")
+            try await transport.remoteHead(url: fixture.url, ref: "missing", credentials: nil)
         }
     }
 
@@ -72,7 +79,7 @@ struct GitTransportTests {
         let absent = parent.appendingPathComponent("absent", isDirectory: true).absoluteString
 
         await #expect(throws: GitTransportError.unreachable) {
-            try await transport.remoteHead(url: absent, ref: "main")
+            try await transport.remoteHead(url: absent, ref: "main", credentials: nil)
         }
     }
 
@@ -84,7 +91,8 @@ struct GitTransportTests {
         let destination = try Self.makeDestination()
         defer { Self.removeDestination(destination) }
 
-        let fetched = try await transport.fetch(url: fixture.url, revision: "main", intoBareRepository: destination)
+        let fetched = try await transport.fetch(
+            url: fixture.url, revision: "main", intoBareRepository: destination, credentials: nil)
 
         #expect(fetched == tip)
         #expect(try GitFixtureRepository.containsCommit(sha: tip, inRepositoryAt: destination))
@@ -95,12 +103,14 @@ struct GitTransportTests {
         let first = try fixture.commit(files: ["README.md": .file("first")])
         let destination = try Self.makeDestination()
         defer { Self.removeDestination(destination) }
-        let firstFetch = try await transport.fetch(url: fixture.url, revision: "main", intoBareRepository: destination)
+        let firstFetch = try await transport.fetch(
+            url: fixture.url, revision: "main", intoBareRepository: destination, credentials: nil)
         let newer = try fixture.commit(
             files: ["README.md": .file("newer"), "link": .symlink(target: "README.md")], on: "next")
         try fixture.moveBranch(named: "main", to: newer)
 
-        let secondFetch = try await transport.fetch(url: fixture.url, revision: "main", intoBareRepository: destination)
+        let secondFetch = try await transport.fetch(
+            url: fixture.url, revision: "main", intoBareRepository: destination, credentials: nil)
 
         #expect(firstFetch == first)
         #expect(secondFetch == newer)
@@ -114,7 +124,8 @@ struct GitTransportTests {
         let destination = try Self.makeDestination()
         defer { Self.removeDestination(destination) }
 
-        let fetched = try await transport.fetch(url: fixture.url, revision: pinned, intoBareRepository: destination)
+        let fetched = try await transport.fetch(
+            url: fixture.url, revision: pinned, intoBareRepository: destination, credentials: nil)
 
         #expect(fetched == pinned)
         #expect(try GitFixtureRepository.containsCommit(sha: pinned, inRepositoryAt: destination))
@@ -127,7 +138,8 @@ struct GitTransportTests {
         let destination = try Self.makeDestination()
         defer { Self.removeDestination(destination) }
 
-        let fetched = try await transport.fetch(url: fixture.url, revision: "v2.0.0", intoBareRepository: destination)
+        let fetched = try await transport.fetch(
+            url: fixture.url, revision: "v2.0.0", intoBareRepository: destination, credentials: nil)
 
         #expect(fetched == tagged)
     }
@@ -139,7 +151,8 @@ struct GitTransportTests {
         defer { Self.removeDestination(destination) }
 
         await #expect(throws: GitTransportError.refNotFound) {
-            try await transport.fetch(url: fixture.url, revision: "missing", intoBareRepository: destination)
+            try await transport.fetch(
+                url: fixture.url, revision: "missing", intoBareRepository: destination, credentials: nil)
         }
     }
 
@@ -150,7 +163,7 @@ struct GitTransportTests {
             .appendingPathComponent("absent", isDirectory: true).absoluteString
 
         await #expect(throws: GitTransportError.unreachable) {
-            try await transport.fetch(url: absent, revision: "main", intoBareRepository: destination)
+            try await transport.fetch(url: absent, revision: "main", intoBareRepository: destination, credentials: nil)
         }
     }
 
@@ -164,7 +177,7 @@ struct GitTransportTests {
 
         let fetch = Task {
             withUnsafeCurrentTask { $0?.cancel() }
-            return try await transport.fetch(url: url, revision: "main", intoBareRepository: destination)
+            return try await transport.fetch(url: url, revision: "main", intoBareRepository: destination, credentials: nil)
         }
 
         await #expect(throws: GitTransportError.cancelled) {
@@ -201,6 +214,55 @@ struct GitTransportTests {
         #expect(result == status)
     }
 
+    // MARK: - Credentials
+
+    @Test func aFileSourceFetchesWithNoCredentialRequest() async throws {
+        let fixture = try GitFixtureRepository()
+        let tip = try fixture.commit(files: ["README.md": .file("first")])
+        let destination = try Self.makeDestination()
+        defer { Self.removeDestination(destination) }
+        let requests = CredentialRequestCounter()
+
+        let fetched = try await transport.fetch(
+            url: fixture.url, revision: "main", intoBareRepository: destination,
+            credentials: requests.provider(giving: Self.credential))
+
+        #expect(fetched == tip)
+        #expect(await requests.count == 0)
+    }
+
+    @Test func theCredentialsCallbackGivesTheCredentialOneTime() throws {
+        var gate = CredentialGate(sourceURL: Self.httpsSourceURL, credential: Self.credential)
+        var first: UnsafeMutablePointer<git_credential>?
+        var second: UnsafeMutablePointer<git_credential>?
+
+        let statuses = withUnsafeMutablePointer(to: &gate) { gate in
+            [
+                LibGit2Transport.credentialStatus(into: &first, requestURL: Self.httpsSourceURL, gate: gate),
+                LibGit2Transport.credentialStatus(into: &second, requestURL: Self.httpsSourceURL, gate: gate),
+            ]
+        }
+        defer { git_credential_free(first) }
+        let given: UnsafeMutablePointer<git_credential> = try #require(first)
+
+        #expect(statuses == [GIT_OK.rawValue, GIT_EUSER.rawValue])
+        #expect(String(cString: git_credential_get_username(given)) == Self.credential.username)
+        #expect(second == nil)
+    }
+
+    @Test func theCredentialsCallbackRefusesARequestFromAnotherOrigin() {
+        var gate = CredentialGate(sourceURL: Self.httpsSourceURL, credential: Self.credential)
+        var given: UnsafeMutablePointer<git_credential>?
+
+        let status = withUnsafeMutablePointer(to: &gate) { gate in
+            LibGit2Transport.credentialStatus(
+                into: &given, requestURL: "https://other.example.com/owner/skills.git", gate: gate)
+        }
+
+        #expect(status == GIT_EUSER.rawValue)
+        #expect(given == nil)
+    }
+
     // MARK: - Error mapping
 
     @Test(arguments: LibGit2Transport.Phase.allCases)
@@ -208,6 +270,14 @@ struct GitTransportTests {
         let error = LibGit2Transport.transportError(code: GIT_EUSER.rawValue, message: "stopped", phase: phase)
 
         #expect(error == .cancelled)
+    }
+
+    @Test(arguments: LibGit2Transport.Phase.allCases)
+    func aStopFromARefusedCredentialRequestIsUnreachable(phase: LibGit2Transport.Phase) {
+        let error = LibGit2Transport.transportError(
+            code: GIT_EUSER.rawValue, message: "stopped", phase: phase, credentialRefused: true)
+
+        #expect(error == .unreachable)
     }
 
     @Test(arguments: LibGit2Transport.Phase.allCases)
@@ -249,5 +319,27 @@ struct GitTransportTests {
     /// Removes the temporary directory that ``makeDestination()`` made.
     private static func removeDestination(_ destination: URL) {
         try? FileManager.default.removeItem(at: destination.deletingLastPathComponent())
+    }
+}
+
+/// Counts the requests that a credential provider gets.
+private actor CredentialRequestCounter {
+    /// The number of requests.
+    private(set) var count = 0
+
+    /// Counts one request.
+    func recordRequest() {
+        count += 1
+    }
+
+    /// Makes a provider that counts each request and gives `credential`.
+    ///
+    /// - Parameter credential: The credential that the provider gives.
+    /// - Returns: The provider.
+    nonisolated func provider(giving credential: MarketplaceCredential) -> @Sendable (URL) async -> MarketplaceCredential? {
+        { _ in
+            await self.recordRequest()
+            return credential
+        }
     }
 }
