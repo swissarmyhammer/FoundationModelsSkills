@@ -17,6 +17,15 @@ internal enum MarketplaceCacheError: Error, Equatable, Sendable {
     /// code is the `errno` of the call.
     case cannotLock(path: String, code: Int32)
 
+    /// Another writer holds the folder of the marketplace now, thus the call
+    /// did no work at all. The path names the lock file.
+    ///
+    /// The writer lock never waits (marketplace.md §7.6): a wait would hold
+    /// the thread of the actor, and the holder of the lock may need that same
+    /// actor to finish its own work. The caller keeps the snapshot it serves
+    /// and runs again later.
+    case writerLockHeld(path: String)
+
     /// The cache cannot put the new `current` symlink in place. The path names
     /// the symlink, and the code is the `errno` of `rename(2)`.
     case cannotSwap(path: String, code: Int32)
@@ -42,6 +51,8 @@ extension MarketplaceCacheError: CustomStringConvertible {
         switch self {
         case .cannotLock(let path, let code):
             #"Cannot lock "\#(path)": error code \#(code)."#
+        case .writerLockHeld(let path):
+            #"Another writer holds the marketplace folder of "\#(path)" now."#
         case .cannotSwap(let path, let code):
             #"Cannot put the new snapshot link "\#(path)" in place: error code \#(code)."#
         case .unsafePathValue(let kind, let value):
@@ -665,10 +676,15 @@ internal struct MarketplaceCache: Sendable {
     /// Runs `body` while this process holds the exclusive writer lock of the
     /// marketplace folder (marketplace.md §7.6).
     ///
+    /// The call never waits for the lock: a folder that another writer holds
+    /// gives ``MarketplaceCacheError/writerLockHeld(path:)`` and `body` does
+    /// not run at all. ``openWriterLock()`` tells why.
+    ///
     /// - Parameter body: The work to do under the lock.
     /// - Returns: What `body` gives.
-    /// - Throws: ``MarketplaceCacheError/cannotLock(path:code:)`` when the
-    ///   lock fails, else what `body` throws.
+    /// - Throws: ``MarketplaceCacheError/writerLockHeld(path:)`` when another
+    ///   writer holds the folder, ``MarketplaceCacheError/cannotLock(path:code:)``
+    ///   when the lock fails, else what `body` throws.
     func withWriterLock<Value>(_ body: () throws -> Value) throws -> Value {
         let descriptor = try openWriterLock()
         defer { close(descriptor) }
@@ -683,6 +699,10 @@ internal struct MarketplaceCache: Sendable {
     /// belongs to the open file, not to the thread, thus the lock stays over
     /// a suspension point.
     ///
+    /// The call never waits for the lock: a folder that another writer holds
+    /// gives ``MarketplaceCacheError/writerLockHeld(path:)`` and `body` does
+    /// not run at all. ``openWriterLock()`` tells why.
+    ///
     /// The folder of the marketplace must exist: ``makeFolders()`` makes it.
     ///
     /// - Parameters:
@@ -690,8 +710,9 @@ internal struct MarketplaceCache: Sendable {
     ///     read the state of that actor. The default is the caller.
     ///   - body: The work to do under the lock.
     /// - Returns: What `body` gives.
-    /// - Throws: ``MarketplaceCacheError/cannotLock(path:code:)`` when the
-    ///   lock fails, else what `body` throws.
+    /// - Throws: ``MarketplaceCacheError/writerLockHeld(path:)`` when another
+    ///   writer holds the folder, ``MarketplaceCacheError/cannotLock(path:code:)``
+    ///   when the lock fails, else what `body` throws.
     func withWriterLock<Value>(
         isolation: isolated (any Actor)? = #isolation, _ body: () async throws -> Value
     ) async throws -> Value {
@@ -700,19 +721,37 @@ internal struct MarketplaceCache: Sendable {
         return try await body()
     }
 
-    /// Opens the lock file and takes the exclusive writer lock.
+    /// Opens the lock file and takes the exclusive writer lock, without a
+    /// wait.
+    ///
+    /// The lock is `LOCK_NB`, thus a folder that another writer holds gives
+    /// ``MarketplaceCacheError/writerLockHeld(path:)`` at once. A wait would
+    /// be a deadlock: `flock(2)` belongs to the open file description, so a
+    /// second open of the same file conflicts with the first one even inside
+    /// one process, and the wait holds the thread. `MarketplaceStore` is an
+    /// actor that holds this lock over the `await` of its fetch, thus the
+    /// waiting call would hold the very actor that the holder needs to
+    /// finish and release the lock.
+    ///
+    /// The call reads `errno` before it closes the descriptor, because
+    /// `close(2)` can replace the value.
     ///
     /// - Returns: The open descriptor. The caller closes it, which releases
     ///   the lock.
-    /// - Throws: ``MarketplaceCacheError/cannotLock(path:code:)``.
+    /// - Throws: ``MarketplaceCacheError/writerLockHeld(path:)`` when another
+    ///   writer holds the folder, else
+    ///   ``MarketplaceCacheError/cannotLock(path:code:)``.
     private func openWriterLock() throws -> Int32 {
         let descriptor = open(lockFile.path, O_CREAT | O_RDWR | O_CLOEXEC, Self.lockFileMode)
         guard descriptor >= 0 else {
             throw MarketplaceCacheError.cannotLock(path: lockFile.path, code: errno)
         }
-        guard flock(descriptor, LOCK_EX) == 0 else {
+        guard flock(descriptor, LOCK_EX | LOCK_NB) == 0 else {
+            let code = errno
             close(descriptor)
-            throw MarketplaceCacheError.cannotLock(path: lockFile.path, code: errno)
+            throw code == EWOULDBLOCK
+                ? MarketplaceCacheError.writerLockHeld(path: lockFile.path)
+                : MarketplaceCacheError.cannotLock(path: lockFile.path, code: code)
         }
         return descriptor
     }

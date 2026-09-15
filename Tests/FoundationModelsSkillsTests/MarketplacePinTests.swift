@@ -25,6 +25,19 @@ struct MarketplacePinTests {
     /// The body of a commit that a test adds after the store started.
     private static let laterBody = "alpha body v3"
 
+    /// The body of a commit that a test adds after a snapshot waits for the
+    /// next launch.
+    private static let newestBody = "alpha body v4"
+
+    /// How many fetches a store made when the held pass entered the gate: the
+    /// one of the first `start()`, the one of the `update()` that staged a
+    /// pending snapshot, and the held one.
+    private static let fetchesAtTheHeldPass = 3
+
+    /// The words of ``MarketplaceCacheError/writerLockHeld(path:)`` that the
+    /// text of a failure event carries.
+    private static let writerLockRefusal = "Another writer holds the marketplace folder"
+
     /// The id that no marketplace of a fixture has.
     private static let unknownID = "no-such-marketplace"
 
@@ -227,6 +240,36 @@ struct MarketplacePinTests {
         #expect(restarted.store.marketplaceLayers().first?.provenance.sha == pruned.fixture.head)
     }
 
+    // MARK: - Two passes over one writer lock (§7.6)
+
+    @Test func aSecondStartFinishesWhileAPassHoldsTheWriterLock() async throws {
+        let gate = GatedGitTransport(wrapping: LibGit2Transport())
+        let fixture = try PinFixture(
+            policy: MarketplacePolicy(applyUpdates: .nextLaunch), transport: gate)
+        let log = MarketplaceEventLog()
+        let subscription = log.follow(fixture.store.events)
+        defer { subscription.cancel() }
+        await fixture.store.start()
+        let staged = try fixture.repository.commit(
+            files: MarketplaceTestSupport.skillTree(body: Self.laterBody))
+        await fixture.store.update()
+        await gate.setBehavior(.holdThenPass, of: .fetch)
+        try fixture.repository.commit(files: MarketplaceTestSupport.skillTree(body: Self.newestBody))
+
+        let store = fixture.store
+        let held = Task { await store.start() }
+        await gate.waitForEntry(of: .fetch, count: Self.fetchesAtTheHeldPass)
+        try Self.stagePending(sha: fixture.head, inCacheOf: fixture)
+        let second = Task { await store.start() }
+        let refusal = await log.waitForEvent { Self.namesTheWriterLock($0) }
+        await gate.release()
+        await held.value
+        await second.value
+
+        #expect(Self.namesTheWriterLock(refusal))
+        #expect(fixture.store.marketplaceLayers().first?.provenance.sha == staged)
+    }
+
     // MARK: - Fixtures
 
     /// One fixture repository with two commits, and a store over a temporary
@@ -261,8 +304,13 @@ struct MarketplacePinTests {
         ///     default is `false`.
         ///   - policy: The policy of the store. The default is
         ///     `MarketplacePolicy()`.
+        ///   - transport: The git transport, or `nil` for the real one. The
+        ///     default is `nil`.
         /// - Throws: The error of a fixture step.
-        init(pinToFirstCommit: Bool = false, policy: MarketplacePolicy = MarketplacePolicy()) throws {
+        init(
+            pinToFirstCommit: Bool = false, policy: MarketplacePolicy = MarketplacePolicy(),
+            transport: (any GitTransport)? = nil
+        ) throws {
             repository = try GitFixtureRepository()
             first = try repository.commit(
                 files: MarketplaceTestSupport.skillTree(body: MarketplacePinTests.firstBody))
@@ -270,7 +318,7 @@ struct MarketplacePinTests {
                 files: MarketplaceTestSupport.skillTree(body: MarketplacePinTests.headBody))
             cache = try MarketplaceStoreFixture(
                 sources: [MarketplaceSource(repository.url, sha: pinToFirstCommit ? first : nil)],
-                policy: policy)
+                policy: policy, transport: transport)
         }
 
         /// Makes a second store over the repository and the cache of another
@@ -326,6 +374,34 @@ struct MarketplacePinTests {
             from: MarketplaceCache.stateFile(inCacheDirectory: directory))
         let folderName = try #require(state.marketplaces.keys.first)
         return MarketplaceCache(root: directory, folderName: folderName)
+    }
+
+    /// Writes a pending snapshot into the state file of a fixture, as a
+    /// second process over the same cache would (marketplace.md §8.4).
+    ///
+    /// - Parameters:
+    ///   - sha: The commit of a snapshot that the cache already holds.
+    ///   - fixture: The fixture whose cache holds `state.json`.
+    /// - Throws: The error of the file read or of the file write, or a failed
+    ///   requirement when the state file names no marketplace.
+    private static func stagePending(sha: String, inCacheOf fixture: PinFixture) throws {
+        let file = MarketplaceCache.stateFile(inCacheDirectory: fixture.cache.cacheDirectory)
+        var state = try MarketplaceState.load(from: file)
+        let folderName = try #require(state.marketplaces.keys.first)
+        state.marketplaces[folderName]?.pending = MarketplacePendingSnapshot(sha: sha)
+        try state.save(to: file)
+    }
+
+    /// Whether one event says that another writer holds the marketplace
+    /// folder.
+    ///
+    /// - Parameter event: The event to read.
+    /// - Returns: `true` for the failure of a call that met the writer lock.
+    private static func namesTheWriterLock(_ event: MarketplaceEvent) -> Bool {
+        if case .failed(_, let error, _) = event {
+            return error.contains(writerLockRefusal)
+        }
+        return false
     }
 
     /// The one state record of the cache of a fixture.

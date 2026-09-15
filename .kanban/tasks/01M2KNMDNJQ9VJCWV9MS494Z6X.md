@@ -29,8 +29,25 @@ comments:
     - note for the next agent: a test of the true interleaving (the delete lands between the test and the swap) is not deterministic without a hook in the source, because no caller can observe that another thread is waiting in `flock(2)`. The tests prove the two results that the lock gives: the typed refusal, and the served snapshot that stays.
     - next: ready for /review.
   timestamp: 2026-09-15T23:24:02.807808+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01m2kpexw1bdj9sgxk74sw6bfx
+  text: |
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (d4e5ab8) — 0 findings, 0 confirmed, 0 refuted, 7 attempted, 0 failed. 3 files reviewed; 6 `.kanban/` files are out of scope by the ignore rule.
+    - checks: the existence test of the staged snapshot and the swap are now in one critical section in `withWriterLock`; a missing snapshot throws `MarketplaceCacheError.snapshotMissing(sha:)` before `activate(checked:)`, so `current` stays as it was. `makeFolders()` stays before the lock, because the lock file is in that folder.
+    - next: task moves to done.
+  timestamp: 2026-09-15T23:29:31.009479+00:00
+- actor: claude-code
+  id: 01m2kpff7gb5bzahjbkjd6y8e9
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 3 files; the existence check and the swap are now one critical section under the writer lock, and a missing snapshot throws `snapshotMissing(sha:)` and leaves `current` as it was. The whole file was checked: `adopt` was the only decide-then-write outside the lock.
+    - test: green — swift build --build-tests 0 warnings; swift test x2, 676 passed each run, 0 failed, 0 skipped
+    - commit: d4e5ab8 fix(marketplace): move the adopt existence check into the writer lock
+    - review: clean — 0 findings; task moved to done
+  timestamp: 2026-09-15T23:29:48.784055+00:00
+position_column: done
+position_ordinal: dc80
 title: MarketplaceCache.adopt checks the snapshot before it takes the writer lock
 ---
 ## What
