@@ -61,6 +61,40 @@ comments:
     - evidence: 6 files. Sources/FoundationModelsSkills/Marketplace/CatalogResolver.swift (one generic `selectedItems(_:by:noun:nameOf:)` with `SelectionNoun.selectedNames(in:)`, and one `collected()` join helper); Tests/FoundationModelsSkillsTests/MarketplaceTestSupport.swift (new: `makeTempDirectory(withFiles:)`, `writeFile(_:to:)`); Tests/FoundationModelsSkillsTests/MarketplaceCatalogTests.swift; Tests/FoundationModelsSkillsTests/MarketplaceConfigTests.swift; Tests/FoundationModelsSkillsTests/SkillWatcherTests.swift; Tests/FoundationModelsSkillsTests/ReloadTestSupport.swift (doc comment only). `swift test`: 517 tests in 37 suites passed, exit 0, 0 warnings, 0 errors. All 4 findings of "Review Findings (2026-09-15 08:38)" are checked. No assertion changed. The `git` binary was not used. No commit.
     - next: the task stays in doing. Run /review.
   timestamp: 2026-09-15T13:55:44.214951+00:00
+- actor: claude-code
+  id: 01m2jp37j0ypz8vamratspw0ee
+  text: |-
+    ### review — findings
+    - evidence: `review sha HEAD~1..HEAD` (commit 4ab0464). The 4 items of the 2026-09-15 08:38 section are all checked. 2 new findings (2 confirmed, 0 refuted): Sources/FoundationModelsSkills/Marketplace/CatalogResolver.swift:443 (`swift/fluent-usage`), Tests/FoundationModelsSkillsTests/MarketplaceTestSupport.swift:26 (`swift/fluent-usage`). The rule about tests that existed before this task does not apply: commit 4ab0464 created MarketplaceTestSupport.swift.
+    - next: Label the first argument of `selectedItems` and of `writeFile`, and update all call sites. Remove the same cause from all of each file. Then run the review again. The task stays in `review`.
+  timestamp: 2026-09-15T14:03:53.280237+00:00
+- actor: claude-code
+  id: 01m2jp3x0jhkvkbc0zd3w8dnjb
+  text: |-
+    ### finish iteration 2 — findings
+    - implement: changed — 6 files (CatalogResolver.swift, MarketplaceTestSupport.swift new, MarketplaceCatalogTests.swift, MarketplaceConfigTests.swift, SkillWatcherTests.swift, ReloadTestSupport.swift)
+    - test: green — swift package clean && swift test x4, 517 passed each run, 0 failed, 0 skipped, 0 warnings
+    - commit: 4ab0464 refactor(marketplace): share the catalog selection and test fixture helpers
+    - review: findings — Sources/FoundationModelsSkills/Marketplace/CatalogResolver.swift:443, Tests/FoundationModelsSkillsTests/MarketplaceTestSupport.swift:26 (all 4 prior findings checked)
+  timestamp: 2026-09-15T14:04:15.250079+00:00
+- actor: claude-code
+  id: 01m2jpcbvq67avfz0868rh3qvp
+  text: |-
+    Picked up the 2 findings of "Review Findings (2026-09-15 08:59)". The task is in doing again.
+    - The rule `swift/fluent-usage`: only a value-preserving conversion omits the first argument label. I removed that cause from the whole of each file in scope, not only from the two lines in the findings.
+    - CatalogResolver.swift: each function now has a labeled first argument. `Diagnosed.map(using:)`, `resolved(catalog:selection:)`, `listedSkill(entry:ofPlugin:root:)`, `renamedSelection(of:renames:)`, `renamedNames(of:renames:)`, `renamedName(of:renames:)`, `selectedItems(items:by:noun:nameOf:)`, `filtered(items:keepingNames:noun:nameOf:)`, `deduplicated(skills:winner:)`, `isSkillFile(entry:)`, `isSubfolder(entry:)`, `diagnostic(severity:saying:)`, `described(skill:)`. In `CatalogPath`: `normalized(path:)`, `resolved(relativePath:inFolder:)`, `child(named:of:)`, `isSingleComponent(name:)`, `display(path:)`. Only CatalogResolver.swift calls the `CatalogPath` functions, so no other source file changed.
+    - CatalogFileSource.swift and MarketplaceCatalog.swift: no function has an unlabeled first argument, so they did not change. (Enum cases with associated values are not functions.)
+    - MarketplaceTestSupport.swift: `writeFile(text:to:)`. The 13 call sites in MarketplaceConfigTests.swift now use `text:`. The text of each file is the same, so the assertions did not change.
+    - MarketplaceCatalogTests.swift: all helper functions already had labels, so it did not change.
+    - Tool note (again): the `replace_all` flag of the `files` edit op changed only 1 of 12 occurrences. I wrote the whole file.
+  timestamp: 2026-09-15T14:08:52.599026+00:00
+- actor: claude-code
+  id: 01m2jpdw1ere2y8182xb7fzgxs
+  text: |-
+    ### implement — changed
+    - evidence: 3 files. Sources/FoundationModelsSkills/Marketplace/CatalogResolver.swift (a labeled first argument on each function, including `selectedItems(items:by:noun:nameOf:)` and all of `CatalogPath`); Tests/FoundationModelsSkillsTests/MarketplaceTestSupport.swift (`writeFile(text:to:)`); Tests/FoundationModelsSkillsTests/MarketplaceConfigTests.swift (13 call sites use `text:`). `swift test`: 517 tests in 37 suites passed, exit 0, 0 warnings, 0 errors, 0 failures. Both items of "Review Findings (2026-09-15 08:59)" are checked. No assertion changed. No commit.
+    - next: the task stays in doing. Run /review.
+  timestamp: 2026-09-15T14:09:41.934305+00:00
 depends_on:
 - 01M2H0R2AFRD111HR47N3YVH8R
 position_column: doing
@@ -121,3 +155,13 @@ Fixtures go in `Examples/marketplace-fixtures/catalogs/`, found from `#filePath`
 - [x] `Sources/FoundationModelsSkills/Marketplace/CatalogResolver.swift:434` `duplication/duplication` — `selectedSkills` and `selectedPlugins` (line 418) are almost the same code. Each function examines one selection case. If the case does not match, the function returns all items. If the case matches, the function calls `filtered` with a different noun value. The only differences are the variable names and the literal values. Move this code into one shared function. Make a generic helper that has the selection case and the noun as parameters, and call it from the two functions. Example: `private func selectedItems<T>(_ items: [T], selection: SkillSelection, selectNames: (SkillSelection) -> [String]?, noun: SelectionNoun, nameOf: (T) -> String)`. This removes the duplicate guard and filter code.
 - [x] `Tests/FoundationModelsSkillsTests/MarketplaceCatalogTests.swift:473` `reuse/reuse` — This function makes a temporary directory again, but code for this is already in the project. `ConfigFixture::write` in `MarketplaceConfigTests.swift` does the same work: it makes a temporary directory and writes files into it from a dictionary. Make this function call the existing function, or put the two functions into one shared test utility. Make a shared test helper `makeTempDirectory(withFiles:)` in a common location (for example, `HotReloadTestSupport` or `FixtureLibrary`). Call it from `MarketplaceCatalogTests` and from `MarketplaceConfigTests`.
 - [x] `Tests/FoundationModelsSkillsTests/MarketplaceCatalogTests.swift:488` `reuse/reuse` — This function makes SKILL.md file text again, but code for this is already in the project. `skillFileContents` in `SkillWatcherTests.swift` does the same work: it makes a standard markdown template with frontmatter. Make this function call the existing function, or put the two functions into one shared test utility. Make a shared test helper `makeSkillFileText(named:)` in a common location (for example, `FixtureLibrary` or a new test utility module). Call it from `MarketplaceCatalogTests` and from `SkillWatcherTests`.
+
+## Review Findings (2026-09-15 08:59)
+
+> Scope: `review sha HEAD~1..HEAD` — reviewed the diffs only — lines this change added or modified. 6 file(s) reviewed, 2 not reviewed.
+
+> 2 file(s) not reviewed — excluded by an ignore rule:
+> - `.kanban/ (from .reviewignore)` — 2 file(s)
+
+- [x] `Sources/FoundationModelsSkills/Marketplace/CatalogResolver.swift:443` `swift/fluent-usage` — The first argument to selectedItems() omits a label, but this is not a value-preserving conversion — it filters/selects items based on criteria. Per the fluent-usage rule, only value-preserving conversions (like `Int64(someUInt32)`) omit the first argument label; all other operations must label it. Label the first argument: `func selectedItems(items: [Item], by selection: SkillSelection, noun: SelectionNoun, nameOf: (Item) -> String)` and update all call sites from `selectedItems(collection, by: ...)` to `selectedItems(items: collection, by: ...)`.
+- [x] `Tests/FoundationModelsSkillsTests/MarketplaceTestSupport.swift:26` `swift/fluent-usage` — The first argument to writeFile() omits a label, but this is not a value-preserving conversion — it performs file I/O, creating a side effect. Per fluent-usage, only value-preserving conversions omit the first argument label; all other operations must label it. Label the first argument: `static func writeFile(text: String, to file: URL) throws` and update all call sites from `writeFile(text, to: ...)` to `writeFile(text: text, to: ...)`.

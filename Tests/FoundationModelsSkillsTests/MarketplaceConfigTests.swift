@@ -26,7 +26,7 @@ struct MarketplaceConfigTests {
         let fixture = try ConfigFixture()
         defer { fixture.remove() }
         try MarketplaceTestSupport.writeFile(
-            """
+            text: """
             marketplaces:
               - url: git@github.com:swissarmyhammer/skills.git
               - url: github:acme/team-skills
@@ -48,14 +48,14 @@ struct MarketplaceConfigTests {
         let fixture = try ConfigFixture()
         defer { fixture.remove() }
         try MarketplaceTestSupport.writeFile(
-            """
+            text: """
             marketplaces:
               - url: github:acme/one
               - url: github:acme/two
             """,
             to: fixture.userFile)
         try MarketplaceTestSupport.writeFile(
-            """
+            text: """
             marketplaces:
               - url: github:acme/three
             """,
@@ -75,7 +75,7 @@ struct MarketplaceConfigTests {
         let fixture = try ConfigFixture()
         defer { fixture.remove() }
         try MarketplaceTestSupport.writeFile(
-            """
+            text: """
             marketplaces:
               - url: github:acme/skills
                 alias: team
@@ -85,7 +85,7 @@ struct MarketplaceConfigTests {
             """,
             to: fixture.userFile)
         try MarketplaceTestSupport.writeFile(
-            """
+            text: """
             marketplaces:
               - url: github:acme/forked-skills
                 alias: team
@@ -105,7 +105,7 @@ struct MarketplaceConfigTests {
         let fixture = try ConfigFixture()
         defer { fixture.remove() }
         try MarketplaceTestSupport.writeFile(
-            """
+            text: """
             marketplaces:
               - url: github:acme/skills
                 ref: stable
@@ -114,7 +114,7 @@ struct MarketplaceConfigTests {
             """,
             to: fixture.userFile)
         try MarketplaceTestSupport.writeFile(
-            """
+            text: """
             marketplaces:
               - url: https://GitHub.com/acme/skills.git/
             """,
@@ -133,13 +133,13 @@ struct MarketplaceConfigTests {
         let fixture = try ConfigFixture()
         defer { fixture.remove() }
         try MarketplaceTestSupport.writeFile(
-            """
+            text: """
             marketplaces:
               - url: github:acme/skills
             """,
             to: fixture.userFile)
         try MarketplaceTestSupport.writeFile(
-            """
+            text: """
             marketplaces:
               - url: github:acme/other
                 alias: https://github.com/acme/skills.git
@@ -155,14 +155,14 @@ struct MarketplaceConfigTests {
         let fixture = try ConfigFixture()
         defer { fixture.remove() }
         try MarketplaceTestSupport.writeFile(
-            """
+            text: """
             marketplaces:
               - url: github:acme/skills
                 alias: team
             """,
             to: fixture.userFile)
         try MarketplaceTestSupport.writeFile(
-            """
+            text: """
             marketplaces:
               - url: github:evil/skills
                 alias: team
@@ -214,7 +214,7 @@ struct MarketplaceConfigTests {
     @Test func aFileThatIsNotValidYAMLThrowsAnErrorThatNamesTheFile() throws {
         let fixture = try ConfigFixture()
         defer { fixture.remove() }
-        try MarketplaceTestSupport.writeFile("marketplaces: [", to: fixture.userFile)
+        try MarketplaceTestSupport.writeFile(text: "marketplaces: [", to: fixture.userFile)
 
         let error = #expect(throws: MarketplaceConfigError.self) {
             try MarketplaceConfig.load(from: fixture.stack, includeProject: false)
@@ -228,7 +228,7 @@ struct MarketplaceConfigTests {
         let fixture = try ConfigFixture()
         defer { fixture.remove() }
         try MarketplaceTestSupport.writeFile(
-            """
+            text: """
             marketplaces:
               - alias: team
             """,

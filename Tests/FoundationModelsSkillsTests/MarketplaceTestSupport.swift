@@ -12,7 +12,7 @@ enum MarketplaceTestSupport {
     static func makeTempDirectory(withFiles files: [String: String] = [:]) throws -> URL {
         let root = try WatcherTestSupport.makeTempDirectory()
         for (path, text) in files {
-            try writeFile(text, to: root.appendingPathComponent(path))
+            try writeFile(text: text, to: root.appendingPathComponent(path))
         }
         return root
     }
@@ -23,7 +23,7 @@ enum MarketplaceTestSupport {
     ///   - text: The text of the file.
     ///   - file: The file to write.
     /// - Throws: The error of the folder or the file write.
-    static func writeFile(_ text: String, to file: URL) throws {
+    static func writeFile(text: String, to file: URL) throws {
         try FileManager.default.createDirectory(
             at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
         try text.write(to: file, atomically: true, encoding: .utf8)

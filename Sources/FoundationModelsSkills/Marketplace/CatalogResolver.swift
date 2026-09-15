@@ -88,7 +88,8 @@ internal enum CatalogResolver {
             case .unusable(let diagnostic):
                 return ResolvedCatalog(name: nil, version: nil, skills: [], renames: [:], diagnostics: [diagnostic])
             case .found(let catalog):
-                return CatalogReader(source: source, marketplaceID: catalog.name).resolved(catalog, selection: selection)
+                return CatalogReader(source: source, marketplaceID: catalog.name).resolved(
+                    catalog: catalog, selection: selection)
             }
         }
         return CatalogReader(source: source, marketplaceID: nil).scanned(selection: selection)
@@ -127,7 +128,7 @@ private struct Diagnosed<Value> {
     ///
     /// - Parameter transform: The change of the value.
     /// - Returns: The changed value, with the same diagnostics.
-    func map<NewValue>(_ transform: (Value) -> NewValue) -> Diagnosed<NewValue> {
+    func map<NewValue>(using transform: (Value) -> NewValue) -> Diagnosed<NewValue> {
         Diagnosed<NewValue>(value: transform(value), diagnostics: diagnostics)
     }
 }
@@ -191,12 +192,12 @@ private struct CatalogReader {
     ///   - catalog: The decoded catalog.
     ///   - selection: The host selection.
     /// - Returns: The selected skills, with a diagnostic for each problem.
-    func resolved(_ catalog: MarketplaceCatalog, selection: SkillSelection) -> ResolvedCatalog {
-        let renamed = renamedSelection(selection, renames: catalog.renames)
-        let plugins = selectedItems(catalog.plugins, by: renamed.value, noun: .plugin, nameOf: \.name)
+    func resolved(catalog: MarketplaceCatalog, selection: SkillSelection) -> ResolvedCatalog {
+        let renamed = renamedSelection(of: selection, renames: catalog.renames)
+        let plugins = selectedItems(items: catalog.plugins, by: renamed.value, noun: .plugin, nameOf: \.name)
         let listed = plugins.value.map { skills(of: $0) }
-        let unique = deduplicated(listed.flatMap(\.value), winner: .last)
-        let selected = selectedItems(unique.value, by: renamed.value, noun: .skill, nameOf: \.name)
+        let unique = deduplicated(skills: listed.flatMap(\.value), winner: .last)
+        let selected = selectedItems(items: unique.value, by: renamed.value, noun: .skill, nameOf: \.name)
         return ResolvedCatalog(
             name: catalog.name, version: catalog.metadata?.version, skills: selected.value, renames: catalog.renames,
             diagnostics: renamed.diagnostics + plugins.diagnostics + listed.flatMap(\.diagnostics)
@@ -225,15 +226,15 @@ private struct CatalogReader {
     /// - Returns: The skills of the `skills` array, else of the
     ///   `<source>/skills/` folder.
     func skills(of plugin: MarketplaceCatalog.Plugin, inFolder path: String) -> Diagnosed<[ResolvedSkill]> {
-        guard let root = CatalogPath.normalized(path) else {
+        guard let root = CatalogPath.normalized(path: path) else {
             let message =
                 #"The plugin "\#(plugin.name)" has the source path "\#(path)", which is not a relative path in the repository. The resolver skips this plugin."#
-            return Diagnosed(value: [], diagnostics: [diagnostic(.warning, saying: message)])
+            return Diagnosed(value: [], diagnostics: [diagnostic(severity: .warning, saying: message)])
         }
         guard let entries = plugin.skills else {
             return folderSkills(ofPlugin: plugin.name, root: root)
         }
-        return entries.map { listedSkill($0, ofPlugin: plugin.name, root: root) }.collected()
+        return entries.map { listedSkill(entry: $0, ofPlugin: plugin.name, root: root) }.collected()
     }
 
     /// Finds one skill of a `skills` array.
@@ -244,18 +245,19 @@ private struct CatalogReader {
     ///   - root: The normalized source path of the plugin.
     /// - Returns: The skill, or `nil` and one diagnostic when the entry is not
     ///   a skill folder.
-    func listedSkill(_ entry: String, ofPlugin plugin: String, root: String) -> Diagnosed<ResolvedSkill?> {
-        guard let path = CatalogPath.resolved(entry, inFolder: root), let name = CatalogPath.lastComponent(of: path)
+    func listedSkill(entry: String, ofPlugin plugin: String, root: String) -> Diagnosed<ResolvedSkill?> {
+        guard let path = CatalogPath.resolved(relativePath: entry, inFolder: root),
+            let name = CatalogPath.lastComponent(of: path)
         else {
             let message =
                 #"The plugin "\#(plugin)" lists the skill path "\#(entry)", which is not a folder in the repository. The resolver skips it."#
-            return Diagnosed(value: nil, diagnostics: [diagnostic(.warning, saying: message)])
+            return Diagnosed(value: nil, diagnostics: [diagnostic(severity: .warning, saying: message)])
         }
         do {
             guard try hasSkillFile(inFolder: path) else {
                 let message =
                     #"The plugin "\#(plugin)" lists the skill folder "\#(path)", which has no SKILL.md file. The resolver skips it."#
-                return Diagnosed(value: nil, diagnostics: [diagnostic(.warning, saying: message)])
+                return Diagnosed(value: nil, diagnostics: [diagnostic(severity: .warning, saying: message)])
             }
             return Diagnosed(value: ResolvedSkill(name: name, path: path, plugin: plugin))
         } catch {
@@ -275,11 +277,11 @@ private struct CatalogReader {
     /// - Returns: The skills, in name order. A plugin with no skills folder
     ///   gives no skill.
     func folderSkills(ofPlugin plugin: String, root: String) -> Diagnosed<[ResolvedSkill]> {
-        let folder = CatalogPath.child(CatalogResolver.pluginSkillsFolderName, of: root)
+        let folder = CatalogPath.child(named: CatalogResolver.pluginSkillsFolderName, of: root)
         do {
             let skills = try source.entries(inDirectory: folder)
                 .filter(Self.isSubfolder)
-                .map { ResolvedSkill(name: $0.name, path: CatalogPath.child($0.name, of: folder), plugin: plugin) }
+                .map { ResolvedSkill(name: $0.name, path: CatalogPath.child(named: $0.name, of: folder), plugin: plugin) }
                 .filter { try hasSkillFile(inFolder: $0.path) }
             return Diagnosed(value: skills)
         } catch {
@@ -298,12 +300,13 @@ private struct CatalogReader {
     func scanned(selection: SkillSelection) -> ResolvedCatalog {
         guard case .plugins = selection else {
             let found = scannedSkills()
-            let selected = selectedItems(found.value, by: selection, noun: .skill, nameOf: \.name)
+            let selected = selectedItems(items: found.value, by: selection, noun: .skill, nameOf: \.name)
             return ResolvedCatalog(
                 name: nil, version: nil, skills: selected.value, renames: [:],
                 diagnostics: found.diagnostics + selected.diagnostics)
         }
-        let unknownPlugins = selectedItems([MarketplaceCatalog.Plugin](), by: selection, noun: .plugin, nameOf: \.name)
+        let unknownPlugins = selectedItems(
+            items: [MarketplaceCatalog.Plugin](), by: selection, noun: .plugin, nameOf: \.name)
         return ResolvedCatalog(
             name: nil, version: nil, skills: [], renames: [:], diagnostics: unknownPlugins.diagnostics)
     }
@@ -316,7 +319,7 @@ private struct CatalogReader {
     func scannedSkills() -> Diagnosed<[ResolvedSkill]> {
         let folders = skillFolders(in: [""], depth: 1)
         let named = folders.value.map { scannedSkill(atFolder: $0) }.collected()
-        let unique = deduplicated(named.value, winner: .first)
+        let unique = deduplicated(skills: named.value, winner: .first)
         return Diagnosed(
             value: unique.value, diagnostics: folders.diagnostics + named.diagnostics + unique.diagnostics)
     }
@@ -335,7 +338,7 @@ private struct CatalogReader {
         let listings = folders.map { (folder: $0, listing: listing(ofFolder: $0)) }
         let found = listings.filter { $0.listing.value.contains(where: Self.isSkillFile) }.map(\.folder)
         let children = listings.flatMap { level in
-            level.listing.value.filter(Self.isSubfolder).map { CatalogPath.child($0.name, of: level.folder) }
+            level.listing.value.filter(Self.isSubfolder).map { CatalogPath.child(named: $0.name, of: level.folder) }
         }
         let deeper = skillFolders(in: children, depth: depth + 1)
         return Diagnosed(
@@ -355,7 +358,7 @@ private struct CatalogReader {
         do {
             guard let name = try rootSkillName() else {
                 let message = "The root SKILL.md has no frontmatter name that is one folder name. The resolver skips it."
-                return Diagnosed(value: nil, diagnostics: [diagnostic(.warning, saying: message)])
+                return Diagnosed(value: nil, diagnostics: [diagnostic(severity: .warning, saying: message)])
             }
             return Diagnosed(value: ResolvedSkill(name: name, path: "", plugin: nil))
         } catch {
@@ -371,7 +374,7 @@ private struct CatalogReader {
     func rootSkillName() throws -> String? {
         guard let data = try source.contents(atPath: SkillDiscovery.skillFileName),
             case .decoded(let skill) = FrontmatterDecoder.decode(text: String(decoding: data, as: UTF8.self)),
-            let name = skill.frontmatter.name, CatalogPath.isSingleComponent(name)
+            let name = skill.frontmatter.name, CatalogPath.isSingleComponent(name: name)
         else {
             return nil
         }
@@ -387,14 +390,14 @@ private struct CatalogReader {
     ///   - renames: The `renames` map of the catalog.
     /// - Returns: The selection with the new names. Each renamed name gives
     ///   one advisory, and each removed name gives one warning.
-    func renamedSelection(_ selection: SkillSelection, renames: [String: String?]) -> Diagnosed<SkillSelection> {
+    func renamedSelection(of selection: SkillSelection, renames: [String: String?]) -> Diagnosed<SkillSelection> {
         switch selection {
         case .all:
             Diagnosed(value: .all)
         case .plugins(let names):
-            renamedNames(names, renames: renames).map(SkillSelection.plugins)
+            renamedNames(of: names, renames: renames).map(using: SkillSelection.plugins)
         case .skills(let names):
-            renamedNames(names, renames: renames).map(SkillSelection.skills)
+            renamedNames(of: names, renames: renames).map(using: SkillSelection.skills)
         }
     }
 
@@ -404,8 +407,8 @@ private struct CatalogReader {
     ///   - names: The selected names.
     ///   - renames: The `renames` map of the catalog.
     /// - Returns: The names after the map, with no removed name.
-    func renamedNames(_ names: [String], renames: [String: String?]) -> Diagnosed<[String]> {
-        names.map { renamedName($0, renames: renames) }.collected()
+    func renamedNames(of names: [String], renames: [String: String?]) -> Diagnosed<[String]> {
+        names.map { renamedName(of: $0, renames: renames) }.collected()
     }
 
     /// Applies the `renames` map of the catalog to one selected name.
@@ -416,16 +419,16 @@ private struct CatalogReader {
     /// - Returns: The same name when the map does not have it, the new name
     ///   with one advisory, or `nil` with one warning when the catalog
     ///   removed the name.
-    func renamedName(_ name: String, renames: [String: String?]) -> Diagnosed<String?> {
+    func renamedName(of name: String, renames: [String: String?]) -> Diagnosed<String?> {
         guard let entry = renames[name] else {
             return Diagnosed(value: name)
         }
         guard let newName = entry else {
             let message = #"The selected name "\#(name)" is removed from the catalog. It selects nothing."#
-            return Diagnosed(value: nil, diagnostics: [diagnostic(.warning, saying: message)])
+            return Diagnosed(value: nil, diagnostics: [diagnostic(severity: .warning, saying: message)])
         }
         let message = #"The selected name "\#(name)" is renamed to "\#(newName)" in the catalog. The resolver uses "\#(newName)"."#
-        return Diagnosed(value: newName, diagnostics: [diagnostic(.advisory, saying: message)])
+        return Diagnosed(value: newName, diagnostics: [diagnostic(severity: .advisory, saying: message)])
     }
 
     /// Keeps the items that a selection names, when the selection names this
@@ -440,12 +443,12 @@ private struct CatalogReader {
     /// - Returns: The selected items in catalog order. A selection of a
     ///   different kind keeps every item.
     func selectedItems<Item>(
-        _ items: [Item], by selection: SkillSelection, noun: SelectionNoun, nameOf: (Item) -> String
+        items: [Item], by selection: SkillSelection, noun: SelectionNoun, nameOf: (Item) -> String
     ) -> Diagnosed<[Item]> {
         guard let names = noun.selectedNames(in: selection) else {
             return Diagnosed(value: items)
         }
-        return filtered(items, keepingNames: names, noun: noun, nameOf: nameOf)
+        return filtered(items: items, keepingNames: names, noun: noun, nameOf: nameOf)
     }
 
     /// Keeps the items that a list of names names.
@@ -458,14 +461,15 @@ private struct CatalogReader {
     /// - Returns: The named items, in order. Each name that no item has gives
     ///   one warning.
     func filtered<Item>(
-        _ items: [Item], keepingNames names: [String], noun: SelectionNoun, nameOf: (Item) -> String
+        items: [Item], keepingNames names: [String], noun: SelectionNoun, nameOf: (Item) -> String
     ) -> Diagnosed<[Item]> {
         let wanted = Set(names)
         let known = Set(items.map(nameOf))
         return Diagnosed(
             value: items.filter { wanted.contains(nameOf($0)) },
             diagnostics: names.filter { !known.contains($0) }.map { name in
-                diagnostic(.warning, saying: #"The selected \#(noun.rawValue) "\#(name)" is not in the marketplace."#)
+                diagnostic(
+                    severity: .warning, saying: #"The selected \#(noun.rawValue) "\#(name)" is not in the marketplace."#)
             })
     }
 
@@ -478,7 +482,7 @@ private struct CatalogReader {
     ///   - winner: Which skill wins when two skills have the same name.
     /// - Returns: The winning skills, in order. Each losing skill gives one
     ///   warning.
-    func deduplicated(_ skills: [ResolvedSkill], winner: DuplicateWinner) -> Diagnosed<[ResolvedSkill]> {
+    func deduplicated(skills: [ResolvedSkill], winner: DuplicateWinner) -> Diagnosed<[ResolvedSkill]> {
         let winners = Dictionary(skills.indices.map { (skills[$0].name, $0) }) { first, later in
             winner == .first ? first : later
         }
@@ -518,7 +522,7 @@ private struct CatalogReader {
     /// - Parameter entry: The item.
     /// - Returns: `true` for a regular file named `SKILL.md`. A symbolic link
     ///   with that name is not a skill file.
-    static func isSkillFile(_ entry: CatalogTreeEntry) -> Bool {
+    static func isSkillFile(entry: CatalogTreeEntry) -> Bool {
         guard entry.name == SkillDiscovery.skillFileName, case .file = entry.kind else {
             return false
         }
@@ -530,7 +534,7 @@ private struct CatalogReader {
     /// - Parameter entry: The item.
     /// - Returns: `true` for a real folder whose name discovery does not
     ///   skip. A symbolic link and a submodule are never read.
-    static func isSubfolder(_ entry: CatalogTreeEntry) -> Bool {
+    static func isSubfolder(entry: CatalogTreeEntry) -> Bool {
         guard !SkillDiscovery.excludedDirectoryNames.contains(entry.name) else {
             return false
         }
@@ -550,7 +554,7 @@ private struct CatalogReader {
     ///   - severity: How serious the diagnostic is.
     ///   - message: The text of the diagnostic.
     /// - Returns: The diagnostic, with ``marketplaceID``.
-    func diagnostic(_ severity: MarketplaceDiagnostic.Severity, saying message: String) -> MarketplaceDiagnostic {
+    func diagnostic(severity: MarketplaceDiagnostic.Severity, saying message: String) -> MarketplaceDiagnostic {
         MarketplaceDiagnostic(severity: severity, marketplaceID: marketplaceID, message: message)
     }
 
@@ -561,7 +565,7 @@ private struct CatalogReader {
     ///   - error: The error of the source.
     /// - Returns: An error diagnostic.
     func readFailure(atPath path: String, error: any Error) -> MarketplaceDiagnostic {
-        diagnostic(.error, saying: #"The resolver cannot read "\#(CatalogPath.display(path))": \#(error)"#)
+        diagnostic(severity: .error, saying: #"The resolver cannot read "\#(CatalogPath.display(path: path))": \#(error)"#)
     }
 
     /// Makes the warning for a plugin with a remote source.
@@ -574,7 +578,7 @@ private struct CatalogReader {
         let location = (remote.url ?? remote.repo).map { " \($0)" } ?? ""
         let message =
             #"The plugin "\#(plugin)" has a remote source (\#(remote.kind)\#(location)). The resolver reads only relative plugin sources, so it skips this plugin."#
-        return diagnostic(.warning, saying: message)
+        return diagnostic(severity: .warning, saying: message)
     }
 
     /// Makes the warning for a skill that loses to a skill with the same
@@ -586,16 +590,16 @@ private struct CatalogReader {
     /// - Returns: A warning that names the two skill folders.
     func duplicateDiagnostic(loser: ResolvedSkill, winner: ResolvedSkill) -> MarketplaceDiagnostic {
         let message =
-            #"Two skills have the name "\#(winner.name)": \#(Self.described(loser)) and \#(Self.described(winner)). The resolver uses "\#(CatalogPath.display(winner.path))"."#
-        return diagnostic(.warning, saying: message)
+            #"Two skills have the name "\#(winner.name)": \#(Self.described(skill: loser)) and \#(Self.described(skill: winner)). The resolver uses "\#(CatalogPath.display(path: winner.path))"."#
+        return diagnostic(severity: .warning, saying: message)
     }
 
     /// Describes a skill for the text of a diagnostic.
     ///
     /// - Parameter skill: The skill.
     /// - Returns: The quoted folder path, and the plugin when there is one.
-    static func described(_ skill: ResolvedSkill) -> String {
-        let folder = #""\#(CatalogPath.display(skill.path))""#
+    static func described(skill: ResolvedSkill) -> String {
+        let folder = #""\#(CatalogPath.display(path: skill.path))""#
         return skill.plugin.map { #"\#(folder) (plugin "\#($0)")"# } ?? folder
     }
 }
@@ -621,7 +625,7 @@ internal enum CatalogPath {
     /// - Returns: The path with no `.` component and no empty component, or
     ///   `nil` when the path is empty, absolute, starts with `~`, or has a
     ///   `..` component. The path `./` gives the empty path: the root.
-    static func normalized(_ path: String) -> String? {
+    static func normalized(path: String) -> String? {
         guard PathConfinement.isWellFormedRelativePath(path) else {
             return nil
         }
@@ -634,9 +638,9 @@ internal enum CatalogPath {
     ///   - relativePath: The path, as the catalog writes it.
     ///   - folder: The normalized folder that the path is relative to.
     /// - Returns: The normalized path in the tree, or `nil` when
-    ///   ``normalized(_:)`` refuses `relativePath`.
-    static func resolved(_ relativePath: String, inFolder folder: String) -> String? {
-        normalized(relativePath).map { $0.isEmpty ? folder : child($0, of: folder) }
+    ///   ``normalized(path:)`` refuses `relativePath`.
+    static func resolved(relativePath: String, inFolder folder: String) -> String? {
+        normalized(path: relativePath).map { $0.isEmpty ? folder : child(named: $0, of: folder) }
     }
 
     /// Adds one or more components to a folder path.
@@ -645,7 +649,7 @@ internal enum CatalogPath {
     ///   - name: The normalized components to add.
     ///   - folder: The normalized folder path. The empty path is the root.
     /// - Returns: The path of the child.
-    static func child(_ name: String, of folder: String) -> String {
+    static func child(named name: String, of folder: String) -> String {
         folder.isEmpty ? name : folder + String(separator) + name
     }
 
@@ -662,15 +666,15 @@ internal enum CatalogPath {
     /// - Parameter name: The name.
     /// - Returns: `true` when the name is a normalized path with one
     ///   component.
-    static func isSingleComponent(_ name: String) -> Bool {
-        normalized(name) == name && !name.contains(separator)
+    static func isSingleComponent(name: String) -> Bool {
+        normalized(path: name) == name && !name.contains(separator)
     }
 
     /// Shows a path in the text of a diagnostic.
     ///
     /// - Parameter path: The normalized path.
     /// - Returns: The path, or `.` for the root.
-    static func display(_ path: String) -> String {
+    static func display(path: String) -> String {
         path.isEmpty ? rootDisplay : path
     }
 }
