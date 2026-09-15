@@ -232,6 +232,12 @@ struct GitTransportTests {
     }
 
     @Test func theCredentialsCallbackGivesTheCredentialOneTime() throws {
+        // `git_credential_userpass_plaintext_new` needs libgit2 started. A
+        // call through `fetch` or `remoteHead` starts it before it reaches
+        // the credentials callback; this test calls the callback directly,
+        // thus it starts libgit2 itself first.
+        try LibGit2Transport.check(status: LibGit2Transport.libraryStartCount, phase: .localRepository)
+
         var gate = CredentialGate(sourceURL: Self.httpsSourceURL, credential: Self.credential)
         var first: UnsafeMutablePointer<git_credential>?
         var second: UnsafeMutablePointer<git_credential>?
@@ -319,29 +325,5 @@ struct GitTransportTests {
     /// Removes the temporary directory that ``makeDestination()`` made.
     private static func removeDestination(_ destination: URL) {
         try? FileManager.default.removeItem(at: destination.deletingLastPathComponent())
-    }
-}
-
-/// Records each URL that a credential provider gets.
-private actor CredentialRequestRecorder {
-    /// The URL of each request, in order.
-    private(set) var requestedURLs: [URL] = []
-
-    /// Records one request.
-    ///
-    /// - Parameter url: The URL that the provider got.
-    func record(url: URL) {
-        requestedURLs.append(url)
-    }
-
-    /// Makes a provider that records each request and gives `credential`.
-    ///
-    /// - Parameter credential: The credential that the provider gives.
-    /// - Returns: The provider.
-    nonisolated func provider(giving credential: MarketplaceCredential) -> @Sendable (URL) async -> MarketplaceCredential? {
-        { url in
-            await self.record(url: url)
-            return credential
-        }
     }
 }

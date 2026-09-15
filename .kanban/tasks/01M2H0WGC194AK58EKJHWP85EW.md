@@ -65,6 +65,45 @@ comments:
     - evidence: 3 files — Sources/FoundationModelsSkills/Marketplace/Git/CredentialGate.swift, Tests/FoundationModelsSkillsTests/CredentialGateTests.swift, Tests/FoundationModelsSkillsTests/GitTransportTests.swift; `swift build --build-tests` gives 0 warnings; `swift test` gives 550 tests in 39 suites, all passed
     - next: /review
   timestamp: 2026-09-15T15:12:23.621104+00:00
+- actor: claude-code
+  id: 01m2jtennng9amf58ntaz2m6z0
+  text: |
+    ### review — findings
+    - evidence: 10 findings — Sources/FoundationModelsSkills/Marketplace/Git/CredentialGate.swift:52-60, Tests/FoundationModelsSkillsTests/GitTransportTests.swift:326
+    - scope: review sha HEAD~1..HEAD (commit 2dbbea9). The 4 prior findings of 2026-09-15 10:04 are all checked.
+    - next: Remove the hand-written Equatable conformance in CredentialGate.swift, and move CredentialRequestRecorder to one shared test helper file. Then run the review again.
+  timestamp: 2026-09-15T15:20:02.485161+00:00
+- actor: claude-code
+  id: 01m2jtfchhsymdjvzjx6jrk1fw
+  text: |-
+    ### finish iteration 2 — findings
+    - implement: changed — 3 files (CredentialGate.swift, CredentialGateTests.swift, GitTransportTests.swift); the same-origin check was already correct through the synthesized `==`
+    - test: green — swift package clean && swift build --build-tests 0 warnings; swift test, 550 passed, 0 failed, 0 skipped
+    - commit: 2dbbea9 refactor(marketplace): write out the credential origin comparison
+    - review: findings — Sources/FoundationModelsSkills/Marketplace/Git/CredentialGate.swift:52 to :60 (the hand-written Equatable is redundant), Tests/FoundationModelsSkillsTests/GitTransportTests.swift:326 (a second copy of the CredentialRequestRecorder helper)
+    - risk of a rule conflict: iteration 1 reported `host` and `port` as assign-only with the synthesized `==`; iteration 2 reports the written-out `==` as redundant. One fix must satisfy both rules, or the task is stuck.
+  timestamp: 2026-09-15T15:20:25.905415+00:00
+- actor: claude-code
+  id: 01m2jtp7r8ahkfg9yc2x8zt0b5
+  text: |
+    Corrected the 10 findings of iteration 2. No rule conflict remains.
+
+    The two rules (iteration 1: `host` and `port` are assign-only with a synthesized `==`; iteration 2: the written-out `==` is redundant) both fall away, because the private `Origin` type is gone. Option 1 of the plan (a `// periphery:ignore` marker) was not used: no file in this package uses `periphery:ignore` or `swiftlint:disable`, thus that marker is not a form of this project. Option 2 was used instead.
+
+    `CredentialGate` now keeps one origin text, `private let origin: String?`. A new private static function, `origin(ofURL:)`, builds the text from the scheme, the host in lowercase, and the port: `https://<host>:<port>`. It gives `nil` for a URL that is not HTTPS or that has no host. The gate compares two texts with the `==` of `String`. Thus there is no stored property that only an `==` body reads, and there is no hand-written `Equatable`.
+
+    The behavior does not change:
+    - The same host on another port gives another text, thus another origin. `aRequestFromAnotherOriginIsRefused` with `:8443` proves it.
+    - A port that the URL writes and that equals 443 gives the same text as no port. `theDefaultPortWrittenOutIsTheSameOrigin` proves it.
+    - The scheme and the host are compared without letter case. `theSchemeAndTheHostAreComparedWithoutLetterCase` proves it.
+    - A source or a request of another scheme has no origin text, thus it is refused. The `http://` case and the SSH cases prove it.
+
+    The duplicated `CredentialRequestRecorder` actor now lives one time in `Tests/FoundationModelsSkillsTests/MarketplaceTestSupport.swift`, the shared test support file that this package already has. The two private copies in `CredentialGateTests.swift` and `GitTransportTests.swift` are removed. A new helper file was not made, because the package has no `Helpers` folder and the test target is one module.
+
+    ### implement — changed
+    - evidence: 4 files — Sources/FoundationModelsSkills/Marketplace/Git/CredentialGate.swift, Tests/FoundationModelsSkillsTests/MarketplaceTestSupport.swift, Tests/FoundationModelsSkillsTests/CredentialGateTests.swift, Tests/FoundationModelsSkillsTests/GitTransportTests.swift; `swift build --build-tests` gives 0 warnings; `swift test` gives 550 tests in 39 suites, all passed
+    - next: /review
+  timestamp: 2026-09-15T15:24:10.376968+00:00
 depends_on:
 - 01M2H0RFR101FGE3GT88HD33M4
 - 01M2H0QNGBQDQWBB3H1NSGYGDN
@@ -109,3 +148,21 @@ marketplace.md §5.1 (the libgit2 call table and HTTPS rules) and §7.3 step 3. 
 - [x] `Sources/FoundationModelsSkills/Marketplace/Git/CredentialGate.swift:33` `code-hygiene/dead-code-swift` — var.instance `port` is assignOnlyProperty.
 - [x] `Tests/FoundationModelsSkillsTests/CredentialGateTests.swift:122` `code-hygiene/disallowed-constructs-swift` — no_direct_standard_out_logs: Do not commit print(…), debugPrint(…), dump(…) or _printChanges(), which write to standard out in release. Log to a dedicated logging system, or silence one debug-only line with // swiftlint:disable:next no_direct_standard_out_logs and the reason after it.
 - [x] `Tests/FoundationModelsSkillsTests/GitTransportTests.swift:231` `code-hygiene/idioms-swift` — isEmpty: Prefer isEmpty over comparing count against zero.
+
+## Review Findings (2026-09-15 10:16)
+
+> Scope: `review sha HEAD~1..HEAD` — reviewed the diffs only — lines this change added or modified. 3 file(s) reviewed, 2 not reviewed.
+
+> 2 file(s) not reviewed — excluded by an ignore rule:
+> - `.kanban/ (from .reviewignore)` — 2 file(s)
+
+- [x] `Sources/FoundationModelsSkills/Marketplace/Git/CredentialGate.swift:52` `code-hygiene/idioms-swift` — redundantEquatable: Omit a hand-written Equatable implementation when the compiler-synthesized conformance would be equivalent.
+- [x] `Sources/FoundationModelsSkills/Marketplace/Git/CredentialGate.swift:53` `code-hygiene/idioms-swift` — redundantEquatable: Omit a hand-written Equatable implementation when the compiler-synthesized conformance would be equivalent.
+- [x] `Sources/FoundationModelsSkills/Marketplace/Git/CredentialGate.swift:54` `code-hygiene/idioms-swift` — redundantEquatable: Omit a hand-written Equatable implementation when the compiler-synthesized conformance would be equivalent.
+- [x] `Sources/FoundationModelsSkills/Marketplace/Git/CredentialGate.swift:55` `code-hygiene/idioms-swift` — redundantEquatable: Omit a hand-written Equatable implementation when the compiler-synthesized conformance would be equivalent.
+- [x] `Sources/FoundationModelsSkills/Marketplace/Git/CredentialGate.swift:56` `code-hygiene/idioms-swift` — redundantEquatable: Omit a hand-written Equatable implementation when the compiler-synthesized conformance would be equivalent.
+- [x] `Sources/FoundationModelsSkills/Marketplace/Git/CredentialGate.swift:57` `code-hygiene/idioms-swift` — redundantEquatable: Omit a hand-written Equatable implementation when the compiler-synthesized conformance would be equivalent.
+- [x] `Sources/FoundationModelsSkills/Marketplace/Git/CredentialGate.swift:58` `code-hygiene/idioms-swift` — redundantEquatable: Omit a hand-written Equatable implementation when the compiler-synthesized conformance would be equivalent.
+- [x] `Sources/FoundationModelsSkills/Marketplace/Git/CredentialGate.swift:59` `code-hygiene/idioms-swift` — redundantEquatable: Omit a hand-written Equatable implementation when the compiler-synthesized conformance would be equivalent.
+- [x] `Sources/FoundationModelsSkills/Marketplace/Git/CredentialGate.swift:60` `code-hygiene/idioms-swift` — redundantEquatable: Omit a hand-written Equatable implementation when the compiler-synthesized conformance would be equivalent.
+- [x] `Tests/FoundationModelsSkillsTests/GitTransportTests.swift:326` `reuse/reuse` — CredentialRequestRecorder is duplicated identically in both CredentialGateTests.swift and GitTransportTests.swift. The same test helper is being reimplemented rather than shared, which creates maintenance burden and risks divergence between copies. Extract CredentialRequestRecorder to a shared test utilities file (e.g., Tests/FoundationModelsSkillsTests/Helpers/CredentialRequestRecorder.swift) and import it in both test files to eliminate duplication.

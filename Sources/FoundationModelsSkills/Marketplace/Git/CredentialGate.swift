@@ -20,54 +20,15 @@ import Foundation
 /// keeps one gate for each call and lends it to the libgit2 `credentials`
 /// callback.
 internal struct CredentialGate: Sendable {
-    /// The scheme, the host, and the port of a URL.
-    private struct Origin: Equatable, Sendable {
-        /// The scheme, in lowercase.
-        let scheme: String
-
-        /// The host, in lowercase.
-        let host: String
-
-        /// The port that the URL writes, else the default port of HTTPS for
-        /// an HTTPS URL, else `nil`.
-        let port: Int?
-
-        /// Parses the origin of a URL.
-        ///
-        /// - Parameter url: The URL text.
-        /// - Returns: The origin, or `nil` when the text has no scheme or no
-        ///   host.
-        init?(url: String) {
-            guard let components = URLComponents(string: url),
-                let scheme = components.scheme?.lowercased(),
-                let host = components.host?.lowercased(), !host.isEmpty
-            else {
-                return nil
-            }
-            self.scheme = scheme
-            self.host = host
-            self.port = components.port ?? (scheme == CredentialGate.httpsScheme ? CredentialGate.httpsDefaultPort : nil)
-        }
-
-        /// Compares two origins by the scheme, the host, and the port.
-        ///
-        /// - Parameters:
-        ///   - lhs: One origin.
-        ///   - rhs: The other origin.
-        /// - Returns: `true` when all three parts are equal.
-        static func == (lhs: Origin, rhs: Origin) -> Bool {
-            lhs.scheme == rhs.scheme && lhs.host == rhs.host && lhs.port == rhs.port
-        }
-    }
-
     /// The only scheme that gets a credential.
     private static let httpsScheme = "https"
 
     /// The port of an HTTPS URL that writes no port.
     private static let httpsDefaultPort = 443
 
-    /// The origin of the source, or `nil` for a source that is not HTTPS.
-    private let origin: Origin?
+    /// The origin text of the source, or `nil` for a source that is not
+    /// HTTPS.
+    private let origin: String?
 
     /// The credential, until the gate gives it.
     private var credential: MarketplaceCredential?
@@ -83,9 +44,30 @@ internal struct CredentialGate: Sendable {
     ///   - credential: The credential for the source, or `nil` for none. A
     ///     source that is not HTTPS keeps no credential.
     init(sourceURL: String, credential: MarketplaceCredential?) {
-        let origin = Origin(url: sourceURL).flatMap { $0.scheme == Self.httpsScheme ? $0 : nil }
+        let origin = Self.origin(ofURL: sourceURL)
         self.origin = origin
         self.credential = origin == nil ? nil : credential
+    }
+
+    /// Makes the one text that names the origin of an HTTPS URL.
+    ///
+    /// The text holds the scheme, the host in lowercase, and the port. Thus
+    /// the same host on another port gives another text, and a port that the
+    /// URL writes and that equals the default port gives the same text as a
+    /// URL that writes no port. A URL of another scheme, or a URL with no
+    /// host, has no origin text, thus it never matches a source.
+    ///
+    /// - Parameter url: The URL text.
+    /// - Returns: The origin text, or `nil` when the URL is not an HTTPS URL
+    ///   with a host.
+    private static func origin(ofURL url: String) -> String? {
+        guard let components = URLComponents(string: url),
+            components.scheme?.lowercased() == httpsScheme,
+            let host = components.host?.lowercased(), !host.isEmpty
+        else {
+            return nil
+        }
+        return "\(httpsScheme)://\(host):\(components.port ?? httpsDefaultPort)"
     }
 
     /// Makes the gate for one git call, and asks the host for the credential
@@ -113,7 +95,7 @@ internal struct CredentialGate: Sendable {
     /// - Returns: The credential for the first request from the origin of the
     ///   source. Every other request gets `nil` and sets ``hasRefused``.
     mutating func credential(forRequestURL requestURL: String) -> MarketplaceCredential? {
-        guard let origin, Origin(url: requestURL) == origin, let given = credential.take() else {
+        guard let origin, Self.origin(ofURL: requestURL) == origin, let given = credential.take() else {
             hasRefused = true
             return nil
         }
