@@ -228,18 +228,21 @@ final class MarketplaceStoreFixture {
     ///   - clock: The clock of the periodic check and of the fetch timeout,
     ///     or `nil` for the `ContinuousClock` of the store. The default is
     ///     `nil`.
+    ///   - environment: The environment of the store, which names the
+    ///     read-only seed folder. The default is no variable at all.
     /// - Throws: The error of a folder write.
     init(
         sources: [MarketplaceSource], cacheDirectory: URL? = nil,
         policy: MarketplacePolicy = MarketplacePolicy(), transport: (any GitTransport)? = nil,
-        clock: (any Clock<Duration>)? = nil
+        clock: (any Clock<Duration>)? = nil, environment: [String: String] = [:]
     ) throws {
         ownsCacheDirectory = cacheDirectory == nil
         self.cacheDirectory = try cacheDirectory ?? WatcherTestSupport.makeTempDirectory()
         localRoot = try WatcherTestSupport.makeTempDirectory()
         store = MarketplaceStore(
             sources: sources, cacheDirectory: self.cacheDirectory, policy: policy,
-            transport: transport ?? LibGit2Transport(), clock: clock ?? ContinuousClock())
+            transport: transport ?? LibGit2Transport(), clock: clock ?? ContinuousClock(),
+            environment: environment)
     }
 
     deinit {
@@ -252,11 +255,13 @@ final class MarketplaceStoreFixture {
     /// Makes a registry over the layers of the store and one empty local
     /// project layer.
     ///
-    /// - Returns: The registry, with watching off.
-    func makeRegistry() -> SkillsRegistry {
+    /// - Parameter watch: Whether the registry watches every layer root. The
+    ///   default is `false`.
+    /// - Returns: The registry.
+    func makeRegistry(watch: Bool = false) -> SkillsRegistry {
         var stack = DotfolderStack(name: "skills", workingDirectory: localRoot, environment: [:])
         stack.layers = [DotfolderStack.Layer(source: .project, root: localRoot)]
-        return SkillsRegistry(marketplaces: store, stack: stack)
+        return SkillsRegistry(marketplaces: store, stack: stack, watch: watch)
     }
 }
 

@@ -84,6 +84,19 @@ public struct MarketplaceLayer: Sendable {
     /// off.
     public var grants: MarketplaceGrants
 
+    /// Whether a file watcher watches ``layer`` as it watches a local layer
+    /// (marketplace.md §7.4).
+    ///
+    /// It is `true` for a folder on this computer that the provider reads
+    /// directly: an edit in that folder is a file-system event like any other.
+    ///
+    /// It is `false` for a root that a cache snapshot backs. A snapshot swap
+    /// is a symlink rename, which sends no reliable event to a watcher that
+    /// holds the old target open, and cleanup of an old snapshot would send a
+    /// delete event that names no real change. Such a layer reloads on
+    /// ``MarketplaceLayerProviding/layerUpdates`` only.
+    public var isWatchable: Bool
+
     /// Creates a marketplace layer by directly assigning its fields.
     ///
     /// - Parameters:
@@ -92,12 +105,16 @@ public struct MarketplaceLayer: Sendable {
     ///   - grants: What the host lets the skills under that layer run. The
     ///     default is ``MarketplaceGrants/none``: no shell injection and no
     ///     scripts.
+    ///   - isWatchable: Whether a file watcher watches the root of the layer.
+    ///     The default is `false`, which is the cache-backed root.
     public init(
-        layer: DotfolderStack.Layer, provenance: MarketplaceProvenance, grants: MarketplaceGrants = .none
+        layer: DotfolderStack.Layer, provenance: MarketplaceProvenance,
+        grants: MarketplaceGrants = .none, isWatchable: Bool = false
     ) {
         self.layer = layer
         self.provenance = provenance
         self.grants = grants
+        self.isWatchable = isWatchable
     }
 }
 

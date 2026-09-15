@@ -334,9 +334,11 @@ public struct SkillsRegistry: Sendable {
     ///   - stack: The dotfolder stack whose layers sit above them.
     ///   - policy: The render policy every render call this registry makes
     ///     honors. Defaults to the permissive `RenderPolicy()`.
-    ///   - watch: Whether to watch every layer root and rebuild the catalog
-    ///     on change (plan.md §7). Defaults to `false`; a provider update
-    ///     still rebuilds.
+    ///   - watch: Whether to watch every local layer root, and the root of
+    ///     each marketplace layer that a folder on this computer backs, and
+    ///     rebuild the catalog on change (plan.md §7, marketplace.md §7.4).
+    ///     Defaults to `false`; a provider update still rebuilds, and a
+    ///     cache-backed marketplace root rebuilds on that update only.
     public init(
         marketplaces: some MarketplaceLayerProviding, stack: DotfolderStack,
         policy: RenderPolicy = RenderPolicy(), watch: Bool = false
@@ -390,7 +392,8 @@ public struct SkillsRegistry: Sendable {
         // reader uses, without duplicating any of it.
         let reader = SkillsRegistry(catalogBox: catalogBox, pipeline: pipeline, policy: policy, roots: roots)
         let coordinator = ReloadCoordinator(
-            source: source, watchedRoots: watch ? roots : nil, catalogBox: catalogBox, reader: reader)
+            source: source, watchedRoots: watch ? plan.watchedRoots : nil, catalogBox: catalogBox,
+            reader: reader)
         coordinator.start()
         reloadCoordinator = coordinator
     }
@@ -403,12 +406,22 @@ public struct SkillsRegistry: Sendable {
         /// Which marketplace each entry of `layers` came from.
         let marketplaces: MarketplaceProvenanceIndex
 
+        /// The roots that a `watch: true` registry watches: every local root,
+        /// and the root of each marketplace layer that a folder on this
+        /// computer backs (marketplace.md §7.4).
+        ///
+        /// A cache-backed marketplace root is not here: its snapshot swap
+        /// sends no reliable file-system event, thus it rebuilds on a value of
+        /// `LayerSource.marketplaceUpdates` instead.
+        let watchedRoots: [URL]
+
         /// Creates a plan of local layers only, which names no marketplace.
         ///
         /// - Parameter localLayers: The layers, lowest precedence first.
         init(localLayers: [DotfolderStack.Layer]) {
             layers = localLayers
             marketplaces = MarketplaceProvenanceIndex()
+            watchedRoots = localLayers.map(\.root)
         }
 
         /// Creates a plan of marketplace layers in front of local layers
@@ -425,6 +438,8 @@ public struct SkillsRegistry: Sendable {
             }
             let unnamed: [MarketplaceProvenanceIndex.Entry?] = localLayers.map { _ in nil }
             marketplaces = MarketplaceProvenanceIndex(byLayerIndex: named + unnamed)
+            watchedRoots =
+                marketplaceLayers.filter(\.isWatchable).map(\.layer.root) + localLayers.map(\.root)
         }
 
         /// The grants that gate a skill whose winning layer is at `index`

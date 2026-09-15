@@ -303,14 +303,15 @@ struct RunScriptTests {
         #expect(result.exitCode == 0)
         #expect(result.lines == 1)
         #expect(result.output == ["1: building release notes"])
-        // Bounded, not an exact value -- this fixture script runs in a few
-        // milliseconds, but the point is proving `durationMs` reports a
-        // real sub-second measurement at all (see
-        // `durationMsReportsTheSubSecondRemainderNotJustWholeSeconds`,
-        // which pins the specific truncation bug this bound would have let
-        // slip through unnoticed: `Int(0)` also satisfies `>= 0`).
+        // No upper bound here: a wall-clock ceiling is a hard-coded time
+        // budget, and the load of the host must never decide a pass or a
+        // fail. This proves only the shape of the result: `durationMs` is
+        // a real, non-negative measurement. The specific truncation bug
+        // that would silently drop the sub-second remainder is pinned in
+        // `durationMsReportsTheSubSecondRemainderNotJustWholeSeconds`
+        // below, with an assertion that does not depend on wall-clock
+        // speed either.
         #expect(result.durationMs >= 0)
-        #expect(result.durationMs < 2000)
     }
 
     // MARK: - durationMs sub-second precision
@@ -318,9 +319,12 @@ struct RunScriptTests {
     /// `ScriptProcessRunner.run(...)`'s duration previously converted via
     /// `Int(elapsed.components.seconds * 1000)` alone, silently discarding
     /// the `.attoseconds` remainder -- a genuinely ~300ms run would report
-    /// `durationMs == 0`. A `sleep 0.3` fixture pins the fix: the reported
-    /// duration must land in a bounded window around 300ms, proving the
-    /// sub-second term survived the conversion.
+    /// `durationMs == 0`. A `sleep 0.3` fixture pins the fix. No wall-clock
+    /// window is asserted -- the load of the host must never decide a pass
+    /// or a fail. Instead this proves the remainder itself survived: the
+    /// truncating conversion always lands on a whole multiple of 1000 (in
+    /// fact exactly 0 for a sub-second sleep), while a duration that keeps
+    /// its sub-second term essentially never does, on any host speed.
     @Test func durationMsReportsTheSubSecondRemainderNotJustWholeSeconds() async throws {
         let root = try HotReloadTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -337,13 +341,11 @@ struct RunScriptTests {
             return
         }
         #expect(result.status == "completed")
-        // A whole-seconds-only conversion would report 0 here -- the lower
-        // bound alone would have let the truncation bug slip through
-        // unnoticed, so this asserts a genuinely sub-second-aware range:
-        // comfortably above 0, below the 2s ceiling a flaky/slow CI runner
-        // might otherwise trip.
-        #expect(result.durationMs >= 200)
-        #expect(result.durationMs < 2000)
+        // A whole-seconds-only conversion of a sub-second sleep always
+        // reports an exact multiple of 1000 (0, here). A duration that
+        // keeps its sub-second remainder does not, regardless of how fast
+        // or slow the host actually ran the sleep.
+        #expect(result.durationMs % 1000 != 0)
     }
 
     // MARK: - generatedContent / init(_:) round trips

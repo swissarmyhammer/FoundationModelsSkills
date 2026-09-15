@@ -72,6 +72,10 @@ internal struct MarketplaceCache: Sendable {
     /// The environment variable that names the cache directory.
     static let cacheVariable = "SKILLS_MARKETPLACE_CACHE"
 
+    /// The environment variable that names the read-only seed folder
+    /// (marketplace.md §7.5).
+    static let seedVariable = "SKILLS_MARKETPLACE_SEED"
+
     /// The cache directory under the home folder, for an environment that
     /// does not name one.
     private static let homeCachePath = ".cache/skills/marketplaces"
@@ -215,13 +219,37 @@ internal struct MarketplaceCache: Sendable {
     /// - Parameter environment: The environment to read.
     /// - Returns: The cache directory.
     static func cacheDirectory(environment: [String: String]) -> URL {
-        if let configured = environment[cacheVariable], !configured.isEmpty {
-            return URL(
-                fileURLWithPath: NSString(string: configured).expandingTildeInPath,
-                isDirectory: true)
-        }
-        return FileManager.default.homeDirectoryForCurrentUser
+        directory(ofVariable: cacheVariable, in: environment)
+            ?? FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(homeCachePath, isDirectory: true)
+    }
+
+    /// The read-only seed folder that `environment` names
+    /// (marketplace.md §7.5).
+    ///
+    /// The folder has the layout of a cache directory. It gives an offline or
+    /// a CI install: the store reads a snapshot from it, and never writes it.
+    ///
+    /// - Parameter environment: The environment to read.
+    /// - Returns: The seed folder, or `nil` when `SKILLS_MARKETPLACE_SEED` is
+    ///   not set or is empty.
+    static func seedDirectory(environment: [String: String]) -> URL? {
+        directory(ofVariable: seedVariable, in: environment)
+    }
+
+    /// The folder that one environment variable names.
+    ///
+    /// - Parameters:
+    ///   - name: The variable to read.
+    ///   - environment: The environment to read.
+    /// - Returns: The folder, with a leading `~` expanded, or `nil` when the
+    ///   variable is not set or is empty.
+    private static func directory(ofVariable name: String, in environment: [String: String]) -> URL? {
+        guard let configured = environment[name], !configured.isEmpty else {
+            return nil
+        }
+        return URL(
+            fileURLWithPath: NSString(string: configured).expandingTildeInPath, isDirectory: true)
     }
 
     /// The state file of a cache directory.

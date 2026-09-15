@@ -6,7 +6,7 @@ import Synchronization
 /// and the layers that ``SkillsRegistry`` reads (marketplace.md §6.1, §6.2,
 /// §7.3, and §7.6).
 ///
-/// ``marketplaceLayers()`` reads only the cache, thus a registry is built with
+/// ``marketplaceLayers()`` reads only the disk, thus a registry is built with
 /// no network work at all. ``start()`` then brings each git marketplace to its
 /// remote head one time, and each install publishes
 /// ``MarketplaceEvent/updated(id:from:to:)`` and one value on
@@ -18,25 +18,33 @@ import Synchronization
 /// await store.start()
 /// ```
 ///
-/// This version serves git sources. A source that names a local folder gets an
-/// advisory and no layer.
+/// Three kinds of source give a layer:
+///
+/// - A git source, which the store fetches into its cache.
+/// - A `file://` source that names a folder and not a `.git` repository. The
+///   folder is the layer itself: the store makes no copy, keeps no cache
+///   entry, and fetches nothing. A `watch: true` registry watches that root as
+///   it watches a local layer (marketplace.md §5.1 and §7.4).
+/// - A git source that the read-only seed folder serves, when the cache holds
+///   no snapshot of it. The store never writes the seed folder
+///   (marketplace.md §7.5).
 public actor MarketplaceStore: MarketplaceLayerProviding {
     /// The ref that a source with no branch, tag, or pin follows.
     private static let defaultRef = "HEAD"
+
+    /// The folder of a local marketplace that holds its skill folders, for a
+    /// source that names no `path` (marketplace.md §5.1).
+    ///
+    /// ``Preparation`` reads it, thus it is `fileprivate` and not `private`.
+    fileprivate static let localSkillsFolderName = "skills"
 
     /// The suffix of the staged snapshot folder, before the install renames
     /// it. It is no commit, thus cleanup never reads it as a snapshot.
     private static let stagedSnapshotSuffix = ".tmp"
 
-    /// One git source, with everything that the sync needs and that never
-    /// changes.
-    fileprivate struct PreparedSource: Sendable {
-        /// The source, as the host wrote it.
-        let source: MarketplaceSource
-
-        /// The pre-fetch key: the alias, else the repository name.
-        let key: String
-
+    /// The git remote of one marketplace, and the cache folder that holds its
+    /// snapshots.
+    fileprivate struct GitRemote: Sendable {
         /// The normalized git URL of the remote.
         let url: String
 
@@ -45,6 +53,43 @@ public actor MarketplaceStore: MarketplaceLayerProviding {
 
         /// The folder of this marketplace in the cache.
         let cache: MarketplaceCache
+    }
+
+    /// Where the layer of one marketplace comes from.
+    fileprivate enum PreparedKind: Sendable {
+        /// A git remote. The store fetches it and installs its snapshots.
+        case git(GitRemote)
+
+        /// A folder on this computer, which is the layer root itself. The
+        /// store makes no copy and keeps no cache entry (marketplace.md §5.1).
+        case local(root: URL)
+
+        /// A git source that the read-only seed folder serves, because the
+        /// cache holds no snapshot of it. The store never updates such a
+        /// marketplace (marketplace.md §7.5).
+        case seed(GitRemote, seed: MarketplaceCache)
+    }
+
+    /// One source, with everything that a pass needs and that never changes.
+    fileprivate struct PreparedSource: Sendable {
+        /// The source, as the host wrote it.
+        let source: MarketplaceSource
+
+        /// The pre-fetch key: the alias, else the repository name.
+        let key: String
+
+        /// Where the layer of this source comes from.
+        let kind: PreparedKind
+
+        /// The cache folder that serves the layer of this source, or `nil` for
+        /// a local folder, which is its own layer root.
+        var servingCache: MarketplaceCache? {
+            switch kind {
+            case .git(let remote): remote.cache
+            case .seed(_, let seed): seed
+            case .local: nil
+            }
+        }
     }
 
     /// One marketplace as the store serves it now.
@@ -59,8 +104,8 @@ public actor MarketplaceStore: MarketplaceLayerProviding {
 
     // MARK: - State
 
-    /// The git sources, in list order. It is empty when the source list is
-    /// refused.
+    /// The sources that give a layer, in list order. It is empty when the
+    /// source list is refused.
     private let prepared: [PreparedSource]
 
     /// The cache directory that holds `state.json` and every marketplace
@@ -105,8 +150,8 @@ public actor MarketplaceStore: MarketplaceLayerProviding {
     /// The findings about the source list itself. They never change.
     private let listDiagnostics: [MarketplaceDiagnostic]
 
-    /// The findings of the last sync of each marketplace, one list for each
-    /// entry of ``prepared``. A sync replaces its own list, thus repeated
+    /// The findings of the last pass over each marketplace, one list for each
+    /// entry of ``prepared``. A pass replaces its own list, thus repeated
     /// updates do not grow the findings.
     private let sourceDiagnostics: Mutex<[[MarketplaceDiagnostic]]>
 
@@ -143,7 +188,7 @@ public actor MarketplaceStore: MarketplaceLayerProviding {
     ) {
         self.init(
             sources: sources, cacheDirectory: cacheDirectory, policy: policy,
-            transport: LibGit2Transport())
+            transport: LibGit2Transport(), environment: ProcessInfo.processInfo.environment)
     }
 
     /// Creates a store over a source list and one git transport.
@@ -157,17 +202,23 @@ public actor MarketplaceStore: MarketplaceLayerProviding {
     ///   - transport: The git transport that fetches.
     ///   - clock: The clock of the periodic check and of the fetch timeout.
     ///     The default is a `ContinuousClock`.
+    ///   - environment: The environment that names the read-only seed folder
+    ///     (marketplace.md §7.5). The default is no variable at all.
     internal init(
         sources: [MarketplaceSource], cacheDirectory: URL, policy: MarketplacePolicy,
-        transport: any GitTransport, clock: any Clock<Duration> = ContinuousClock()
+        transport: any GitTransport, clock: any Clock<Duration> = ContinuousClock(),
+        environment: [String: String] = [:]
     ) {
         self.clock = clock
+        let seedDirectory = MarketplaceCache.seedDirectory(environment: environment)
         let identity = MarketplaceIdentity.validate(sources)
         let refused = identity.contains { $0.severity == .error }
         let preparation =
             refused
             ? Preparation()
-            : Preparation(sources: sources, cacheDirectory: cacheDirectory, policy: policy)
+            : Preparation(
+                sources: sources, cacheDirectory: cacheDirectory, policy: policy,
+                seedDirectory: seedDirectory)
         prepared = preparation.sources
         listDiagnostics = identity + preparation.diagnostics
         self.cacheDirectory = cacheDirectory
@@ -175,10 +226,9 @@ public actor MarketplaceStore: MarketplaceLayerProviding {
         self.transport = transport
         sourceDiagnostics = Mutex(preparation.sources.map { _ in [] })
         served = Mutex(
-            Self.servedFromCache(
-                prepared: preparation.sources,
-                state: (try? MarketplaceState.load(from: MarketplaceCache.stateFile(inCacheDirectory: cacheDirectory)))
-                    ?? MarketplaceState()))
+            Self.servedFromDisk(
+                prepared: preparation.sources, state: Self.state(inDirectory: cacheDirectory),
+                seedState: seedDirectory.map(Self.state(inDirectory:)) ?? MarketplaceState()))
     }
 
     /// The cache directory that an environment names (marketplace.md §7.1).
@@ -196,15 +246,26 @@ public actor MarketplaceStore: MarketplaceLayerProviding {
         MarketplaceCache.cacheDirectory(environment: environment)
     }
 
+    /// Reads the state file of one cache directory.
+    ///
+    /// - Parameter directory: The cache directory, or the seed folder, which
+    ///   has the same layout.
+    /// - Returns: The state, or an empty state when there is no file.
+    private static func state(inDirectory directory: URL) -> MarketplaceState {
+        (try? MarketplaceState.load(from: MarketplaceCache.stateFile(inCacheDirectory: directory)))
+            ?? MarketplaceState()
+    }
+
     // MARK: - What the registry reads
 
     /// Gives the marketplace layers, lowest precedence first.
     ///
-    /// The root of each layer is the stable `<cache>/<folder>/current` path,
-    /// thus it never changes; only the provenance of the layer does. The call
+    /// The root of a git layer is the stable `<cache>/<folder>/current` path,
+    /// and the root of a local layer is the folder of the source itself. Thus
+    /// a root never changes; only the provenance of the layer does. The call
     /// does no network work and no fetch.
     ///
-    /// - Returns: One layer for each git source, in list order.
+    /// - Returns: One layer for each source that gives one, in list order.
     public nonisolated func marketplaceLayers() -> [MarketplaceLayer] {
         served.withLock { $0.map(\.layer) }
     }
@@ -225,7 +286,7 @@ public actor MarketplaceStore: MarketplaceLayerProviding {
         eventSubscribers.subscribe()
     }
 
-    /// The findings about the source list and about the last sync of each
+    /// The findings about the source list and about the last pass over each
     /// marketplace.
     ///
     /// No message holds a credential.
@@ -297,6 +358,7 @@ public actor MarketplaceStore: MarketplaceLayerProviding {
     /// on the disk. A source that is already at its head does no fetch. With
     /// the automatic update off, or with a dry-run policy, the call publishes
     /// ``MarketplaceEvent/updateAvailable(id:from:to:)`` and fetches nothing.
+    /// A local folder and a seed entry need no network at all.
     ///
     /// The periodic check runs only when the policy gives a
     /// ``MarketplacePolicy/checkInterval``. Without one, the store makes no
@@ -329,7 +391,8 @@ public actor MarketplaceStore: MarketplaceLayerProviding {
     /// marketplace answers this call too, thus two concurrent calls open one
     /// remote connection.
     ///
-    /// - Returns: One status for each git source, in list order.
+    /// - Returns: One status for each source, in list order. A local folder
+    ///   has no remote, thus its status names no commit.
     public func check() async -> [MarketplaceStatus] {
         var statuses: [MarketplaceStatus] = []
         for index in prepared.indices {
@@ -342,7 +405,8 @@ public actor MarketplaceStore: MarketplaceLayerProviding {
     ///
     /// With ``MarketplacePolicy/checkOnly`` the call is a dry run: it reads
     /// the remote head, reports it, and fetches nothing (marketplace.md
-    /// §8.3).
+    /// §8.3). A local folder needs no update, and a marketplace that the seed
+    /// folder serves is never updated (marketplace.md §7.5).
     ///
     /// - Parameters:
     ///   - id: The pre-fetch key or the display id of one marketplace, or
@@ -413,19 +477,99 @@ public actor MarketplaceStore: MarketplaceLayerProviding {
         policy.checkOnly ? .check : kind
     }
 
-    /// Does the work of one pass.
+    /// Does the work of one pass, as the kind of the source needs it.
     ///
     /// - Parameters:
     ///   - kind: What the pass does.
     ///   - index: The marketplace.
     /// - Returns: What the pass gave.
     private func runPass(_ kind: PassKind, atIndex index: Int) async -> PassResult {
+        switch prepared[index].kind {
+        case .git(let remote):
+            return await gitPass(kind, remote: remote, atIndex: index)
+        case .seed(let remote, let seed):
+            return await seedPass(kind, remote: remote, seed: seed, atIndex: index)
+        case .local:
+            return localPass(atIndex: index)
+        }
+    }
+
+    /// Runs one pass over a git marketplace.
+    ///
+    /// - Parameters:
+    ///   - kind: What the pass does.
+    ///   - remote: The remote of the marketplace.
+    ///   - index: The marketplace.
+    /// - Returns: What the pass gave.
+    private func gitPass(
+        _ kind: PassKind, remote: GitRemote, atIndex index: Int
+    ) async -> PassResult {
         switch kind {
         case .check:
-            return await checkHead(atIndex: index)
+            return await checkHead(remote: remote, current: remote.cache.currentSha(), atIndex: index)
         case .update(let force):
-            return await sync(atIndex: index, force: force)
+            return await sync(remote: remote, atIndex: index, force: force)
         }
+    }
+
+    /// Runs one pass over a marketplace that the read-only seed folder serves
+    /// (marketplace.md §7.5).
+    ///
+    /// A check reads the remote head and writes nothing, thus it runs as it
+    /// does for a git marketplace. An update would write, thus it does nothing
+    /// and gives one finding.
+    ///
+    /// - Parameters:
+    ///   - kind: What the pass does.
+    ///   - remote: The remote of the marketplace.
+    ///   - seed: The folder of the marketplace in the seed folder.
+    ///   - index: The marketplace.
+    /// - Returns: What the pass gave.
+    private func seedPass(
+        _ kind: PassKind, remote: GitRemote, seed: MarketplaceCache, atIndex index: Int
+    ) async -> PassResult {
+        switch kind {
+        case .check:
+            return await checkHead(remote: remote, current: seed.currentSha(), atIndex: index)
+        case .update:
+            return refuseSeedUpdate(atIndex: index, seed: seed)
+        }
+    }
+
+    /// Gives what a pass over a local folder knows, with no work at all.
+    ///
+    /// The folder is the layer itself, thus there is nothing to fetch and
+    /// nothing to install (marketplace.md §5.1).
+    ///
+    /// - Parameter index: The marketplace.
+    /// - Returns: The status of the folder, and no event.
+    private func localPass(atIndex index: Int) -> PassResult {
+        PassResult(
+            status: MarketplaceStatus(id: displayID(atIndex: index), current: nil, latest: nil),
+            event: nil)
+    }
+
+    /// Records that the store does not update a marketplace that the
+    /// read-only seed folder serves (marketplace.md §7.5).
+    ///
+    /// - Parameters:
+    ///   - index: The marketplace.
+    ///   - seed: The folder of the marketplace in the seed folder.
+    /// - Returns: The status of the seed snapshot, and no event.
+    private func refuseSeedUpdate(atIndex index: Int, seed: MarketplaceCache) -> PassResult {
+        let id = displayID(atIndex: index)
+        record(
+            diagnostics: [
+                MarketplaceDiagnostic(
+                    severity: .advisory, marketplaceID: id,
+                    message: """
+                        The read-only seed folder serves this marketplace. The store never updates a seed \
+                        entry, thus this update changes nothing.
+                        """)
+            ],
+            atIndex: index)
+        return PassResult(
+            status: MarketplaceStatus(id: id, current: seed.currentSha(), latest: nil), event: nil)
     }
 
     /// Takes one finished pass out of the table, so that the next request
@@ -443,15 +587,18 @@ public actor MarketplaceStore: MarketplaceLayerProviding {
     /// Reads the remote head of one marketplace and reports it, with no fetch
     /// (marketplace.md §8.1).
     ///
-    /// - Parameter index: The marketplace to check.
+    /// - Parameters:
+    ///   - remote: The remote of the marketplace.
+    ///   - current: The commit that the store serves now.
+    ///   - index: The marketplace to check.
     /// - Returns: The status, and
     ///   ``MarketplaceEvent/updateAvailable(id:from:to:)`` when the head
     ///   differs from the snapshot.
-    private func checkHead(atIndex index: Int) async -> PassResult {
-        let entry = prepared[index]
-        let current = entry.cache.currentSha()
+    private func checkHead(
+        remote: GitRemote, current: String?, atIndex index: Int
+    ) async -> PassResult {
         do {
-            let latest = try await remoteHead(of: entry)
+            let latest = try await remoteHead(of: remote, pinnedSha: prepared[index].source.sha)
             let identifier = displayID(atIndex: index)
             eventSubscribers.publish(.checked(id: identifier, current: current, latest: latest))
             let status = MarketplaceStatus(id: identifier, current: current, latest: latest)
@@ -514,17 +661,17 @@ public actor MarketplaceStore: MarketplaceLayerProviding {
     /// processes (marketplace.md §7.6).
     ///
     /// - Parameters:
+    ///   - remote: The remote of the marketplace.
     ///   - index: The marketplace to sync.
     ///   - force: Whether to materialize again even with no remote change.
     /// - Returns: The status, and the event of the sync when something
     ///   changed or the sync failed.
-    private func sync(atIndex index: Int, force: Bool) async -> PassResult {
-        let entry = prepared[index]
-        let current = entry.cache.currentSha()
+    private func sync(remote: GitRemote, atIndex index: Int, force: Bool) async -> PassResult {
+        let current = remote.cache.currentSha()
         do {
-            try entry.cache.makeFolders()
-            return try await entry.cache.withWriterLock {
-                try await installHead(ofIndex: index, force: force)
+            try remote.cache.makeFolders()
+            return try await remote.cache.withWriterLock {
+                try await installHead(remote: remote, ofIndex: index, force: force)
             }
         } catch {
             return failureResult(atIndex: index, error: error, current: current)
@@ -537,6 +684,7 @@ public actor MarketplaceStore: MarketplaceLayerProviding {
     /// The caller holds the writer lock and has made the folders.
     ///
     /// - Parameters:
+    ///   - remote: The remote of the marketplace.
     ///   - index: The marketplace to sync.
     ///   - force: Whether to materialize again even with no remote change.
     /// - Returns: The status, and ``MarketplaceEvent/updated(id:from:to:)``.
@@ -545,10 +693,12 @@ public actor MarketplaceStore: MarketplaceLayerProviding {
     /// - Throws: ``GitTransportError``, ``MarketplaceTimeoutError``,
     ///   ``SnapshotError``, ``MarketplaceCacheError``, or the error of a file
     ///   read or write.
-    private func installHead(ofIndex index: Int, force: Bool) async throws -> PassResult {
-        let entry = prepared[index]
-        let previous = entry.cache.currentSha()
-        let head = try await remoteHead(of: entry)
+    private func installHead(
+        remote: GitRemote, ofIndex index: Int, force: Bool
+    ) async throws -> PassResult {
+        let source = prepared[index].source
+        let previous = remote.cache.currentSha()
+        let head = try await remoteHead(of: remote, pinnedSha: source.sha)
         eventSubscribers.publish(
             .checked(id: displayID(atIndex: index), current: previous, latest: head))
         guard force || head != previous else {
@@ -557,17 +707,22 @@ public actor MarketplaceStore: MarketplaceLayerProviding {
                     id: displayID(atIndex: index), current: previous, latest: head),
                 event: nil)
         }
-        let fetched = try await fetch(entry: entry)
-        let catalog = try materialize(entry: entry, commit: fetched)
-        try entry.cache.installUnderWriterLock(
-            snapshotAt: catalog.staged, sha: fetched, ref: entry.source.isPinned ? nil : entry.ref)
-        let installedID = catalog.resolved.name ?? entry.key
-        serve(atIndex: index, sha: fetched, displayID: installedID, catalogVersion: catalog.resolved.version)
+        let fetched = try await fetch(remote: remote, source: source)
+        let catalog = try materialize(remote: remote, source: source, commit: fetched)
+        try remote.cache.installUnderWriterLock(
+            snapshotAt: catalog.staged, sha: fetched, ref: source.isPinned ? nil : remote.ref)
+        let installedID = catalog.resolved.name ?? prepared[index].key
+        serve(
+            atIndex: index, cache: remote.cache, sha: fetched, displayID: installedID,
+            catalogVersion: catalog.resolved.version)
         record(
             diagnostics: catalog.diagnostics + duplicateDisplayIDDiagnostics(installedID, atIndex: index),
             atIndex: index)
-        try save(record: stateRecord(of: entry, sha: fetched, catalog: catalog.resolved, displayID: installedID),
-            forFolder: entry.cache.folderName)
+        try save(
+            record: stateRecord(
+                remote: remote, source: source, sha: fetched, catalog: catalog.resolved,
+                displayID: installedID),
+            forFolder: remote.cache.folderName)
         let event = MarketplaceEvent.updated(id: installedID, from: previous, to: fetched)
         eventSubscribers.publish(event)
         updateSubscribers.publish(())
@@ -582,16 +737,18 @@ public actor MarketplaceStore: MarketplaceLayerProviding {
     /// ``MarketplacePolicy/fetchTimeout`` the fetch runs until it ends, or
     /// until ``stop()`` cancels it (marketplace.md §5.1).
     ///
-    /// - Parameter entry: The marketplace to fetch.
+    /// - Parameters:
+    ///   - remote: The remote of the marketplace to fetch.
+    ///   - source: The source, as the host wrote it.
     /// - Returns: The 40-hex SHA of the fetched commit.
     /// - Throws: ``GitTransportError``, or ``MarketplaceTimeoutError`` when
     ///   the fetch took longer than the timeout.
-    private func fetch(entry: PreparedSource) async throws -> String {
-        let revision = entry.source.sha ?? entry.ref ?? Self.defaultRef
+    private func fetch(remote: GitRemote, source: MarketplaceSource) async throws -> String {
+        let revision = source.sha ?? remote.ref ?? Self.defaultRef
         let transport = self.transport
         let credentials = policy.credentials
-        let repository = entry.cache.repositoryDirectory
-        let url = entry.url
+        let repository = remote.cache.repositoryDirectory
+        let url = remote.url
         guard let timeout = policy.fetchTimeout else {
             return try await transport.fetch(
                 url: url, revision: revision, intoBareRepository: repository,
@@ -621,16 +778,18 @@ public actor MarketplaceStore: MarketplaceLayerProviding {
 
     /// Reads the commit that one marketplace must hold.
     ///
-    /// - Parameter entry: The marketplace.
+    /// - Parameters:
+    ///   - remote: The remote of the marketplace.
+    ///   - pinnedSha: The commit that the source pins, or `nil`.
     /// - Returns: The pinned commit, else the commit that the remote head
     ///   names.
     /// - Throws: ``GitTransportError``.
-    private func remoteHead(of entry: PreparedSource) async throws -> String {
-        if let pinned = entry.source.sha {
-            return pinned
+    private func remoteHead(of remote: GitRemote, pinnedSha: String?) async throws -> String {
+        if let pinnedSha {
+            return pinnedSha
         }
         return try await transport.remoteHead(
-            url: entry.url, ref: entry.ref ?? Self.defaultRef, credentials: policy.credentials)
+            url: remote.url, ref: remote.ref ?? Self.defaultRef, credentials: policy.credentials)
     }
 
     /// What one materialize step made.
@@ -649,21 +808,24 @@ public actor MarketplaceStore: MarketplaceLayerProviding {
     /// into a staged folder (marketplace.md §7.3 steps 2 to 4).
     ///
     /// - Parameters:
-    ///   - entry: The marketplace.
+    ///   - remote: The remote of the marketplace.
+    ///   - source: The source, as the host wrote it.
     ///   - commit: The fetched commit.
     /// - Returns: The staged folder, the selected skills, and the findings.
     /// - Throws: ``SnapshotError``, ``CatalogFileSourceError``, or the error
     ///   of a read or of a write.
-    private func materialize(entry: PreparedSource, commit: String) throws -> Materialized {
-        let source = try GitTreeFileSource(
-            repositoryURL: entry.cache.repositoryDirectory, commit: commit, rootPath: entry.source.path)
-        let resolved = CatalogResolver.resolve(from: source, selection: entry.source.select)
-        let staged = entry.cache.snapshotsDirectory
+    private func materialize(
+        remote: GitRemote, source: MarketplaceSource, commit: String
+    ) throws -> Materialized {
+        let files = try GitTreeFileSource(
+            repositoryURL: remote.cache.repositoryDirectory, commit: commit, rootPath: source.path)
+        let resolved = CatalogResolver.resolve(from: files, selection: source.select)
+        let staged = remote.cache.snapshotsDirectory
             .appendingPathComponent(commit + Self.stagedSnapshotSuffix, isDirectory: true)
         // A staged folder that an interrupted sync left behind is not an error.
         try? FileManager.default.removeItem(at: staged)
         let report = try SnapshotWriter.write(
-            catalog: resolved, from: source, to: staged, limits: policy.snapshotLimits)
+            catalog: resolved, from: files, to: staged, limits: policy.snapshotLimits)
         return Materialized(
             staged: staged, resolved: resolved, diagnostics: resolved.diagnostics + report.diagnostics)
     }
@@ -682,7 +844,7 @@ public actor MarketplaceStore: MarketplaceLayerProviding {
         let id = displayID(atIndex: index)
         let text = Self.text(of: error)
         let event = MarketplaceEvent.failed(
-            id: id, error: text, keptVersion: prepared[index].cache.currentSha())
+            id: id, error: text, keptVersion: prepared[index].servingCache?.currentSha())
         record(
             diagnostics: [
                 MarketplaceDiagnostic(
@@ -732,16 +894,20 @@ public actor MarketplaceStore: MarketplaceLayerProviding {
     ///
     /// - Parameters:
     ///   - index: The marketplace.
+    ///   - cache: The cache folder of the marketplace.
     ///   - sha: The commit of the new snapshot.
     ///   - displayID: The display id: the catalog `name`, else the pre-fetch
     ///     key.
     ///   - catalogVersion: The `version` field of the catalog, or `nil`.
-    private func serve(atIndex index: Int, sha: String, displayID: String, catalogVersion: String?) {
-        let entry = prepared[index]
-        let lease = try? entry.cache.leaseCurrentSnapshot()
+    private func serve(
+        atIndex index: Int, cache: MarketplaceCache, sha: String, displayID: String,
+        catalogVersion: String?
+    ) {
+        let url = prepared[index].source.url
+        let lease = try? cache.leaseCurrentSnapshot()
         let superseded = served.withLock { layers -> SnapshotLease? in
             layers[index].layer.provenance = MarketplaceProvenance(
-                id: displayID, url: entry.source.url, sha: sha, catalogVersion: catalogVersion)
+                id: displayID, url: url, sha: sha, catalogVersion: catalogVersion)
             let previous = layers[index].lease
             layers[index].lease = lease
             return previous
@@ -758,30 +924,60 @@ public actor MarketplaceStore: MarketplaceLayerProviding {
         served.withLock { $0[index].layer.provenance.id }
     }
 
-    /// Makes one layer for each git source from what the cache already holds.
+    /// Makes one layer for each source from what the disk already holds.
     ///
     /// Every source gets a layer, also before its first install: the root of a
     /// layer is a construction-time invariant of `SkillsRegistry`, thus the
     /// list must not grow when the first snapshot arrives.
     ///
     /// - Parameters:
-    ///   - prepared: The git sources, in list order.
-    ///   - state: The state file of the cache.
+    ///   - prepared: The sources, in list order.
+    ///   - state: The state file of the cache directory.
+    ///   - seedState: The state file of the read-only seed folder.
     /// - Returns: One served marketplace for each source, in list order.
-    private static func servedFromCache(
-        prepared: [PreparedSource], state: MarketplaceState
+    private static func servedFromDisk(
+        prepared: [PreparedSource], state: MarketplaceState, seedState: MarketplaceState
     ) -> [ServedMarketplace] {
         prepared.map { entry in
-            let stored = state.marketplaces[entry.cache.folderName]
-            let sha = entry.cache.currentSha()
-            let layer = MarketplaceLayer(
-                layer: DotfolderStack.Layer(source: .marketplace, root: entry.cache.currentLink),
-                provenance: MarketplaceProvenance(
-                    id: stored?.displayID ?? entry.key, url: entry.source.url, sha: sha,
-                    catalogVersion: sha == nil ? nil : stored?.catalogVersion),
-                grants: entry.source.grants)
-            return ServedMarketplace(layer: layer, lease: try? entry.cache.leaseCurrentSnapshot())
+            switch entry.kind {
+            case .git(let remote):
+                return servedFromCache(entry: entry, cache: remote.cache, state: state, leased: true)
+            case .seed(_, let seed):
+                // The seed folder is read only: the store never cleans it up,
+                // thus it needs no lease on a snapshot of it.
+                return servedFromCache(entry: entry, cache: seed, state: seedState, leased: false)
+            case .local(let root):
+                return ServedMarketplace(
+                    layer: MarketplaceLayer(
+                        layer: DotfolderStack.Layer(source: .marketplace, root: root),
+                        provenance: MarketplaceProvenance(id: entry.key, url: entry.source.url),
+                        grants: entry.source.grants, isWatchable: true),
+                    lease: nil)
+            }
         }
+    }
+
+    /// Makes the layer of one marketplace from a folder in the cache layout.
+    ///
+    /// - Parameters:
+    ///   - entry: The source of the marketplace.
+    ///   - cache: The folder of the marketplace, in the cache or in the seed
+    ///     folder.
+    ///   - state: The state file that belongs to that folder.
+    ///   - leased: Whether the store takes a shared lock on the snapshot.
+    /// - Returns: The served marketplace.
+    private static func servedFromCache(
+        entry: PreparedSource, cache: MarketplaceCache, state: MarketplaceState, leased: Bool
+    ) -> ServedMarketplace {
+        let stored = state.marketplaces[cache.folderName]
+        let sha = cache.currentSha()
+        let layer = MarketplaceLayer(
+            layer: DotfolderStack.Layer(source: .marketplace, root: cache.currentLink),
+            provenance: MarketplaceProvenance(
+                id: stored?.displayID ?? entry.key, url: entry.source.url, sha: sha,
+                catalogVersion: sha == nil ? nil : stored?.catalogVersion),
+            grants: entry.source.grants)
+        return ServedMarketplace(layer: layer, lease: leased ? try? cache.leaseCurrentSnapshot() : nil)
     }
 
     // MARK: - Diagnostics
@@ -789,7 +985,7 @@ public actor MarketplaceStore: MarketplaceLayerProviding {
     /// Replaces the findings of one marketplace.
     ///
     /// - Parameters:
-    ///   - diagnostics: The findings of the sync that just ran.
+    ///   - diagnostics: The findings of the pass that just ran.
     ///   - index: The marketplace.
     private func record(diagnostics: [MarketplaceDiagnostic], atIndex index: Int) {
         sourceDiagnostics.withLock { $0[index] = diagnostics }
@@ -830,17 +1026,19 @@ public actor MarketplaceStore: MarketplaceLayerProviding {
     /// Makes the state record of one marketplace after an install.
     ///
     /// - Parameters:
-    ///   - entry: The marketplace.
+    ///   - remote: The remote of the marketplace.
+    ///   - source: The source, as the host wrote it.
     ///   - sha: The commit of the new snapshot.
     ///   - catalog: The catalog of that commit.
     ///   - displayID: The display id of the marketplace.
     /// - Returns: The record to write.
     private func stateRecord(
-        of entry: PreparedSource, sha: String, catalog: ResolvedCatalog, displayID: String
+        remote: GitRemote, source: MarketplaceSource, sha: String, catalog: ResolvedCatalog,
+        displayID: String
     ) -> MarketplaceStateRecord {
         let now = Date()
         return MarketplaceStateRecord(
-            url: entry.source.url, ref: entry.ref, pinnedSha: entry.source.sha, currentSha: sha,
+            url: source.url, ref: remote.ref, pinnedSha: source.sha, currentSha: sha,
             catalogVersion: catalog.version, displayID: displayID, lastChecked: now, lastUpdated: now)
     }
 
@@ -858,29 +1056,35 @@ public actor MarketplaceStore: MarketplaceLayerProviding {
     }
 }
 
-/// The git sources of one source list, and what the store could not prepare.
+/// The sources of one source list that give a layer, and what the store could
+/// not prepare.
 ///
 /// The work runs before `self` is whole, thus it lives outside the actor.
 private struct Preparation {
-    /// The git sources that the store serves, in list order.
+    /// The sources that the store serves, in list order.
     var sources: [MarketplaceStore.PreparedSource] = []
 
-    /// One finding for each source that gets no layer.
+    /// One finding for each source that gets no layer, and for each field that
+    /// the store ignores.
     var diagnostics: [MarketplaceDiagnostic] = []
 
-    /// The cache directory that every prepared source writes into.
+    /// The cache directory that every git source writes into.
     private let cacheDirectory: URL
 
     /// The allowlist and the blocklist that every source must pass.
     private let policy: MarketplacePolicy
 
+    /// The read-only seed folder, or `nil` when the environment names none.
+    private let seedDirectory: URL?
+
     /// Prepares no source, for a list that the store refuses.
     init() {
         cacheDirectory = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
         policy = MarketplacePolicy()
+        seedDirectory = nil
     }
 
-    /// Prepares every git source of a list.
+    /// Prepares every source of a list.
     ///
     /// - Parameters:
     ///   - sources: The sources, in list order. Their pre-fetch keys are
@@ -889,9 +1093,14 @@ private struct Preparation {
     ///   - policy: What the host lets the store do. Its allowlist and its
     ///     blocklist run here, before any source reaches the disk or the
     ///     network.
-    init(sources: [MarketplaceSource], cacheDirectory: URL, policy: MarketplacePolicy) {
+    ///   - seedDirectory: The read-only seed folder, or `nil` for none.
+    init(
+        sources: [MarketplaceSource], cacheDirectory: URL, policy: MarketplacePolicy,
+        seedDirectory: URL?
+    ) {
         self.cacheDirectory = cacheDirectory
         self.policy = policy
+        self.seedDirectory = seedDirectory
         for source in sources {
             add(source: source)
         }
@@ -908,26 +1117,93 @@ private struct Preparation {
         }
         // The policy runs before anything touches the disk or the network
         // (marketplace.md §6.7 and §10 item 2). A refused source gets no
-        // cache folder, thus it also gets no layer.
+        // cache folder and no layer, whatever form its URL has.
         if let refusal = policy.refusal(forNormalizedURL: location.normalizedURL) {
             diagnostics.append(Self.refusalDiagnostic(for: refusal, ofSource: source, key: key))
             return
         }
-        guard case .git(let url, let ref) = location else {
+        switch location {
+        case .local(let folder):
+            addLocal(source: source, key: key, folder: folder)
+        case .git(let url, let ref):
+            addGit(source: source, key: key, url: url, ref: ref)
+        }
+    }
+
+    /// Prepares a source that names a folder on this computer
+    /// (marketplace.md §5.1).
+    ///
+    /// The layer root is `<folder>/<path>`, and the `path` field of the source
+    /// names it. A source with no `path` reads the `skills` folder, which is
+    /// the layout of a marketplace repository.
+    ///
+    /// - Parameters:
+    ///   - source: The source, as the host wrote it.
+    ///   - key: The pre-fetch key of the source.
+    ///   - folder: The folder that the URL names.
+    private mutating func addLocal(source: MarketplaceSource, key: String, folder: URL) {
+        let wanted = source.path ?? MarketplaceStore.localSkillsFolderName
+        guard let path = CatalogPath.normalized(path: wanted) else {
             diagnostics.append(
                 MarketplaceDiagnostic(
-                    severity: .advisory, marketplaceID: key,
+                    severity: .error, marketplaceID: key,
                     message:
-                        #"The source "\#(source.url)" names a local folder. This version serves git sources, thus the folder gets no layer."#
+                        #"The source "\#(source.url)" has the path "\#(wanted)", which is not a relative path inside the folder. It gets no layer."#
                 ))
             return
         }
+        if source.select != .all {
+            diagnostics.append(
+                MarketplaceDiagnostic(
+                    severity: .warning, marketplaceID: key,
+                    message:
+                        #"The source "\#(source.url)" names a folder on this computer, thus the store reads that folder as it is. A "select" field needs a catalog of a fetched commit, thus the store ignores it here."#
+                ))
+        }
         sources.append(
             MarketplaceStore.PreparedSource(
-                source: source, key: key, url: url, ref: source.isPinned ? source.ref : ref,
-                cache: MarketplaceCache(
-                    root: cacheDirectory,
-                    folderName: MarketplaceIdentity.cacheFolderName(key: key, normalizedURL: url))))
+                source: source, key: key,
+                kind: .local(root: folder.appendingPathComponent(path, isDirectory: true))))
+    }
+
+    /// Prepares a git source, and serves it from the read-only seed folder
+    /// when the cache holds no snapshot of it (marketplace.md §7.5).
+    ///
+    /// - Parameters:
+    ///   - source: The source, as the host wrote it.
+    ///   - key: The pre-fetch key of the source.
+    ///   - url: The normalized git URL.
+    ///   - ref: The branch or the tag of the URL, or `nil`.
+    private mutating func addGit(source: MarketplaceSource, key: String, url: String, ref: String?) {
+        let folderName = MarketplaceIdentity.cacheFolderName(key: key, normalizedURL: url)
+        let remote = MarketplaceStore.GitRemote(
+            url: url, ref: source.isPinned ? source.ref : ref,
+            cache: MarketplaceCache(root: cacheDirectory, folderName: folderName))
+        sources.append(
+            MarketplaceStore.PreparedSource(
+                source: source, key: key, kind: kind(ofRemote: remote, folderName: folderName)))
+    }
+
+    /// Tells whether the read-only seed folder serves one git marketplace
+    /// (marketplace.md §7.5).
+    ///
+    /// The seed folder has the layout of a cache directory. It serves a
+    /// marketplace only when the cache of the store holds no snapshot of it,
+    /// thus an installed snapshot always wins over the seed.
+    ///
+    /// - Parameters:
+    ///   - remote: The remote of the marketplace.
+    ///   - folderName: The cache folder name of the marketplace.
+    /// - Returns: The seed kind when the seed folder holds a snapshot and the
+    ///   cache holds none, else the git kind.
+    private func kind(
+        ofRemote remote: MarketplaceStore.GitRemote, folderName: String
+    ) -> MarketplaceStore.PreparedKind {
+        guard remote.cache.currentSha() == nil, let seedDirectory else {
+            return .git(remote)
+        }
+        let seed = MarketplaceCache(root: seedDirectory, folderName: folderName)
+        return seed.currentSha() == nil ? .git(remote) : .seed(remote, seed: seed)
     }
 
     /// Makes the finding for a source that the policy refuses
