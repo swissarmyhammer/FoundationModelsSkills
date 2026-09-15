@@ -334,13 +334,16 @@ was removed.
 
 ### 5.3 Marketplace identity
 
-- The **id** of a marketplace is the catalog `name`. If there is no catalog, the id is the
-  last path component of the repository name.
-- The host can give an alias. The alias wins over the catalog name.
-- Two sources with the same id are a configuration error. The store rejects the list and
-  records a diagnostic. It does not merge them.
-- The cache folder name is `<id>-<first 8 hex of sha256(normalized URL)>`. Thus a changed URL
-  never uses a stale cache.
+- Before a fetch, the store knows only the source. Thus it uses a **pre-fetch key**. The
+  pre-fetch key is the alias, if the host gives one. If there is no alias, the pre-fetch key
+  is the last path component of the repository, without `.git`.
+- Validation uses the pre-fetch key. Two sources with the same pre-fetch key are a
+  configuration error. The store rejects the list and records a diagnostic. It does not merge
+  them. To use the two sources, give one of them an alias.
+- The cache folder name uses the pre-fetch key:
+  `<pre-fetch key>-<first 8 hex of sha256(normalized URL)>`. Thus a changed URL never uses a
+  stale cache.
+- After a fetch, the catalog `name` is the **display id** of the marketplace.
 
 ## 6. The `MarketplaceStore`
 

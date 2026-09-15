@@ -37,8 +37,40 @@ comments:
     - rules check: the rules subagent did not report in time. I checked the new tests against the project rules myself: no `guard`; `#require(throws:)` and `#expect` with messages; no magic numbers except the regex digit counts, which a comment ties to the Stencil default format; no new public items.
     - next: `/review`. The task stays in `doing`. Nothing is committed.
   timestamp: 2026-09-15T12:22:35.701455+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01m2jghqxf0c937ge585ery9bq
+  text: |-
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (2051176). 0 findings (confirmed 0, refuted 0, attempted 7, failed 0). 1 file reviewed: `Tests/FoundationModelsSkillsTests/StencilPassTests.swift`. 4 `.kanban/` files are excluded by `.reviewignore`. The description has no prior `## Review Findings` section.
+    - next: The task is in `done`. No work stays open.
+  timestamp: 2026-09-15T12:26:57.327690+00:00
+- actor: claude-code
+  id: 01m2jgj6mh052sypfzdwdq3063
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 1 file (Tests/FoundationModelsSkillsTests/StencilPassTests.swift)
+    - test: green — swift test, 434 passed, 0 failed, 0 skipped; swift build --build-tests, 0 warnings
+    - commit: 2051176 test(render): prove a marketplace layer renders untrusted
+    - review: clean — 0 findings; task moved to done
+  timestamp: 2026-09-15T12:27:12.401479+00:00
+- actor: claude-code
+  id: 01m2jgkzfaf48btpp3d6770rwy
+  text: |-
+    ### Rules report — late check
+    The rules subagent reported after the step record. I checked the two new tests against each rule it quoted. Result: no change is necessary.
+    - magic-numbers-swift: the new code has no numeric literal. The digit counts are inside one regex literal.
+    - optionals / noGuardInTests: no `guard`, and no trailing `if let`. The tests use `#require(throws:)` and `#expect`.
+    - noForceUnwrapInTests / noForceTryInTests / disallowed-constructs: no `!`, no `try!`, no `as!`, and no `print`.
+    - casing / immutability: `nowTagBody` and `nowTagUntrustedRejection` are `lowerCamelCase` `static let`.
+    - missing-docs-swift: no new `public` item. The private constants have doc comments.
+    - swiftTestingTestCaseNames: the test names have no `test` prefix.
+    - no-hard-code: the rejection text is in the expected-value position of an assertion.
+    - no-test-cheating: each test has an assertion that can fail. The RED run proved this.
+    - duplication / reuse: the two tests assert different results (an error, and a rendered date). They use the shared `render` and `request` helpers.
+    The step record "implement — changed" is still correct.
+  timestamp: 2026-09-15T12:28:10.602501+00:00
+position_column: done
+position_ordinal: c980
 title: Pin Extras with DotfolderStack.Source.marketplace and prove it renders untrusted
 ---
 ## What
