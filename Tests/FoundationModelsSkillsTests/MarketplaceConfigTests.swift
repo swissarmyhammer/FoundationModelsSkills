@@ -25,7 +25,7 @@ struct MarketplaceConfigTests {
     @Test func aUserFileGivesItsEntriesInFileOrder() throws {
         let fixture = try ConfigFixture()
         defer { fixture.remove() }
-        try fixture.write(
+        try MarketplaceTestSupport.writeFile(
             """
             marketplaces:
               - url: git@github.com:swissarmyhammer/skills.git
@@ -47,14 +47,14 @@ struct MarketplaceConfigTests {
     @Test func theProjectListComesAfterTheUserList() throws {
         let fixture = try ConfigFixture()
         defer { fixture.remove() }
-        try fixture.write(
+        try MarketplaceTestSupport.writeFile(
             """
             marketplaces:
               - url: github:acme/one
               - url: github:acme/two
             """,
             to: fixture.userFile)
-        try fixture.write(
+        try MarketplaceTestSupport.writeFile(
             """
             marketplaces:
               - url: github:acme/three
@@ -74,7 +74,7 @@ struct MarketplaceConfigTests {
     @Test func aProjectEntryWithTheSameAliasReplacesTheUserEntryCompletely() throws {
         let fixture = try ConfigFixture()
         defer { fixture.remove() }
-        try fixture.write(
+        try MarketplaceTestSupport.writeFile(
             """
             marketplaces:
               - url: github:acme/skills
@@ -84,7 +84,7 @@ struct MarketplaceConfigTests {
               - url: github:acme/other
             """,
             to: fixture.userFile)
-        try fixture.write(
+        try MarketplaceTestSupport.writeFile(
             """
             marketplaces:
               - url: github:acme/forked-skills
@@ -104,7 +104,7 @@ struct MarketplaceConfigTests {
     @Test func aProjectEntryWithTheSameNormalizedURLReplacesTheUserEntryCompletely() throws {
         let fixture = try ConfigFixture()
         defer { fixture.remove() }
-        try fixture.write(
+        try MarketplaceTestSupport.writeFile(
             """
             marketplaces:
               - url: github:acme/skills
@@ -113,7 +113,7 @@ struct MarketplaceConfigTests {
               - url: github:acme/other
             """,
             to: fixture.userFile)
-        try fixture.write(
+        try MarketplaceTestSupport.writeFile(
             """
             marketplaces:
               - url: https://GitHub.com/acme/skills.git/
@@ -132,13 +132,13 @@ struct MarketplaceConfigTests {
     @Test func anAliasAndAURLAreNeverTheSameMergeKey() throws {
         let fixture = try ConfigFixture()
         defer { fixture.remove() }
-        try fixture.write(
+        try MarketplaceTestSupport.writeFile(
             """
             marketplaces:
               - url: github:acme/skills
             """,
             to: fixture.userFile)
-        try fixture.write(
+        try MarketplaceTestSupport.writeFile(
             """
             marketplaces:
               - url: github:acme/other
@@ -154,14 +154,14 @@ struct MarketplaceConfigTests {
     @Test func aProjectFileHasNoEffectWhenTheProjectIsNotIncluded() throws {
         let fixture = try ConfigFixture()
         defer { fixture.remove() }
-        try fixture.write(
+        try MarketplaceTestSupport.writeFile(
             """
             marketplaces:
               - url: github:acme/skills
                 alias: team
             """,
             to: fixture.userFile)
-        try fixture.write(
+        try MarketplaceTestSupport.writeFile(
             """
             marketplaces:
               - url: github:evil/skills
@@ -214,7 +214,7 @@ struct MarketplaceConfigTests {
     @Test func aFileThatIsNotValidYAMLThrowsAnErrorThatNamesTheFile() throws {
         let fixture = try ConfigFixture()
         defer { fixture.remove() }
-        try fixture.write("marketplaces: [", to: fixture.userFile)
+        try MarketplaceTestSupport.writeFile("marketplaces: [", to: fixture.userFile)
 
         let error = #expect(throws: MarketplaceConfigError.self) {
             try MarketplaceConfig.load(from: fixture.stack, includeProject: false)
@@ -227,7 +227,7 @@ struct MarketplaceConfigTests {
     @Test func aFileWithAnEntryThatHasNoURLThrowsAnErrorThatNamesTheFile() throws {
         let fixture = try ConfigFixture()
         defer { fixture.remove() }
-        try fixture.write(
+        try MarketplaceTestSupport.writeFile(
             """
             marketplaces:
               - alias: team
@@ -265,11 +265,9 @@ private struct ConfigFixture {
     /// Makes the temporary folder and the stack. The layer folders do not
     /// exist yet.
     ///
-    /// - Throws: The error of `FileManager.createDirectory`.
+    /// - Throws: The error of `MarketplaceTestSupport.makeTempDirectory(withFiles:)`.
     init() throws {
-        root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("MarketplaceConfigTests-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        root = try MarketplaceTestSupport.makeTempDirectory()
         stack = DotfolderStack(
             name: Self.stackName,
             workingDirectory: root,
@@ -279,18 +277,6 @@ private struct ConfigFixture {
             .root.appendingPathComponent(MarketplaceConfig.fileName)
         projectFile = try #require(stack.layers.first { $0.source == .project })
             .root.appendingPathComponent(MarketplaceConfig.fileName)
-    }
-
-    /// Writes `text` to `file`, and makes the folder of the file first.
-    ///
-    /// - Parameters:
-    ///   - text: The YAML text.
-    ///   - file: The file to write.
-    /// - Throws: The error of the folder or the file write.
-    func write(_ text: String, to file: URL) throws {
-        try FileManager.default.createDirectory(
-            at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try text.write(to: file, atomically: true, encoding: .utf8)
     }
 
     /// Removes the temporary folder and everything in it.

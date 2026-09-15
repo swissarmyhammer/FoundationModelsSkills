@@ -40,24 +40,24 @@ struct SkillWatcherTests {
 
     @Test func creatingASkillFileProducesExactlyOneCoalescedCallback() async throws {
         try await Self.withWatchedTempRoot { root, recorder in
-            try Self.writeSkillFile(id: "new-skill", in: root)
+            try ReloadTestSupport.writeSkillFile(id: "new-skill", in: root)
             _ = await Self.expectExactlyOneSignal(recorder, since: 0)
         }
     }
 
     @Test func editingASkillFileProducesExactlyOneCoalescedCallback() async throws {
         try await Self.withWatchedTempRoot { root, recorder in
-            try Self.writeSkillFile(id: "existing-skill", in: root)
+            try ReloadTestSupport.writeSkillFile(id: "existing-skill", in: root)
             let baseline = await Self.expectExactlyOneSignal(recorder, since: 0)
 
-            try Self.writeSkillFile(id: "existing-skill", in: root, bodySuffix: "edited")
+            try ReloadTestSupport.writeSkillFile(id: "existing-skill", in: root, descriptionSuffix: "edited")
             _ = await Self.expectExactlyOneSignal(recorder, since: baseline)
         }
     }
 
     @Test func deletingASkillFileProducesExactlyOneCoalescedCallback() async throws {
         try await Self.withWatchedTempRoot { root, recorder in
-            try Self.writeSkillFile(id: "doomed-skill", in: root)
+            try ReloadTestSupport.writeSkillFile(id: "doomed-skill", in: root)
             let baseline = await Self.expectExactlyOneSignal(recorder, since: 0)
 
             try FileManager.default.removeItem(
@@ -77,7 +77,7 @@ struct SkillWatcherTests {
                 at: skillFile.deletingLastPathComponent(), withIntermediateDirectories: true)
 
             for iteration in 0..<5 {
-                try Self.skillFileContents(id: "burst-skill", bodySuffix: "rev\(iteration)")
+                try ReloadTestSupport.skillFileContents(id: "burst-skill", descriptionSuffix: "rev\(iteration)")
                     .write(to: skillFile, atomically: true, encoding: .utf8)
             }
 
@@ -89,7 +89,7 @@ struct SkillWatcherTests {
 
     @Test func skillFileNestedTwoLevelsDeepIsDetected() async throws {
         try await Self.withWatchedTempRoot { root, recorder in
-            try Self.writeSkillFile(id: "nested-skill", in: root)
+            try ReloadTestSupport.writeSkillFile(id: "nested-skill", in: root)
             _ = await Self.expectExactlyOneSignal(recorder, since: 0)
         }
     }
@@ -141,7 +141,7 @@ struct SkillWatcherTests {
         watcher.start()
         defer { watcher.stop() }
 
-        try Self.writeSkillFile(id: "still-works", in: realRoot)
+        try ReloadTestSupport.writeSkillFile(id: "still-works", in: realRoot)
         _ = await Self.expectExactlyOneSignal(recorder, since: 0)
     }
 
@@ -157,7 +157,7 @@ struct SkillWatcherTests {
         watcher.start()
         defer { watcher.stop() }
 
-        try Self.writeSkillFile(id: "arrived-skill", in: lateRoot)
+        try ReloadTestSupport.writeSkillFile(id: "arrived-skill", in: lateRoot)
         _ = await Self.expectExactlyOneSignal(recorder, since: 0)
     }
 
@@ -172,7 +172,7 @@ struct SkillWatcherTests {
         watcher.start()
         defer { watcher.stop() }
 
-        try Self.writeSkillFile(id: "before-delete", in: root)
+        try ReloadTestSupport.writeSkillFile(id: "before-delete", in: root)
         let afterFirstCreate = await Self.expectExactlyOneSignal(recorder, since: 0)
 
         try FileManager.default.removeItem(at: root)
@@ -181,7 +181,7 @@ struct SkillWatcherTests {
         // The root is gone -- `flush()`'s rebuild must have fallen back to
         // arming `privateDirectory` (the now-nearest existing ancestor), not
         // silently stopped watching anything at all.
-        try Self.writeSkillFile(id: "after-recreate", in: root)
+        try ReloadTestSupport.writeSkillFile(id: "after-recreate", in: root)
         _ = await Self.expectExactlyOneSignal(recorder, since: afterDelete)
     }
 
@@ -189,14 +189,14 @@ struct SkillWatcherTests {
         try await Self.withTempDirectory { privateDirectory in
             let lateRoot = privateDirectory.appendingPathComponent("skills-arrive-later", isDirectory: true)
             try await Self.withWatcher(over: [lateRoot]) { recorder in
-                try Self.writeSkillFile(id: "arrived-skill", in: lateRoot)
+                try ReloadTestSupport.writeSkillFile(id: "arrived-skill", in: lateRoot)
                 let afterCreate = await Self.expectExactlyOneSignal(recorder, since: 0)
 
                 // The flush above rebuilt the watch tree, so `lateRoot` is
                 // now watched recursively. An edit two levels under it never
                 // touches `privateDirectory`, so only the recursive watch
                 // can see it -- the ancestor watch alone cannot.
-                try Self.writeSkillFile(id: "arrived-skill", in: lateRoot, bodySuffix: "edited")
+                try ReloadTestSupport.writeSkillFile(id: "arrived-skill", in: lateRoot, descriptionSuffix: "edited")
                 _ = await Self.expectExactlyOneSignal(recorder, since: afterCreate)
             }
         }
@@ -217,7 +217,7 @@ struct SkillWatcherTests {
                 #expect(afterNoise == 0)
 
                 // Creating the awaited root itself still fires.
-                try Self.writeSkillFile(id: "arrived-skill", in: lateRoot)
+                try ReloadTestSupport.writeSkillFile(id: "arrived-skill", in: lateRoot)
                 _ = await Self.expectExactlyOneSignal(recorder, since: 0)
             }
         }
@@ -236,13 +236,13 @@ struct SkillWatcherTests {
             try await Self.withWatcher(over: [deepRoot]) { recorder in
                 // Creating the whole chain at once makes `a` appear directly
                 // under the armed ancestor, which is the awaited child.
-                try Self.writeSkillFile(id: "deep-skill", in: deepRoot)
+                try ReloadTestSupport.writeSkillFile(id: "deep-skill", in: deepRoot)
                 let afterCreate = await Self.expectExactlyOneSignal(recorder, since: 0)
 
                 // The flush above escalated to a real recursive watch of
                 // `deepRoot`; an edit four levels below `privateDirectory`
                 // is only visible through that watch.
-                try Self.writeSkillFile(id: "deep-skill", in: deepRoot, bodySuffix: "edited")
+                try ReloadTestSupport.writeSkillFile(id: "deep-skill", in: deepRoot, descriptionSuffix: "edited")
                 _ = await Self.expectExactlyOneSignal(recorder, since: afterCreate)
             }
         }
@@ -262,7 +262,7 @@ struct SkillWatcherTests {
             // failed listing as "no entries" rather than throwing or
             // abandoning the rest of the tree.
             try await Self.withWatcher(over: [root]) { recorder in
-                try Self.writeSkillFile(id: "readable-skill", in: root)
+                try ReloadTestSupport.writeSkillFile(id: "readable-skill", in: root)
                 _ = await Self.expectExactlyOneSignal(recorder, since: 0)
             }
         }
@@ -306,7 +306,7 @@ struct SkillWatcherTests {
         watcher.start()
         watcher.stop()
 
-        try Self.writeSkillFile(id: "after-stop", in: root)
+        try ReloadTestSupport.writeSkillFile(id: "after-stop", in: root)
         let countAfterWait = await Self.waitForCount(recorder, atLeast: 1, timeout: Self.noFurtherSignalWindow)
         #expect(countAfterWait == 0)
     }
@@ -325,7 +325,7 @@ struct SkillWatcherTests {
         }
         box.watcher?.start()
 
-        try Self.writeSkillFile(id: "self-stopping", in: root)
+        try ReloadTestSupport.writeSkillFile(id: "self-stopping", in: root)
         let afterFirstFlush = await Self.waitForCount(recorder, atLeast: 1, timeout: Self.expectedSignalTimeout)
         #expect(afterFirstFlush == 1)
 
@@ -340,7 +340,7 @@ struct SkillWatcherTests {
         // so a further change on the same root must not produce a second
         // signal: the watcher must already be genuinely stopped, not just
         // about to be.
-        try Self.writeSkillFile(id: "should-not-be-seen", in: root)
+        try ReloadTestSupport.writeSkillFile(id: "should-not-be-seen", in: root)
         let afterIgnoredChange = await Self.waitForCount(recorder, atLeast: 2, timeout: Self.noFurtherSignalWindow)
         #expect(afterIgnoredChange == 1)
 
@@ -349,7 +349,7 @@ struct SkillWatcherTests {
         // again.
         box.watcher?.start()
         defer { box.watcher?.stop() }
-        try Self.writeSkillFile(id: "after-restart", in: root)
+        try ReloadTestSupport.writeSkillFile(id: "after-restart", in: root)
         let afterRestart = await Self.waitForCount(recorder, atLeast: 2, timeout: Self.expectedSignalTimeout)
         #expect(afterRestart == 2)
     }
@@ -513,34 +513,5 @@ struct SkillWatcherTests {
         while await !condition(), ContinuousClock.now < deadline {
             try? await Task.sleep(for: Self.pollInterval)
         }
-    }
-
-    /// Builds a minimal but structurally valid `SKILL.md` body for `id`.
-    ///
-    /// - Parameters:
-    ///   - id: The skill id the frontmatter's `name:` field carries.
-    ///   - bodySuffix: Extra text appended to the body, so a second call
-    ///     with a different suffix produces genuinely different file
-    ///     content for edit tests.
-    /// - Returns: The `SKILL.md` file contents.
-    private static func skillFileContents(id: String, bodySuffix: String = "") -> String {
-        "---\nname: \(id)\ndescription: test fixture.\n---\nBody. \(bodySuffix)\n"
-    }
-
-    /// Writes `id/SKILL.md` directly under `directory`, creating the
-    /// skill's own subdirectory first if it does not already exist.
-    ///
-    /// - Parameters:
-    ///   - id: The skill id -- both the subdirectory name and the
-    ///     frontmatter's `name:` field.
-    ///   - directory: The root to write under.
-    ///   - bodySuffix: Forwarded to `skillFileContents(id:bodySuffix:)`.
-    /// - Throws: Whatever `FileManager.createDirectory` or `String.write`
-    ///   throws.
-    private static func writeSkillFile(id: String, in directory: URL, bodySuffix: String = "") throws {
-        let skillDirectory = directory.appendingPathComponent(id, isDirectory: true)
-        try FileManager.default.createDirectory(at: skillDirectory, withIntermediateDirectories: true)
-        try Self.skillFileContents(id: id, bodySuffix: bodySuffix)
-            .write(to: skillDirectory.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
     }
 }

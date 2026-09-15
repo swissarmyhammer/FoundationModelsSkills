@@ -132,6 +132,16 @@ private struct Diagnosed<Value> {
     }
 }
 
+extension Array {
+    /// Joins the results of a step that can give no value for an item.
+    ///
+    /// - Returns: The values that are present, in order, with the diagnostics
+    ///   of every result, in order.
+    fileprivate func collected<Item>() -> Diagnosed<[Item]> where Element == Diagnosed<Item?> {
+        Diagnosed(value: compactMap(\.value), diagnostics: flatMap(\.diagnostics))
+    }
+}
+
 /// The steps of one resolution over one tree.
 private struct CatalogReader {
     /// What a selected name names, for the text of a diagnostic.
@@ -141,6 +151,20 @@ private struct CatalogReader {
 
         /// A skill name.
         case skill
+
+        /// Gives the names that a selection of this kind names.
+        ///
+        /// - Parameter selection: The host selection.
+        /// - Returns: The names, or `nil` when the selection is of a
+        ///   different kind.
+        func selectedNames(in selection: SkillSelection) -> [String]? {
+            switch (self, selection) {
+            case (.plugin, .plugins(let names)), (.skill, .skills(let names)):
+                names
+            case (.plugin, _), (.skill, _):
+                nil
+            }
+        }
     }
 
     /// Which skill wins when two skills have the same name.
@@ -169,10 +193,10 @@ private struct CatalogReader {
     /// - Returns: The selected skills, with a diagnostic for each problem.
     func resolved(_ catalog: MarketplaceCatalog, selection: SkillSelection) -> ResolvedCatalog {
         let renamed = renamedSelection(selection, renames: catalog.renames)
-        let plugins = selectedPlugins(catalog.plugins, selection: renamed.value)
+        let plugins = selectedItems(catalog.plugins, by: renamed.value, noun: .plugin, nameOf: \.name)
         let listed = plugins.value.map { skills(of: $0) }
         let unique = deduplicated(listed.flatMap(\.value), winner: .last)
-        let selected = selectedSkills(unique.value, selection: renamed.value)
+        let selected = selectedItems(unique.value, by: renamed.value, noun: .skill, nameOf: \.name)
         return ResolvedCatalog(
             name: catalog.name, version: catalog.metadata?.version, skills: selected.value, renames: catalog.renames,
             diagnostics: renamed.diagnostics + plugins.diagnostics + listed.flatMap(\.diagnostics)
@@ -209,8 +233,7 @@ private struct CatalogReader {
         guard let entries = plugin.skills else {
             return folderSkills(ofPlugin: plugin.name, root: root)
         }
-        let found = entries.map { listedSkill($0, ofPlugin: plugin.name, root: root) }
-        return Diagnosed(value: found.compactMap(\.value), diagnostics: found.flatMap(\.diagnostics))
+        return entries.map { listedSkill($0, ofPlugin: plugin.name, root: root) }.collected()
     }
 
     /// Finds one skill of a `skills` array.
@@ -275,14 +298,14 @@ private struct CatalogReader {
     func scanned(selection: SkillSelection) -> ResolvedCatalog {
         guard case .plugins = selection else {
             let found = scannedSkills()
-            let selected = selectedSkills(found.value, selection: selection)
+            let selected = selectedItems(found.value, by: selection, noun: .skill, nameOf: \.name)
             return ResolvedCatalog(
                 name: nil, version: nil, skills: selected.value, renames: [:],
                 diagnostics: found.diagnostics + selected.diagnostics)
         }
+        let unknownPlugins = selectedItems([MarketplaceCatalog.Plugin](), by: selection, noun: .plugin, nameOf: \.name)
         return ResolvedCatalog(
-            name: nil, version: nil, skills: [], renames: [:],
-            diagnostics: selectedPlugins([], selection: selection).diagnostics)
+            name: nil, version: nil, skills: [], renames: [:], diagnostics: unknownPlugins.diagnostics)
     }
 
     /// Scans the tree for skills, to a depth of
@@ -292,11 +315,10 @@ private struct CatalogReader {
     ///   each deeper skill with the same name gives one warning.
     func scannedSkills() -> Diagnosed<[ResolvedSkill]> {
         let folders = skillFolders(in: [""], depth: 1)
-        let named = folders.value.map { scannedSkill(atFolder: $0) }
-        let unique = deduplicated(named.compactMap(\.value), winner: .first)
+        let named = folders.value.map { scannedSkill(atFolder: $0) }.collected()
+        let unique = deduplicated(named.value, winner: .first)
         return Diagnosed(
-            value: unique.value,
-            diagnostics: folders.diagnostics + named.flatMap(\.diagnostics) + unique.diagnostics)
+            value: unique.value, diagnostics: folders.diagnostics + named.diagnostics + unique.diagnostics)
     }
 
     /// Finds the folders that hold a `SKILL.md` file, one level at a time.
@@ -383,8 +405,7 @@ private struct CatalogReader {
     ///   - renames: The `renames` map of the catalog.
     /// - Returns: The names after the map, with no removed name.
     func renamedNames(_ names: [String], renames: [String: String?]) -> Diagnosed<[String]> {
-        let renamed = names.map { renamedName($0, renames: renames) }
-        return Diagnosed(value: renamed.compactMap(\.value), diagnostics: renamed.flatMap(\.diagnostics))
+        names.map { renamedName($0, renames: renames) }.collected()
     }
 
     /// Applies the `renames` map of the catalog to one selected name.
@@ -407,35 +428,24 @@ private struct CatalogReader {
         return Diagnosed(value: newName, diagnostics: [diagnostic(.advisory, saying: message)])
     }
 
-    /// Keeps the plugins that a ``SkillSelection/plugins(_:)`` selection
-    /// names.
+    /// Keeps the items that a selection names, when the selection names this
+    /// kind of item.
     ///
     /// - Parameters:
-    ///   - plugins: The plugins of the catalog, in catalog order.
+    ///   - items: The items, in catalog order.
     ///   - selection: The selection, after the renames.
-    /// - Returns: The selected plugins in catalog order. The other selections
-    ///   keep every plugin.
-    func selectedPlugins(
-        _ plugins: [MarketplaceCatalog.Plugin], selection: SkillSelection
-    ) -> Diagnosed<[MarketplaceCatalog.Plugin]> {
-        guard case .plugins(let names) = selection else {
-            return Diagnosed(value: plugins)
+    ///   - noun: The kind of the items. Only a selection of this kind removes
+    ///     items.
+    ///   - nameOf: The name of an item.
+    /// - Returns: The selected items in catalog order. A selection of a
+    ///   different kind keeps every item.
+    func selectedItems<Item>(
+        _ items: [Item], by selection: SkillSelection, noun: SelectionNoun, nameOf: (Item) -> String
+    ) -> Diagnosed<[Item]> {
+        guard let names = noun.selectedNames(in: selection) else {
+            return Diagnosed(value: items)
         }
-        return filtered(plugins, keepingNames: names, noun: .plugin, nameOf: \.name)
-    }
-
-    /// Keeps the skills that a ``SkillSelection/skills(_:)`` selection names.
-    ///
-    /// - Parameters:
-    ///   - skills: The skills, in catalog order.
-    ///   - selection: The selection, after the renames.
-    /// - Returns: The selected skills in catalog order. The other selections
-    ///   keep every skill.
-    func selectedSkills(_ skills: [ResolvedSkill], selection: SkillSelection) -> Diagnosed<[ResolvedSkill]> {
-        guard case .skills(let names) = selection else {
-            return Diagnosed(value: skills)
-        }
-        return filtered(skills, keepingNames: names, noun: .skill, nameOf: \.name)
+        return filtered(items, keepingNames: names, noun: noun, nameOf: nameOf)
     }
 
     /// Keeps the items that a list of names names.

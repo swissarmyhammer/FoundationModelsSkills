@@ -121,7 +121,7 @@ struct MarketplaceCatalogTests {
     @Test func anUndecodableCatalogGivesOneErrorInPlaceOfTheScan() throws {
         let catalog = try Self.resolvedCatalog(ofTree: [
             Self.claudeCatalogPath: "{ not json",
-            "skills/alpha/SKILL.md": Self.skillFileText(named: "alpha"),
+            "skills/alpha/SKILL.md": ReloadTestSupport.skillFileContents(id: "alpha"),
         ])
 
         #expect(catalog.skills.isEmpty)
@@ -184,7 +184,7 @@ struct MarketplaceCatalogTests {
             Self.claudeCatalogPath:
                 #"{"name": "n", "plugins": [{"name": "p", "source": "./", "skills": ["./skills/empty", "./skills/real"]}]}"#,
             "skills/empty/README.md": "No skill here.",
-            "skills/real/SKILL.md": Self.skillFileText(named: "real"),
+            "skills/real/SKILL.md": ReloadTestSupport.skillFileContents(id: "real"),
         ])
 
         #expect(catalog.skills == [ResolvedSkill(name: "real", path: "skills/real", plugin: "p")])
@@ -237,9 +237,9 @@ struct MarketplaceCatalogTests {
 
     @Test func theScanSkipsTheFoldersThatDiscoverySkips() throws {
         let catalog = try Self.resolvedCatalog(ofTree: [
-            ".git/hooks/SKILL.md": Self.skillFileText(named: "hooks"),
-            "node_modules/package/SKILL.md": Self.skillFileText(named: "package"),
-            "kept/SKILL.md": Self.skillFileText(named: "kept"),
+            ".git/hooks/SKILL.md": ReloadTestSupport.skillFileContents(id: "hooks"),
+            "node_modules/package/SKILL.md": ReloadTestSupport.skillFileContents(id: "package"),
+            "kept/SKILL.md": ReloadTestSupport.skillFileContents(id: "kept"),
         ])
 
         #expect(catalog.skills == [ResolvedSkill(name: "kept", path: "kept", plugin: nil)])
@@ -386,7 +386,8 @@ struct MarketplaceCatalogTests {
     // MARK: - Local file source
 
     @Test func aLocalSourceListsTheKindOfEachItemInNameOrder() throws {
-        let root = try Self.makeTree(["plain.txt": "plain", "run.sh": "echo hi", "folder/inner.txt": "inner"])
+        let root = try MarketplaceTestSupport.makeTempDirectory(
+            withFiles: ["plain.txt": "plain", "run.sh": "echo hi", "folder/inner.txt": "inner"])
         try FileManager.default.setAttributes(
             [.posixPermissions: Self.executableMode], ofItemAtPath: root.appendingPathComponent("run.sh").path)
         try FileManager.default.createSymbolicLink(
@@ -404,27 +405,29 @@ struct MarketplaceCatalogTests {
     }
 
     @Test func aLocalSourceReadsTheBytesOfAFile() throws {
-        let source = LocalCatalogFileSource(root: try Self.makeTree(["folder/inner.txt": "inner"]))
+        let source = LocalCatalogFileSource(
+            root: try MarketplaceTestSupport.makeTempDirectory(withFiles: ["folder/inner.txt": "inner"]))
 
         #expect(try source.contents(atPath: "folder/inner.txt") == Data("inner".utf8))
     }
 
     @Test(arguments: ["folder/missing.txt", "folder"])
     func aLocalSourceGivesNilForAPathThatIsNotAFile(path: String) throws {
-        let source = LocalCatalogFileSource(root: try Self.makeTree(["folder/inner.txt": "inner"]))
+        let source = LocalCatalogFileSource(
+            root: try MarketplaceTestSupport.makeTempDirectory(withFiles: ["folder/inner.txt": "inner"]))
 
         #expect(try source.contents(atPath: path) == nil)
     }
 
     @Test func aLocalSourceGivesNoEntriesForAMissingFolder() throws {
-        let source = LocalCatalogFileSource(root: try Self.makeTree([:]))
+        let source = LocalCatalogFileSource(root: try MarketplaceTestSupport.makeTempDirectory())
 
         #expect(try source.entries(inDirectory: "missing").isEmpty)
     }
 
     @Test(arguments: ["../outside.txt", "/etc/hosts", "~/secret"])
     func aLocalSourceRefusesAPathOutsideItsRoot(path: String) throws {
-        let source = LocalCatalogFileSource(root: try Self.makeTree([:]))
+        let source = LocalCatalogFileSource(root: try MarketplaceTestSupport.makeTempDirectory())
 
         #expect(throws: CatalogFileSourceError.pathOutsideRoot(path)) {
             try source.contents(atPath: path)
@@ -432,8 +435,8 @@ struct MarketplaceCatalogTests {
     }
 
     @Test func aLocalSourceRefusesASymlinkThatLeavesItsRoot() throws {
-        let outside = try Self.makeTree(["secret.txt": "secret"])
-        let root = try Self.makeTree([:])
+        let outside = try MarketplaceTestSupport.makeTempDirectory(withFiles: ["secret.txt": "secret"])
+        let root = try MarketplaceTestSupport.makeTempDirectory()
         try FileManager.default.createSymbolicLink(
             at: root.appendingPathComponent("escape"), withDestinationURL: outside.appendingPathComponent("secret.txt"))
 
@@ -462,38 +465,9 @@ struct MarketplaceCatalogTests {
     /// - Returns: The resolved catalog.
     /// - Throws: The error of a folder or file write.
     private static func resolvedCatalog(ofTree files: [String: String]) throws -> ResolvedCatalog {
-        CatalogResolver.resolve(from: LocalCatalogFileSource(root: try makeTree(files)), selection: .all)
-    }
-
-    /// Writes a tree into a new temporary folder.
-    ///
-    /// - Parameter files: The text of each file, keyed by its path in the tree.
-    /// - Returns: The root folder of the tree.
-    /// - Throws: The error of a folder or file write.
-    private static func makeTree(_ files: [String: String]) throws -> URL {
-        let root = try HotReloadTestSupport.makeTempDirectory()
-        for (path, text) in files {
-            let file = root.appendingPathComponent(path)
-            try FileManager.default.createDirectory(
-                at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try text.write(to: file, atomically: true, encoding: .utf8)
-        }
-        return root
-    }
-
-    /// Makes the text of a small `SKILL.md` file.
-    ///
-    /// - Parameter name: The frontmatter name of the skill.
-    /// - Returns: The file text.
-    private static func skillFileText(named name: String) -> String {
-        """
-        ---
-        name: \(name)
-        description: A skill of a test tree.
-        ---
-
-        The body of a test skill.
-        """
+        CatalogResolver.resolve(
+            from: LocalCatalogFileSource(root: try MarketplaceTestSupport.makeTempDirectory(withFiles: files)),
+            selection: .all)
     }
 
     /// Makes the expected skills of one folder of skill folders.
