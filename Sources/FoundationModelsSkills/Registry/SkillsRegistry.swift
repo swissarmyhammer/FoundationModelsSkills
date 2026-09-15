@@ -407,9 +407,30 @@ public struct SkillsRegistry: Sendable {
         ///   - localLayers: The local layers, lowest precedence first.
         init(marketplaceLayers: [MarketplaceLayer], localLayers: [DotfolderStack.Layer]) {
             layers = marketplaceLayers.map(\.layer) + localLayers
-            let named: [MarketplaceProvenance?] = marketplaceLayers.map(\.provenance)
-            let unnamed: [MarketplaceProvenance?] = localLayers.map { _ in nil }
+            let named: [MarketplaceProvenanceIndex.Entry?] = marketplaceLayers.map {
+                MarketplaceProvenanceIndex.Entry(provenance: $0.provenance, grants: $0.grants)
+            }
+            let unnamed: [MarketplaceProvenanceIndex.Entry?] = localLayers.map { _ in nil }
             marketplaces = MarketplaceProvenanceIndex(byLayerIndex: named + unnamed)
+        }
+
+        /// The grants that gate a skill whose winning layer is at `index`
+        /// (marketplace.md §6.6).
+        ///
+        /// A marketplace layer that no provider named grants for still gets
+        /// `MarketplaceGrants.none`, the most restrictive value: a layer
+        /// that always renders untrusted must never gain a capability
+        /// because nothing named a grant for it.
+        ///
+        /// - Parameter index: The index of the layer.
+        /// - Returns: The grants, or `nil` for a local layer -- a local
+        ///   skill is gated by the host policy alone.
+        func grants(atLayerIndex index: Int) -> MarketplaceGrants? {
+            if let grants = marketplaces.grants(atLayerIndex: index) {
+                return grants
+            }
+            let isMarketplaceLayer = layers.indices.contains(index) && layers[index].source == .marketplace
+            return isMarketplaceLayer ? MarketplaceGrants.none : nil
         }
     }
 
@@ -467,6 +488,9 @@ public struct SkillsRegistry: Sendable {
         let body: String
         let skillDirectory: URL
         let winningLayer: DotfolderStack.Layer
+        /// What the marketplace of `winningLayer` lets this skill run, or
+        /// `nil` for a local skill (marketplace.md §6.6).
+        let grants: MarketplaceGrants?
         let isModelVisible: Bool
         let isUserInvocable: Bool
         let isPreloaded: Bool
@@ -481,12 +505,18 @@ public struct SkillsRegistry: Sendable {
         ///     own directory.
         ///   - winningLayer: The `Layer` `discovered.rootIndex` resolves
         ///     to.
-        init(validated: ValidatedSkill, discovered: DiscoveredSkill, winningLayer: DotfolderStack.Layer) {
+        ///   - grants: What the marketplace of that layer lets this skill
+        ///     run, or `nil` for a local skill.
+        init(
+            validated: ValidatedSkill, discovered: DiscoveredSkill, winningLayer: DotfolderStack.Layer,
+            grants: MarketplaceGrants?
+        ) {
             id = validated.id
             frontmatter = validated.frontmatter
             body = validated.body
             skillDirectory = discovered.skillDirectory
             self.winningLayer = winningLayer
+            self.grants = grants
 
             let visibility = ResolvedVisibility(validated: validated)
             isModelVisible = visibility.isModelVisible
@@ -556,7 +586,8 @@ public struct SkillsRegistry: Sendable {
                     validated: validated, discovered: discovered, marketplaces: plan.marketplaces))
             catalog[discovered.id] = CatalogEntry(
                 validated: validated, discovered: discovered,
-                winningLayer: plan.layers[discovered.rootIndex])
+                winningLayer: plan.layers[discovered.rootIndex],
+                grants: plan.grants(atLayerIndex: discovered.rootIndex))
         }
 
         return (catalog, diagnostics)
@@ -622,12 +653,46 @@ public struct SkillsRegistry: Sendable {
         }
     }
 
+    // MARK: - Per-marketplace grants (marketplace.md §6.6)
+
+    /// The render policy that gates one catalog entry: this registry's own
+    /// `policy` for a local skill, and that policy folded together with the
+    /// grants of its marketplace for a marketplace skill.
+    ///
+    /// The host policy always wins. A grant can only keep a capability that
+    /// the host left on, never turn on one the host turned off, thus each
+    /// axis is the more restrictive of the two.
+    ///
+    /// - Parameter entry: The catalog entry to gate.
+    /// - Returns: The policy every gate reads for that entry.
+    private func effectivePolicy(for entry: CatalogEntry) -> RenderPolicy {
+        guard let grants = entry.grants else { return policy }
+        return RenderPolicy(
+            isShellExecutionDisabled: policy.isShellExecutionDisabled || !grants.shellInjection,
+            isScriptExecutionDisabled: policy.isScriptExecutionDisabled || !grants.scripts)
+    }
+
+    /// The render policy that gates the skill `id` names -- the lookup the
+    /// resource operations use, since they hold an id and not a catalog
+    /// entry.
+    ///
+    /// - Parameter id: The skill id to look up.
+    /// - Returns: The effective policy of that skill, or this registry's own
+    ///   `policy` when `id` is not currently in the catalog. An unknown id
+    ///   thus draws the same host-policy answer it drew before any
+    ///   marketplace existed, and the operation itself reports the unusable
+    ///   id.
+    internal func effectivePolicy(id: String) -> RenderPolicy {
+        guard let entry = catalogBox.snapshot.catalog[id] else { return policy }
+        return effectivePolicy(for: entry)
+    }
+
     // MARK: - Rendering helpers
 
     /// Builds a `RenderRequest` for `text` rendered under `entry`.
     ///
-    /// Threads `entry.skillDirectory`/`entry.winningLayer` and this
-    /// registry's own `policy` -- the fields every render call site shares
+    /// Threads `entry.skillDirectory`/`entry.winningLayer` and the entry's
+    /// effective policy -- the fields every render call site shares
     /// -- so a call site only ever supplies what actually varies for it
     /// (`text`, and, where relevant, `arguments`/`argumentNames`).
     ///
@@ -646,7 +711,7 @@ public struct SkillsRegistry: Sendable {
     ) -> RenderRequest {
         RenderRequest(
             text: text, arguments: arguments, argumentNames: argumentNames, skillDirectory: entry.skillDirectory,
-            winningLayer: entry.winningLayer, policy: policy)
+            winningLayer: entry.winningLayer, policy: effectivePolicy(for: entry))
     }
 
     /// Renders `text` under `entry` through `render`, falling back to `text`

@@ -52,14 +52,28 @@ public struct MarketplaceLayer: Sendable {
     /// Where the skills under ``layer`` came from.
     public var provenance: MarketplaceProvenance
 
-    /// Creates a marketplace layer by directly assigning both fields.
+    /// What the host lets the skills under ``layer`` run
+    /// (marketplace.md §6.6).
+    ///
+    /// A grant removes only the marketplace block. The host `RenderPolicy`
+    /// always wins: a grant can never turn on what the host policy turned
+    /// off.
+    public var grants: MarketplaceGrants
+
+    /// Creates a marketplace layer by directly assigning its fields.
     ///
     /// - Parameters:
     ///   - layer: The layer itself.
     ///   - provenance: Where the skills under that layer came from.
-    public init(layer: DotfolderStack.Layer, provenance: MarketplaceProvenance) {
+    ///   - grants: What the host lets the skills under that layer run. The
+    ///     default is ``MarketplaceGrants/none``: no shell injection and no
+    ///     scripts.
+    public init(
+        layer: DotfolderStack.Layer, provenance: MarketplaceProvenance, grants: MarketplaceGrants = .none
+    ) {
         self.layer = layer
         self.provenance = provenance
+        self.grants = grants
     }
 }
 
@@ -89,22 +103,43 @@ public protocol MarketplaceLayerProviding: Sendable {
     var layerUpdates: AsyncStream<Void> { get }
 }
 
-/// Which marketplace each layer of one catalog generation came from, by
-/// layer index.
+/// Which marketplace each layer of one catalog generation came from, and
+/// what its skills may run, by layer index.
 ///
 /// `DiscoveredSkill.rootIndex` and `ShadowedCandidate.rootIndex` are both
 /// indices into the same ordered layer list, thus one lookup by index
-/// serves both the winner's provenance and the shadow message.
+/// serves the winner's provenance, the shadow message, and the grants that
+/// gate the winner's shell injection and scripts (marketplace.md §6.6).
 internal struct MarketplaceProvenanceIndex: Sendable {
+    /// What one marketplace layer carries: where its skills came from, and
+    /// what the host lets them run.
+    internal struct Entry: Sendable {
+        /// Where the skills of the layer came from.
+        let provenance: MarketplaceProvenance
+
+        /// What the host lets those skills run.
+        let grants: MarketplaceGrants
+
+        /// Creates an entry.
+        ///
+        /// - Parameters:
+        ///   - provenance: Where the skills of the layer came from.
+        ///   - grants: What the host lets those skills run.
+        init(provenance: MarketplaceProvenance, grants: MarketplaceGrants) {
+            self.provenance = provenance
+            self.grants = grants
+        }
+    }
+
     /// One entry for each layer, in layer order; `nil` for a local layer.
-    private let byLayerIndex: [MarketplaceProvenance?]
+    private let byLayerIndex: [Entry?]
 
     /// Creates an index.
     ///
     /// - Parameter byLayerIndex: One entry for each layer, in layer order;
     ///   `nil` for a local layer. The default is no entry, which names no
     ///   marketplace at all.
-    init(byLayerIndex: [MarketplaceProvenance?] = []) {
+    init(byLayerIndex: [Entry?] = []) {
         self.byLayerIndex = byLayerIndex
     }
 
@@ -114,6 +149,24 @@ internal struct MarketplaceProvenanceIndex: Sendable {
     /// - Returns: The marketplace, or `nil` for a local layer or an index
     ///   that names no layer.
     func provenance(atLayerIndex index: Int) -> MarketplaceProvenance? {
+        entry(atLayerIndex: index)?.provenance
+    }
+
+    /// Gives the grants of one layer.
+    ///
+    /// - Parameter index: The index of the layer.
+    /// - Returns: The grants, or `nil` for a local layer or an index that
+    ///   names no layer.
+    func grants(atLayerIndex index: Int) -> MarketplaceGrants? {
+        entry(atLayerIndex: index)?.grants
+    }
+
+    /// Gives the entry of one layer.
+    ///
+    /// - Parameter index: The index of the layer.
+    /// - Returns: The entry, or `nil` for a local layer or an index that
+    ///   names no layer.
+    private func entry(atLayerIndex index: Int) -> Entry? {
         byLayerIndex.indices.contains(index) ? byLayerIndex[index] : nil
     }
 }

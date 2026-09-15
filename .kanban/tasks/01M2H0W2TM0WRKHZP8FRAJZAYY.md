@@ -52,11 +52,27 @@ comments:
     - evidence: 1 file — Tests/FoundationModelsSkillsTests/MarketplaceRegistryTests.swift. `swift build --build-tests` = zero errors, zero warnings. `swift test --filter MarketplaceRegistryTests` = 7 tests, 7 pass. `swift test` = 599 tests in 43 suites, all pass, 0 fail, 0 skip.
     - next: /review
   timestamp: 2026-09-15T17:15:53.113037+00:00
+- actor: claude-code
+  id: 01m2k18r255ecwadt1zs6fbx53
+  text: |-
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (commit b1a7c10). 0 findings, 0 confirmed, 0 refuted, 7 validators. The earlier finding is marked complete.
+    - next: the task moves to done.
+  timestamp: 2026-09-15T17:19:08.357046+00:00
+- actor: claude-code
+  id: 01m2k1928q4jv2gamcj7aq3d1n
+  text: |-
+    ### finish iteration 2 — clean
+    - implement: changed — 1 file; the fake provider holds its layers in a Mutex and takes a plain Sendable conformance
+    - test: green — swift build --build-tests 0 warnings; swift test x2, 599 passed each run, 0 failed, 0 skipped
+    - commit: b1a7c10 fix(tests): use plain Sendable for the fake marketplace provider
+    - review: clean — 0 new findings; the prior finding is checked; task moved to done
+  timestamp: 2026-09-15T17:19:18.807259+00:00
 depends_on:
 - 01M2H0PTG2XXMYBQX8BB3E76AX
 - 01M2H0R2AFRD111HR47N3YVH8R
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: d280
 title: Put marketplace layers below the stack in SkillsRegistry, with provenance and reload on update
 ---
 ## What

@@ -1,7 +1,6 @@
 import Foundation
 import FoundationModelsExtras
 import FoundationModelsSkills
-import Synchronization
 import Testing
 
 /// Tests for the marketplace half of `SkillsRegistry` (marketplace.md §4.1,
@@ -147,8 +146,10 @@ struct MarketplaceRegistryTests {
                     id: MarketplaceRegistryTests.sharedSkillID, in: localRoot, body: localBody)
             }
 
-            let first = Fixture.makeLayer(root: firstRoot, id: "first-marketplace", sha: "sha-first-1")
-            let second = Fixture.makeLayer(root: secondRoot, id: "second-marketplace", sha: "sha-second-1")
+            let first = MarketplaceTestSupport.makeMarketplaceLayer(
+                root: firstRoot, id: "first-marketplace", sha: "sha-first-1")
+            let second = MarketplaceTestSupport.makeMarketplaceLayer(
+                root: secondRoot, id: "second-marketplace", sha: "sha-second-1")
             provider = FakeMarketplaceProvider(
                 layers: reversedMarketplaceOrder ? [second, first] : [first, second])
         }
@@ -172,8 +173,10 @@ struct MarketplaceRegistryTests {
         /// - Throws: The error of a folder or file write.
         func publishSecondMarketplaceUpdate(body: String, sha: String) throws {
             try Fixture.writeSharedSkill(in: secondRoot, body: body)
-            let first = Fixture.makeLayer(root: firstRoot, id: "first-marketplace", sha: "sha-first-1")
-            let second = Fixture.makeLayer(root: secondRoot, id: "second-marketplace", sha: sha)
+            let first = MarketplaceTestSupport.makeMarketplaceLayer(
+                root: firstRoot, id: "first-marketplace", sha: "sha-first-1")
+            let second = MarketplaceTestSupport.makeMarketplaceLayer(
+                root: secondRoot, id: "second-marketplace", sha: sha)
             provider.publish(layers: [first, second])
         }
 
@@ -188,58 +191,6 @@ struct MarketplaceRegistryTests {
             try ReloadTestSupport.writeSkillFile(
                 id: MarketplaceRegistryTests.sharedSkillID, in: root,
                 extraFrontmatter: "compatibility: \"\"\n", body: body)
-        }
-
-        /// Makes one marketplace layer over a root.
-        ///
-        /// - Parameters:
-        ///   - root: The stable layer root of the marketplace.
-        ///   - id: The display id of the marketplace.
-        ///   - sha: The commit of the snapshot.
-        /// - Returns: The layer.
-        private static func makeLayer(root: URL, id: String, sha: String) -> MarketplaceLayer {
-            MarketplaceLayer(
-                layer: DotfolderStack.Layer(source: .marketplace, root: root),
-                provenance: MarketplaceProvenance(
-                    id: id, url: "https://example.invalid/\(id).git", sha: sha, catalogVersion: "1.0.0"))
-        }
-    }
-
-    /// A provider whose layer list the test replaces, and which publishes one
-    /// update for each replacement.
-    ///
-    /// Every stored property is an immutable `let` of a `Sendable` type: the
-    /// mutable layer list lives inside a `Mutex`, which gives the class a
-    /// plain `Sendable` conformance the compiler checks.
-    private final class FakeMarketplaceProvider: MarketplaceLayerProviding, Sendable {
-        private let layers: Mutex<[MarketplaceLayer]>
-        private let continuation: AsyncStream<Void>.Continuation
-
-        let layerUpdates: AsyncStream<Void>
-
-        /// Creates a provider over one starting layer list.
-        ///
-        /// - Parameter layers: The starting layers, lowest precedence first.
-        init(layers: [MarketplaceLayer]) {
-            self.layers = Mutex(layers)
-            let made = AsyncStream<Void>.makeStream()
-            layerUpdates = made.stream
-            continuation = made.continuation
-        }
-
-        /// Gives the current layers, lowest precedence first.
-        ///
-        /// - Returns: The layers.
-        func marketplaceLayers() -> [MarketplaceLayer] {
-            layers.withLock { $0 }
-        }
-
-        /// Replaces the layers and publishes one update.
-        ///
-        /// - Parameter layers: The new layers, lowest precedence first.
-        func publish(layers: [MarketplaceLayer]) {
-            self.layers.withLock { $0 = layers }
-            continuation.yield()
         }
     }
 }

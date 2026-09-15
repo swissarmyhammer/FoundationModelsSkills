@@ -1,4 +1,6 @@
 import Foundation
+import FoundationModelsExtras
+import Synchronization
 
 @testable import FoundationModelsSkills
 
@@ -57,5 +59,65 @@ enum MarketplaceTestSupport {
         try FileManager.default.createDirectory(
             at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
         try text.write(to: file, atomically: true, encoding: .utf8)
+    }
+
+    /// Makes one marketplace layer over a root.
+    ///
+    /// `MarketplaceRegistryTests` and `MarketplaceGrantsTests` both build a
+    /// layer this way, thus the helper is here.
+    ///
+    /// - Parameters:
+    ///   - root: The stable layer root of the marketplace.
+    ///   - id: The display id of the marketplace.
+    ///   - sha: The commit of the snapshot.
+    ///   - grants: What the host lets the skills of the marketplace run. The
+    ///     default is `MarketplaceGrants.none`.
+    /// - Returns: The layer.
+    static func makeMarketplaceLayer(
+        root: URL, id: String, sha: String, grants: MarketplaceGrants = .none
+    ) -> MarketplaceLayer {
+        MarketplaceLayer(
+            layer: DotfolderStack.Layer(source: .marketplace, root: root),
+            provenance: MarketplaceProvenance(
+                id: id, url: "https://example.invalid/\(id).git", sha: sha, catalogVersion: "1.0.0"),
+            grants: grants)
+    }
+}
+
+/// A provider whose layer list the test replaces, and which publishes one
+/// update for each replacement.
+///
+/// Every stored property is an immutable `let` of a `Sendable` type: the
+/// mutable layer list lives inside a `Mutex`, which gives the class a
+/// plain `Sendable` conformance the compiler checks.
+final class FakeMarketplaceProvider: MarketplaceLayerProviding, Sendable {
+    private let layers: Mutex<[MarketplaceLayer]>
+    private let continuation: AsyncStream<Void>.Continuation
+
+    let layerUpdates: AsyncStream<Void>
+
+    /// Creates a provider over one starting layer list.
+    ///
+    /// - Parameter layers: The starting layers, lowest precedence first.
+    init(layers: [MarketplaceLayer]) {
+        self.layers = Mutex(layers)
+        let made = AsyncStream<Void>.makeStream()
+        layerUpdates = made.stream
+        continuation = made.continuation
+    }
+
+    /// Gives the current layers, lowest precedence first.
+    ///
+    /// - Returns: The layers.
+    func marketplaceLayers() -> [MarketplaceLayer] {
+        layers.withLock { $0 }
+    }
+
+    /// Replaces the layers and publishes one update.
+    ///
+    /// - Parameter layers: The new layers, lowest precedence first.
+    func publish(layers: [MarketplaceLayer]) {
+        self.layers.withLock { $0 = layers }
+        continuation.yield()
     }
 }

@@ -96,7 +96,7 @@ struct RunScriptTests {
         let root = try HotReloadTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         try ResourceTestSupport.writeMinimalSkillFile(id: "no-grant", in: root, allowedTools: nil)
-        try Self.writeExecutableShebangScript(named: "run.sh", inSkillID: "no-grant", under: root)
+        try ResourceTestSupport.writeExecutableShebangScript(named: "run.sh", inSkillID: "no-grant", under: root)
 
         let output = try await RunScript(id: "no-grant", path: "scripts/run.sh").execute(
             in: Self.makeContext(roots: [root]))
@@ -112,7 +112,7 @@ struct RunScriptTests {
         let root = try HotReloadTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         try ResourceTestSupport.writeMinimalSkillFile(id: "narrow-grant", in: root, allowedTools: "Script(scripts/other/*)")
-        try Self.writeExecutableShebangScript(named: "run.sh", inSkillID: "narrow-grant", under: root)
+        try ResourceTestSupport.writeExecutableShebangScript(named: "run.sh", inSkillID: "narrow-grant", under: root)
 
         let output = try await RunScript(id: "narrow-grant", path: "scripts/run.sh").execute(
             in: Self.makeContext(roots: [root]))
@@ -190,7 +190,7 @@ struct RunScriptTests {
         let root = try HotReloadTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         try ResourceTestSupport.writeMinimalSkillFile(id: "not-executable", in: root, allowedTools: "Script")
-        let scriptURL = try Self.scriptsDirectory(inSkillID: "not-executable", under: root)
+        let scriptURL = try ResourceTestSupport.scriptsDirectory(inSkillID: "not-executable", under: root)
             .appendingPathComponent("run.sh")
         try "#!/bin/sh\necho hi\n".write(to: scriptURL, atomically: true, encoding: .utf8)
         // Deliberately not marked executable.
@@ -209,7 +209,7 @@ struct RunScriptTests {
         let root = try HotReloadTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         try ResourceTestSupport.writeMinimalSkillFile(id: "no-shebang", in: root, allowedTools: "Script")
-        let scriptURL = try Self.scriptsDirectory(inSkillID: "no-shebang", under: root)
+        let scriptURL = try ResourceTestSupport.scriptsDirectory(inSkillID: "no-shebang", under: root)
             .appendingPathComponent("run.sh")
         try "echo hi\n".write(to: scriptURL, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
@@ -230,7 +230,7 @@ struct RunScriptTests {
         let root = try HotReloadTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         try ResourceTestSupport.writeMinimalSkillFile(id: "sleeper", in: root, allowedTools: "Script")
-        let scriptURL = try Self.scriptsDirectory(inSkillID: "sleeper", under: root)
+        let scriptURL = try ResourceTestSupport.scriptsDirectory(inSkillID: "sleeper", under: root)
             .appendingPathComponent("sleep-and-background.sh")
         try """
             #!/bin/sh
@@ -273,7 +273,7 @@ struct RunScriptTests {
     func scriptProcessRunnerReportsFailedToSpawnWhenTheInterpreterDoesNotExist() async throws {
         let root = try HotReloadTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
-        let scriptURL = try Self.writeExecutableShebangScript(
+        let scriptURL = try ResourceTestSupport.writeExecutableShebangScript(
             named: "no-interpreter.sh", inSkillID: "no-interpreter", under: root,
             contents: "#!/nonexistent/interpreter\necho hi\n")
 
@@ -325,7 +325,7 @@ struct RunScriptTests {
         let root = try HotReloadTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         try ResourceTestSupport.writeMinimalSkillFile(id: "sub-second-sleeper", in: root, allowedTools: "Script")
-        try Self.writeExecutableShebangScript(
+        try ResourceTestSupport.writeExecutableShebangScript(
             named: "sleep-a-bit.sh", inSkillID: "sub-second-sleeper", under: root,
             contents: "#!/bin/sh\nsleep 0.3\necho done\n")
 
@@ -373,56 +373,5 @@ struct RunScriptTests {
         #expect(decoded.timeout == nil)
         #expect(!content.jsonString.contains("\"arguments\""))
         #expect(!content.jsonString.contains("\"timeout\""))
-    }
-
-    // MARK: - Fixture helpers
-
-    /// The `scripts/` subdirectory under `id`'s skill directory, created if
-    /// it does not already exist.
-    ///
-    /// - Parameters:
-    ///   - id: The owning skill id.
-    ///   - directory: The root the skill lives under.
-    /// - Returns: The `scripts/` directory.
-    /// - Throws: Whatever `FileManager.createDirectory` throws.
-    private static func scriptsDirectory(inSkillID id: String, under directory: URL) throws -> URL {
-        guard !id.contains("/"), !id.contains("..") else { throw UnsafeFixtureFileName() }
-        let scriptsDirectory = directory.appendingPathComponent(id, isDirectory: true)
-            .appendingPathComponent("scripts", isDirectory: true)
-        try FileManager.default.createDirectory(at: scriptsDirectory, withIntermediateDirectories: true)
-        return scriptsDirectory
-    }
-
-    /// Thrown by `writeExecutableShebangScript(named:inSkillID:under:contents:)`
-    /// when `name` is not a plain file name -- a test-authoring bug, never
-    /// expected in practice, since every call site names a fixed literal.
-    private struct UnsafeFixtureFileName: Error {}
-
-    /// Writes an executable, shebang-carrying script named `name` under
-    /// `id`'s `scripts/` directory.
-    ///
-    /// - Parameters:
-    ///   - name: The script's file name -- a plain name with no path
-    ///     separators or `..` components.
-    ///   - id: The owning skill id.
-    ///   - directory: The root the skill lives under.
-    ///   - contents: The script's full text, shebang included. Defaults to
-    ///     a minimal `echo hi` script.
-    /// - Returns: The written script's URL, for a test that runs it
-    ///   directly rather than through `RunScript`.
-    /// - Throws: `UnsafeFixtureFileName` if `name` is not a plain file name;
-    ///   otherwise whatever `FileManager.createDirectory`, `String.write`,
-    ///   or `FileManager.setAttributes` throws.
-    @discardableResult
-    private static func writeExecutableShebangScript(
-        named name: String, inSkillID id: String, under directory: URL, contents: String = "#!/bin/sh\necho hi\n"
-    )
-        throws -> URL
-    {
-        guard !name.contains("/"), !name.contains("..") else { throw UnsafeFixtureFileName() }
-        let scriptURL = try Self.scriptsDirectory(inSkillID: id, under: directory).appendingPathComponent(name)
-        try contents.write(to: scriptURL, atomically: true, encoding: .utf8)
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
-        return scriptURL
     }
 }

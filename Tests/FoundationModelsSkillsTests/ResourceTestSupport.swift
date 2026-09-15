@@ -22,7 +22,16 @@ enum ResourceTestSupport {
     ///     Defaults to the permissive `RenderPolicy()`.
     /// - Returns: The assembled context.
     static func makeContext(roots: [URL], policy: RenderPolicy = RenderPolicy()) -> SkillsToolContext {
-        let registry = SkillsRegistry(roots: roots, policy: policy)
+        makeContext(registry: SkillsRegistry(roots: roots, policy: policy))
+    }
+
+    /// Builds a `SkillsToolContext` over an already-built registry -- what a
+    /// test that needs a registry shape `makeContext(roots:policy:)` cannot
+    /// build (a marketplace-backed one, e.g.) calls.
+    ///
+    /// - Parameter registry: The registry the context dispatches against.
+    /// - Returns: The assembled context.
+    static func makeContext(registry: SkillsRegistry) -> SkillsToolContext {
         let searcher = MetadataSearcher(items: registry.metadata().filter(\.isModelVisible))
         return SkillsToolContext(registry: registry, searchAgent: SkillSearchAgent(searcher: searcher))
     }
@@ -62,5 +71,51 @@ enum ResourceTestSupport {
         try "---\nname: \(id)\ndescription: resource fixture.\n\(allowedToolsLine)---\nBody text for \(id).\n"
             .write(to: skillDirectory.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
         return skillDirectory
+    }
+
+    /// The `scripts/` subdirectory under `id`'s skill directory, created if
+    /// it does not already exist.
+    ///
+    /// - Parameters:
+    ///   - id: The owning skill id.
+    ///   - directory: The root the skill lives under.
+    /// - Returns: The `scripts/` directory.
+    /// - Throws: `UnsafeFixtureInput` if `id` is not a plain name; otherwise
+    ///   whatever `FileManager.createDirectory` throws.
+    static func scriptsDirectory(inSkillID id: String, under directory: URL) throws -> URL {
+        guard !id.contains("/"), !id.contains("..") else { throw UnsafeFixtureInput() }
+        let scriptsDirectory = directory.appendingPathComponent(id, isDirectory: true)
+            .appendingPathComponent("scripts", isDirectory: true)
+        try FileManager.default.createDirectory(at: scriptsDirectory, withIntermediateDirectories: true)
+        return scriptsDirectory
+    }
+
+    /// Writes an executable, shebang-carrying script named `name` under
+    /// `id`'s `scripts/` directory.
+    ///
+    /// `RunScriptTests` and `MarketplaceGrantsTests` both need a script that
+    /// passes the direct-exec eligibility check, thus the helper is here.
+    ///
+    /// - Parameters:
+    ///   - name: The script's file name -- a plain name with no path
+    ///     separators or `..` components.
+    ///   - id: The owning skill id.
+    ///   - directory: The root the skill lives under.
+    ///   - contents: The script's full text, shebang included. Defaults to
+    ///     a minimal `echo hi` script.
+    /// - Returns: The written script's URL, for a test that runs it
+    ///   directly rather than through `RunScript`.
+    /// - Throws: `UnsafeFixtureInput` if `name` is not a plain file name;
+    ///   otherwise whatever `FileManager.createDirectory`, `String.write`,
+    ///   or `FileManager.setAttributes` throws.
+    @discardableResult
+    static func writeExecutableShebangScript(
+        named name: String, inSkillID id: String, under directory: URL, contents: String = "#!/bin/sh\necho hi\n"
+    ) throws -> URL {
+        guard !name.contains("/"), !name.contains("..") else { throw UnsafeFixtureInput() }
+        let scriptURL = try Self.scriptsDirectory(inSkillID: id, under: directory).appendingPathComponent(name)
+        try contents.write(to: scriptURL, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
+        return scriptURL
     }
 }
