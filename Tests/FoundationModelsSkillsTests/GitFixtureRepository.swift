@@ -1,6 +1,8 @@
 import Foundation
 import libgit2
 
+@testable import FoundationModelsSkills
+
 /// A git repository that a test builds with libgit2 only (marketplace.md §13).
 ///
 /// The fixture never starts the `git` binary. It makes a bare repository in a
@@ -11,6 +13,10 @@ import libgit2
 /// `HEAD` names ``defaultBranch`` whatever `init.defaultBranch` the host sets,
 /// thus a test that reads `HEAD` does not depend on the host configuration.
 /// The directory is removed when the fixture is released.
+///
+/// The fixture uses the libgit2 helpers of ``LibGit2Transport``: the one
+/// library start, the bare-repository flag, the SHA format, and the last
+/// error message.
 final class GitFixtureRepository {
     /// One file in a fixture commit.
     enum Entry {
@@ -65,8 +71,8 @@ final class GitFixtureRepository {
         }
     }
 
-    /// The branch that `HEAD` names and that ``commit(_:on:message:)`` uses
-    /// when a test names no branch.
+    /// The branch that `HEAD` names and that ``commit(files:on:message:)``
+    /// uses when a test names no branch.
     static let defaultBranch = "main"
 
     /// The name that each fixture commit and annotated tag records.
@@ -76,21 +82,12 @@ final class GitFixtureRepository {
     /// `.invalid` top-level domain can never be a real address.
     private static let signatureEmail = "fixture@example.invalid"
 
-    /// The `is_bare` flag value that makes `git_repository_init` write a bare
-    /// repository.
-    private static let bareRepositoryFlag: UInt32 = 1
-
     /// The `force` flag value that lets `git_reference_create` replace an
     /// existing branch.
     private static let replaceExistingReference: Int32 = 1
 
     /// The `force` flag value that makes a tag call fail on an existing tag.
     private static let keepExistingTag: Int32 = 0
-
-    /// Starts libgit2 one time for the test process. libgit2 counts each
-    /// start, and the fixture never shuts it down, because the transport
-    /// under test uses the same library.
-    private static let libraryStartCount: Int32 = git_libgit2_init()
 
     /// The temporary directory that holds the bare repository.
     let directory: URL
@@ -137,11 +134,11 @@ final class GitFixtureRepository {
     /// - Throws: ``FixtureError`` when a libgit2 call fails.
     @discardableResult
     func commit(
-        _ files: [String: Entry], on branch: String = defaultBranch, message: String = "Fixture commit"
+        files: [String: Entry], on branch: String = defaultBranch, message: String = "Fixture commit"
     ) throws -> String {
-        var treeID = try writeTree(Self.nodes(from: files.map { (Self.components(of: $0.key), $0.value) }))
+        var treeID = try writeTree(of: Self.nodes(from: files.map { (Self.components(of: $0.key), $0.value) }))
         var tree: OpaquePointer?
-        try Self.check(git_tree_lookup(&tree, repository, &treeID), "git_tree_lookup")
+        try Self.check(status: git_tree_lookup(&tree, repository, &treeID), of: "git_tree_lookup")
         defer { git_tree_free(tree) }
         let parent = try tipCommit(of: branch)
         defer { git_commit_free(parent) }
@@ -149,12 +146,12 @@ final class GitFixtureRepository {
         var commitID = git_oid()
         try withSignature { signature in
             try Self.check(
-                git_commit_create(
-                    &commitID, repository, Self.branchReference(branch), signature, signature, nil, message,
+                status: git_commit_create(
+                    &commitID, repository, Self.branchReference(named: branch), signature, signature, nil, message,
                     tree, parents.count, &parents),
-                "git_commit_create")
+                of: "git_commit_create")
         }
-        return Self.hex(of: commitID)
+        return LibGit2Transport.hex(of: commitID)
     }
 
     /// Points `branch` at the commit `sha`, and makes the branch when it
@@ -164,13 +161,14 @@ final class GitFixtureRepository {
     ///   - branch: The branch to move.
     ///   - sha: The 40-hex SHA of the target commit.
     /// - Throws: ``FixtureError`` when a libgit2 call fails.
-    func moveBranch(_ branch: String, to sha: String) throws {
+    func moveBranch(named branch: String, to sha: String) throws {
         var target = try Self.objectID(of: sha)
         var reference: OpaquePointer?
         try Self.check(
-            git_reference_create(
-                &reference, repository, Self.branchReference(branch), &target, Self.replaceExistingReference, nil),
-            "git_reference_create")
+            status: git_reference_create(
+                &reference, repository, Self.branchReference(named: branch), &target, Self.replaceExistingReference,
+                nil),
+            of: "git_reference_create")
         git_reference_free(reference)
     }
 
@@ -180,12 +178,12 @@ final class GitFixtureRepository {
     ///   - name: The tag name, without `refs/tags/`.
     ///   - sha: The 40-hex SHA of the tagged commit.
     /// - Throws: ``FixtureError`` when a libgit2 call fails.
-    func tag(_ name: String, at sha: String) throws {
-        try withCommitObject(sha) { commit in
+    func addLightweightTag(named name: String, at sha: String) throws {
+        try withCommitObject(sha: sha) { commit in
             var tagID = git_oid()
             try Self.check(
-                git_tag_create_lightweight(&tagID, repository, name, commit, Self.keepExistingTag),
-                "git_tag_create_lightweight")
+                status: git_tag_create_lightweight(&tagID, repository, name, commit, Self.keepExistingTag),
+                of: "git_tag_create_lightweight")
         }
     }
 
@@ -198,13 +196,14 @@ final class GitFixtureRepository {
     ///   - name: The tag name, without `refs/tags/`.
     ///   - sha: The 40-hex SHA of the tagged commit.
     /// - Throws: ``FixtureError`` when a libgit2 call fails.
-    func annotatedTag(_ name: String, at sha: String) throws {
-        try withCommitObject(sha) { commit in
+    func addAnnotatedTag(named name: String, at sha: String) throws {
+        try withCommitObject(sha: sha) { commit in
             var tagID = git_oid()
             try withSignature { signature in
                 try Self.check(
-                    git_tag_create(&tagID, repository, name, commit, signature, "Fixture tag", Self.keepExistingTag),
-                    "git_tag_create")
+                    status: git_tag_create(
+                        &tagID, repository, name, commit, signature, "Fixture tag", Self.keepExistingTag),
+                    of: "git_tag_create")
             }
         }
     }
@@ -217,9 +216,9 @@ final class GitFixtureRepository {
     ///   - repositoryURL: The directory of a bare repository.
     /// - Returns: `true` when the commit object is in the repository.
     /// - Throws: ``FixtureError`` when the repository cannot be opened.
-    static func containsCommit(_ sha: String, inRepositoryAt repositoryURL: URL) throws -> Bool {
+    static func containsCommit(sha: String, inRepositoryAt repositoryURL: URL) throws -> Bool {
         var repository: OpaquePointer?
-        try check(git_repository_open_bare(&repository, repositoryURL.path), "git_repository_open_bare")
+        try check(status: git_repository_open_bare(&repository, repositoryURL.path), of: "git_repository_open_bare")
         defer { git_repository_free(repository) }
         var commitID = try objectID(of: sha)
         var commit: OpaquePointer?
@@ -260,50 +259,56 @@ final class GitFixtureRepository {
     /// Writes `nodes` as one tree object.
     ///
     /// - Returns: The id of the tree.
-    private func writeTree(_ nodes: [String: Node]) throws -> git_oid {
+    private func writeTree(of nodes: [String: Node]) throws -> git_oid {
         var builder: OpaquePointer?
-        try Self.check(git_treebuilder_new(&builder, repository, nil), "git_treebuilder_new")
+        try Self.check(status: git_treebuilder_new(&builder, repository, nil), of: "git_treebuilder_new")
         defer { git_treebuilder_free(builder) }
         for (name, node) in nodes {
-            var (objectID, mode) = try write(node)
-            try Self.check(git_treebuilder_insert(nil, builder, name, &objectID, mode), "git_treebuilder_insert")
+            var (objectID, mode) = try write(node: node)
+            try Self.check(
+                status: git_treebuilder_insert(nil, builder, name, &objectID, mode), of: "git_treebuilder_insert")
         }
         var treeID = git_oid()
-        try Self.check(git_treebuilder_write(&treeID, builder), "git_treebuilder_write")
+        try Self.check(status: git_treebuilder_write(&treeID, builder), of: "git_treebuilder_write")
         return treeID
     }
 
     /// Writes one node, and gives the id and mode of its tree entry.
-    private func write(_ node: Node) throws -> (git_oid, git_filemode_t) {
+    private func write(node: Node) throws -> (git_oid, git_filemode_t) {
         switch node {
         case .directory(let children):
-            (try writeTree(children), GIT_FILEMODE_TREE)
+            (try writeTree(of: children), GIT_FILEMODE_TREE)
         case .entry(let entry):
-            (try writeBlob(entry.contents), entry.mode)
+            (try writeBlob(contents: entry.contents), entry.mode)
         }
     }
 
     /// Writes `contents` as one blob object.
-    private func writeBlob(_ contents: String) throws -> git_oid {
+    private func writeBlob(contents: String) throws -> git_oid {
         var blobID = git_oid()
         let bytes = Array(contents.utf8)
         try Self.check(
-            git_blob_create_from_buffer(&blobID, repository, bytes, bytes.count), "git_blob_create_from_buffer")
+            status: git_blob_create_from_buffer(&blobID, repository, bytes, bytes.count),
+            of: "git_blob_create_from_buffer")
         return blobID
     }
 
     // MARK: - Objects and references
 
-    /// Makes the bare repository, and points `HEAD` at ``defaultBranch``.
+    /// Starts libgit2 through ``LibGit2Transport``, makes the bare
+    /// repository, and points `HEAD` at ``defaultBranch``.
     private static func makeBareRepository(at directory: URL) throws -> OpaquePointer {
-        try check(libraryStartCount, "git_libgit2_init")
+        try check(status: LibGit2Transport.libraryStartCount, of: "git_libgit2_init")
         var repository: OpaquePointer?
-        try check(git_repository_init(&repository, directory.path, bareRepositoryFlag), "git_repository_init")
-        let status = git_repository_set_head(repository, branchReference(defaultBranch))
+        try check(
+            status: git_repository_init(&repository, directory.path, LibGit2Transport.bareRepositoryFlag),
+            of: "git_repository_init")
+        let status = git_repository_set_head(repository, branchReference(named: defaultBranch))
         if let repository, status == GIT_OK.rawValue {
             return repository
         }
-        let error = FixtureError(call: "git_repository_set_head", code: status, message: lastErrorMessage())
+        let error = FixtureError(
+            call: "git_repository_set_head", code: status, message: LibGit2Transport.lastErrorMessage())
         git_repository_free(repository)
         throw error
     }
@@ -314,61 +319,53 @@ final class GitFixtureRepository {
     ///   The caller frees it.
     private func tipCommit(of branch: String) throws -> OpaquePointer? {
         var tipID = git_oid()
-        if git_reference_name_to_id(&tipID, repository, Self.branchReference(branch)) != GIT_OK.rawValue {
+        if git_reference_name_to_id(&tipID, repository, Self.branchReference(named: branch)) != GIT_OK.rawValue {
             return nil
         }
         var commit: OpaquePointer?
-        try Self.check(git_commit_lookup(&commit, repository, &tipID), "git_commit_lookup")
+        try Self.check(status: git_commit_lookup(&commit, repository, &tipID), of: "git_commit_lookup")
         return commit
     }
 
     /// Looks up the commit `sha` as a generic object, and gives it to `body`.
-    private func withCommitObject(_ sha: String, _ body: (OpaquePointer?) throws -> Void) throws {
+    private func withCommitObject(sha: String, body: (OpaquePointer?) throws -> Void) throws {
         var commitID = try Self.objectID(of: sha)
         var commit: OpaquePointer?
-        try Self.check(git_object_lookup(&commit, repository, &commitID, GIT_OBJECT_COMMIT), "git_object_lookup")
+        try Self.check(
+            status: git_object_lookup(&commit, repository, &commitID, GIT_OBJECT_COMMIT), of: "git_object_lookup")
         defer { git_object_free(commit) }
         try body(commit)
     }
 
     /// Makes the fixture signature with the time now, and gives it to `body`.
-    private func withSignature(_ body: (UnsafeMutablePointer<git_signature>?) throws -> Void) throws {
+    private func withSignature(body: (UnsafeMutablePointer<git_signature>?) throws -> Void) throws {
         var signature: UnsafeMutablePointer<git_signature>?
-        try Self.check(git_signature_now(&signature, Self.signatureName, Self.signatureEmail), "git_signature_now")
+        try Self.check(
+            status: git_signature_now(&signature, Self.signatureName, Self.signatureEmail), of: "git_signature_now")
         defer { git_signature_free(signature) }
         try body(signature)
     }
 
     /// The full reference name of `branch`.
-    private static func branchReference(_ branch: String) -> String {
+    private static func branchReference(named branch: String) -> String {
         "refs/heads/\(branch)"
     }
 
     /// Parses a 40-hex SHA.
     private static func objectID(of sha: String) throws -> git_oid {
         var objectID = git_oid()
-        try check(git_oid_fromstr(&objectID, sha), "git_oid_fromstr")
+        try check(status: git_oid_fromstr(&objectID, sha), of: "git_oid_fromstr")
         return objectID
     }
 
-    /// Formats `objectID` as 40 hex digits.
-    private static func hex(of objectID: git_oid) -> String {
-        var objectID = objectID
-        return String(cString: git_oid_tostr_s(&objectID))
-    }
-
     /// Throws ``FixtureError`` when `status` is a libgit2 error code.
-    private static func check(_ status: Int32, _ call: String) throws {
+    ///
+    /// - Parameters:
+    ///   - status: The code that the libgit2 call returned.
+    ///   - call: The name of the libgit2 function, for the error.
+    private static func check(status: Int32, of call: String) throws {
         if status < GIT_OK.rawValue {
-            throw FixtureError(call: call, code: status, message: lastErrorMessage())
+            throw FixtureError(call: call, code: status, message: LibGit2Transport.lastErrorMessage())
         }
-    }
-
-    /// The message of the last libgit2 error on this thread.
-    private static func lastErrorMessage() -> String {
-        if let error = git_error_last(), let message = error.pointee.message {
-            return String(cString: message)
-        }
-        return ""
     }
 }

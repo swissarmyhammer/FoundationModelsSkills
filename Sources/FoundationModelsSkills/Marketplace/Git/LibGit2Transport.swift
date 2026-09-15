@@ -42,14 +42,14 @@ internal struct LibGit2Transport: GitTransport {
 
     /// The `is_bare` flag value that makes `git_repository_init` write a bare
     /// repository.
-    private static let bareRepositoryFlag: UInt32 = 1
+    internal static let bareRepositoryFlag: UInt32 = 1
 
     /// The value that a progress callback returns to let libgit2 continue.
     private static let continueTransfer: Int32 = 0
 
     /// Starts libgit2 one time for the process. The value is the start count,
     /// or a negative libgit2 error code.
-    private static let libraryStartCount: Int32 = git_libgit2_init()
+    internal static let libraryStartCount: Int32 = git_libgit2_init()
 
     internal func remoteHead(url: String, ref: String) async throws -> String {
         try Self.check(Self.libraryStartCount, phase: .localRepository)
@@ -289,7 +289,7 @@ internal struct LibGit2Transport: GitTransport {
     }
 
     /// The message of the last libgit2 error on this thread.
-    private static func lastErrorMessage() -> String {
+    internal static func lastErrorMessage() -> String {
         if let error = git_error_last(), let message = error.pointee.message {
             return String(cString: message)
         }
@@ -299,7 +299,7 @@ internal struct LibGit2Transport: GitTransport {
     // MARK: - Conversions
 
     /// Formats `objectID` as 40 hex digits.
-    private static func hex(of objectID: git_oid) -> String {
+    internal static func hex(of objectID: git_oid) -> String {
         var objectID = objectID
         return String(cString: git_oid_tostr_s(&objectID))
     }

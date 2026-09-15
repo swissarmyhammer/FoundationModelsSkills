@@ -19,7 +19,7 @@ struct GitTransportTests {
 
     @Test func remoteHeadGivesTheTipOfABranch() async throws {
         let fixture = try GitFixtureRepository()
-        let tip = try fixture.commit(["README.md": .file("first")])
+        let tip = try fixture.commit(files: ["README.md": .file("first")])
 
         let head = try await transport.remoteHead(url: fixture.url, ref: "main")
 
@@ -28,9 +28,9 @@ struct GitTransportTests {
 
     @Test func remoteHeadGivesTheCommitOfALightweightTag() async throws {
         let fixture = try GitFixtureRepository()
-        let tagged = try fixture.commit(["README.md": .file("first")])
-        try fixture.commit(["README.md": .file("second")])
-        try fixture.tag("v1.0.0", at: tagged)
+        let tagged = try fixture.commit(files: ["README.md": .file("first")])
+        try fixture.commit(files: ["README.md": .file("second")])
+        try fixture.addLightweightTag(named: "v1.0.0", at: tagged)
 
         let head = try await transport.remoteHead(url: fixture.url, ref: "v1.0.0")
 
@@ -39,9 +39,9 @@ struct GitTransportTests {
 
     @Test func remoteHeadGivesTheCommitThatAnAnnotatedTagPeelsTo() async throws {
         let fixture = try GitFixtureRepository()
-        let tagged = try fixture.commit(["README.md": .file("first")])
-        try fixture.commit(["README.md": .file("second")])
-        try fixture.annotatedTag("v2.0.0", at: tagged)
+        let tagged = try fixture.commit(files: ["README.md": .file("first")])
+        try fixture.commit(files: ["README.md": .file("second")])
+        try fixture.addAnnotatedTag(named: "v2.0.0", at: tagged)
 
         let head = try await transport.remoteHead(url: fixture.url, ref: "v2.0.0")
 
@@ -50,7 +50,7 @@ struct GitTransportTests {
 
     @Test func remoteHeadGivesTheCommitThatHEADNames() async throws {
         let fixture = try GitFixtureRepository()
-        let tip = try fixture.commit(["README.md": .file("first")])
+        let tip = try fixture.commit(files: ["README.md": .file("first")])
 
         let head = try await transport.remoteHead(url: fixture.url, ref: "HEAD")
 
@@ -59,7 +59,7 @@ struct GitTransportTests {
 
     @Test func remoteHeadThrowsRefNotFoundForAMissingRef() async throws {
         let fixture = try GitFixtureRepository()
-        try fixture.commit(["README.md": .file("first")])
+        try fixture.commit(files: ["README.md": .file("first")])
 
         await #expect(throws: GitTransportError.refNotFound) {
             try await transport.remoteHead(url: fixture.url, ref: "missing")
@@ -80,49 +80,50 @@ struct GitTransportTests {
 
     @Test func fetchPutsTheBranchTipInANewBareRepository() async throws {
         let fixture = try GitFixtureRepository()
-        let tip = try fixture.commit(["skills/commit/SKILL.md": .file("body"), "run.sh": .executable("echo")])
+        let tip = try fixture.commit(files: ["skills/commit/SKILL.md": .file("body"), "run.sh": .executable("echo")])
         let destination = try Self.makeDestination()
         defer { Self.removeDestination(destination) }
 
         let fetched = try await transport.fetch(url: fixture.url, revision: "main", intoBareRepository: destination)
 
         #expect(fetched == tip)
-        #expect(try GitFixtureRepository.containsCommit(tip, inRepositoryAt: destination))
+        #expect(try GitFixtureRepository.containsCommit(sha: tip, inRepositoryAt: destination))
     }
 
     @Test func fetchGetsTheNewerCommitAfterTheBranchMoves() async throws {
         let fixture = try GitFixtureRepository()
-        let first = try fixture.commit(["README.md": .file("first")])
+        let first = try fixture.commit(files: ["README.md": .file("first")])
         let destination = try Self.makeDestination()
         defer { Self.removeDestination(destination) }
         let firstFetch = try await transport.fetch(url: fixture.url, revision: "main", intoBareRepository: destination)
-        let newer = try fixture.commit(["README.md": .file("newer"), "link": .symlink(target: "README.md")], on: "next")
-        try fixture.moveBranch("main", to: newer)
+        let newer = try fixture.commit(
+            files: ["README.md": .file("newer"), "link": .symlink(target: "README.md")], on: "next")
+        try fixture.moveBranch(named: "main", to: newer)
 
         let secondFetch = try await transport.fetch(url: fixture.url, revision: "main", intoBareRepository: destination)
 
         #expect(firstFetch == first)
         #expect(secondFetch == newer)
-        #expect(try GitFixtureRepository.containsCommit(newer, inRepositoryAt: destination))
+        #expect(try GitFixtureRepository.containsCommit(sha: newer, inRepositoryAt: destination))
     }
 
     @Test func fetchOfAPinnedSHAGivesThatCommit() async throws {
         let fixture = try GitFixtureRepository()
-        let pinned = try fixture.commit(["README.md": .file("first")])
-        try fixture.commit(["README.md": .file("second")])
+        let pinned = try fixture.commit(files: ["README.md": .file("first")])
+        try fixture.commit(files: ["README.md": .file("second")])
         let destination = try Self.makeDestination()
         defer { Self.removeDestination(destination) }
 
         let fetched = try await transport.fetch(url: fixture.url, revision: pinned, intoBareRepository: destination)
 
         #expect(fetched == pinned)
-        #expect(try GitFixtureRepository.containsCommit(pinned, inRepositoryAt: destination))
+        #expect(try GitFixtureRepository.containsCommit(sha: pinned, inRepositoryAt: destination))
     }
 
     @Test func fetchOfAnAnnotatedTagGivesTheCommit() async throws {
         let fixture = try GitFixtureRepository()
-        let tagged = try fixture.commit(["README.md": .file("first")])
-        try fixture.annotatedTag("v2.0.0", at: tagged)
+        let tagged = try fixture.commit(files: ["README.md": .file("first")])
+        try fixture.addAnnotatedTag(named: "v2.0.0", at: tagged)
         let destination = try Self.makeDestination()
         defer { Self.removeDestination(destination) }
 
@@ -133,7 +134,7 @@ struct GitTransportTests {
 
     @Test func fetchOfAMissingRefThrowsRefNotFound() async throws {
         let fixture = try GitFixtureRepository()
-        try fixture.commit(["README.md": .file("first")])
+        try fixture.commit(files: ["README.md": .file("first")])
         let destination = try Self.makeDestination()
         defer { Self.removeDestination(destination) }
 
@@ -155,7 +156,7 @@ struct GitTransportTests {
 
     @Test func fetchInACancelledTaskThrowsCancelled() async throws {
         let fixture = try GitFixtureRepository()
-        try fixture.commit(["README.md": .file("first")])
+        try fixture.commit(files: ["README.md": .file("first")])
         let destination = try Self.makeDestination()
         defer { Self.removeDestination(destination) }
         let url = fixture.url
