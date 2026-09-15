@@ -31,11 +31,27 @@ comments:
 
     Note on the test-driven steps. The tests came first and failed because the types were not there. One test then failed for a true reason: with `maxFiles: 1` the writer permits the first file and throws at the second one. The test named the first file. The test now names the second file, and the writer is unchanged.
   timestamp: 2026-09-15T16:52:35.901527+00:00
+- actor: claude-code
+  id: 01m2k001k16nyh4e6yzb814jq0
+  text: |-
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (commit 3e8f8f6); 0 findings, 0 confirmed, 0 refuted, 7 validator runs; all prior checklist items are checked
+    - next: move the task to done
+  timestamp: 2026-09-15T16:56:54.625030+00:00
+- actor: claude-code
+  id: 01m2k00fyypa3ve9crm8dzv0s5
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 2 files (Marketplace/SnapshotWriter.swift, Tests/FoundationModelsSkillsTests/SnapshotWriterTests.swift)
+    - test: green — swift build --build-tests 0 warnings; swift test x2, 592 passed each run, 0 failed, 0 skipped
+    - commit: 3e8f8f6 feat(marketplace): add the snapshot writer for the layer root
+    - review: clean — 0 findings; task moved to done
+  timestamp: 2026-09-15T16:57:09.342393+00:00
 depends_on:
 - 01M2H0QNGBQDQWBB3H1NSGYGDN
 - 01M2H0R2AFRD111HR47N3YVH8R
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: d180
 title: Write a validated flat snapshot of the selected skills (SnapshotWriter)
 ---
 ## What

@@ -173,9 +173,12 @@ public struct SkillsRegistry: Sendable {
     /// Each element is the full, current `metadata()` list -- not an
     /// incremental diff, the same full-catalog contract `metadata()` itself
     /// carries. `nil` when this registry was constructed with `watch:
-    /// false`, since a registry that never reloads has nothing to publish;
-    /// every subscription finishes once this registry (and every copy
-    /// sharing its watcher) is deinitialized.
+    /// false` and no marketplace provider, since a registry that never
+    /// reloads has nothing to publish; a marketplace-backed registry
+    /// publishes on every provider update, thus `onReload` is never `nil`
+    /// for `init(marketplaces:stack:policy:watch:)`, whatever `watch` is
+    /// (marketplace.md §7.4). Every subscription finishes once this
+    /// registry (and every copy sharing its coordinator) is deinitialized.
     public var onReload: AsyncStream<[SkillMetadata]>? {
         reloadCoordinator?.subscribe()
     }
@@ -290,16 +293,80 @@ public struct SkillsRegistry: Sendable {
     ///   - watch: Whether to watch every layer root and rebuild the catalog
     ///     on change (plan.md §7). Defaults to `false` -- a static catalog.
     public init(layers: [DotfolderStack.Layer], policy: RenderPolicy = RenderPolicy(), watch: Bool = false) {
-        roots = layers.map(\.root)
+        self.init(
+            source: LayerSource(plan: { LayerPlan(localLayers: layers) }, marketplaceUpdates: nil),
+            policy: policy, watch: watch)
+    }
+
+    /// Creates a `SkillsRegistry` over a marketplace provider's layers in
+    /// front of a `DotfolderStack`'s own layers, building its catalog once,
+    /// immediately (marketplace.md §4.1, §4.2, §7.4).
+    ///
+    /// The layer order is `url[0] < … < url[n] < defaults < user <
+    /// project`: a local skill always wins over a marketplace copy of the
+    /// same id, and the last marketplace wins among themselves.
+    ///
+    /// The registry stays a pure disk reader: it reads only what the
+    /// provider already materialized, and it never waits on the network. A
+    /// marketplace layer root is the stable `<cache>/<id>/current` path,
+    /// and a swap of that path sends no reliable file-system event, thus
+    /// each value of `marketplaces.layerUpdates` -- not the watcher -- asks
+    /// the provider for its layers again (the commit and the catalog
+    /// version change) and then runs exactly the rebuild the watcher runs:
+    /// one atomic catalog swap and one `onReload` publication, also when
+    /// `watch` is `false`. Thus `onReload` is never `nil` here.
+    ///
+    /// - Parameters:
+    ///   - marketplaces: The provider of the marketplace layers.
+    ///   - stack: The dotfolder stack whose layers sit above them.
+    ///   - policy: The render policy every render call this registry makes
+    ///     honors. Defaults to the permissive `RenderPolicy()`.
+    ///   - watch: Whether to watch every layer root and rebuild the catalog
+    ///     on change (plan.md §7). Defaults to `false`; a provider update
+    ///     still rebuilds.
+    public init(
+        marketplaces: some MarketplaceLayerProviding, stack: DotfolderStack,
+        policy: RenderPolicy = RenderPolicy(), watch: Bool = false
+    ) {
+        let localLayers = stack.layers
+        self.init(
+            source: LayerSource(
+                plan: {
+                    LayerPlan(
+                        marketplaceLayers: marketplaces.marketplaceLayers(), localLayers: localLayers)
+                },
+                marketplaceUpdates: marketplaces.layerUpdates),
+            policy: policy, watch: watch)
+    }
+
+    /// Creates a `SkillsRegistry` over whatever computes its layers,
+    /// building its catalog once, immediately -- the one designated
+    /// initializer every other one funnels through.
+    ///
+    /// `roots` and the render pipeline are construction-time invariants
+    /// (plan.md decisions #25/#28), thus they come from the first plan and
+    /// never move; a later rebuild changes only the catalog and its
+    /// diagnostics.
+    ///
+    /// - Parameters:
+    ///   - source: How to compute the layers of each catalog generation,
+    ///     and what makes them change.
+    ///   - policy: The render policy every render call this registry makes
+    ///     honors.
+    ///   - watch: Whether to watch every layer root and rebuild the catalog
+    ///     on change.
+    private init(source: LayerSource, policy: RenderPolicy, watch: Bool) {
+        let plan = source.plan()
+        roots = plan.layers.map(\.root)
         self.policy = policy
 
-        let built = Self.buildCatalog(layers: layers)
+        let built = Self.buildCatalog(plan: plan)
         catalogBox = CatalogBox(catalog: built.catalog, diagnostics: built.diagnostics)
         pipeline = RenderPipeline(
             argumentSubstitution: ArgumentSubstitution(), shellInjection: ShellInjection(),
-            stencil: StencilPass(layers: layers))
+            stencil: StencilPass(layers: plan.layers))
 
-        guard watch else {
+        guard watch || source.marketplaceUpdates != nil else {
             reloadCoordinator = nil
             return
         }
@@ -309,9 +376,54 @@ public struct SkillsRegistry: Sendable {
         // every rebuild through the exact same rendering path every other
         // reader uses, without duplicating any of it.
         let reader = SkillsRegistry(catalogBox: catalogBox, pipeline: pipeline, policy: policy, roots: roots)
-        let coordinator = ReloadCoordinator(layers: layers, catalogBox: catalogBox, reader: reader)
+        let coordinator = ReloadCoordinator(
+            source: source, watchedRoots: watch ? roots : nil, catalogBox: catalogBox, reader: reader)
         coordinator.start()
         reloadCoordinator = coordinator
+    }
+
+    /// The ordered layers of one catalog generation, and which marketplace
+    /// each of them came from.
+    private struct LayerPlan: Sendable {
+        /// The layers, lowest precedence first.
+        let layers: [DotfolderStack.Layer]
+        /// Which marketplace each entry of `layers` came from.
+        let marketplaces: MarketplaceProvenanceIndex
+
+        /// Creates a plan of local layers only, which names no marketplace.
+        ///
+        /// - Parameter localLayers: The layers, lowest precedence first.
+        init(localLayers: [DotfolderStack.Layer]) {
+            layers = localLayers
+            marketplaces = MarketplaceProvenanceIndex()
+        }
+
+        /// Creates a plan of marketplace layers in front of local layers
+        /// (marketplace.md §4.1).
+        ///
+        /// - Parameters:
+        ///   - marketplaceLayers: The marketplace layers, lowest precedence
+        ///     first; they all sit below `localLayers`.
+        ///   - localLayers: The local layers, lowest precedence first.
+        init(marketplaceLayers: [MarketplaceLayer], localLayers: [DotfolderStack.Layer]) {
+            layers = marketplaceLayers.map(\.layer) + localLayers
+            let named: [MarketplaceProvenance?] = marketplaceLayers.map(\.provenance)
+            let unnamed: [MarketplaceProvenance?] = localLayers.map { _ in nil }
+            marketplaces = MarketplaceProvenanceIndex(byLayerIndex: named + unnamed)
+        }
+    }
+
+    /// How one registry computes the layers of each catalog generation, and
+    /// what makes them change.
+    private struct LayerSource: Sendable {
+        /// Computes the layers of the next catalog generation. Called once
+        /// at construction, and again for every rebuild, because a
+        /// marketplace's commit and catalog version change between calls.
+        let plan: @Sendable () -> LayerPlan
+
+        /// One value for each marketplace update, or `nil` when no provider
+        /// backs this registry.
+        let marketplaceUpdates: AsyncStream<Void>?
     }
 
     /// Builds a read-only view of an existing registry's live catalog, with
@@ -422,25 +534,29 @@ public struct SkillsRegistry: Sendable {
     /// Discovers, decodes, and validates every skill across `layers`'
     /// roots, folding the un-hidden survivors into a catalog keyed by id.
     ///
-    /// - Parameter layers: The layers to build the catalog over, lowest
-    ///   precedence first.
+    /// - Parameter plan: The layers to build the catalog over, lowest
+    ///   precedence first, and the marketplace each of them came from.
     /// - Returns: The catalog, keyed by id, plus every diagnostic raised
     ///   while validating (including for skills excluded from the
     ///   catalog).
     private static func buildCatalog(
-        layers: [DotfolderStack.Layer]
+        plan: LayerPlan
     ) -> (catalog: [String: CatalogEntry], diagnostics: [SkillDiagnostic]) {
         var catalog: [String: CatalogEntry] = [:]
         var diagnostics: [SkillDiagnostic] = []
 
-        for discovered in SkillDiscovery(roots: layers.map(\.root)).discover() {
-            guard let validated = Self.validate(discovered: discovered, diagnostics: &diagnostics), !validated.isHidden else {
+        for discovered in SkillDiscovery(roots: plan.layers.map(\.root)).discover() {
+            let validation = Self.validate(
+                discovered: discovered, marketplaces: plan.marketplaces, diagnostics: &diagnostics)
+            guard let validated = validation, !validated.isHidden else {
                 continue
             }
             diagnostics.append(
-                contentsOf: Self.inferenceDiagnostics(validated: validated, discovered: discovered))
+                contentsOf: Self.inferenceDiagnostics(
+                    validated: validated, discovered: discovered, marketplaces: plan.marketplaces))
             catalog[discovered.id] = CatalogEntry(
-                validated: validated, discovered: discovered, winningLayer: layers[discovered.rootIndex])
+                validated: validated, discovered: discovered,
+                winningLayer: plan.layers[discovered.rootIndex])
         }
 
         return (catalog, diagnostics)
@@ -455,16 +571,19 @@ public struct SkillsRegistry: Sendable {
     /// - Parameters:
     ///   - validated: The validated skill to infer parameters for.
     ///   - discovered: Its discovery record, for provenance.
+    ///   - marketplaces: Which marketplace each layer came from, so the
+    ///     provenance names it (marketplace.md §9.1).
     /// - Returns: One advisory `SkillDiagnostic` per inference note; empty
     ///   when the sources agree.
     private static func inferenceDiagnostics(
-        validated: ValidatedSkill, discovered: DiscoveredSkill
+        validated: ValidatedSkill, discovered: DiscoveredSkill, marketplaces: MarketplaceProvenanceIndex
     ) -> [SkillDiagnostic] {
-        ParameterInference.infer(frontmatter: validated.frontmatter, body: validated.body).diagnostics
+        let provenance = SkillDiagnostic.Provenance(
+            discovered: discovered, marketplace: marketplaces.provenance(atLayerIndex: discovered.rootIndex))
+        return ParameterInference.infer(frontmatter: validated.frontmatter, body: validated.body).diagnostics
             .map { message in
                 SkillDiagnostic(
-                    severity: .advisory, skillID: validated.id,
-                    provenance: SkillDiagnostic.Provenance(discovered: discovered), message: message)
+                    severity: .advisory, skillID: validated.id, provenance: provenance, message: message)
             }
     }
 
@@ -474,23 +593,30 @@ public struct SkillsRegistry: Sendable {
     ///
     /// - Parameters:
     ///   - discovered: The skill's discovery record.
+    ///   - marketplaces: Which marketplace each layer came from, so every
+    ///     diagnostic names it (marketplace.md §9.1).
     ///   - diagnostics: Accumulates every diagnostic raised.
     /// - Returns: The validated skill, or `nil` for unparseable YAML
     ///   (`SkillValidator`'s own `.skipped` outcome) or an unreadable
     ///   `SKILL.md`.
     private static func validate(
-        discovered: DiscoveredSkill, diagnostics: inout [SkillDiagnostic]
+        discovered: DiscoveredSkill, marketplaces: MarketplaceProvenanceIndex,
+        diagnostics: inout [SkillDiagnostic]
     ) -> ValidatedSkill? {
         do {
             let text = try String(contentsOf: discovered.skillFileURL, encoding: .utf8)
-            let result = SkillValidator.validate(discovered: discovered, text: text)
+            let result = SkillValidator.validate(
+                discovered: discovered, outcome: FrontmatterDecoder.decode(text: text),
+                marketplaces: marketplaces)
             diagnostics.append(contentsOf: result.diagnostics)
             return result.skill
         } catch {
             diagnostics.append(
                 SkillDiagnostic(
                     severity: .skip, skillID: discovered.id,
-                    provenance: SkillDiagnostic.Provenance(discovered: discovered),
+                    provenance: SkillDiagnostic.Provenance(
+                        discovered: discovered,
+                        marketplace: marketplaces.provenance(atLayerIndex: discovered.rootIndex)),
                     message: "SKILL.md could not be read: \(error.localizedDescription)"))
             return nil
         }
@@ -871,52 +997,69 @@ public struct SkillsRegistry: Sendable {
     /// `SkillsRegistry` needs to own; a struct has no `deinit` to hang that
     /// stop on.
     ///
-    /// `@unchecked Sendable`: both stored properties (`watcher`,
-    /// `broadcaster`) are immutable `let`s referring to types that are
-    /// themselves safe under concurrent use -- `SkillWatcher` is
-    /// `@unchecked Sendable` and serializes its own mutable state on a
-    /// private queue, and `ReloadBroadcaster` locks its own mutable state.
-    /// This class itself declares no other stored state: the watcher's
-    /// `onChange` closure wired up in `init` captures
-    /// `layers`/`catalogBox`/`reader`/`broadcaster` directly rather than
+    /// `@unchecked Sendable`: every stored property (`watcher`,
+    /// `broadcaster`, `marketplaceUpdates`) is an immutable `let` referring
+    /// to a type that is itself safe under concurrent use -- `SkillWatcher`
+    /// is `@unchecked Sendable` and serializes its own mutable state on a
+    /// private queue, `ReloadBroadcaster` locks its own mutable state, and
+    /// `Task` is `Sendable`. This class itself declares no other stored
+    /// state: the rebuild closure wired up in `init` captures
+    /// `source`/`catalogBox`/`reader`/`broadcaster` directly rather than
     /// `self`, so no `ReloadCoordinator` instance property is ever read or
     /// written outside of `init`/`start()`/`subscribe()`/`deinit`, none of
     /// which race with each other (`start()` and `deinit` are only ever
     /// called from the owning `SkillsRegistry`'s single construction and
     /// deinitialization points).
     private final class ReloadCoordinator: @unchecked Sendable {
-        private let watcher: SkillWatcher
+        /// The watcher over the local layer roots, or `nil` for a registry
+        /// that only a marketplace update rebuilds.
+        private let watcher: SkillWatcher?
         private let broadcaster: ReloadBroadcaster
+        /// The task that rebuilds on each marketplace update, or `nil` when
+        /// no provider backs this registry.
+        private let marketplaceUpdates: Task<Void, Never>?
 
-        /// Creates a `ReloadCoordinator` and wires (but does not yet start)
-        /// its watcher.
+        /// Creates a `ReloadCoordinator`, wires (but does not yet start)
+        /// its watcher, and begins following the marketplace updates.
         ///
-        /// The watcher's `onChange` closure captures `layers`, `catalogBox`,
-        /// `reader`, and `broadcaster` directly rather than `self`, so
-        /// wiring it up here creates no retain cycle between this
-        /// coordinator and its own watcher.
+        /// One rebuild closure serves both the watcher and the marketplace
+        /// updates, thus a marketplace update goes through exactly the
+        /// catalog swap and the publication a file change goes through, and
+        /// one update gives one `onReload` value. The closure captures
+        /// `source`, `catalogBox`, `reader`, and `broadcaster` directly
+        /// rather than `self`, so it creates no retain cycle between this
+        /// coordinator and its own watcher or task.
         ///
         /// - Parameters:
-        ///   - layers: The layer roots to watch and to rebuild the catalog
-        ///     from on every coalesced signal.
+        ///   - source: How to compute the layers of each rebuild, and what
+        ///     makes them change.
+        ///   - watchedRoots: The roots to watch, or `nil` for no watching.
         ///   - catalogBox: The catalog holder to atomically replace on
         ///     every rebuild.
         ///   - reader: A read-only registry view sharing `catalogBox`, used
         ///     to recompute `metadata()` after each rebuild via the real
         ///     rendering path.
-        init(layers: [DotfolderStack.Layer], catalogBox: CatalogBox, reader: SkillsRegistry) {
+        init(source: LayerSource, watchedRoots: [URL]?, catalogBox: CatalogBox, reader: SkillsRegistry) {
             let broadcaster = ReloadBroadcaster()
             self.broadcaster = broadcaster
-            watcher = SkillWatcher(roots: layers.map(\.root)) {
-                let rebuilt = SkillsRegistry.buildCatalog(layers: layers)
+            let rebuild: @Sendable () -> Void = {
+                let rebuilt = SkillsRegistry.buildCatalog(plan: source.plan())
                 catalogBox.replace(catalog: rebuilt.catalog, diagnostics: rebuilt.diagnostics)
                 broadcaster.publish(reader.metadata())
             }
+            watcher = watchedRoots.map { SkillWatcher(roots: $0, onChange: rebuild) }
+            marketplaceUpdates = source.marketplaceUpdates.map { updates in
+                Task {
+                    for await _ in updates {
+                        rebuild()
+                    }
+                }
+            }
         }
 
-        /// Starts the underlying watcher.
+        /// Starts the underlying watcher, when there is one.
         func start() {
-            watcher.start()
+            watcher?.start()
         }
 
         /// Registers a fresh subscriber stream against this coordinator's
@@ -928,11 +1071,13 @@ public struct SkillsRegistry: Sendable {
             broadcaster.subscribe()
         }
 
-        /// Stops the underlying watcher and finishes every current and
-        /// future subscriber, so no further rebuilds or publications happen
-        /// once every copy of the owning registry has gone out of scope.
+        /// Stops the underlying watcher, cancels the marketplace-update
+        /// task, and finishes every current and future subscriber, so no
+        /// further rebuilds or publications happen once every copy of the
+        /// owning registry has gone out of scope.
         deinit {
-            watcher.stop()
+            watcher?.stop()
+            marketplaceUpdates?.cancel()
             broadcaster.finishAll()
         }
     }

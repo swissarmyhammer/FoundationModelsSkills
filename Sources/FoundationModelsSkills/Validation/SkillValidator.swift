@@ -114,7 +114,26 @@ public enum SkillValidator {
     public static func validate(
         discovered: DiscoveredSkill, outcome: FrontmatterDecoder.Outcome
     ) -> Result {
-        let provenance = SkillDiagnostic.Provenance(discovered: discovered)
+        validate(discovered: discovered, outcome: outcome, marketplaces: MarketplaceProvenanceIndex())
+    }
+
+    /// Validates `discovered`'s already-decoded skill, naming the
+    /// marketplace of every layer that `marketplaces` knows
+    /// (marketplace.md §9.1).
+    ///
+    /// - Parameters:
+    ///   - discovered: The skill's discovery record.
+    ///   - outcome: `FrontmatterDecoder.decode(text:)`'s result for this
+    ///     skill's `SKILL.md`.
+    ///   - marketplaces: Which marketplace each layer came from.
+    /// - Returns: The validated skill (`nil` for `.skipped`) plus every
+    ///   diagnostic raised.
+    internal static func validate(
+        discovered: DiscoveredSkill, outcome: FrontmatterDecoder.Outcome,
+        marketplaces: MarketplaceProvenanceIndex
+    ) -> Result {
+        let provenance = SkillDiagnostic.Provenance(
+            discovered: discovered, marketplace: marketplaces.provenance(atLayerIndex: discovered.rootIndex))
         switch outcome {
         case .skipped(let reason):
             let diagnostic = SkillDiagnostic(
@@ -123,8 +142,8 @@ public enum SkillValidator {
             return Result(skill: nil, diagnostics: [diagnostic])
         case .decoded(let decodedSkill):
             return validateDecoded(
-                id: discovered.id, shadowedCandidates: discovered.shadowedCandidates,
-                decodedSkill: decodedSkill, provenance: provenance)
+                discovered: discovered, decodedSkill: decodedSkill, provenance: provenance,
+                marketplaces: marketplaces)
         }
     }
 
@@ -151,8 +170,12 @@ public enum SkillValidator {
         let id: String
         let frontmatter: SkillFrontmatter
         let body: String
-        let shadowedCandidateCount: Int
+        /// The winning copy's own directory, which the shadow message names.
+        let skillDirectory: URL
+        let shadowedCandidates: [DiscoveredSkill.ShadowedCandidate]
         let provenance: SkillDiagnostic.Provenance
+        /// Which marketplace each layer came from, for the shadow message.
+        let marketplaces: MarketplaceProvenanceIndex
         /// `DecodedSkill.notes` -- every diagnostic-worthy note the decoder
         /// recorded, surfaced by `decoderNoteDiagnostics`.
         let notes: [String]
@@ -204,20 +227,21 @@ public enum SkillValidator {
     /// each) and never change eligibility.
     ///
     /// - Parameters:
-    ///   - id: The canonical id (directory name).
-    ///   - shadowedCandidates: `discovered.shadowedCandidates`, for the
-    ///     shadowed-id rule.
+    ///   - discovered: The skill's discovery record -- its canonical id, its
+    ///     own directory, and its shadowed candidates.
     ///   - decodedSkill: The successfully decoded frontmatter + body.
     ///   - provenance: The winning-layer provenance every diagnostic carries.
+    ///   - marketplaces: Which marketplace each layer came from.
     /// - Returns: The validated skill plus every diagnostic raised.
     private static func validateDecoded(
-        id: String, shadowedCandidates: [DiscoveredSkill.ShadowedCandidate],
-        decodedSkill: DecodedSkill, provenance: SkillDiagnostic.Provenance
+        discovered: DiscoveredSkill, decodedSkill: DecodedSkill,
+        provenance: SkillDiagnostic.Provenance, marketplaces: MarketplaceProvenanceIndex
     ) -> Result {
+        let id = discovered.id
         let context = RuleContext(
             id: id, frontmatter: decodedSkill.frontmatter, body: decodedSkill.body,
-            shadowedCandidateCount: shadowedCandidates.count, provenance: provenance,
-            notes: decodedSkill.notes)
+            skillDirectory: discovered.skillDirectory, shadowedCandidates: discovered.shadowedCandidates,
+            provenance: provenance, marketplaces: marketplaces, notes: decodedSkill.notes)
 
         var diagnostics: [SkillDiagnostic] = []
         var isModelVisibleEligible = true
@@ -421,18 +445,44 @@ public enum SkillValidator {
     // MARK: - Shadowed id
 
     /// Rule: an id that shadowed one or more lower-precedence copies draws
-    /// an `.advisory` diagnostic naming how many (plan.md §4) --
-    /// informational only, no effect on eligibility.
+    /// an `.advisory` diagnostic naming how many (plan.md §4), and then
+    /// naming both sides of every copy that came from a marketplace
+    /// (marketplace.md §9.1) -- informational only, no effect on
+    /// eligibility.
     ///
     /// - Parameter context: The rule context.
-    /// - Returns: A diagnostic when `shadowedCandidateCount` is nonzero, else
+    /// - Returns: A diagnostic when there is a shadowed candidate, else
     ///   `nil`.
     private static func shadowedIDDiagnostic(_ context: RuleContext) -> SkillDiagnostic? {
-        let count = context.shadowedCandidateCount
+        let count = context.shadowedCandidates.count
         guard count > 0 else { return nil }
         return SkillDiagnostic(
             severity: .advisory, skillID: context.id, provenance: context.provenance,
-            message: "shadows \(count) lower-precedence copy\(count == 1 ? "" : "ies") of this id.")
+            message: "shadows \(count) lower-precedence copy\(count == 1 ? "" : "ies") of this id."
+                + shadowedMarketplaceSentences(context))
+    }
+
+    /// Names both sides of every shadowed copy that came from a
+    /// marketplace, for example "` local `/repo/.skills/commit` shadows
+    /// `commit` from marketplace `swissarmyhammer-skills`.`"
+    /// (marketplace.md §9.1).
+    ///
+    /// A layer that no marketplace backs contributes nothing, thus a purely
+    /// local stack keeps the plain count message.
+    ///
+    /// - Parameter context: The rule context.
+    /// - Returns: One leading-space sentence per marketplace copy, joined;
+    ///   the empty string when no shadowed copy came from a marketplace.
+    private static func shadowedMarketplaceSentences(_ context: RuleContext) -> String {
+        let winner = context.marketplaces.provenance(atLayerIndex: context.provenance.rootIndex)
+        let winnerLabel = winner.map { "marketplace `\($0.id)`" } ?? "local"
+        return context.shadowedCandidates
+            .compactMap { context.marketplaces.provenance(atLayerIndex: $0.rootIndex) }
+            .map { loser in
+                " \(winnerLabel) `\(context.skillDirectory.path)` shadows `\(context.id)` "
+                    + "from marketplace `\(loser.id)`."
+            }
+            .joined()
     }
 
     // MARK: - Body line count

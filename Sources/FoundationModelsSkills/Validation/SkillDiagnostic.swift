@@ -31,26 +31,34 @@ public struct SkillDiagnostic: Sendable, Equatable {
         public var rootIndex: Int
         /// The winning root itself.
         public var root: URL
+        /// The marketplace the winning root came from, or `nil` for a local
+        /// layer (marketplace.md §9.1).
+        public var marketplace: MarketplaceProvenance?
 
-        /// Creates a `Provenance` by directly assigning both fields.
+        /// Creates a `Provenance` by directly assigning every field.
         ///
         /// - Parameters:
         ///   - rootIndex: The winning root's position in the roots list,
         ///     lowest precedence first.
         ///   - root: The winning root itself.
-        public init(rootIndex: Int, root: URL) {
+        ///   - marketplace: The marketplace the winning root came from.
+        ///     Defaults to `nil`, a local layer.
+        public init(rootIndex: Int, root: URL, marketplace: MarketplaceProvenance? = nil) {
             self.rootIndex = rootIndex
             self.root = root
+            self.marketplace = marketplace
         }
 
         /// Creates a `Provenance` from the layer that won a `DiscoveredSkill`
         /// -- its own `rootIndex`/`root`, never one of its shadowed
         /// candidates'.
         ///
-        /// - Parameter discovered: The discovered skill to take provenance
-        ///   from.
-        public init(discovered: DiscoveredSkill) {
-            self.init(rootIndex: discovered.rootIndex, root: discovered.root)
+        /// - Parameters:
+        ///   - discovered: The discovered skill to take provenance from.
+        ///   - marketplace: The marketplace the winning root came from.
+        ///     Defaults to `nil`, a local layer.
+        public init(discovered: DiscoveredSkill, marketplace: MarketplaceProvenance? = nil) {
+            self.init(rootIndex: discovered.rootIndex, root: discovered.root, marketplace: marketplace)
         }
     }
 
