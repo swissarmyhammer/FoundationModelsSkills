@@ -39,6 +39,18 @@ public struct SkillListing: Sendable, Equatable {
     /// this.
     public var acceptsTrailingArguments: Bool
 
+    /// The marketplace this skill came from, for example
+    /// `swissarmyhammer-skills@1.2.0`, or `nil` for a local skill
+    /// (marketplace.md §9.1).
+    ///
+    /// Lets the `/` menu show `commit (swissarmyhammer-skills@1.2.0)`. The
+    /// text names the marketplace and the snapshot, never the URL, thus it
+    /// can never show a credential.
+    ///
+    /// `SkillsRegistry.commandListing()` fills this in; the initializers
+    /// below leave it `nil`, because a frontmatter carries no marketplace.
+    public var source: String?
+
     /// Creates a `SkillListing` by directly assigning every field --
     /// primarily for tests and callers building a listing row by hand.
     ///
@@ -55,6 +67,8 @@ public struct SkillListing: Sendable, Equatable {
     ///   - parameters: Parsed positional parameters.
     ///   - acceptsTrailingArguments: Whether the body references
     ///     `$ARGUMENTS`.
+    ///   - source: The marketplace the skill came from. Defaults to `nil`,
+    ///     a local skill.
     public init(
         id: String,
         displayName: String? = nil,
@@ -62,7 +76,8 @@ public struct SkillListing: Sendable, Equatable {
         license: String? = nil,
         compatibility: String? = nil,
         parameters: [SkillParameter] = [],
-        acceptsTrailingArguments: Bool = false
+        acceptsTrailingArguments: Bool = false,
+        source: String? = nil
     ) {
         self.id = id
         self.displayName = displayName
@@ -71,6 +86,7 @@ public struct SkillListing: Sendable, Equatable {
         self.compatibility = compatibility
         self.parameters = parameters
         self.acceptsTrailingArguments = acceptsTrailingArguments
+        self.source = source
     }
 
     /// Builds a listing row for one decoded skill: the spec fields copy

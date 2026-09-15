@@ -72,16 +72,25 @@ enum MarketplaceTestSupport {
     ///   - sha: The commit of the snapshot.
     ///   - grants: What the host lets the skills of the marketplace run. The
     ///     default is `MarketplaceGrants.none`.
+    ///   - catalogVersion: The `version` field of the catalog, or `nil` for
+    ///     a catalog with no version. The default is
+    ///     ``defaultCatalogVersion``.
     /// - Returns: The layer.
     static func makeMarketplaceLayer(
-        root: URL, id: String, sha: String, grants: MarketplaceGrants = .none
+        root: URL, id: String, sha: String, grants: MarketplaceGrants = .none,
+        catalogVersion: String? = defaultCatalogVersion
     ) -> MarketplaceLayer {
         MarketplaceLayer(
             layer: DotfolderStack.Layer(source: .marketplace, root: root),
             provenance: MarketplaceProvenance(
-                id: id, url: "https://example.invalid/\(id).git", sha: sha, catalogVersion: "1.0.0"),
+                id: id, url: "https://example.invalid/\(id).git", sha: sha,
+                catalogVersion: catalogVersion),
             grants: grants)
     }
+
+    /// The `version` field ``makeMarketplaceLayer(root:id:sha:grants:catalogVersion:)``
+    /// gives a catalog when the caller names none.
+    static let defaultCatalogVersion = "1.0.0"
 }
 
 /// A provider whose layer list the test replaces, and which publishes one

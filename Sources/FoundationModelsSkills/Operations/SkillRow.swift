@@ -14,23 +14,38 @@ public struct SkillRow: Encodable, Sendable, Equatable {
     /// `"[env]"` (plan.md §6.1).
     public let parameters: [String]
 
+    /// The marketplace this skill came from, for example
+    /// `swissarmyhammer-skills@1.2.0`, or `nil` for a local skill
+    /// (marketplace.md §9.1).
+    ///
+    /// A `nil` value writes no key at all, thus a local row keeps the shape
+    /// it had before marketplaces existed. The text names the marketplace
+    /// and the snapshot, never the URL, thus it can never show a
+    /// credential.
+    public let source: String?
+
     /// Creates a `SkillRow` by directly assigning every field.
     ///
     /// - Parameters:
     ///   - id: The skill's canonical id.
     ///   - description: The skill's rendered `description:`.
     ///   - parameters: Placeholder summaries of the skill's parameters.
-    public init(id: String, description: String, parameters: [String]) {
+    ///   - source: The marketplace the skill came from. Defaults to `nil`,
+    ///     a local skill.
+    public init(id: String, description: String, parameters: [String], source: String? = nil) {
         self.id = id
         self.description = description
         self.parameters = parameters
+        self.source = source
     }
 
     /// Builds a row from one catalog entry's rendered metadata.
     ///
     /// - Parameter metadata: The catalog entry to summarize as a row.
     internal init(metadata: SkillMetadata) {
-        self.init(id: metadata.id, description: metadata.description, parameters: metadata.parameters)
+        self.init(
+            id: metadata.id, description: metadata.description, parameters: metadata.parameters,
+            source: metadata.source)
     }
 }
 

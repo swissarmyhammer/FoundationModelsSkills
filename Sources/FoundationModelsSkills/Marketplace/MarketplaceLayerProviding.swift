@@ -37,6 +37,30 @@ public struct MarketplaceProvenance: Sendable, Equatable {
         self.sha = sha
         self.catalogVersion = catalogVersion
     }
+
+    /// How many first characters of ``sha`` a row shows when the catalog
+    /// carries no version: the usual short form of a commit.
+    private static let shortShaLength = 7
+
+    /// The text a display row shows for this marketplace, for example
+    /// `swissarmyhammer-skills@1.2.0` (marketplace.md §9.1).
+    ///
+    /// The catalog version names the snapshot when the catalog has one.
+    /// Without a version, the short commit names it instead, thus a row
+    /// still says which snapshot a skill came from. Without a commit too,
+    /// the id alone is the text.
+    ///
+    /// ``url`` is never part of the text: a URL can hold a credential, and
+    /// a row must never show one.
+    public var displayText: String {
+        if let catalogVersion {
+            return "\(id)@\(catalogVersion)"
+        }
+        if let sha {
+            return "\(id)@\(sha.prefix(Self.shortShaLength))"
+        }
+        return id
+    }
 }
 
 /// One marketplace as the registry sees it: a layer root plus the

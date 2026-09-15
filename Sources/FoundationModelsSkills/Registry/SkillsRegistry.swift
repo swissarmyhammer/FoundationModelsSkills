@@ -49,6 +49,15 @@ public struct SkillMetadata: Sendable, Equatable {
     /// surface: `search skill`/`list skill`/`use skill` (plan.md §6).
     public var isModelVisible: Bool
 
+    /// The marketplace this skill came from, for example
+    /// `swissarmyhammer-skills@1.2.0`, or `nil` for a local skill
+    /// (marketplace.md §9.1).
+    ///
+    /// Display only: `SkillRow` carries it into a `list skill` row. It
+    /// stays out of `renderBlock()`, thus a marketplace name can never
+    /// change how a search ranks a skill.
+    public var source: String?
+
     /// Creates a `SkillMetadata` by directly assigning every field.
     ///
     /// - Parameters:
@@ -62,9 +71,12 @@ public struct SkillMetadata: Sendable, Equatable {
     ///     `required`/`variadic`/`name`. Defaults to empty.
     ///   - isModelVisible: Whether this skill is currently eligible for the
     ///     model-facing surface.
+    ///   - source: The marketplace this skill came from. Defaults to `nil`,
+    ///     a local skill.
     public init(
         id: String, description: String, metadata: [String: FrontmatterValue] = [:],
-        parameters: [String] = [], parameterDetails: [SkillParameter] = [], isModelVisible: Bool
+        parameters: [String] = [], parameterDetails: [SkillParameter] = [], isModelVisible: Bool,
+        source: String? = nil
     ) {
         self.id = id
         self.description = description
@@ -72,6 +84,7 @@ public struct SkillMetadata: Sendable, Equatable {
         self.parameters = parameters
         self.parameterDetails = parameterDetails
         self.isModelVisible = isModelVisible
+        self.source = source
     }
 }
 
@@ -491,6 +504,9 @@ public struct SkillsRegistry: Sendable {
         /// What the marketplace of `winningLayer` lets this skill run, or
         /// `nil` for a local skill (marketplace.md §6.6).
         let grants: MarketplaceGrants?
+        /// The marketplace `winningLayer` came from, or `nil` for a local
+        /// skill (marketplace.md §9.1).
+        let marketplace: MarketplaceProvenance?
         let isModelVisible: Bool
         let isUserInvocable: Bool
         let isPreloaded: Bool
@@ -507,9 +523,11 @@ public struct SkillsRegistry: Sendable {
         ///     to.
         ///   - grants: What the marketplace of that layer lets this skill
         ///     run, or `nil` for a local skill.
+        ///   - marketplace: The marketplace that layer came from, or `nil`
+        ///     for a local skill.
         init(
             validated: ValidatedSkill, discovered: DiscoveredSkill, winningLayer: DotfolderStack.Layer,
-            grants: MarketplaceGrants?
+            grants: MarketplaceGrants?, marketplace: MarketplaceProvenance?
         ) {
             id = validated.id
             frontmatter = validated.frontmatter
@@ -517,6 +535,7 @@ public struct SkillsRegistry: Sendable {
             skillDirectory = discovered.skillDirectory
             self.winningLayer = winningLayer
             self.grants = grants
+            self.marketplace = marketplace
 
             let visibility = ResolvedVisibility(validated: validated)
             isModelVisible = visibility.isModelVisible
@@ -587,7 +606,8 @@ public struct SkillsRegistry: Sendable {
             catalog[discovered.id] = CatalogEntry(
                 validated: validated, discovered: discovered,
                 winningLayer: plan.layers[discovered.rootIndex],
-                grants: plan.grants(atLayerIndex: discovered.rootIndex))
+                grants: plan.grants(atLayerIndex: discovered.rootIndex),
+                marketplace: plan.marketplaces.provenance(atLayerIndex: discovered.rootIndex))
         }
 
         return (catalog, diagnostics)
@@ -838,7 +858,8 @@ public struct SkillsRegistry: Sendable {
                     metadata: renderedMetadataFields(entry: entry),
                     parameters: entryParameters.map(Self.parameterSummary),
                     parameterDetails: entryParameters,
-                    isModelVisible: entry.isModelVisible)
+                    isModelVisible: entry.isModelVisible,
+                    source: entry.marketplace?.displayText)
             }
     }
 
@@ -864,9 +885,10 @@ public struct SkillsRegistry: Sendable {
     ///
     /// - Parameter entry: The catalog entry to build a row for.
     /// - Returns: The row, `description` rendered and menu-truncated when
-    ///   present.
+    ///   present, and `source` naming the marketplace the skill came from.
     private func listing(for entry: CatalogEntry) -> SkillListing {
         var listing = SkillListing(id: entry.id, frontmatter: entry.frontmatter, body: entry.body)
+        listing.source = entry.marketplace?.displayText
         if let description = entry.frontmatter.description {
             listing.description = Self.truncatedForMenu(renderedMetadataText(text: description, entry: entry))
         }

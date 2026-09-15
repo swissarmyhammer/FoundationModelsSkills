@@ -24,11 +24,28 @@ comments:
     - evidence: 7 files changed, 1 file added. Sources/FoundationModelsSkills/Marketplace/MarketplaceLayerProviding.swift, Sources/FoundationModelsSkills/Registry/SkillsRegistry.swift, Sources/FoundationModelsSkills/Resources/RunScript.swift, Tests/FoundationModelsSkillsTests/MarketplaceGrantsTests.swift (new), Tests/FoundationModelsSkillsTests/MarketplaceTestSupport.swift, Tests/FoundationModelsSkillsTests/ResourceTestSupport.swift, Tests/FoundationModelsSkillsTests/MarketplaceRegistryTests.swift, Tests/FoundationModelsSkillsTests/RunScriptTests.swift. `swift test --filter MarketplaceGrantsTests`: 9 tests, 9 passed. `swift test`: 608 tests in 44 suites, all passed. `swift build --build-tests`: zero warnings. TDD: the two default-grant tests failed first (the marketplace skill ran the shell command and ran the script), then passed after the change.
     - next: /review
   timestamp: 2026-09-15T17:29:23.934286+00:00
+- actor: claude-code
+  id: 01m2k24jrzgnx2bw51qs2cpp9z
+  text: |-
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (commit f5e7a3b). 0 findings, 0 confirmed, 0 refuted. 7 validators ran, 0 failed. 8 files reviewed; 4 `.kanban/` files not reviewed because of an ignore rule.
+    - next: no work is open. All task items and all acceptance criteria are marked. The task moves to done.
+  timestamp: 2026-09-15T17:34:20.447667+00:00
+- actor: claude-code
+  id: 01m2k24xej4k1mmy77pzbbd5e7
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 8 files (Marketplace/MarketplaceLayerProviding.swift, Registry/SkillsRegistry.swift, Resources/RunScript.swift, Tests/.../MarketplaceGrantsTests.swift new, plus the moved test helpers)
+    - test: green — swift build --build-tests 0 warnings; swift test x2, 608 passed each run, 0 failed, 0 skipped
+    - commit: f5e7a3b feat(marketplace): check the marketplace grant before a skill can run
+    - review: clean — 0 findings; task moved to done
+    - note: a `.marketplace` layer with no named grants gets `MarketplaceGrants.none`, thus no capability comes from omission
+  timestamp: 2026-09-15T17:34:31.378783+00:00
 depends_on:
 - 01M2H0W2TM0WRKHZP8FRAJZAYY
 - 01M2H0R2AFRD111HR47N3YVH8R
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: d380
 title: Apply per-marketplace grants to shell injection and run script
 ---
 ## What

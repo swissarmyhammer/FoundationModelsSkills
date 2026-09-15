@@ -128,6 +128,34 @@ struct SkillsToolAssemblyTests {
         #expect(!ids.contains(Self.modelHiddenSkillID))
     }
 
+    // MARK: - The operation surface does not change
+
+    /// The operations of the fused tool, in the order `SkillsTool.make`
+    /// lists them (marketplace.md §9.2: the model surface does not change).
+    private static let expectedOperationNames = [
+        "search skill", "list skill", "use skill", "list resource", "read resource", "run script",
+    ]
+
+    /// The parameter names of each operation of the fused tool, keyed by the
+    /// operation name (marketplace.md §9.2).
+    private static let expectedParameterNames: [String: [String]] = [
+        "search skill": ["query", "limit"],
+        "list skill": ["filter"],
+        "use skill": ["id", "arguments"],
+        "list resource": ["id"],
+        "read resource": ["id", "path", "start", "end"],
+        "run script": ["id", "path", "arguments", "timeout"],
+    ]
+
+    @Test func theMarketplaceSourceTextLeavesTheOperationNamesAndParametersAlone() async throws {
+        let tool = try await SkillsTool.make(registry: Self.makeFixtureRegistry())
+
+        #expect(tool.operations.map(\.opString) == Self.expectedOperationNames)
+        let parameterNames = Dictionary(
+            uniqueKeysWithValues: tool.operations.map { ($0.opString, $0.parameters.map(\.name)) })
+        #expect(parameterNames == Self.expectedParameterNames)
+    }
+
     // MARK: - Fixture assembly
 
     /// Builds a registry over the `Examples/skill-library` fixture stack.
