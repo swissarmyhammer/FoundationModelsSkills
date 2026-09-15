@@ -24,8 +24,24 @@ comments:
     - note: marketplace.md §6.2 is an illustrative sketch. Its comment on `alias` still says "it wins over the catalog name". The new §5.3 text makes the alias the pre-fetch key, and the catalog name the display id after a fetch. The store task owns the display id. §6.2 can need the same change. This task did not change §6.2, because the card names only §5.3.
     - next: /review
   timestamp: 2026-09-15T12:45:37.412019+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01m2jhyr844hsrc86vfs0gg4b1
+  text: |-
+    ### review — clean
+    - evidence: review sha HEAD~1..HEAD (9ca51d5). 0 findings (confirmed 0, refuted 0, attempted 7, failed 0). The review did not examine marketplace.md because no validator matches that file. It did not examine 4 .kanban files because .reviewignore excludes them. There was no earlier Review Findings section.
+    - next: none. The task moved to done.
+  timestamp: 2026-09-15T12:51:32.228038+00:00
+- actor: claude-code
+  id: 01m2jhz8cv486tf9mdcbx2ek19
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 7 new files in Sources/FoundationModelsSkills/Marketplace/ and Tests/, plus marketplace.md §5.3
+    - test: green — swift test, 462 passed, 0 failed, 0 skipped, 0 warnings
+    - commit: 9ca51d5 feat(marketplace): add MarketplaceSource, URL forms, and identity rules
+    - review: clean — 0 findings; task moved to done
+  timestamp: 2026-09-15T12:51:48.763692+00:00
+position_column: done
+position_ordinal: ca80
 title: Add MarketplaceSource, URL forms, and marketplace identity rules
 ---
 ## What
