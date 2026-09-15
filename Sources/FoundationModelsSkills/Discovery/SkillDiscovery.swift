@@ -125,17 +125,20 @@ public struct SkillDiscovery: Sendable {
     /// Never recurses past this one level, and never fails: a `root` that
     /// does not exist, or cannot be read, contributes no candidates.
     ///
+    /// The listing goes through the path of the root, not its URL: a
+    /// marketplace layer root is the `current` symlink of the cache
+    /// (marketplace.md §7.2), and the URL form of the call opens the link
+    /// itself, which is not a directory.
+    ///
     /// - Parameter root: The layer root to scan.
     /// - Returns: `root`'s eligible immediate subdirectories, in whatever
     ///   order `FileManager` returns them.
     private static func candidateSkillDirectories(under root: URL) -> [URL] {
-        guard
-            let entries = try? FileManager.default.contentsOfDirectory(
-                at: root, includingPropertiesForKeys: [.isDirectoryKey], options: [])
-        else {
+        guard let names = try? FileManager.default.contentsOfDirectory(atPath: root.path) else {
             return []
         }
-        return entries.filter(Self.isEligibleSkillDirectoryCandidate)
+        return names.map { root.appendingPathComponent($0, isDirectory: true) }
+            .filter(Self.isEligibleSkillDirectoryCandidate)
     }
 
     /// Reports whether `entry` is an immediate root subdirectory eligible to

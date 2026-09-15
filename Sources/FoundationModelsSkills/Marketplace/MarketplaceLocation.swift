@@ -8,11 +8,13 @@ import Foundation
 /// - HTTPS: `https://github.com/owner/repo.git`
 /// - the GitHub shorthand `github:owner/repo`, which expands to
 ///   `https://github.com/owner/repo.git`
+/// - a git repository on this computer: `file:///Users/me/skills.git`
 /// - a `#ref` suffix on each git form
 /// - a local folder: `file:///Users/me/skills`
 ///
 /// A git form must end in `.git`. Thus a later HTTPS `marketplace.json` form
-/// cannot be read as a git repository. The scheme and the host are not case
+/// cannot be read as a git repository, and the same suffix tells a `file://`
+/// repository from a `file://` folder. The scheme and the host are not case
 /// sensitive; the parser writes both in lowercase.
 internal enum MarketplaceLocation: Sendable, Hashable {
     /// A git repository.
@@ -78,7 +80,7 @@ internal enum MarketplaceLocation: Sendable, Hashable {
         guard ref?.isEmpty != true else {
             throw MarketplaceSourceError.emptyRef
         }
-        if Self.scheme(of: address) == Self.fileScheme {
+        if Self.namesAFolder(address) {
             guard ref == nil else {
                 throw MarketplaceSourceError.refOnLocalFolder
             }
@@ -86,6 +88,30 @@ internal enum MarketplaceLocation: Sendable, Hashable {
         } else {
             self = .git(url: try Self.gitURL(address), ref: ref)
         }
+    }
+
+    /// Whether an address names a local folder and not a git repository.
+    ///
+    /// A git form ends in `.git`, also over `file://`. Thus
+    /// `file:///Users/me/skills` is a folder that the store reads directly,
+    /// and `file:///Users/me/skills.git` is a git repository that the
+    /// transport fetches.
+    ///
+    /// - Parameter address: The URL text with no ref.
+    /// - Returns: `true` for a `file://` URL that does not end in `.git`.
+    private static func namesAFolder(_ address: String) -> Bool {
+        guard scheme(of: address) == fileScheme else {
+            return false
+        }
+        return !trimmingTrailingSeparators(address).hasSuffix(gitSuffix)
+    }
+
+    /// Removes the trailing `/` characters of a path or a URL.
+    ///
+    /// - Parameter text: The path or the URL.
+    /// - Returns: The text with no trailing `/`.
+    private static func trimmingTrailingSeparators(_ text: String) -> String {
+        String(text.reversed().drop { $0 == pathSeparator }.reversed())
     }
 
     /// The normalized URL: the git URL with no ref, or `file://` and the
@@ -160,7 +186,7 @@ internal enum MarketplaceLocation: Sendable, Hashable {
     /// - Throws: ``MarketplaceSourceError/missingRepository`` or
     ///   ``MarketplaceSourceError/missingGitSuffix``.
     private static func repositoryPath(_ path: String) throws -> String {
-        let trimmed = String(path.reversed().drop { $0 == pathSeparator }.reversed())
+        let trimmed = trimmingTrailingSeparators(path)
         guard !repositoryName(inPath: trimmed).isEmpty else {
             throw MarketplaceSourceError.missingRepository
         }
@@ -179,10 +205,14 @@ internal enum MarketplaceLocation: Sendable, Hashable {
     /// - Throws: ``MarketplaceSourceError``.
     private static func gitURL(_ address: String) throws -> String {
         if let scheme = scheme(of: address) {
-            guard scheme == httpsScheme else {
+            switch scheme {
+            case httpsScheme:
+                return try httpsURL(address)
+            case fileScheme:
+                return try localRepositoryURL(address)
+            default:
                 throw MarketplaceSourceError.unsupportedForm
             }
-            return try httpsURL(address)
         }
         if address.lowercased().hasPrefix(githubShorthandPrefix) {
             return try githubURL(repository: address.dropFirst(githubShorthandPrefix.count))
@@ -251,6 +281,21 @@ internal enum MarketplaceLocation: Sendable, Hashable {
         }
         let path = try repositoryPath(String(address[address.index(after: colon)...]))
         return "\(authority[..<hostStart])\(host.lowercased())\(scpPathSeparator)\(path)"
+    }
+
+    /// Parses a `file://` URL that names a git repository on this computer.
+    ///
+    /// libgit2 fetches such a URL over its local transport, thus a test and a
+    /// mirror on a disk both work with no network.
+    ///
+    /// - Parameter address: The URL text with no ref.
+    /// - Returns: `file://` and the repository path, with no trailing `/`.
+    /// - Throws: ``MarketplaceSourceError/invalidLocalPath`` when the URL has
+    ///   a remote host or no absolute path, else
+    ///   ``MarketplaceSourceError/missingGitSuffix``.
+    private static func localRepositoryURL(_ address: String) throws -> String {
+        let folder = try localFolder(address)
+        return "\(fileScheme)\(schemeSeparator)\(try repositoryPath(folder.path))"
     }
 
     /// Parses a `file://` URL into a folder URL.

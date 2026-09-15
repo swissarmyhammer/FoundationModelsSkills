@@ -42,10 +42,26 @@ comments:
     - evidence: 6 files — Sources/FoundationModelsSkills/Marketplace/MarketplaceLayerProviding.swift, Sources/FoundationModelsSkills/Operations/SkillRow.swift, Sources/FoundationModelsSkills/Listing/SkillListing.swift, Sources/FoundationModelsSkills/Registry/SkillsRegistry.swift, Tests/FoundationModelsSkillsTests/MarketplaceProvenanceDisplayTests.swift (new), Tests/FoundationModelsSkillsTests/SkillsToolAssemblyTests.swift, Tests/FoundationModelsSkillsTests/MarketplaceTestSupport.swift; `swift test` 616 tests in 45 suites passed, 0 failures, 0 warnings
     - next: /review
   timestamp: 2026-09-15T17:42:15.819647+00:00
+- actor: claude-code
+  id: 01m2k2vftmryjy01wpjh12sm53
+  text: |-
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (commit 47bd272). 7 files reviewed, 0 findings, 0 confirmed, 0 refuted. 4 files in `.kanban/` were not reviewed, because an ignore rule excludes them.
+    - next: The task moved doing → review → done. No work is open.
+  timestamp: 2026-09-15T17:46:51.092605+00:00
+- actor: claude-code
+  id: 01m2k2vs9zxws0m0pabn9a5dt7
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 7 files; the skill row and the `/` listing show `<marketplace id>@<catalog version or short sha>`, never a URL; a local row keeps its shape
+    - test: green — swift build --build-tests 0 warnings; swift test x2, 616 passed each run, 0 failed, 0 skipped
+    - commit: 47bd272 feat(marketplace): show the marketplace source on each skill row
+    - review: clean — 0 findings; task moved to done
+  timestamp: 2026-09-15T17:47:00.799085+00:00
 depends_on:
 - 01M2H0W2TM0WRKHZP8FRAJZAYY
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: d480
 title: Show marketplace provenance in list skill rows and the / command listing
 ---
 ## What

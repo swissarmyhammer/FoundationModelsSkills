@@ -262,8 +262,13 @@ internal struct MarketplaceCache: Sendable {
     }
 
     /// The symlink that names the snapshot the registry reads.
+    ///
+    /// The URL says that it names a folder, thus its path ends in `/` and a
+    /// directory read follows the link. A URL with no trailing `/` makes
+    /// `FileManager.contentsOfDirectory(at:…)` open the link itself, which is
+    /// not a folder.
     var currentLink: URL {
-        folder.appendingPathComponent(Self.currentLinkName)
+        folder.appendingPathComponent(Self.currentLinkName, isDirectory: true)
     }
 
     /// The file that the writer lock holds.
@@ -385,24 +390,70 @@ internal struct MarketplaceCache: Sendable {
     /// - Throws: ``MarketplaceCacheError`` when the lock or the swap fails,
     ///   else the error of the file work.
     func install(snapshotAt temporary: URL, sha: String, ref: String?) throws {
-        let checkedSha = try Self.validated(sha: sha)
-        let checkedRef = try ref.map { try Self.validated(ref: $0) }
+        let checked = try Self.validated(sha: sha, ref: ref)
         try makeFolders()
         try withWriterLock {
-            let previous = currentSha()
-            try publish(snapshotAt: temporary, validatedSha: checkedSha)
-            if let checkedRef {
-                try write(sha: checkedSha, toValidatedRef: checkedRef)
-            }
-            try swapCurrent(toValidatedSha: checkedSha)
-            try removeUnusedSnapshots(keeping: [checkedSha, previous].compactMap { $0 })
+            try installValidated(snapshotAt: temporary, checked: checked)
         }
+    }
+
+    /// The same work as ``install(snapshotAt:sha:ref:)``, for a caller that
+    /// already made the folders and already holds the writer lock.
+    ///
+    /// The store holds the lock over the whole sync of one marketplace, which
+    /// covers the fetch and the materialize as well as the swap
+    /// (marketplace.md §7.6). `flock(2)` is per open file, thus a second lock
+    /// of the same file from the same process would wait forever; this entry
+    /// point takes no lock of its own.
+    ///
+    /// - Parameters:
+    ///   - temporary: The folder that holds the materialized snapshot.
+    ///   - sha: The commit of the snapshot.
+    ///   - ref: The branch or the tag that resolved to `sha`, or `nil` for a
+    ///     pinned commit.
+    /// - Throws: ``MarketplaceCacheError`` when a value is not safe in a path
+    ///   or the swap fails, else the error of the file work.
+    func installUnderWriterLock(snapshotAt temporary: URL, sha: String, ref: String?) throws {
+        try installValidated(snapshotAt: temporary, checked: try Self.validated(sha: sha, ref: ref))
+    }
+
+    /// Checks the commit and the ref of one install.
+    ///
+    /// - Parameters:
+    ///   - sha: The commit of the snapshot.
+    ///   - ref: The branch or the tag, or `nil` for a pinned commit.
+    /// - Returns: The commit, and the name components of the ref.
+    /// - Throws: ``MarketplaceCacheError`` when a value can leave the cache
+    ///   folder.
+    private static func validated(sha: String, ref: String?) throws -> (sha: String, ref: [String]?) {
+        (sha: try validated(sha: sha), ref: try ref.map { try validated(ref: $0) })
+    }
+
+    /// Runs the steps of one install over values that are already checked,
+    /// under a writer lock that the caller holds.
+    ///
+    /// - Parameters:
+    ///   - temporary: The folder that holds the materialized snapshot.
+    ///   - checked: The checked commit and ref.
+    /// - Throws: ``MarketplaceCacheError`` when the swap fails, else the
+    ///   error of the file work.
+    private func installValidated(snapshotAt temporary: URL, checked: (sha: String, ref: [String]?)) throws {
+        let previous = currentSha()
+        try publish(snapshotAt: temporary, validatedSha: checked.sha)
+        if let ref = checked.ref {
+            try write(sha: checked.sha, toValidatedRef: ref)
+        }
+        try swapCurrent(toValidatedSha: checked.sha)
+        try removeUnusedSnapshots(keeping: [checked.sha, previous].compactMap { $0 })
     }
 
     /// Makes the folders that an install writes into.
     ///
+    /// A caller that takes the writer lock itself calls this first: the lock
+    /// file lives in the folder of the marketplace.
+    ///
     /// - Throws: The error of the folder.
-    private func makeFolders() throws {
+    func makeFolders() throws {
         for directory in [folder, refsDirectory, snapshotsDirectory] {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         }
@@ -515,22 +566,55 @@ internal struct MarketplaceCache: Sendable {
     /// - Throws: ``MarketplaceCacheError/cannotLock(path:code:)`` when the
     ///   lock fails, else what `body` throws.
     func withWriterLock<Value>(_ body: () throws -> Value) throws -> Value {
+        let descriptor = try openWriterLock()
+        defer { close(descriptor) }
+        return try body()
+    }
+
+    /// Runs an asynchronous `body` while this process holds the exclusive
+    /// writer lock of the marketplace folder (marketplace.md §7.6).
+    ///
+    /// The store holds the lock over the whole sync of one marketplace, and
+    /// the fetch in the middle of that sync is asynchronous. `flock(2)`
+    /// belongs to the open file, not to the thread, thus the lock stays over
+    /// a suspension point.
+    ///
+    /// The folder of the marketplace must exist: ``makeFolders()`` makes it.
+    ///
+    /// - Parameters:
+    ///   - isolation: The actor that the caller runs on, so that `body` can
+    ///     read the state of that actor. The default is the caller.
+    ///   - body: The work to do under the lock.
+    /// - Returns: What `body` gives.
+    /// - Throws: ``MarketplaceCacheError/cannotLock(path:code:)`` when the
+    ///   lock fails, else what `body` throws.
+    func withWriterLock<Value>(
+        isolation: isolated (any Actor)? = #isolation, _ body: () async throws -> Value
+    ) async throws -> Value {
+        let descriptor = try openWriterLock()
+        defer { close(descriptor) }
+        return try await body()
+    }
+
+    /// Opens the lock file and takes the exclusive writer lock.
+    ///
+    /// - Returns: The open descriptor. The caller closes it, which releases
+    ///   the lock.
+    /// - Throws: ``MarketplaceCacheError/cannotLock(path:code:)``.
+    private func openWriterLock() throws -> Int32 {
         let descriptor = open(lockFile.path, O_CREAT | O_RDWR, Self.lockFileMode)
         guard descriptor >= 0 else {
             throw MarketplaceCacheError.cannotLock(path: lockFile.path, code: errno)
         }
-        defer { close(descriptor) }
         guard flock(descriptor, LOCK_EX) == 0 else {
+            close(descriptor)
             throw MarketplaceCacheError.cannotLock(path: lockFile.path, code: errno)
         }
-        return try body()
+        return descriptor
     }
 
     /// Runs `body` while this process holds a shared lock on one snapshot, so
     /// that cleanup does not delete the folder the caller is reading.
-    ///
-    /// The lock is on the snapshot folder itself, so the layer root gets no
-    /// extra file that skill discovery would see.
     ///
     /// - Parameters:
     ///   - sha: The commit of the snapshot.
@@ -541,14 +625,68 @@ internal struct MarketplaceCache: Sendable {
     ///   throws.
     func withSnapshotInUse<Value>(sha: String, _ body: (URL) throws -> Value) throws -> Value {
         let directory = try snapshotDirectory(forSha: sha)
+        let lease = try Self.sharedLock(onDirectory: directory)
+        return try withExtendedLifetime(lease) { try body(directory) }
+    }
+
+    /// Takes a shared lock on the snapshot that `current` names, and keeps it
+    /// until the caller releases the lease (marketplace.md §7.6).
+    ///
+    /// A store holds one lease for as long as it serves a snapshot, thus
+    /// cleanup in another process keeps that folder.
+    ///
+    /// - Returns: The lease, or `nil` when there is no `current` snapshot.
+    /// - Throws: ``MarketplaceCacheError/cannotLock(path:code:)`` when the
+    ///   folder does not open or the lock fails.
+    func leaseCurrentSnapshot() throws -> SnapshotLease? {
+        guard let directory = currentSnapshot() else {
+            return nil
+        }
+        return try Self.sharedLock(onDirectory: directory)
+    }
+
+    /// Takes a shared lock on one snapshot folder.
+    ///
+    /// The lock is on the folder itself, so the layer root gets no extra file
+    /// that skill discovery would see.
+    ///
+    /// - Parameter directory: The snapshot folder.
+    /// - Returns: The lease, which holds the lock until it is released.
+    /// - Throws: ``MarketplaceCacheError/cannotLock(path:code:)``.
+    private static func sharedLock(onDirectory directory: URL) throws -> SnapshotLease {
         let descriptor = open(directory.path, O_RDONLY | O_DIRECTORY)
         guard descriptor >= 0 else {
             throw MarketplaceCacheError.cannotLock(path: directory.path, code: errno)
         }
-        defer { close(descriptor) }
         guard flock(descriptor, LOCK_SH) == 0 else {
+            close(descriptor)
             throw MarketplaceCacheError.cannotLock(path: directory.path, code: errno)
         }
-        return try body(directory)
+        return SnapshotLease(descriptor: descriptor)
+    }
+}
+
+/// A shared lock that one reader holds on the snapshot folder it serves
+/// (marketplace.md §7.6).
+///
+/// The lock lasts as long as the lease. Cleanup, in this process or in
+/// another one, takes an exclusive lock before it deletes a snapshot, thus it
+/// never deletes a folder that a lease holds.
+///
+/// The only stored property is an immutable `Int32`, which gives the class a
+/// plain `Sendable` conformance that the compiler checks.
+internal final class SnapshotLease: Sendable {
+    /// The open folder that holds the lock.
+    private let descriptor: Int32
+
+    /// Takes over an open, already locked folder.
+    ///
+    /// - Parameter descriptor: The open folder, with its shared lock.
+    fileprivate init(descriptor: Int32) {
+        self.descriptor = descriptor
+    }
+
+    deinit {
+        close(descriptor)
     }
 }

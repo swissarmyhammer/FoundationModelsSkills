@@ -85,8 +85,16 @@ final class GitFixtureRepository {
     /// The `force` flag value that makes a tag call fail on an existing tag.
     private static let keepExistingTag: Int32 = 0
 
-    /// The temporary directory that holds the bare repository.
+    /// The name of the bare repository folder. It ends in `.git`, thus a
+    /// `file://` URL of it is a git source and not a local folder
+    /// (marketplace.md §5.1).
+    private static let repositoryDirectoryName = "fixture.git"
+
+    /// The bare repository: `<temporary directory>/fixture.git`.
     let directory: URL
+
+    /// The temporary directory that holds ``directory``.
+    private let parentDirectory: URL
 
     /// The open repository handle.
     private let repository: OpaquePointer
@@ -101,19 +109,22 @@ final class GitFixtureRepository {
     /// - Throws: ``FixtureError`` when libgit2 cannot make the repository, or
     ///   the error of `WatcherTestSupport.makeTempDirectory()`.
     init() throws {
-        let directory = try WatcherTestSupport.makeTempDirectory()
+        let parentDirectory = try WatcherTestSupport.makeTempDirectory()
+        let directory = parentDirectory.appendingPathComponent(
+            Self.repositoryDirectoryName, isDirectory: true)
         do {
             repository = try Self.makeBareRepository(at: directory)
         } catch {
-            try? FileManager.default.removeItem(at: directory)
+            try? FileManager.default.removeItem(at: parentDirectory)
             throw error
         }
+        self.parentDirectory = parentDirectory
         self.directory = directory
     }
 
     deinit {
         git_repository_free(repository)
-        try? FileManager.default.removeItem(at: directory)
+        try? FileManager.default.removeItem(at: parentDirectory)
     }
 
     /// Commits `files` as the whole tree of a new commit on `branch`.

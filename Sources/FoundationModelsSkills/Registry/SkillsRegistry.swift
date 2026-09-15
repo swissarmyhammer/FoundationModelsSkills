@@ -1075,7 +1075,7 @@ public struct SkillsRegistry: Sendable {
         }
     }
 
-    /// Owns the `SkillWatcher` and `ReloadBroadcaster` for a `watch: true`
+    /// Owns the `SkillWatcher` and `EventBroadcaster` for a `watch: true`
     /// registry: rebuilds `catalogBox` on every coalesced watcher signal and
     /// publishes the refreshed metadata list to every current subscriber.
     ///
@@ -1088,7 +1088,7 @@ public struct SkillsRegistry: Sendable {
     /// `broadcaster`, `marketplaceUpdates`) is an immutable `let` referring
     /// to a type that is itself safe under concurrent use -- `SkillWatcher`
     /// is `@unchecked Sendable` and serializes its own mutable state on a
-    /// private queue, `ReloadBroadcaster` locks its own mutable state, and
+    /// private queue, `EventBroadcaster` locks its own mutable state, and
     /// `Task` is `Sendable`. This class itself declares no other stored
     /// state: the rebuild closure wired up in `init` captures
     /// `source`/`catalogBox`/`reader`/`broadcaster` directly rather than
@@ -1101,7 +1101,7 @@ public struct SkillsRegistry: Sendable {
         /// The watcher over the local layer roots, or `nil` for a registry
         /// that only a marketplace update rebuilds.
         private let watcher: SkillWatcher?
-        private let broadcaster: ReloadBroadcaster
+        private let broadcaster: EventBroadcaster<[SkillMetadata]>
         /// The task that rebuilds on each marketplace update, or `nil` when
         /// no provider backs this registry.
         private let marketplaceUpdates: Task<Void, Never>?
@@ -1127,7 +1127,7 @@ public struct SkillsRegistry: Sendable {
         ///     to recompute `metadata()` after each rebuild via the real
         ///     rendering path.
         init(source: LayerSource, watchedRoots: [URL]?, catalogBox: CatalogBox, reader: SkillsRegistry) {
-            let broadcaster = ReloadBroadcaster()
+            let broadcaster = EventBroadcaster<[SkillMetadata]>()
             self.broadcaster = broadcaster
             let rebuild: @Sendable () -> Void = {
                 let rebuilt = SkillsRegistry.buildCatalog(plan: source.plan())
@@ -1166,77 +1166,6 @@ public struct SkillsRegistry: Sendable {
             watcher?.stop()
             marketplaceUpdates?.cancel()
             broadcaster.finishAll()
-        }
-    }
-
-    /// Broadcasts each rebuild's refreshed metadata list to every currently
-    /// registered subscriber (plan.md §7.1 "one registry, four simultaneous
-    /// consumers").
-    ///
-    /// A single shared `AsyncStream` cannot serve this: two concurrent `for
-    /// await` loops over the same stream *split* its elements between them
-    /// rather than each observing every one, since they compete for the
-    /// same underlying buffer. This type sidesteps that entirely -- each
-    /// `subscribe()` call registers its own independent continuation, and
-    /// `publish(_:)` yields to every one of them, so a fresh subscription
-    /// (`onReload`/`commandUpdates`, accessed once or many times) never
-    /// steals another's elements.
-    ///
-    /// `@unchecked Sendable`: `continuations`/`nextID` are only ever read or
-    /// mutated while holding `lock`.
-    private final class ReloadBroadcaster: @unchecked Sendable {
-        private let lock = NSLock()
-        private var continuations: [Int: AsyncStream<[SkillMetadata]>.Continuation] = [:]
-        private var nextID = 0
-
-        /// Registers a fresh subscriber stream, capturing every publication
-        /// from this point forward.
-        ///
-        /// - Returns: The subscriber's stream. Finishes on its own
-        ///   `onTermination` (the caller cancels/drops it) or when
-        ///   `finishAll()` runs.
-        func subscribe() -> AsyncStream<[SkillMetadata]> {
-            let (stream, continuation) = AsyncStream<[SkillMetadata]>.makeStream()
-            let id = lock.withLock {
-                let id = nextID
-                nextID += 1
-                continuations[id] = continuation
-                return id
-            }
-            continuation.onTermination = { [weak self] _ in self?.unsubscribe(id: id) }
-            return stream
-        }
-
-        /// Publishes `metadata` to every currently registered subscriber.
-        ///
-        /// - Parameter metadata: The refreshed metadata list to publish.
-        func publish(_ metadata: [SkillMetadata]) {
-            let subscribers = lock.withLock { Array(continuations.values) }
-            for continuation in subscribers {
-                continuation.yield(metadata)
-            }
-        }
-
-        /// Finishes every currently registered subscriber and stops
-        /// accepting new publications -- called once, from
-        /// `ReloadCoordinator.deinit`.
-        func finishAll() {
-            let subscribers = lock.withLock {
-                defer { continuations.removeAll() }
-                return Array(continuations.values)
-            }
-            for continuation in subscribers {
-                continuation.finish()
-            }
-        }
-
-        /// Removes subscriber `id`'s continuation once its stream
-        /// terminates, so a cancelled/dropped subscriber's slot doesn't
-        /// linger forever.
-        ///
-        /// - Parameter id: The subscriber id to remove.
-        private func unsubscribe(id: Int) {
-            lock.withLock { _ = continuations.removeValue(forKey: id) }
         }
     }
 }

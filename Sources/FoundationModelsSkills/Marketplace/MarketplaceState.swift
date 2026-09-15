@@ -25,6 +25,13 @@ internal struct MarketplaceStateRecord: Sendable, Hashable, Codable {
     /// when the catalog has none.
     var catalogVersion: String?
 
+    /// The display id of the marketplace: the `name` field of the catalog of
+    /// the current snapshot, or `nil` before the first fetch.
+    ///
+    /// A new process reads it, thus a row shows the same name across a
+    /// restart, with no fetch (marketplace.md §5.3).
+    var displayID: String?
+
     /// When the store last asked the remote for its head, or `nil` when it
     /// never asked.
     var lastChecked: Date?
@@ -45,6 +52,7 @@ internal struct MarketplaceStateRecord: Sendable, Hashable, Codable {
     ///   - pinnedSha: The commit that the host pinned.
     ///   - currentSha: The commit of the snapshot that `current` names.
     ///   - catalogVersion: The `version` field of the catalog.
+    ///   - displayID: The `name` field of the catalog.
     ///   - lastChecked: When the store last asked the remote for its head.
     ///   - lastUpdated: When the store last installed a snapshot.
     ///   - lastError: The message of the last failure.
@@ -54,6 +62,7 @@ internal struct MarketplaceStateRecord: Sendable, Hashable, Codable {
         pinnedSha: String? = nil,
         currentSha: String? = nil,
         catalogVersion: String? = nil,
+        displayID: String? = nil,
         lastChecked: Date? = nil,
         lastUpdated: Date? = nil,
         lastError: String? = nil
@@ -63,6 +72,7 @@ internal struct MarketplaceStateRecord: Sendable, Hashable, Codable {
         self.pinnedSha = pinnedSha
         self.currentSha = currentSha
         self.catalogVersion = catalogVersion
+        self.displayID = displayID
         self.lastChecked = lastChecked
         self.lastUpdated = lastUpdated
         self.lastError = lastError

@@ -93,6 +93,120 @@ enum MarketplaceTestSupport {
     static let defaultCatalogVersion = "1.0.0"
 }
 
+/// A ``GitTransport`` that counts the calls of the store, records the
+/// credential that each fetch received, and then does the real libgit2 work.
+///
+/// A pure double would put no object in the bare repository, thus the store
+/// would have no tree to read. The recorder wraps ``LibGit2Transport``
+/// instead, so a store test sees real snapshots and still counts the calls.
+actor RecordingGitTransport: GitTransport {
+    /// The transport that does the work.
+    private let base = LibGit2Transport()
+
+    /// How many times the store asked for a remote head.
+    private(set) var remoteHeadCount = 0
+
+    /// How many times the store fetched.
+    private(set) var fetchCount = 0
+
+    /// The credential that the provider of each fetch gave, in call order.
+    /// An entry is `nil` when the fetch got no provider.
+    private(set) var fetchCredentials: [MarketplaceCredential?] = []
+
+    func remoteHead(
+        url: String, ref: String, credentials: (@Sendable (URL) async -> MarketplaceCredential?)?
+    ) async throws -> String {
+        remoteHeadCount += 1
+        return try await base.remoteHead(url: url, ref: ref, credentials: credentials)
+    }
+
+    func fetch(
+        url: String, revision: String, intoBareRepository repositoryURL: URL,
+        credentials: (@Sendable (URL) async -> MarketplaceCredential?)?
+    ) async throws -> String {
+        fetchCount += 1
+        fetchCredentials.append(await Self.credential(from: credentials, forURL: url))
+        return try await base.fetch(
+            url: url, revision: revision, intoBareRepository: repositoryURL, credentials: credentials)
+    }
+
+    /// Asks a credentials provider for the credential of one source.
+    ///
+    /// - Parameters:
+    ///   - credentials: The provider of the call, or `nil` when the call got
+    ///     none.
+    ///   - url: The git URL of the remote.
+    /// - Returns: The credential, or `nil` when there is no provider or the
+    ///   provider gives none.
+    private static func credential(
+        from credentials: (@Sendable (URL) async -> MarketplaceCredential?)?, forURL url: String
+    ) async -> MarketplaceCredential? {
+        guard let credentials, let requestURL = URL(string: url) else {
+            return nil
+        }
+        return await credentials(requestURL)
+    }
+}
+
+/// One ``MarketplaceStore`` over a temporary cache, plus the empty local
+/// layer root that a registry test puts above its marketplace layers.
+///
+/// The fixture removes every folder that it made when it is released, thus a
+/// store test leaves nothing behind.
+final class MarketplaceStoreFixture {
+    /// The cache directory of the store.
+    let cacheDirectory: URL
+
+    /// The root of the one local layer of ``makeRegistry()``.
+    let localRoot: URL
+
+    /// The store under test.
+    let store: MarketplaceStore
+
+    /// Whether the fixture made ``cacheDirectory`` and thus removes it.
+    private let ownsCacheDirectory: Bool
+
+    /// Makes a store over a temporary cache.
+    ///
+    /// - Parameters:
+    ///   - sources: The marketplace sources, in list order.
+    ///   - cacheDirectory: The cache directory to share with another store,
+    ///     or `nil` for a new temporary one. The default is `nil`.
+    ///   - policy: The policy of the store. The default is
+    ///     `MarketplacePolicy()`.
+    ///   - transport: The git transport, or `nil` for the real
+    ///     ``LibGit2Transport``. The default is `nil`.
+    /// - Throws: The error of a folder write.
+    init(
+        sources: [MarketplaceSource], cacheDirectory: URL? = nil,
+        policy: MarketplacePolicy = MarketplacePolicy(), transport: (any GitTransport)? = nil
+    ) throws {
+        ownsCacheDirectory = cacheDirectory == nil
+        self.cacheDirectory = try cacheDirectory ?? WatcherTestSupport.makeTempDirectory()
+        localRoot = try WatcherTestSupport.makeTempDirectory()
+        store = MarketplaceStore(
+            sources: sources, cacheDirectory: self.cacheDirectory, policy: policy,
+            transport: transport ?? LibGit2Transport())
+    }
+
+    deinit {
+        try? FileManager.default.removeItem(at: localRoot)
+        if ownsCacheDirectory {
+            try? FileManager.default.removeItem(at: cacheDirectory)
+        }
+    }
+
+    /// Makes a registry over the layers of the store and one empty local
+    /// project layer.
+    ///
+    /// - Returns: The registry, with watching off.
+    func makeRegistry() -> SkillsRegistry {
+        var stack = DotfolderStack(name: "skills", workingDirectory: localRoot, environment: [:])
+        stack.layers = [DotfolderStack.Layer(source: .project, root: localRoot)]
+        return SkillsRegistry(marketplaces: store, stack: stack)
+    }
+}
+
 /// A provider whose layer list the test replaces, and which publishes one
 /// update for each replacement.
 ///
