@@ -34,6 +34,9 @@ import FoundationModelsExtras
 /// letting a stack derive its own layers from a bare name; `DotfolderStack`
 /// exposes `layers` as a mutable property and `Layer.init(source:root:)`
 /// publicly for exactly this purpose.
+///
+/// The stack of one render holds only the layers the winning layer may read
+/// (marketplace.md §6.5, decision 9); see `partialsStack(for:)`.
 public struct StencilPass: RenderPass {
     /// The host-supplied layer roots this pass resolves `{% include %}`
     /// partials against, ordered lowest precedence first.
@@ -140,7 +143,7 @@ public struct StencilPass: RenderPass {
     ///   `Trust.untrusted` validation rejects it (a disallowed tag/filter,
     ///   an include-depth bomb, an output-size bomb, or an iteration bomb).
     public func render(_ text: QuarantinedText, request: RenderRequest) throws -> QuarantinedText {
-        let engine = TemplateEngine(partials: Self.partialsStack(layers: layers))
+        let engine = TemplateEngine(partials: partialsStack(for: request.winningLayer))
         var context = templateContext(for: request)
         let template = try Self.template(for: text, injectingQuarantinedSpansInto: &context)
         let rendered = try engine.render(template, context: context, trust: resolvedTrust(for: request.winningLayer))
@@ -306,22 +309,34 @@ public struct StencilPass: RenderPass {
     }
 
     /// Builds the `DotfolderStack` `TemplateEngine.init(partials:)` uses to
-    /// resolve `{% include %}` over `layers`.
+    /// resolve `{% include %}` for one render, scoped to `winningLayer`
+    /// (marketplace.md §6.5, decision 9).
+    ///
+    /// A skill of a `.marketplace` layer gets that one marketplace layer
+    /// plus every local layer -- `url[k]._partials < defaults < user <
+    /// project` -- so it never reads a partial of a different marketplace,
+    /// and a local `_partials/` file of the same name still wins. A skill of
+    /// a local layer gets the local layers only, so it stays independent of
+    /// a remote source: an include of a name that only a marketplace ships
+    /// is a render error, not that marketplace's text.
     ///
     /// `DotfolderStack` exposes no initializer that takes `layers` directly,
     /// so this builds a throwaway stack (name and working directory are
     /// irrelevant -- construction performs no I/O) and immediately replaces
-    /// its derived layers with the host-supplied ones.
+    /// its derived layers with the scoped ones.
     ///
-    /// - Parameter layers: The host-supplied layer roots, lowest precedence
-    ///   first.
-    /// - Returns: A stack wrapping exactly `layers`, or `nil` when `layers`
-    ///   is empty (no partials resolution).
-    private static func partialsStack(layers: [DotfolderStack.Layer]) -> DotfolderStack? {
-        guard !layers.isEmpty else { return nil }
+    /// - Parameter winningLayer: The layer the rendered skill was discovered
+    ///   in.
+    /// - Returns: A stack wrapping the scoped layers, lowest precedence
+    ///   first, or `nil` when there are none (no partials resolution).
+    private func partialsStack(for winningLayer: DotfolderStack.Layer) -> DotfolderStack? {
+        let localLayers = layers.filter { $0.source != .marketplace }
+        let scopedLayers =
+            winningLayer.source == .marketplace ? [winningLayer] + localLayers : localLayers
+        guard !scopedLayers.isEmpty else { return nil }
         var stack = DotfolderStack(
             name: "stencil-pass-partials", workingDirectory: URL(fileURLWithPath: "/", isDirectory: true))
-        stack.layers = layers
+        stack.layers = scopedLayers
         return stack
     }
 }

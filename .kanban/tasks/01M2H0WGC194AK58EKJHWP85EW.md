@@ -104,11 +104,27 @@ comments:
     - evidence: 4 files — Sources/FoundationModelsSkills/Marketplace/Git/CredentialGate.swift, Tests/FoundationModelsSkillsTests/MarketplaceTestSupport.swift, Tests/FoundationModelsSkillsTests/CredentialGateTests.swift, Tests/FoundationModelsSkillsTests/GitTransportTests.swift; `swift build --build-tests` gives 0 warnings; `swift test` gives 550 tests in 39 suites, all passed
     - next: /review
   timestamp: 2026-09-15T15:24:10.376968+00:00
+- actor: claude-code
+  id: 01m2jvysn72xn9f1aqgk8hff58
+  text: |
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (commit 3585d17); 0 findings, 0 confirmed, 0 refuted, 7 attempted; 4 files reviewed, 2 files not reviewed (.kanban, from .reviewignore). Each one of the 14 earlier findings is corrected: `CredentialGate` keeps one private `origin: String?` that both `resolved(forSourceURL:credentials:)` and `credential(forRequestURL:)` read, thus there is no unread stored property and no hand-written `==`; the tests write no `print(...)`; `GitTransportTests` uses `isEmpty`; `CredentialRequestRecorder` is in the shared file `Tests/FoundationModelsSkillsTests/MarketplaceTestSupport.swift`.
+    - next: task moved to done.
+  timestamp: 2026-09-15T15:46:19.431164+00:00
+- actor: claude-code
+  id: 01m2jvzb3j6g4v0zjmh97e4p8p
+  text: |-
+    ### finish iteration 3 — clean
+    - implement: changed — 4 files (CredentialGate.swift, MarketplaceTestSupport.swift, CredentialGateTests.swift, GitTransportTests.swift); one origin string replaces the private Origin struct, so no rule conflict remains
+    - test: green — swift build --build-tests 0 warnings; swift test, 550 passed in 3 full runs. The tester found and fixed an order-dependent test: `theCredentialsCallbackGivesTheCredentialOneTime` called a libgit2 function before the library start.
+    - commit: 3585d17 refactor(marketplace): compare one credential origin string
+    - review: clean — 0 findings; all 14 prior findings checked; task moved to done
+  timestamp: 2026-09-15T15:46:37.298026+00:00
 depends_on:
 - 01M2H0RFR101FGE3GT88HD33M4
 - 01M2H0QNGBQDQWBB3H1NSGYGDN
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: cd80
 title: Read a fetched commit as a CatalogFileSource and add the HTTPS credential callback
 ---
 ## What
