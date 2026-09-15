@@ -20,8 +20,9 @@ internal enum MarketplaceCacheError: Error, Equatable, Sendable {
     /// the symlink, and the code is the `errno` of `rename(2)`.
     case cannotSwap(path: String, code: Int32)
 
-    /// A value cannot go into a cache path, because it is empty, it holds a
-    /// path separator or a relative step, or it starts with a dot.
+    /// A value cannot go into a cache path, because one of its name
+    /// components is empty, starts with a dot, or holds a backslash or a
+    /// control character.
     case unsafePathValue(kind: MarketplacePathValue, value: String)
 
     /// A value is no commit, because it is not a hexadecimal object name.
@@ -110,36 +111,43 @@ internal struct MarketplaceCache: Sendable {
     /// The lengths that the object name of a commit can have.
     private static let commitLengths: Set<Int> = [sha1Length, sha256Length]
 
-    /// The relative step that walks to the parent folder.
-    private static let relativeStep = ".."
+    /// The character that separates the name components of a ref.
+    private static let refSeparator: Character = "/"
 
-    /// The characters that make a value more than one name.
-    private static let pathSeparators: Set<Character> = ["/", "\\"]
+    /// The characters that make one name component more than one name.
+    private static let pathSeparators: Set<Character> = [refSeparator, "\\"]
 
     /// The character that starts a hidden name.
     private static let hiddenNamePrefix = "."
 
-    /// Checks a value before it goes into a cache path (marketplace.md §7.2).
+    /// Whether one name component is safe inside the cache folder
+    /// (marketplace.md §7.2).
     ///
-    /// Each path of the cache is one name inside the folder of the
-    /// marketplace. Thus a value that is empty, that holds a separator or the
-    /// relative step, that starts with a dot, or that holds a control
-    /// character, can leave the cache folder, and the call refuses it.
+    /// A component that is empty, that starts with a dot, that holds a
+    /// separator, or that holds a control character, can leave the cache
+    /// folder. A component that starts with a dot covers `.` and `..`, which
+    /// are the two names that walk out of a folder.
+    ///
+    /// - Parameter component: The one name to check.
+    /// - Returns: `true` when the name stays inside the folder that holds it.
+    private static func isSafe(component: String) -> Bool {
+        !component.isEmpty
+            && !component.hasPrefix(hiddenNamePrefix)
+            && !component.contains(where: pathSeparators.contains)
+            && !component.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains)
+    }
+
+    /// Checks a value that names one file or folder of the cache
+    /// (marketplace.md §7.2).
     ///
     /// - Parameters:
-    ///   - value: The value to check.
+    ///   - value: The value to check. It is one name, not a path.
     ///   - kind: What the value names. The error tells it.
     /// - Returns: The value, which is now safe in a path.
     /// - Throws: ``MarketplaceCacheError/unsafePathValue(kind:value:)`` when
     ///   the value can leave the cache folder.
     static func validated(pathValue value: String, kind: MarketplacePathValue) throws -> String {
-        let safe =
-            !value.isEmpty
-            && !value.hasPrefix(hiddenNamePrefix)
-            && !value.contains(relativeStep)
-            && !value.contains(where: pathSeparators.contains)
-            && !value.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains)
-        guard safe else {
+        guard isSafe(component: value) else {
             throw MarketplaceCacheError.unsafePathValue(kind: kind, value: value)
         }
         return value
@@ -164,15 +172,25 @@ internal struct MarketplaceCache: Sendable {
 
     /// Checks a branch or a tag before it names a file under `refs/`.
     ///
-    /// The ref is one file name, so it holds no separator. A ref name with a
-    /// `/` in it is refused.
+    /// Git permits a `/` in a ref name, as in `feature/login` and
+    /// `refs/heads/main`, and each part is then one folder under `refs/`. So
+    /// the call splits the ref on `/` and checks each part with the rule for
+    /// one name. A leading `/`, a trailing `/`, and two separators together
+    /// all make an empty part, which the rule refuses; thus the ref stays
+    /// inside the folder of the marketplace.
     ///
     /// - Parameter ref: The branch or the tag to check.
-    /// - Returns: The ref, which is now safe in a path.
+    /// - Returns: The name components of the ref, in order, each one safe in
+    ///   a path.
     /// - Throws: ``MarketplaceCacheError/unsafePathValue(kind:value:)`` when
     ///   the ref can leave the cache folder.
-    static func validated(ref: String) throws -> String {
-        try validated(pathValue: ref, kind: .ref)
+    static func validated(ref: String) throws -> [String] {
+        let components = ref.split(separator: refSeparator, omittingEmptySubsequences: false)
+            .map(String.init)
+        guard components.allSatisfy(isSafe(component:)) else {
+            throw MarketplaceCacheError.unsafePathValue(kind: .ref, value: ref)
+        }
+        return components
     }
 
     /// Whether a name is the object name of a commit.
@@ -272,6 +290,18 @@ internal struct MarketplaceCache: Sendable {
         snapshotsDirectory.appendingPathComponent(sha, isDirectory: true)
     }
 
+    /// The file of one ref whose components ``validated(ref:)`` already
+    /// checked.
+    ///
+    /// The call appends one component at a time, so it never puts a separator
+    /// of the caller into the path.
+    ///
+    /// - Parameter components: The checked name components of the ref.
+    /// - Returns: `<folder>/refs/<component>/…/<component>`.
+    private func refFile(forValidatedRef components: [String]) -> URL {
+        components.reduce(refsDirectory) { $0.appendingPathComponent($1) }
+    }
+
     // MARK: - Reading
 
     /// The commit that `current` names.
@@ -324,7 +354,7 @@ internal struct MarketplaceCache: Sendable {
     /// - Throws: ``MarketplaceCacheError`` when `ref` is not safe in a path,
     ///   else the error of the file read.
     func sha(forRef ref: String) throws -> String? {
-        let file = refsDirectory.appendingPathComponent(try Self.validated(ref: ref))
+        let file = refFile(forValidatedRef: try Self.validated(ref: ref))
         guard FileManager.default.fileExists(atPath: file.path) else {
             return nil
         }
@@ -400,14 +430,18 @@ internal struct MarketplaceCache: Sendable {
 
     /// Writes the commit that a ref resolved to.
     ///
+    /// A ref name with a `/` in it gets one folder for each part before the
+    /// last, so the call makes those folders before it writes the file.
+    ///
     /// - Parameters:
     ///   - sha: The commit.
-    ///   - ref: The checked branch or tag. It is one name, so the file goes
-    ///     straight into `refs/`.
-    /// - Throws: The error of the file write.
-    private func write(sha: String, toValidatedRef ref: String) throws {
-        try sha.write(
-            to: refsDirectory.appendingPathComponent(ref), atomically: true, encoding: .utf8)
+    ///   - ref: The checked name components of the branch or the tag.
+    /// - Throws: The error of the folder or of the file write.
+    private func write(sha: String, toValidatedRef ref: [String]) throws {
+        let file = refFile(forValidatedRef: ref)
+        try FileManager.default.createDirectory(
+            at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try sha.write(to: file, atomically: true, encoding: .utf8)
     }
 
     /// Makes `current` name one snapshot, in one atomic step.

@@ -93,10 +93,27 @@ comments:
     - evidence: 2 files — Sources/FoundationModelsSkills/Marketplace/MarketplaceCache.swift, Tests/FoundationModelsSkillsTests/MarketplaceCacheTests.swift. `swift build --build-tests` = 0 warnings, 0 errors. `swift test --filter MarketplaceCacheTests` = 24 tests, 1 suite, 0 failures. `swift test` = 577 tests, 41 suites, 0 failures. All 4 review findings are checked.
     - next: /review
   timestamp: 2026-09-15T16:25:06.115580+00:00
+- actor: claude-code
+  id: 01m2jyfzcvz1t076x6hd0myr5w
+  text: |-
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (commit 1f44d5b). 0 findings, 0 confirmed, 1 refuted, 7 attempted. 2 files reviewed. All 4 findings of the previous pass are marked complete.
+    - next: none. The task moves to done.
+  timestamp: 2026-09-15T16:30:39.515456+00:00
+- actor: claude-code
+  id: 01m2jygafr81rt29qdep0kg50k
+  text: |-
+    ### finish iteration 2 — clean
+    - implement: changed — 2 files; one boundary validator for the `sha` and the `ref` values, with typed errors; every path build now uses a checked value
+    - test: green — swift build --build-tests 0 warnings; swift test x2, 577 passed each run, 0 failed, 0 skipped
+    - commit: 1f44d5b fix(marketplace): check sha and ref values before path use
+    - review: clean — 0 new findings; all 4 prior findings checked; task moved to done
+    - carry-over: a ref name with a `/` (example `feature/login`) is now refused. Task ^7ga9yde holds the follow-up.
+  timestamp: 2026-09-15T16:30:50.872195+00:00
 depends_on:
 - 01M2H0R2AFRD111HR47N3YVH8R
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: cf80
 title: 'Add MarketplaceCache: ~/.cache location, snapshots layout, atomic current swap, count cleanup, lock, state.json'
 ---
 ## What

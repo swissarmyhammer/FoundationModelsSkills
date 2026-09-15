@@ -261,10 +261,24 @@ struct MarketplaceCacheTests {
 
     // MARK: - Path safety
 
-    /// The values that must never reach a file path: an empty value, the
+    /// The values that must never name a snapshot folder: an empty value, the
     /// relative step, a relative step with a name after it, a value that
-    /// holds a separator, an absolute path, and a hidden name.
-    private static let unsafePathValues = ["", "..", "../x", "a/b", "/etc/passwd", ".hidden"]
+    /// holds a separator, an absolute path, and a hidden name. A sha is one
+    /// name, so every separator is unsafe in it.
+    private static let unsafeShaValues = ["", "..", "../x", "a/b", "/etc/passwd", ".hidden"]
+
+    /// The values that must never name a ref file. A ref may hold a `/`, so
+    /// each value here breaks one component rule: an empty value, the
+    /// relative step alone and inside a path, an absolute path, an empty
+    /// component in the middle, a trailing separator, a hidden name alone and
+    /// at the front of a path, and a backslash.
+    private static let unsafeRefValues = [
+        "", "..", "../x", "a/../b", "/abs", "a//b", "a/", ".hidden", ".hidden/x", "a\\b",
+    ]
+
+    /// The ref names with a `/` in them that a user may write, and that the
+    /// cache must take.
+    private static let refsWithSeparators = ["feature/login", "refs/heads/main"]
 
     /// A value with the length of a commit whose letters are not hex digits.
     private static let notHexSha = String(repeating: "z", count: shaHexLength)
@@ -283,7 +297,7 @@ struct MarketplaceCacheTests {
         #expect(directory.lastPathComponent == sha)
     }
 
-    @Test(arguments: MarketplaceCacheTests.unsafePathValues)
+    @Test(arguments: MarketplaceCacheTests.unsafeShaValues)
     func aSnapshotFolderRefusesAnUnsafeSha(value: String) throws {
         let fixture = try CacheFixture()
         defer { fixture.remove() }
@@ -303,7 +317,7 @@ struct MarketplaceCacheTests {
         }
     }
 
-    @Test(arguments: MarketplaceCacheTests.unsafePathValues)
+    @Test(arguments: MarketplaceCacheTests.unsafeShaValues)
     func aSharedLockRefusesAnUnsafeSha(value: String) throws {
         let fixture = try CacheFixture()
         defer { fixture.remove() }
@@ -313,7 +327,7 @@ struct MarketplaceCacheTests {
         }
     }
 
-    @Test(arguments: MarketplaceCacheTests.unsafePathValues)
+    @Test(arguments: MarketplaceCacheTests.unsafeShaValues)
     func installRefusesAnUnsafeSha(value: String) throws {
         let fixture = try CacheFixture()
         defer { fixture.remove() }
@@ -325,7 +339,7 @@ struct MarketplaceCacheTests {
         #expect(!FileManager.default.fileExists(atPath: fixture.cache.folder.path))
     }
 
-    @Test(arguments: MarketplaceCacheTests.unsafePathValues)
+    @Test(arguments: MarketplaceCacheTests.unsafeRefValues)
     func installRefusesAnUnsafeRef(value: String) throws {
         let fixture = try CacheFixture()
         defer { fixture.remove() }
@@ -338,7 +352,7 @@ struct MarketplaceCacheTests {
         #expect(!FileManager.default.fileExists(atPath: fixture.cache.folder.path))
     }
 
-    @Test(arguments: MarketplaceCacheTests.unsafePathValues)
+    @Test(arguments: MarketplaceCacheTests.unsafeRefValues)
     func aRefLookupRefusesAnUnsafeRef(value: String) throws {
         let fixture = try CacheFixture()
         defer { fixture.remove() }
@@ -353,6 +367,34 @@ struct MarketplaceCacheTests {
         defer { fixture.remove() }
 
         #expect(try fixture.cache.sha(forRef: Self.exampleRef) == nil)
+    }
+
+    // MARK: - A ref name with a separator
+
+    @Test(arguments: MarketplaceCacheTests.refsWithSeparators)
+    func aRefWithASeparatorRoundTripsThroughAnInstall(ref: String) throws {
+        let fixture = try CacheFixture()
+        defer { fixture.remove() }
+        let sha = try #require(Self.exampleShas.first)
+        let staged = try fixture.stageSnapshot(sha: sha)
+
+        try fixture.cache.install(snapshotAt: staged, sha: sha, ref: ref)
+
+        #expect(try fixture.cache.sha(forRef: ref) == sha)
+    }
+
+    @Test(arguments: MarketplaceCacheTests.refsWithSeparators)
+    func aRefWithASeparatorNamesAFileOneFolderDeepPerComponent(ref: String) throws {
+        let fixture = try CacheFixture()
+        defer { fixture.remove() }
+        let sha = try #require(Self.exampleShas.first)
+        let staged = try fixture.stageSnapshot(sha: sha)
+        let file = ref.split(separator: "/")
+            .reduce(fixture.cache.refsDirectory) { $0.appendingPathComponent(String($1)) }
+
+        try fixture.cache.install(snapshotAt: staged, sha: sha, ref: ref)
+
+        #expect(FileManager.default.fileExists(atPath: file.path))
     }
 
     @Test func anUnsafeSymlinkTargetNamesNoSnapshot() throws {
