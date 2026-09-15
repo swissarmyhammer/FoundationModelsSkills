@@ -262,6 +262,52 @@ struct StencilPassTests {
         }
     }
 
+    // MARK: - Marketplace layers render untrusted (marketplace.md §4.3, decision 8)
+
+    /// A body made of one bare `{% now %}` -- a real Stencil tag that
+    /// `TemplateEngine.untrustedAllowedTags` does not hold. So it renders the
+    /// current date under `.trusted` and draws the untrusted rejection under
+    /// `.untrusted`.
+    private static let nowTagBody = "{% now %}"
+
+    /// The error text Extras' `TemplateEngine` gives when `Trust.untrusted`
+    /// rejects `nowTagBody`'s tag.
+    private static let nowTagUntrustedRejection = "untrusted rendering does not allow the 'now' tag"
+
+    @Test func marketplaceLayerDrawsTheUntrustedRejectionForTheNowTag() throws {
+        let pass = StencilPass(wellKnownValues: Self.fixtureWellKnownValues)
+        let marketplaceLayer = DotfolderStack.Layer(
+            source: .marketplace,
+            root: URL(fileURLWithPath: "/tmp/stencil-pass-tests/marketplace", isDirectory: true))
+
+        let error = try #require(throws: TemplateEngineError.self) {
+            try render(
+                Self.nowTagBody, using: pass, request: request(text: Self.nowTagBody, winningLayer: marketplaceLayer))
+        }
+
+        #expect(
+            error.description.contains(Self.nowTagUntrustedRejection),
+            "a .marketplace layer must render untrusted, so the 'now' tag must be rejected")
+    }
+
+    @Test func defaultsLayerRendersTheNowTagThatAMarketplaceLayerRejects() throws {
+        let pass = StencilPass(wellKnownValues: Self.fixtureWellKnownValues)
+        let defaultsLayer = DotfolderStack.Layer(
+            source: .defaults,
+            root: URL(fileURLWithPath: "/tmp/stencil-pass-tests/defaults", isDirectory: true))
+
+        let rendered = try render(
+            Self.nowTagBody, using: pass, request: request(text: Self.nowTagBody, winningLayer: defaultsLayer))
+
+        // The shape of Stencil's default `yyyy-MM-dd 'at' HH:mm` `{% now %}`
+        // format. The test matches the shape, not a value, so it does not
+        // depend on the clock. A local, because `Regex` is not `Sendable`.
+        let nowTagRenderedShape = /\d{4}-\d{2}-\d{2} at \d{2}:\d{2}/
+        #expect(
+            rendered.wholeMatch(of: nowTagRenderedShape) != nil,
+            "a .defaults layer must render trusted, so the 'now' tag must render the date, not \(rendered)")
+    }
+
     // MARK: - Labeled roots (^1tb4h7f): `SkillsRegistry.init(layers:)` trust matrix
 
     /// Creates a fresh, empty throwaway directory under
