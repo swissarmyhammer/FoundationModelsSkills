@@ -467,13 +467,75 @@ internal struct MarketplaceCache: Sendable {
     /// - Throws: ``MarketplaceCacheError`` when the swap fails, else the
     ///   error of the file work.
     private func installValidated(snapshotAt temporary: URL, checked: (sha: String, ref: [String]?)) throws {
-        let previous = currentSha()
         try publish(snapshotAt: temporary, validatedSha: checked.sha)
+        try activate(checked: checked)
+    }
+
+    /// Writes the ref file, makes `current` name one snapshot that is already
+    /// under `snapshots/`, and then cleans up.
+    ///
+    /// - Parameter checked: The checked commit and ref.
+    /// - Throws: ``MarketplaceCacheError`` when the swap fails, else the
+    ///   error of the file work.
+    private func activate(checked: (sha: String, ref: [String]?)) throws {
+        let previous = currentSha()
         if let ref = checked.ref {
             try write(sha: checked.sha, toValidatedRef: ref)
         }
         try swapCurrent(toValidatedSha: checked.sha)
         try removeUnusedSnapshots(keeping: [checked.sha, previous].compactMap { $0 })
+    }
+
+    /// Puts a materialized snapshot under `snapshots/<sha>` and leaves
+    /// `current` where it is (marketplace.md §8.4).
+    ///
+    /// This is the install of a host that applies an update at the next
+    /// launch: the content is on the disk, and ``adopt(snapshotSha:ref:)``
+    /// serves it later. The caller holds the writer lock and has made the
+    /// folders.
+    ///
+    /// - Parameters:
+    ///   - temporary: The folder that holds the materialized snapshot. The
+    ///     call moves it, thus the caller must not read it afterwards.
+    ///   - sha: The commit of the snapshot.
+    ///   - kept: The commits that cleanup keeps beside `sha`: the snapshot
+    ///     that `current` names, and the one before it.
+    /// - Throws: ``MarketplaceCacheError`` when `sha` is no commit that is
+    ///   safe in a path, else the error of the file work.
+    func stageUnderWriterLock(snapshotAt temporary: URL, sha: String, keeping kept: [String]) throws
+    {
+        let checked = try Self.validated(sha: sha)
+        try publish(snapshotAt: temporary, validatedSha: checked)
+        try removeUnusedSnapshots(keeping: kept + [checked])
+    }
+
+    /// Makes `current` name a snapshot that the folder already holds
+    /// (marketplace.md §8.4).
+    ///
+    /// ``stageUnderWriterLock(snapshotAt:sha:keeping:)`` put that folder
+    /// there, possibly in an earlier run of the host. The call takes the
+    /// writer lock itself.
+    ///
+    /// - Parameters:
+    ///   - sha: The commit of the snapshot to serve.
+    ///   - ref: The branch or the tag that resolved to `sha`, or `nil` for a
+    ///     pinned commit, which has no ref file.
+    /// - Returns: `true` when `current` now names the snapshot, and `false`
+    ///   when the folder holds no snapshot of that commit.
+    /// - Throws: ``MarketplaceCacheError`` when a value is not safe in a path
+    ///   or the swap fails, else the error of the file work.
+    @discardableResult
+    func adopt(snapshotSha sha: String, ref: String?) throws -> Bool {
+        let checked = try Self.validated(sha: sha, ref: ref)
+        let directory = snapshotDirectory(forValidatedSha: checked.sha)
+        guard FileManager.default.fileExists(atPath: directory.path) else {
+            return false
+        }
+        try makeFolders()
+        try withWriterLock {
+            try activate(checked: checked)
+        }
+        return true
     }
 
     /// Makes the folders that an install writes into.

@@ -32,6 +32,24 @@ public struct MarketplacePolicy: Sendable {
         case notAllowed
     }
 
+    /// When a new snapshot becomes the one that the registry reads
+    /// (marketplace.md §8.4).
+    public enum ApplyUpdates: Sendable, Hashable {
+        /// The install makes `current` name the new snapshot at once, thus
+        /// the registry rebuilds its catalog while the process runs. This is
+        /// the default: the package hot-reloads by design.
+        case immediately
+
+        /// The install materializes the new snapshot and records it as
+        /// pending. The next ``MarketplaceStore/start()`` makes `current`
+        /// name it, thus a running session keeps the catalog it started
+        /// with.
+        ///
+        /// The pending record lives in `state.json`, thus it is a flag on the
+        /// disk and no timer, and it survives a restart.
+        case nextLaunch
+    }
+
     /// The size and the file count that one snapshot may reach.
     public var snapshotLimits: SnapshotLimits
 
@@ -81,6 +99,14 @@ public struct MarketplacePolicy: Sendable {
     /// is the dry run of marketplace.md §8.3.
     public var checkOnly: Bool
 
+    /// When a new snapshot becomes the one that the registry reads
+    /// (marketplace.md §8.4).
+    ///
+    /// The default is ``ApplyUpdates/immediately``: the package hot-reloads
+    /// by design. A host that wants a stable session sets
+    /// ``ApplyUpdates/nextLaunch``.
+    public var applyUpdates: ApplyUpdates
+
     /// How long one fetch may take, or `nil` for no limit.
     ///
     /// The package has no timeout of its own. With a value, a fetch that
@@ -106,6 +132,8 @@ public struct MarketplacePolicy: Sendable {
     ///   - autoUpdate: Whether a check that finds a new commit also installs
     ///     it. The default is `true`.
     ///   - checkOnly: Whether the store only reports. The default is `false`.
+    ///   - applyUpdates: When a new snapshot becomes the one that the
+    ///     registry reads. The default is ``ApplyUpdates/immediately``.
     ///   - fetchTimeout: How long one fetch may take. The default is `nil`:
     ///     no limit.
     ///   - environment: The environment to read. `SKILLS_MARKETPLACE_AUTOUPDATE=0`
@@ -119,6 +147,7 @@ public struct MarketplacePolicy: Sendable {
         checkInterval: Duration? = nil,
         autoUpdate: Bool = true,
         checkOnly: Bool = false,
+        applyUpdates: ApplyUpdates = .immediately,
         fetchTimeout: Duration? = nil,
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) {
@@ -129,6 +158,7 @@ public struct MarketplacePolicy: Sendable {
         self.checkInterval = checkInterval
         self.autoUpdate = autoUpdate && Self.automaticUpdatesAllowed(environment: environment)
         self.checkOnly = checkOnly
+        self.applyUpdates = applyUpdates
         self.fetchTimeout = fetchTimeout
     }
 

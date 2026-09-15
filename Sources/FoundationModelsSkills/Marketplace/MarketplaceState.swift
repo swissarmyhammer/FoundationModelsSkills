@@ -1,5 +1,25 @@
 import Foundation
 
+/// A snapshot that the store materialized but does not serve yet
+/// (marketplace.md §8.4).
+///
+/// ``MarketplacePolicy/ApplyUpdates/nextLaunch`` writes this record. The
+/// snapshot folder is already under `snapshots/`, and the next
+/// ``MarketplaceStore/start()`` makes `current` name it. The record thus
+/// replaces a timer with a flag on the disk, and it survives a restart.
+internal struct MarketplacePendingSnapshot: Sendable, Hashable, Codable {
+    /// The commit of the snapshot that waits.
+    var sha: String
+
+    /// The `version` field of the catalog of that snapshot, or `nil` when the
+    /// catalog has none.
+    var catalogVersion: String?
+
+    /// The display id that the marketplace takes when the store serves the
+    /// snapshot, or `nil` when the catalog names none.
+    var displayID: String?
+}
+
 /// What the cache knows about one marketplace (marketplace.md §7.2).
 ///
 /// Every field but ``url`` is optional, because a record starts before the
@@ -13,9 +33,24 @@ internal struct MarketplaceStateRecord: Sendable, Hashable, Codable {
     /// `HEAD`.
     var ref: String?
 
-    /// The commit that the host pinned, or `nil` when the source follows a
-    /// ref.
+    /// The commit that ``MarketplaceStore/pin(_:sha:)`` named, or `nil` when
+    /// the host pinned nothing (marketplace.md §8.3).
+    ///
+    /// The `sha` field of a source is a pin too, but it lives in the
+    /// configuration of the host and not here. This field is the pin that the
+    /// host set at run time, and a later run reads it back.
     var pinnedSha: String?
+
+    /// Whether ``MarketplaceStore/unpin(_:)`` dropped the pin, or `nil` when
+    /// the host never called it (marketplace.md §8.3).
+    ///
+    /// An unpin beats the `sha` field of the source too, thus the flag says
+    /// more than an empty ``pinnedSha``: a later run follows the ref again.
+    var unpinned: Bool?
+
+    /// The snapshot that the store materialized and does not serve yet, or
+    /// `nil` when nothing waits (marketplace.md §8.4).
+    var pending: MarketplacePendingSnapshot?
 
     /// The commit of the snapshot that `current` names, or `nil` before the
     /// first install.

@@ -40,10 +40,33 @@ comments:
     - A full `swift test` on this computer fails in `RunScriptTests` (`result.durationMs < 2000`, lines 313 and 346). The same two tests pass with `swift test --filter RunScriptTests`, and the same failures appear with `swift test --skip MarketplaceLocalSourceTests`, thus they are not of this work. The limit of 2000 ms is a built-in time value that the load of the host breaks. New task ^g2fy0q1 records it.
     - A settle window stays in the new tests: `ReloadTestSupport.expectExactlyOneEvent` is the helper that `MarketplaceStoreTests` and `MarketplaceRegistryTests` already use for "exactly one reload". A file-system event has no other signal to follow, thus proving that no second event comes needs that window.
   timestamp: 2026-09-15T21:38:49.643697+00:00
+- actor: claude-code
+  id: 01m2kh0ch9gpz0xkr4kd9dss3r
+  text: |-
+    ### review — clean
+
+    - scope: `review sha HEAD~1..HEAD` (commit 5f787b5). 7 files reviewed. 8 files in `.kanban/` not reviewed, because an ignore rule excludes them.
+    - counts: 14 validator passes, 0 findings, 0 confirmed, 0 refuted, 0 failed.
+    - security, the gate before I/O: `MarketplaceStore.add(source:)` calls `policy.refusal(forNormalizedURL:)` before the switch that makes a local source or a git source. A refused source gets a diagnostic, no cache folder, and no layer. No disk read and no network call comes before the gate.
+    - security, the seed folder stays read only: `seedPass` sends an update to `refuseSeedUpdate`, which only gives a diagnostic and the seed status. A check reads the remote head only. `servedFromCache` takes the seed entry with `leased: false`, thus the cleanup never touches it.
+    - security, a path that leaves the folder: `addLocal` puts `source.path` through `CatalogPath.normalized(path:)`, which refuses an empty path, an absolute path, a path that starts with `~`, and a path with a `..` component. Such a source gets an error diagnostic and no layer.
+    - no hard-coded time: the changed production code holds no time value. The interval and the fetch timeout come from the policy, thus the host gives them. The two constants in the new test file, `expectedSignalTimeout` and `noFurtherSignalWindow`, are event-wait limits that mirror the same constants in the other reload tests. They are not an interval, a jitter, a debounce, or an age limit.
+    - prior checklist: every item in the description is already marked done.
+    - next: the task moves to done.
+  timestamp: 2026-09-15T21:54:11.625312+00:00
+- actor: claude-code
+  id: 01m2kh17zd53m8y811tjjr7pps
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 6 files; a `file://` folder gives a layer in place with no copy and no cache folder, the seed folder is read only, and both pass the allowlist gate before any I/O; the watcher now takes only the watchable roots
+    - test: green — swift build --build-tests 0 warnings; swift test x3, 658 passed each run, 0 failed, 0 skipped. The step also corrected task ^g2fy0q1: RunScriptTests no longer asserts a hard-coded wall-clock budget (`durationMs < 2000`), which broke under a loaded host and is the pattern the user forbids.
+    - commit: 5f787b5 feat(marketplace): add local folder sources under the allow-list gate
+    - review: clean — 0 findings; the engine proved the gate runs before any I/O, the seed folder is never written, and an escaping `path` is refused; task moved to done
+  timestamp: 2026-09-15T21:54:39.725565+00:00
 depends_on:
 - 01M2H10AWYB2KQ6P0N4B43PG6M
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: da80
 title: 'MarketplaceStore: file:// sources (watched) and the read-only seed folder'
 ---
 ## What

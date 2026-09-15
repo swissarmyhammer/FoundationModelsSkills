@@ -140,6 +140,25 @@ public actor MarketplaceStore: MarketplaceLayerProviding {
     /// interval or when ``stop()`` ended it.
     private var intervalLoop: Task<Void, Never>?
 
+    /// What the host asked for the pin of one marketplace, on top of the
+    /// `sha` field of its source (marketplace.md §8.3).
+    private enum PinOverride: Sendable, Equatable {
+        /// ``MarketplaceStore/pin(_:sha:)`` named this commit.
+        case pinned(String)
+
+        /// ``MarketplaceStore/unpin(_:)`` dropped the pin. It beats the `sha`
+        /// field of the source too, thus the marketplace follows its ref
+        /// again.
+        case cleared
+    }
+
+    /// The pin that the host set for each marketplace, by list index.
+    ///
+    /// An index with no entry takes the `sha` field of its source. The store
+    /// reads the table out of `state.json` when it is made, thus a pin of an
+    /// earlier run still holds.
+    private var pinOverrides: [Int: PinOverride]
+
     /// What the store serves now, one entry for each entry of ``prepared``.
     ///
     /// A `Mutex` and not actor state, because ``marketplaceLayers()`` is
@@ -225,10 +244,38 @@ public actor MarketplaceStore: MarketplaceLayerProviding {
         self.policy = policy
         self.transport = transport
         sourceDiagnostics = Mutex(preparation.sources.map { _ in [] })
+        let diskState = Self.state(inDirectory: cacheDirectory)
+        pinOverrides = Self.pinOverrides(ofPrepared: preparation.sources, state: diskState)
         served = Mutex(
             Self.servedFromDisk(
-                prepared: preparation.sources, state: Self.state(inDirectory: cacheDirectory),
+                prepared: preparation.sources, state: diskState,
                 seedState: seedDirectory.map(Self.state(inDirectory:)) ?? MarketplaceState()))
+    }
+
+    /// Reads the pin that the host set in an earlier run out of `state.json`
+    /// (marketplace.md §8.3).
+    ///
+    /// - Parameters:
+    ///   - prepared: The sources, in list order.
+    ///   - state: The state file of the cache directory.
+    /// - Returns: The pin of each marketplace that has one, by list index.
+    private static func pinOverrides(
+        ofPrepared prepared: [PreparedSource], state: MarketplaceState
+    ) -> [Int: PinOverride] {
+        var overrides: [Int: PinOverride] = [:]
+        for index in prepared.indices {
+            guard let folder = prepared[index].servingCache?.folderName,
+                let record = state.marketplaces[folder]
+            else {
+                continue
+            }
+            if let pinnedSha = record.pinnedSha {
+                overrides[index] = .pinned(pinnedSha)
+            } else if record.unpinned == true {
+                overrides[index] = .cleared
+            }
+        }
+        return overrides
     }
 
     /// The cache directory that an environment names (marketplace.md §7.1).
@@ -292,6 +339,173 @@ public actor MarketplaceStore: MarketplaceLayerProviding {
     /// No message holds a credential.
     public nonisolated var diagnostics: [MarketplaceDiagnostic] {
         listDiagnostics + sourceDiagnostics.withLock { $0.flatMap { $0 } }
+    }
+
+    // MARK: - Pins
+
+    /// Pins one marketplace to a commit (marketplace.md §8.3).
+    ///
+    /// A pinned marketplace never moves to the remote head: an automatic
+    /// update and an ``update(_:force:)`` both bring it to the pinned commit
+    /// and stop there. ``check()`` still reads the remote head and reports a
+    /// newer commit, thus a host sees that an update exists.
+    ///
+    /// The pin goes into `state.json`, thus a later run of the host holds it
+    /// too.
+    ///
+    /// - Parameters:
+    ///   - id: The pre-fetch key or the display id of the marketplace.
+    ///   - sha: The commit to hold. It must be a hexadecimal object name.
+    /// - Throws: ``MarketplacePinError`` when no marketplace has that id, or
+    ///   when the marketplace is a folder on this computer;
+    ///   ``MarketplaceCacheError`` when `sha` is no commit; else the error of
+    ///   the file write.
+    public func pin(_ id: String, sha: String) async throws {
+        let index = try indexOfMarketplace(named: id)
+        let commit = try MarketplaceCache.validated(sha: sha)
+        let folder = try folderName(ofMarketplace: id, atIndex: index)
+        pinOverrides[index] = .pinned(commit)
+        try updateRecord(forFolder: folder, ofSource: prepared[index].source) { record in
+            record.pinnedSha = commit
+            record.unpinned = nil
+        }
+    }
+
+    /// Drops the pin of one marketplace (marketplace.md §8.3).
+    ///
+    /// The call beats the `sha` field of the source too, thus the next update
+    /// fetches the remote head again. It goes into `state.json`, thus a later
+    /// run of the host reads it too.
+    ///
+    /// - Parameter id: The pre-fetch key or the display id of the
+    ///   marketplace.
+    /// - Throws: ``MarketplacePinError`` when no marketplace has that id, or
+    ///   when the marketplace is a folder on this computer; else the error of
+    ///   the file write.
+    public func unpin(_ id: String) async throws {
+        let index = try indexOfMarketplace(named: id)
+        let folder = try folderName(ofMarketplace: id, atIndex: index)
+        pinOverrides[index] = .cleared
+        try updateRecord(forFolder: folder, ofSource: prepared[index].source) { record in
+            record.pinnedSha = nil
+            record.unpinned = true
+        }
+    }
+
+    /// The marketplace that one id names.
+    ///
+    /// - Parameter id: The pre-fetch key or the display id.
+    /// - Returns: The list index of the marketplace.
+    /// - Throws: ``MarketplacePinError/unknownMarketplace(id:)``.
+    private func indexOfMarketplace(named id: String) throws -> Int {
+        guard let found = prepared.indices.first(where: { names(index: $0, id: id) }) else {
+            throw MarketplacePinError.unknownMarketplace(id: id)
+        }
+        return found
+    }
+
+    /// The cache folder name of one marketplace, which is the key of its
+    /// record in `state.json`.
+    ///
+    /// - Parameters:
+    ///   - id: The id that the host gave, for the error.
+    ///   - index: The marketplace.
+    /// - Returns: The cache folder name.
+    /// - Throws: ``MarketplacePinError/notAGitMarketplace(id:)`` when the
+    ///   marketplace is a folder on this computer.
+    private func folderName(ofMarketplace id: String, atIndex index: Int) throws -> String {
+        guard let cache = prepared[index].servingCache else {
+            throw MarketplacePinError.notAGitMarketplace(id: id)
+        }
+        return cache.folderName
+    }
+
+    /// The commit that one marketplace must hold, or `nil` when it follows
+    /// its ref (marketplace.md §8.3).
+    ///
+    /// - Parameter index: The marketplace.
+    /// - Returns: The pin of the host, else the `sha` field of the source.
+    private func pin(atIndex index: Int) -> String? {
+        switch pinOverrides[index] {
+        case .pinned(let sha):
+            return sha
+        case .cleared:
+            return nil
+        case nil:
+            return prepared[index].source.sha
+        }
+    }
+
+    // MARK: - The pending snapshot
+
+    /// Makes every snapshot that an earlier pass materialized the one that
+    /// the registry reads (marketplace.md §8.4).
+    ///
+    /// ``MarketplacePolicy/ApplyUpdates/nextLaunch`` stages a snapshot and
+    /// records it in `state.json`. The swap is thus a flag on the disk and no
+    /// timer: this call, at the head of ``start()``, is the next launch. A
+    /// store that a new process made over the same cache reads the same flag.
+    private func applyPendingSnapshots() {
+        let state = Self.state(inDirectory: cacheDirectory)
+        for index in prepared.indices {
+            applyPendingSnapshot(atIndex: index, state: state)
+        }
+    }
+
+    /// Serves the pending snapshot of one marketplace, when it has one.
+    ///
+    /// - Parameters:
+    ///   - index: The marketplace.
+    ///   - state: The state file of the cache directory.
+    private func applyPendingSnapshot(atIndex index: Int, state: MarketplaceState) {
+        guard case .git(let remote) = prepared[index].kind,
+            let pending = state.marketplaces[remote.cache.folderName]?.pending
+        else {
+            return
+        }
+        do {
+            try adopt(pending: pending, ofRemote: remote, atIndex: index)
+        } catch {
+            _ = failure(atIndex: index, error: error)
+        }
+    }
+
+    /// Makes `current` name one pending snapshot, and clears the record.
+    ///
+    /// A record whose snapshot folder is gone is stale: the call clears it,
+    /// and the next sync materializes that commit again.
+    ///
+    /// - Parameters:
+    ///   - pending: The snapshot that waits.
+    ///   - remote: The remote of the marketplace.
+    ///   - index: The marketplace.
+    /// - Throws: ``MarketplaceCacheError``, or the error of the file work.
+    private func adopt(
+        pending: MarketplacePendingSnapshot, ofRemote remote: GitRemote, atIndex index: Int
+    ) throws {
+        let previous = remote.cache.currentSha()
+        let adopted = try remote.cache.adopt(
+            snapshotSha: pending.sha, ref: pin(atIndex: index) == nil ? remote.ref : nil)
+        let installedID = pending.displayID ?? prepared[index].key
+        try updateRecord(forFolder: remote.cache.folderName, ofSource: prepared[index].source) {
+            record in
+            record.pending = nil
+            guard adopted else {
+                return
+            }
+            record.currentSha = pending.sha
+            record.catalogVersion = pending.catalogVersion
+            record.displayID = installedID
+            record.lastUpdated = Date()
+        }
+        guard adopted else {
+            return
+        }
+        serve(
+            atIndex: index, cache: remote.cache, sha: pending.sha, displayID: installedID,
+            catalogVersion: pending.catalogVersion)
+        eventSubscribers.publish(.updated(id: installedID, from: previous, to: pending.sha))
+        updateSubscribers.publish(())
     }
 
     // MARK: - Syncing
@@ -363,7 +577,13 @@ public actor MarketplaceStore: MarketplaceLayerProviding {
     /// The periodic check runs only when the policy gives a
     /// ``MarketplacePolicy/checkInterval``. Without one, the store makes no
     /// later call until a request comes.
+    ///
+    /// The call first makes every snapshot that
+    /// ``MarketplacePolicy/ApplyUpdates/nextLaunch`` staged in an earlier
+    /// pass, or in an earlier run of the host, the one that the registry
+    /// reads (marketplace.md §8.4).
     public func start() async {
+        applyPendingSnapshots()
         await runPassOverEverySource()
         startIntervalLoop()
     }
@@ -598,7 +818,7 @@ public actor MarketplaceStore: MarketplaceLayerProviding {
         remote: GitRemote, current: String?, atIndex index: Int
     ) async -> PassResult {
         do {
-            let latest = try await remoteHead(of: remote, pinnedSha: prepared[index].source.sha)
+            let latest = try await remoteHead(of: remote)
             let identifier = displayID(atIndex: index)
             eventSubscribers.publish(.checked(id: identifier, current: current, latest: latest))
             let status = MarketplaceStatus(id: identifier, current: current, latest: latest)
@@ -688,46 +908,137 @@ public actor MarketplaceStore: MarketplaceLayerProviding {
     ///   - index: The marketplace to sync.
     ///   - force: Whether to materialize again even with no remote change.
     /// - Returns: The status, and ``MarketplaceEvent/updated(id:from:to:)``.
-    ///   The event is `nil` when the remote head is already the snapshot that
-    ///   `current` names.
+    ///   The event is `nil` when the commit that the marketplace must hold is
+    ///   already the snapshot that `current` names.
     /// - Throws: ``GitTransportError``, ``MarketplaceTimeoutError``,
     ///   ``SnapshotError``, ``MarketplaceCacheError``, or the error of a file
     ///   read or write.
     private func installHead(
         remote: GitRemote, ofIndex index: Int, force: Bool
     ) async throws -> PassResult {
-        let source = prepared[index].source
         let previous = remote.cache.currentSha()
-        let head = try await remoteHead(of: remote, pinnedSha: source.sha)
+        let pinnedSha = pin(atIndex: index)
+        if let pinnedSha, pinnedSha == previous, !force {
+            // A pinned marketplace that already holds its commit needs no
+            // remote work at all, thus it also works with no network.
+            return upToDateResult(atIndex: index, current: previous, latest: pinnedSha)
+        }
+        let head = try await target(ofRemote: remote, pin: pinnedSha)
         eventSubscribers.publish(
             .checked(id: displayID(atIndex: index), current: previous, latest: head))
         guard force || head != previous else {
-            return PassResult(
-                status: MarketplaceStatus(
-                    id: displayID(atIndex: index), current: previous, latest: head),
-                event: nil)
+            return upToDateResult(atIndex: index, current: previous, latest: head)
         }
-        let fetched = try await fetch(remote: remote, source: source)
+        return try await install(
+            remote: remote, ofIndex: index, pin: pinnedSha, previous: previous, head: head)
+    }
+
+    /// The commit that one marketplace must hold after a sync.
+    ///
+    /// - Parameters:
+    ///   - remote: The remote of the marketplace.
+    ///   - pin: The commit that the marketplace is pinned to, or `nil`.
+    /// - Returns: The pin, else the commit that the remote head names.
+    /// - Throws: ``GitTransportError``.
+    private func target(ofRemote remote: GitRemote, pin: String?) async throws -> String {
+        if let pin {
+            return pin
+        }
+        return try await remoteHead(of: remote)
+    }
+
+    /// The result of a pass that found nothing to install.
+    ///
+    /// - Parameters:
+    ///   - index: The marketplace.
+    ///   - current: The commit that `current` names.
+    ///   - latest: The commit that the marketplace must hold.
+    /// - Returns: The status, and no event.
+    private func upToDateResult(atIndex index: Int, current: String?, latest: String) -> PassResult
+    {
+        PassResult(
+            status: MarketplaceStatus(
+                id: displayID(atIndex: index), current: current, latest: latest),
+            event: nil)
+    }
+
+    /// Fetches one commit, materializes it, and either serves it now or keeps
+    /// it for the next launch (marketplace.md §7.3 and §8.4).
+    ///
+    /// - Parameters:
+    ///   - remote: The remote of the marketplace.
+    ///   - index: The marketplace to sync.
+    ///   - pin: The commit that the marketplace is pinned to, or `nil`.
+    ///   - previous: The commit that `current` named before this pass.
+    ///   - head: The commit that the remote head names.
+    /// - Returns: The status, and the event of the install.
+    /// - Throws: ``GitTransportError``, ``MarketplaceTimeoutError``,
+    ///   ``SnapshotError``, ``MarketplaceCacheError``, or the error of a file
+    ///   read or write.
+    private func install(
+        remote: GitRemote, ofIndex index: Int, pin: String?, previous: String?, head: String
+    ) async throws -> PassResult {
+        let source = prepared[index].source
+        let fetched = try await fetch(
+            remote: remote, revision: pin ?? remote.ref ?? Self.defaultRef)
         let catalog = try materialize(remote: remote, source: source, commit: fetched)
-        try remote.cache.installUnderWriterLock(
-            snapshotAt: catalog.staged, sha: fetched, ref: source.isPinned ? nil : remote.ref)
         let installedID = catalog.resolved.name ?? prepared[index].key
-        serve(
-            atIndex: index, cache: remote.cache, sha: fetched, displayID: installedID,
-            catalogVersion: catalog.resolved.version)
+        // A cold start has no session to keep stable, thus `.nextLaunch`
+        // holds back only an update of a marketplace that the store serves.
+        let deferred = policy.applyUpdates == .nextLaunch && previous != nil
+        if deferred {
+            try remote.cache.stageUnderWriterLock(
+                snapshotAt: catalog.staged, sha: fetched, keeping: [previous].compactMap { $0 })
+        } else {
+            try remote.cache.installUnderWriterLock(
+                snapshotAt: catalog.staged, sha: fetched, ref: pin == nil ? remote.ref : nil)
+            serve(
+                atIndex: index, cache: remote.cache, sha: fetched, displayID: installedID,
+                catalogVersion: catalog.resolved.version)
+        }
         record(
-            diagnostics: catalog.diagnostics + duplicateDisplayIDDiagnostics(installedID, atIndex: index),
+            diagnostics: catalog.diagnostics
+                + (deferred ? [] : duplicateDisplayIDDiagnostics(installedID, atIndex: index)),
             atIndex: index)
-        try save(
-            record: stateRecord(
-                remote: remote, source: source, sha: fetched, catalog: catalog.resolved,
-                displayID: installedID),
-            forFolder: remote.cache.folderName)
-        let event = MarketplaceEvent.updated(id: installedID, from: previous, to: fetched)
+        try recordInstall(
+            remote: remote, ofIndex: index, sha: fetched, catalog: catalog.resolved,
+            displayID: installedID, pending: deferred)
+        return published(
+            atIndex: index, installedID: installedID, previous: previous, installed: fetched,
+            head: head, deferred: deferred)
+    }
+
+    /// Publishes the event of one install and makes the result of the pass.
+    ///
+    /// A staged snapshot is not the one that the registry reads yet, thus it
+    /// gives ``MarketplaceEvent/updateAvailable(id:from:to:)`` and no layer
+    /// update (marketplace.md §8.4).
+    ///
+    /// - Parameters:
+    ///   - index: The marketplace.
+    ///   - installedID: The display id of the new snapshot.
+    ///   - previous: The commit that `current` named before this pass.
+    ///   - installed: The commit of the new snapshot.
+    ///   - head: The commit that the remote head names.
+    ///   - deferred: Whether the snapshot waits for the next ``start()``.
+    /// - Returns: The status, and the event.
+    private func published(
+        atIndex index: Int, installedID: String, previous: String?, installed: String,
+        head: String, deferred: Bool
+    ) -> PassResult {
+        let event: MarketplaceEvent =
+            deferred
+            ? .updateAvailable(id: displayID(atIndex: index), from: previous, to: installed)
+            : .updated(id: installedID, from: previous, to: installed)
         eventSubscribers.publish(event)
-        updateSubscribers.publish(())
+        if !deferred {
+            updateSubscribers.publish(())
+        }
         return PassResult(
-            status: MarketplaceStatus(id: installedID, current: fetched, latest: head), event: event)
+            status: MarketplaceStatus(
+                id: displayID(atIndex: index), current: deferred ? previous : installed,
+                latest: head),
+            event: event)
     }
 
     /// Fetches the commit of one marketplace, and stops the fetch when it
@@ -739,12 +1050,11 @@ public actor MarketplaceStore: MarketplaceLayerProviding {
     ///
     /// - Parameters:
     ///   - remote: The remote of the marketplace to fetch.
-    ///   - source: The source, as the host wrote it.
+    ///   - revision: The pin, the branch, the tag, or `HEAD`.
     /// - Returns: The 40-hex SHA of the fetched commit.
     /// - Throws: ``GitTransportError``, or ``MarketplaceTimeoutError`` when
     ///   the fetch took longer than the timeout.
-    private func fetch(remote: GitRemote, source: MarketplaceSource) async throws -> String {
-        let revision = source.sha ?? remote.ref ?? Self.defaultRef
+    private func fetch(remote: GitRemote, revision: String) async throws -> String {
         let transport = self.transport
         let credentials = policy.credentials
         let repository = remote.cache.repositoryDirectory
@@ -776,19 +1086,16 @@ public actor MarketplaceStore: MarketplaceLayerProviding {
         }
     }
 
-    /// Reads the commit that one marketplace must hold.
+    /// Reads the commit that the remote head of one marketplace names.
     ///
-    /// - Parameters:
-    ///   - remote: The remote of the marketplace.
-    ///   - pinnedSha: The commit that the source pins, or `nil`.
-    /// - Returns: The pinned commit, else the commit that the remote head
-    ///   names.
+    /// A pinned marketplace reads it too: ``check()`` reports a newer commit
+    /// even when the pin stops the update (marketplace.md §8.3).
+    ///
+    /// - Parameter remote: The remote of the marketplace.
+    /// - Returns: The commit that the remote head names.
     /// - Throws: ``GitTransportError``.
-    private func remoteHead(of remote: GitRemote, pinnedSha: String?) async throws -> String {
-        if let pinnedSha {
-            return pinnedSha
-        }
-        return try await transport.remoteHead(
+    private func remoteHead(of remote: GitRemote) async throws -> String {
+        try await transport.remoteHead(
             url: remote.url, ref: remote.ref ?? Self.defaultRef, credentials: policy.credentials)
     }
 
@@ -1023,34 +1330,62 @@ public actor MarketplaceStore: MarketplaceLayerProviding {
 
     // MARK: - The state file
 
-    /// Makes the state record of one marketplace after an install.
+    /// Writes what one install learned into `state.json`.
+    ///
+    /// The call keeps every field that an install does not know, the pin of
+    /// the host included, thus a pin holds over an update.
     ///
     /// - Parameters:
     ///   - remote: The remote of the marketplace.
-    ///   - source: The source, as the host wrote it.
+    ///   - index: The marketplace.
     ///   - sha: The commit of the new snapshot.
     ///   - catalog: The catalog of that commit.
     ///   - displayID: The display id of the marketplace.
-    /// - Returns: The record to write.
-    private func stateRecord(
-        remote: GitRemote, source: MarketplaceSource, sha: String, catalog: ResolvedCatalog,
-        displayID: String
-    ) -> MarketplaceStateRecord {
+    ///   - pending: Whether the snapshot waits for the next ``start()``.
+    /// - Throws: The error of the file read or of the file write.
+    private func recordInstall(
+        remote: GitRemote, ofIndex index: Int, sha: String, catalog: ResolvedCatalog,
+        displayID: String, pending: Bool
+    ) throws {
         let now = Date()
-        return MarketplaceStateRecord(
-            url: source.url, ref: remote.ref, pinnedSha: source.sha, currentSha: sha,
-            catalogVersion: catalog.version, displayID: displayID, lastChecked: now, lastUpdated: now)
+        try updateRecord(forFolder: remote.cache.folderName, ofSource: prepared[index].source) {
+            record in
+            record.ref = remote.ref
+            record.lastChecked = now
+            record.lastError = nil
+            guard pending else {
+                record.pending = nil
+                record.currentSha = sha
+                record.catalogVersion = catalog.version
+                record.displayID = displayID
+                record.lastUpdated = now
+                return
+            }
+            record.pending = MarketplacePendingSnapshot(
+                sha: sha, catalogVersion: catalog.version, displayID: displayID)
+        }
     }
 
-    /// Writes the record of one marketplace into `state.json`.
+    /// Reads `state.json`, changes the record of one marketplace, and writes
+    /// the file again.
+    ///
+    /// A marketplace that has no record yet gets one over the url of its
+    /// source.
     ///
     /// - Parameters:
-    ///   - record: The record to write.
     ///   - folder: The cache folder name, which is the key of the record.
+    ///   - source: The source of the marketplace.
+    ///   - change: What to change in the record.
     /// - Throws: The error of the file read or of the file write.
-    private func save(record: MarketplaceStateRecord, forFolder folder: String) throws {
+    private func updateRecord(
+        forFolder folder: String, ofSource source: MarketplaceSource,
+        _ change: (inout MarketplaceStateRecord) -> Void
+    ) throws {
         let file = MarketplaceCache.stateFile(inCacheDirectory: cacheDirectory)
         var state = (try? MarketplaceState.load(from: file)) ?? MarketplaceState()
+        var record = state.marketplaces[folder] ?? MarketplaceStateRecord(url: source.url)
+        record.url = source.url
+        change(&record)
         state.marketplaces[folder] = record
         try state.save(to: file)
     }
