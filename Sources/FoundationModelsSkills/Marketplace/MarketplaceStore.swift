@@ -165,7 +165,9 @@ public actor MarketplaceStore: MarketplaceLayerProviding {
         let identity = MarketplaceIdentity.validate(sources)
         let refused = identity.contains { $0.severity == .error }
         let preparation =
-            refused ? Preparation() : Preparation(sources: sources, cacheDirectory: cacheDirectory)
+            refused
+            ? Preparation()
+            : Preparation(sources: sources, cacheDirectory: cacheDirectory, policy: policy)
         prepared = preparation.sources
         listDiagnostics = identity + preparation.diagnostics
         self.cacheDirectory = cacheDirectory
@@ -869,9 +871,13 @@ private struct Preparation {
     /// The cache directory that every prepared source writes into.
     private let cacheDirectory: URL
 
+    /// The allowlist and the blocklist that every source must pass.
+    private let policy: MarketplacePolicy
+
     /// Prepares no source, for a list that the store refuses.
     init() {
         cacheDirectory = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+        policy = MarketplacePolicy()
     }
 
     /// Prepares every git source of a list.
@@ -880,8 +886,12 @@ private struct Preparation {
     ///   - sources: The sources, in list order. Their pre-fetch keys are
     ///     already checked.
     ///   - cacheDirectory: The cache directory of the store.
-    init(sources: [MarketplaceSource], cacheDirectory: URL) {
+    ///   - policy: What the host lets the store do. Its allowlist and its
+    ///     blocklist run here, before any source reaches the disk or the
+    ///     network.
+    init(sources: [MarketplaceSource], cacheDirectory: URL, policy: MarketplacePolicy) {
         self.cacheDirectory = cacheDirectory
+        self.policy = policy
         for source in sources {
             add(source: source)
         }
@@ -894,6 +904,13 @@ private struct Preparation {
         guard let key = try? MarketplaceIdentity.preFetchKey(for: source),
             let location = try? MarketplaceLocation(source: source)
         else {
+            return
+        }
+        // The policy runs before anything touches the disk or the network
+        // (marketplace.md §6.7 and §10 item 2). A refused source gets no
+        // cache folder, thus it also gets no layer.
+        if let refusal = policy.refusal(forNormalizedURL: location.normalizedURL) {
+            diagnostics.append(Self.refusalDiagnostic(for: refusal, ofSource: source, key: key))
             return
         }
         guard case .git(let url, let ref) = location else {
@@ -911,5 +928,33 @@ private struct Preparation {
                 cache: MarketplaceCache(
                     root: cacheDirectory,
                     folderName: MarketplaceIdentity.cacheFolderName(key: key, normalizedURL: url))))
+    }
+
+    /// Makes the finding for a source that the policy refuses
+    /// (marketplace.md §6.7).
+    ///
+    /// The message names the source and the pattern, thus a host reads which
+    /// rule stopped which marketplace. It holds no credential: the parser
+    /// refuses a URL that carries one.
+    ///
+    /// - Parameters:
+    ///   - refusal: Why the policy refuses the source.
+    ///   - source: The source, as the host wrote it.
+    ///   - key: The pre-fetch key of the source.
+    /// - Returns: One error diagnostic.
+    private static func refusalDiagnostic(
+        for refusal: MarketplacePolicy.SourceRefusal, ofSource source: MarketplaceSource,
+        key: String
+    ) -> MarketplaceDiagnostic {
+        let reason =
+            switch refusal {
+            case .blocked(let pattern):
+                #"it matches the blocked \#(pattern)"#
+            case .notAllowed:
+                "it matches no allowed source pattern"
+            }
+        return MarketplaceDiagnostic(
+            severity: .error, marketplaceID: key,
+            message: #"The host policy refuses the source "\#(source.url)": \#(reason). It gets no layer."#)
     }
 }

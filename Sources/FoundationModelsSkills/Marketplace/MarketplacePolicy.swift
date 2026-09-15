@@ -23,8 +23,30 @@ public struct MarketplacePolicy: Sendable {
     /// update.
     private static let automaticUpdateOffValue = "0"
 
+    /// Why a policy refuses one source (marketplace.md §6.7).
+    internal enum SourceRefusal: Sendable, Hashable {
+        /// One entry of ``blockedSources`` names the source.
+        case blocked(SourcePattern)
+
+        /// ``allowedSources`` is a list, and no entry of it names the source.
+        case notAllowed
+    }
+
     /// The size and the file count that one snapshot may reach.
     public var snapshotLimits: SnapshotLimits
+
+    /// The sources that the host permits, or `nil` for every source
+    /// (marketplace.md §6.7).
+    ///
+    /// With a list, a source must match one entry of it. An empty list thus
+    /// refuses every source. ``blockedSources`` wins over this list.
+    public var allowedSources: [SourcePattern]?
+
+    /// The sources that the host refuses (marketplace.md §6.7).
+    ///
+    /// A source that matches one entry here gets no layer, whatever
+    /// ``allowedSources`` says.
+    public var blockedSources: [SourcePattern]
 
     /// Gives the credential of a private HTTPS source, or `nil` for a host
     /// that has none.
@@ -73,6 +95,10 @@ public struct MarketplacePolicy: Sendable {
     ///   - snapshotLimits: The size and the file count that one snapshot may
     ///     reach. The default is ``SnapshotLimits/init(maxBytes:maxFiles:)``
     ///     with its own defaults.
+    ///   - allowedSources: The sources that the host permits. The default is
+    ///     `nil`: every source.
+    ///   - blockedSources: The sources that the host refuses. The default is
+    ///     an empty list: no refused source.
     ///   - credentials: Gives the credential of a private HTTPS source. The
     ///     default is `nil`: no credential.
     ///   - checkInterval: How long the store waits between two periodic
@@ -87,6 +113,8 @@ public struct MarketplacePolicy: Sendable {
     ///     the environment of this process.
     public init(
         snapshotLimits: SnapshotLimits = SnapshotLimits(),
+        allowedSources: [SourcePattern]? = nil,
+        blockedSources: [SourcePattern] = [],
         credentials: (@Sendable (URL) async -> MarketplaceCredential?)? = nil,
         checkInterval: Duration? = nil,
         autoUpdate: Bool = true,
@@ -95,11 +123,36 @@ public struct MarketplacePolicy: Sendable {
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) {
         self.snapshotLimits = snapshotLimits
+        self.allowedSources = allowedSources
+        self.blockedSources = blockedSources
         self.credentials = credentials
         self.checkInterval = checkInterval
         self.autoUpdate = autoUpdate && Self.automaticUpdatesAllowed(environment: environment)
         self.checkOnly = checkOnly
         self.fetchTimeout = fetchTimeout
+    }
+
+    /// Whether this policy refuses one source (marketplace.md §6.7 and §10
+    /// item 2).
+    ///
+    /// The call is a pure function of the policy and of the URL: it reads no
+    /// file and opens no connection. Thus the store runs it before it makes
+    /// a cache folder or reaches a remote. ``blockedSources`` wins over
+    /// ``allowedSources``.
+    ///
+    /// - Parameter normalizedURL: ``MarketplaceLocation/normalizedURL`` of
+    ///   the source.
+    /// - Returns: Why the policy refuses the source, or `nil` when it lets
+    ///   the source load.
+    internal func refusal(forNormalizedURL normalizedURL: String) -> SourceRefusal? {
+        if let blocked = blockedSources.first(where: { $0.matches(normalizedURL: normalizedURL) }) {
+            return .blocked(blocked)
+        }
+        guard let allowedSources else {
+            return nil
+        }
+        let allowed = allowedSources.contains { $0.matches(normalizedURL: normalizedURL) }
+        return allowed ? nil : .notAllowed
     }
 
     /// Whether an environment lets the store update by itself

@@ -23,10 +23,27 @@ comments:
     - discovery: `theStoreHoldsALeaseOnTheSnapshotItServesAndReleasesTheOneItLeaves` fails in about one of four full runs. I stashed this work and ran the full suite four times on the code before it: the same failure appeared. Thus it is older than this card. It is now task ^432j35x.
     - next: /review
   timestamp: 2026-09-15T19:22:36.002930+00:00
+- actor: claude-code
+  id: 01m2kb4jwx639mm4mvfn8qg277
+  text: |-
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (b4733fa) — 0 findings, 0 confirmed, 0 refuted; 7 validators; 10 files reviewed
+    - time values: the diff has no built-in time. `checkInterval` and `fetchTimeout` default to `nil`, and the two `clock.sleep` calls use the value that the host gives.
+    - next: the task moved to done.
+  timestamp: 2026-09-15T20:11:37.757372+00:00
+- actor: claude-code
+  id: 01m2kb534y0hy9p61pw4aq02fw
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 9 files; `check()`, `stop()`, coalescing, the optional interval loop over an injected clock, and the fetch timeout as a task-group race; the host gives every time value
+    - test: green — swift build --build-tests 0 warnings; swift test x4, 640 passed each run, 0 failed, 0 skipped. The step also found and corrected a real defect: the cache lock descriptors had no `O_CLOEXEC`, thus a forked child kept a `flock(2)` lock alive after this process closed it (task ^432j35x, now done). 34 full runs green after the fix.
+    - commit: b4733fa feat(marketplace): add update checks and fix cache lock leak
+    - review: clean — 0 findings; no hard-coded time value in the diff; task moved to done
+  timestamp: 2026-09-15T20:11:54.398185+00:00
 depends_on:
 - 01M2H10AWYB2KQ6P0N4B43PG6M
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: d780
 title: Add update checks and automatic update to MarketplaceStore (no built-in times)
 ---
 ## What

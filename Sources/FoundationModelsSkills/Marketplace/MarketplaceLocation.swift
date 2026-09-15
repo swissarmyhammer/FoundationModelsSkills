@@ -131,6 +131,53 @@ internal enum MarketplaceLocation: Sendable, Hashable {
         }
     }
 
+    /// The host and the path of a normalized URL.
+    ///
+    /// ``SourcePattern`` reads these parts, thus the owner rule, the host
+    /// regex, and the path prefix all work over the same split that this
+    /// parser writes.
+    struct NormalizedParts: Sendable, Hashable {
+        /// The host, or `nil` for a source on this computer.
+        let host: String?
+
+        /// The path. It starts with `/` for every form but the scp-like one.
+        let path: String
+
+        /// Whether the source lives on this computer, that is, the URL has
+        /// the `file` scheme.
+        let isLocal: Bool
+    }
+
+    /// Splits a normalized URL into its host and its path.
+    ///
+    /// A normalized URL has one of three shapes: `file://` and an absolute
+    /// path, a scheme with a host and a path, or the scp-like
+    /// `[user@]host:path`. The call is a pure function of its input: it reads
+    /// no file and opens no connection.
+    ///
+    /// - Parameter url: The URL that ``normalizedURL`` gave.
+    /// - Returns: The host and the path.
+    static func parts(ofNormalizedURL url: String) -> NormalizedParts {
+        if let separator = url.range(of: schemeSeparator) {
+            let rest = url[separator.upperBound...]
+            guard url[..<separator.lowerBound] != fileScheme else {
+                return NormalizedParts(host: nil, path: String(rest), isLocal: true)
+            }
+            guard let slash = rest.firstIndex(of: pathSeparator) else {
+                return NormalizedParts(host: String(rest), path: "", isLocal: false)
+            }
+            return NormalizedParts(
+                host: String(rest[..<slash]), path: String(rest[slash...]), isLocal: false)
+        }
+        guard let colon = url.firstIndex(of: scpPathSeparator) else {
+            return NormalizedParts(host: nil, path: url, isLocal: false)
+        }
+        let authority = url[..<colon]
+        return NormalizedParts(
+            host: String(authority[hostStart(ofAuthority: authority)...]),
+            path: String(url[url.index(after: colon)...]), isLocal: false)
+    }
+
     /// The last path component of the repository or of the folder, without
     /// `.git`.
     var repositoryName: String {
@@ -158,6 +205,18 @@ internal enum MarketplaceLocation: Sendable, Hashable {
             throw MarketplaceSourceError.emptyRef
         }
         return (String(text[..<separator]), ref)
+    }
+
+    /// Where the host starts inside the authority of an scp-like URL.
+    ///
+    /// The authority is `[user@]host`. Both ``scpURL(_:)`` and
+    /// ``parts(ofNormalizedURL:)`` need the same split, thus the rule lives
+    /// here one time.
+    ///
+    /// - Parameter authority: The text before the `:` of an scp-like URL.
+    /// - Returns: The index after the last `@`, else the start of the text.
+    private static func hostStart(ofAuthority authority: Substring) -> Substring.Index {
+        authority.lastIndex(of: userSeparator).map { authority.index(after: $0) } ?? authority.startIndex
     }
 
     /// The scheme of `address` in lowercase, or `nil` when it has no `://`.
@@ -282,7 +341,7 @@ internal enum MarketplaceLocation: Sendable, Hashable {
             throw MarketplaceSourceError.unsupportedForm
         }
         let authority = address[..<colon]
-        let hostStart = authority.lastIndex(of: userSeparator).map { authority.index(after: $0) } ?? authority.startIndex
+        let hostStart = hostStart(ofAuthority: authority)
         let host = authority[hostStart...]
         guard !host.isEmpty else {
             throw MarketplaceSourceError.missingHost
