@@ -18,10 +18,26 @@ comments:
     - evidence: 2 files — Sources/FoundationModelsSkills/Render/StencilPass.swift (replaced `partialsStack(layers:)` with the instance method `partialsStack(for winningLayer:)`, and the render makes the engine with it), Tests/FoundationModelsSkillsTests/MarketplacePartialScopeTests.swift (new, 3 cases). `swift build --build-tests`: no warning, no error. `swift test --filter "MarketplacePartialScopeTests|StencilPassTests"`: 26 tests, 2 suites, all pass. `swift test`: 553 tests, 40 suites, all pass.
     - next: /review
   timestamp: 2026-09-15T15:53:38.499694+00:00
+- actor: claude-code
+  id: 01m2jwkys0k7kvxyb7s2hcf2n2
+  text: |
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (1d834c4), 0 findings, 0 confirmed, 0 refuted, 7 validator runs, 0 failed. 2 files reviewed; 4 `.kanban/` files excluded by `.reviewignore`.
+    - next: task moved to done. Every checklist item and every acceptance criterion is checked.
+  timestamp: 2026-09-15T15:57:52.800609+00:00
+- actor: claude-code
+  id: 01m2jwmb1jjtx2n725hk9yfet3
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 2 files (Render/StencilPass.swift, Tests/FoundationModelsSkillsTests/MarketplacePartialScopeTests.swift)
+    - test: green — swift build --build-tests 0 warnings; swift test x2, 553 passed each run, 0 failed, 0 skipped
+    - commit: 1d834c4 feat(render): scope partials to the winning marketplace
+    - review: clean — 0 findings; task moved to done
+  timestamp: 2026-09-15T15:58:05.362490+00:00
 depends_on:
 - 01M2H0PTG2XXMYBQX8BB3E76AX
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: ce80
 title: Scope Stencil partials to the winning marketplace plus the local layers
 ---
 ## What
