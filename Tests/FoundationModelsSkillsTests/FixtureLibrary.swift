@@ -46,6 +46,28 @@ enum FixtureLibrary {
             .appendingPathComponent("skill-library", isDirectory: true)
     }
 
+    /// The root folder of one marketplace catalog fixture:
+    /// `Examples/marketplace-fixtures/catalogs/<name>` (marketplace.md §13).
+    ///
+    /// Each fixture is a small hand-written copy of a catalog tree. The
+    /// resolution walks up from `#filePath`, as ``packageRoot(thisFile:)``
+    /// does, so it never reads a real marketplace or the network.
+    ///
+    /// - Parameters:
+    ///   - name: The folder name of the fixture, one path component.
+    ///   - thisFile: Forwarded to `packageRoot(thisFile:)`.
+    /// - Returns: The fixture folder URL.
+    static func marketplaceCatalog(named name: String, thisFile: String = #filePath) -> URL {
+        precondition(
+            !name.contains("/") && name != "..",
+            "FixtureLibrary.marketplaceCatalog: name must be one path component, got \"\(name)\"")
+        return packageRoot(thisFile: thisFile)
+            .appendingPathComponent("Examples", isDirectory: true)
+            .appendingPathComponent("marketplace-fixtures", isDirectory: true)
+            .appendingPathComponent("catalogs", isDirectory: true)
+            .appendingPathComponent(name, isDirectory: true)
+    }
+
     /// The three-layer dotfolder stack over the fixture library:
     /// `defaults/`, `user/`, and the `project/` working directory.
     ///

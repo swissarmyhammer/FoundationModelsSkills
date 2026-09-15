@@ -15,11 +15,13 @@ import FoundationModelsExtras
 /// does no I/O of its own -- only `discover()` touches disk.
 public struct SkillDiscovery: Sendable {
     /// The filename every skill directory must contain to be discovered.
-    private static let skillFileName = "SKILL.md"
+    /// `CatalogResolver` finds marketplace skills by the same file.
+    internal static let skillFileName = "SKILL.md"
 
     /// Directory names never treated as skill candidates, checked against
-    /// each root's immediate subdirectories.
-    private static let excludedDirectoryNames: Set<String> = [".git", "node_modules"]
+    /// each root's immediate subdirectories. The `CatalogResolver` scan of a
+    /// marketplace repository skips the same names.
+    internal static let excludedDirectoryNames: Set<String> = [".git", "node_modules"]
 
     /// The layer roots to discover over, lowest precedence first.
     public var roots: [URL]

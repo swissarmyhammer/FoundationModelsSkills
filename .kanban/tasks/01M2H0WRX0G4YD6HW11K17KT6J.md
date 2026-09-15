@@ -28,10 +28,26 @@ comments:
     - notes: `load(from:includeProject:)` has no default. It reads `.user`, then `.project` only when `includeProject` is `true`. `.defaults` and `.marketplace` layers are never read. A missing file adds no entry. The merge key is a private `MergeKey` enum (`alias` or `url`), so an alias never matches a URL with the same text. Only the `url` field decides a URL key; `ref` and `sha` do not. A URL that does not parse keeps its raw text as its key, because the store validates the list later. Entries with the same key in one file stay, so that the store can record its duplicate-key diagnostic. `save(to:)` makes a missing parent folder and writes the file atomically. `MarketplaceConfigError` is public and holds `file` and `underlyingError`. Its `description` names the file path. The git binary is not used, and the code has no time values. No ARCHITECTURE.md exists.
     - next: /review
   timestamp: 2026-09-15T12:59:47.057022+00:00
+- actor: claude-code
+  id: 01m2jjsf0fym6t7r2d3djxf2b4
+  text: |-
+    ### review — clean
+    - evidence: review sha HEAD~1..HEAD (cc4f49f). 0 findings, 0 confirmed, 0 refuted. 7 attempts, 0 failed. 3 files reviewed. 6 .kanban files not reviewed because of .reviewignore.
+    - next: None. The task has no prior review findings. The task moved to done.
+  timestamp: 2026-09-15T13:06:07.503502+00:00
+- actor: claude-code
+  id: 01m2jjt2nv7hkaaz5rmjpjjehe
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 3 new files (MarketplaceConfig.swift, MarketplaceConfigError.swift, MarketplaceConfigTests.swift)
+    - test: green — swift package clean && swift test, 473 passed, 0 failed, 0 skipped, 0 warnings
+    - commit: cc4f49f feat(marketplace): add MarketplaceConfig for marketplaces.yaml
+    - review: clean — 0 findings; task moved to done
+  timestamp: 2026-09-15T13:06:27.643604+00:00
 depends_on:
 - 01M2H0R2AFRD111HR47N3YVH8R
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: cb80
 title: 'Add MarketplaceConfig: load and save marketplaces.yaml from the user and project layers'
 ---
 ## What

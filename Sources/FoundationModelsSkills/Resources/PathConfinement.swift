@@ -60,9 +60,12 @@ internal enum PathConfinement {
     /// resolution, so `../x` and `/etc/passwd` are rejected even when
     /// nothing at that path exists to resolve.
     ///
+    /// `CatalogPath` uses the same check for the paths of a marketplace
+    /// catalog, so the two can never drift on what counts as relative.
+    ///
     /// - Parameter path: The candidate path.
     /// - Returns: Whether `path` is well-formed.
-    private static func isWellFormedRelativePath(_ path: String) -> Bool {
+    internal static func isWellFormedRelativePath(_ path: String) -> Bool {
         guard !path.isEmpty, !path.hasPrefix("/"), !path.hasPrefix("~") else { return false }
         return !path.split(separator: "/", omittingEmptySubsequences: true).contains("..")
     }
