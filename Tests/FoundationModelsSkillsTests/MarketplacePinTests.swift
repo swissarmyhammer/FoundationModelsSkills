@@ -195,6 +195,38 @@ struct MarketplacePinTests {
         #expect(restarted.store.marketplaceLayers().first?.provenance.sha == later)
     }
 
+    // MARK: - A staged snapshot that another process deleted (§8.4)
+
+    @Test func adoptRefusesAStagedSnapshotThatAnotherProcessDeleted() async throws {
+        let pruned = try await Self.makePrunedStagedFixture()
+
+        #expect(throws: MarketplaceCacheError.snapshotMissing(sha: pruned.staged)) {
+            try pruned.cache.adopt(snapshotSha: pruned.staged, ref: nil)
+        }
+    }
+
+    @Test func adoptKeepsTheServedSnapshotWhenTheStagedOneIsGone() async throws {
+        let pruned = try await Self.makePrunedStagedFixture()
+
+        #expect(throws: (any Error).self) {
+            try pruned.cache.adopt(snapshotSha: pruned.staged, ref: nil)
+        }
+
+        #expect(pruned.cache.currentSha() == pruned.fixture.head)
+        let served = try #require(pruned.cache.currentSnapshot())
+        #expect(FileManager.default.fileExists(atPath: served.path))
+    }
+
+    @Test func aStartAfterAStagedSnapshotIsDeletedKeepsTheServedSnapshot() async throws {
+        let pruned = try await Self.makePrunedStagedFixture()
+        let restarted = try PinFixture(
+            policy: MarketplacePolicy(applyUpdates: .nextLaunch), sharing: pruned.fixture)
+
+        await restarted.store.start()
+
+        #expect(restarted.store.marketplaceLayers().first?.provenance.sha == pruned.fixture.head)
+    }
+
     // MARK: - Fixtures
 
     /// One fixture repository with two commits, and a store over a temporary
@@ -257,6 +289,43 @@ struct MarketplacePinTests {
                 sources: [MarketplaceSource(other.repository.url)],
                 cacheDirectory: other.cache.cacheDirectory, policy: policy)
         }
+    }
+
+    /// A fixture whose cache holds a staged snapshot that no launch served
+    /// yet, and whose staged folder another process then deleted.
+    ///
+    /// The delete stands for a pruner in a second process: it removes a
+    /// snapshot that no reader holds, thus a staged snapshot can be gone
+    /// before a later launch serves it.
+    ///
+    /// - Returns: The fixture, the cache of its one marketplace, and the
+    ///   commit of the snapshot that is gone.
+    /// - Throws: The error of a fixture step or of the delete.
+    private static func makePrunedStagedFixture() async throws -> (
+        fixture: PinFixture, cache: MarketplaceCache, staged: String
+    ) {
+        let fixture = try PinFixture(policy: MarketplacePolicy(applyUpdates: .nextLaunch))
+        await fixture.store.start()
+        let staged = try fixture.repository.commit(
+            files: MarketplaceTestSupport.skillTree(body: laterBody))
+        await fixture.store.update()
+        let cache = try Self.cache(inCacheOf: fixture)
+        try FileManager.default.removeItem(at: cache.snapshotDirectory(forSha: staged))
+        return (fixture, cache, staged)
+    }
+
+    /// The cache of the one marketplace of a fixture.
+    ///
+    /// - Parameter fixture: The fixture whose cache holds `state.json`.
+    /// - Returns: The cache, over the folder that the state file names.
+    /// - Throws: The error of the file read, or a failed requirement when the
+    ///   state file names no marketplace.
+    private static func cache(inCacheOf fixture: PinFixture) throws -> MarketplaceCache {
+        let directory = fixture.cache.cacheDirectory
+        let state = try MarketplaceState.load(
+            from: MarketplaceCache.stateFile(inCacheDirectory: directory))
+        let folderName = try #require(state.marketplaces.keys.first)
+        return MarketplaceCache(root: directory, folderName: folderName)
     }
 
     /// The one state record of the cache of a fixture.

@@ -48,10 +48,31 @@ comments:
     ### decision — a cold start does not defer
     The implementer asked whether `.nextLaunch` must also hold back the FIRST install of a marketplace. It must not. A cold start has no session to keep stable, and a deferred first install would leave the registry with no layer until a second `start()`. `.nextLaunch` holds back only a snapshot that replaces one the store already serves. The card is correct as built.
   timestamp: 2026-09-15T22:27:26.148894+00:00
+- actor: claude-code
+  id: 01m2knkhxh3ksqkfa3as7dyyq6
+  text: |-
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (commit 2d8e793). 0 findings, 0 confirmed, 0 refuted, 7 validators attempted, 0 failed. 6 files reviewed. 4 files in `.kanban/` were not read, because an ignore rule holds them.
+    - checks that the reviewer made in addition:
+      - No hard-coded time value is in the new source. `MarketplacePolicy.checkInterval` and `MarketplacePolicy.fetchTimeout` are `Duration?`, and each one is `nil` by default. The store sleeps only when the host gives a value. `record.lastUpdated = Date()` writes a time for the record only; it is not an interval, a limit, or a budget.
+      - `.nextLaunch` is a flag on the disk, and it is not a timer. `stageUnderWriterLock` puts the snapshot under `snapshots/<sha>` and does not touch `current`. `start()` then calls `adopt(snapshotSha:ref:)` for each pending record. No clock and no time comparison decides the swap.
+      - The lock order is correct. `stageUnderWriterLock` takes no lock, because the caller holds the writer lock, as its name and its documentation say. `adopt(snapshotSha:ref:)` takes the writer lock one time with `withWriterLock`, and then calls the private `activate(checked:)`, which takes no lock. Thus no path takes a lock while it holds one. `withWriterLock` releases the lock with `defer { close(descriptor) }`, and `openWriterLock` closes the descriptor when `flock` fails. Thus an error path leaks no lock. The install, the stage, and the adopt all use `activate(checked:)`, thus the three paths use one order: write the ref file, swap `current`, then remove the unused snapshots.
+    - next: none. The task moves to done.
+  timestamp: 2026-09-15T23:14:34.033316+00:00
+- actor: claude-code
+  id: 01m2knmmzdfb3p7mckppp0s27n
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 6 files; `pin`, `unpin`, the pin table in `state.json`, and a staged snapshot that the next `start()` adopts; no timer of any kind
+    - test: green — swift build --build-tests 0 warnings; 63 full runs, 673 passed in 62 of them. One run failed with 2 issues and the detail was lost to a `tail` truncation; 60 later runs could not make it happen again, and a read of the new lock code found no fault.
+    - commit: 2d8e793 feat(marketplace): add pin, unpin, and a staged next-launch snapshot
+    - review: clean — 0 findings; the engine proved no hard-coded time value and a sound lock order; task moved to done
+    - carry-over: the review saw that `adopt` checks the snapshot before it takes the writer lock. Task ^s494z6x holds the fix.
+  timestamp: 2026-09-15T23:15:09.933102+00:00
 depends_on:
 - 01M2H125CCEZMT2PZAW6DRYE1R
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: db80
 title: 'MarketplaceStore: pins and .nextLaunch'
 ---
 ## What

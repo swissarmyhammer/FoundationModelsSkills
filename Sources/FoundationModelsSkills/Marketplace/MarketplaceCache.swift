@@ -28,6 +28,12 @@ internal enum MarketplaceCacheError: Error, Equatable, Sendable {
 
     /// A value is no commit, because it is not a hexadecimal object name.
     case notACommit(value: String)
+
+    /// The folder holds no snapshot of that commit, thus `current` cannot
+    /// name it. Cleanup in another process deletes a snapshot that no reader
+    /// holds, so a staged snapshot can be gone before a later launch serves
+    /// it.
+    case snapshotMissing(sha: String)
 }
 
 extension MarketplaceCacheError: CustomStringConvertible {
@@ -42,6 +48,8 @@ extension MarketplaceCacheError: CustomStringConvertible {
             #"The \#(kind.rawValue) "\#(value)" cannot go into a cache path."#
         case .notACommit(let value):
             #"The sha "\#(value)" is no commit."#
+        case .snapshotMissing(let sha):
+            #"The cache holds no snapshot of the commit "\#(sha)"."#
         }
     }
 }
@@ -516,26 +524,31 @@ internal struct MarketplaceCache: Sendable {
     /// there, possibly in an earlier run of the host. The call takes the
     /// writer lock itself.
     ///
+    /// The test of the snapshot folder is inside the lock, in the same
+    /// critical section as the swap. Cleanup in another process takes the
+    /// same lock, thus it cannot delete the folder between the test and the
+    /// swap, and `current` never names a folder that is gone. Only
+    /// ``makeFolders()`` stays outside the lock, because the lock file lives
+    /// in the folder that call makes.
+    ///
     /// - Parameters:
     ///   - sha: The commit of the snapshot to serve.
     ///   - ref: The branch or the tag that resolved to `sha`, or `nil` for a
     ///     pinned commit, which has no ref file.
-    /// - Returns: `true` when `current` now names the snapshot, and `false`
-    ///   when the folder holds no snapshot of that commit.
-    /// - Throws: ``MarketplaceCacheError`` when a value is not safe in a path
-    ///   or the swap fails, else the error of the file work.
-    @discardableResult
-    func adopt(snapshotSha sha: String, ref: String?) throws -> Bool {
+    /// - Throws: ``MarketplaceCacheError/snapshotMissing(sha:)`` when the
+    ///   folder holds no snapshot of that commit, and `current` then stays
+    ///   where it was; ``MarketplaceCacheError`` when a value is not safe in
+    ///   a path or the swap fails; else the error of the file work.
+    func adopt(snapshotSha sha: String, ref: String?) throws {
         let checked = try Self.validated(sha: sha, ref: ref)
-        let directory = snapshotDirectory(forValidatedSha: checked.sha)
-        guard FileManager.default.fileExists(atPath: directory.path) else {
-            return false
-        }
         try makeFolders()
         try withWriterLock {
+            let directory = snapshotDirectory(forValidatedSha: checked.sha)
+            guard FileManager.default.fileExists(atPath: directory.path) else {
+                throw MarketplaceCacheError.snapshotMissing(sha: checked.sha)
+            }
             try activate(checked: checked)
         }
-        return true
     }
 
     /// Makes the folders that an install writes into.

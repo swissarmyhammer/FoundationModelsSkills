@@ -472,8 +472,10 @@ public actor MarketplaceStore: MarketplaceLayerProviding {
 
     /// Makes `current` name one pending snapshot, and clears the record.
     ///
-    /// A record whose snapshot folder is gone is stale: the call clears it,
-    /// and the next sync materializes that commit again.
+    /// A record whose snapshot folder is gone is stale: the cache reports
+    /// ``MarketplaceCacheError/snapshotMissing(sha:)`` and leaves `current`
+    /// where it was, thus the call clears the record and keeps the snapshot
+    /// that it serves. The next sync materializes that commit again.
     ///
     /// - Parameters:
     ///   - pending: The snapshot that waits.
@@ -484,22 +486,24 @@ public actor MarketplaceStore: MarketplaceLayerProviding {
         pending: MarketplacePendingSnapshot, ofRemote remote: GitRemote, atIndex index: Int
     ) throws {
         let previous = remote.cache.currentSha()
-        let adopted = try remote.cache.adopt(
-            snapshotSha: pending.sha, ref: pin(atIndex: index) == nil ? remote.ref : nil)
+        do {
+            try remote.cache.adopt(
+                snapshotSha: pending.sha, ref: pin(atIndex: index) == nil ? remote.ref : nil)
+        } catch MarketplaceCacheError.snapshotMissing {
+            try updateRecord(forFolder: remote.cache.folderName, ofSource: prepared[index].source) {
+                record in
+                record.pending = nil
+            }
+            return
+        }
         let installedID = pending.displayID ?? prepared[index].key
         try updateRecord(forFolder: remote.cache.folderName, ofSource: prepared[index].source) {
             record in
             record.pending = nil
-            guard adopted else {
-                return
-            }
             record.currentSha = pending.sha
             record.catalogVersion = pending.catalogVersion
             record.displayID = installedID
             record.lastUpdated = Date()
-        }
-        guard adopted else {
-            return
         }
         serve(
             atIndex: index, cache: remote.cache, sha: pending.sha, displayID: installedID,
