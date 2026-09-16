@@ -1,5 +1,11 @@
 # Plan: skill marketplaces
 
+**Status: Part B is implemented.** The package holds the store, the cache, the layers, the
+checks and the updates, the pins, the grants, and the `skills marketplace` commands. Read
+[`docs/marketplaces.md`](docs/marketplaces.md) for the host guide of the behavior that
+shipped, and [`docs/security.md`](docs/security.md) for the security posture. This page stays
+the design record. Part A, the `../skills` repository, is not made yet.
+
 This plan adds remote skill marketplaces to `FoundationModelsSkills`. It has two parts:
 
 - **Part A — a new `../skills` repository.** This repository is a skill marketplace in the
@@ -388,7 +394,7 @@ public struct MarketplaceSource: Sendable, Hashable, Codable {
     public var ref: String?                // branch or tag
     public var sha: String?                // a pin; it wins over ref and stops auto-update
     public var path: String?               // a subfolder in the repository
-    public var alias: String?              // a local id; it wins over the catalog name
+    public var alias: String?              // a local name; it is the pre-fetch key (§5.3)
     public var select: SkillSelection      // .all (default) | .plugins([String]) | .skills([String])
     public var autoUpdate: Bool            // default true
     public var grants: MarketplaceGrants   // default .none: no shell injection, no scripts
@@ -398,7 +404,7 @@ public actor MarketplaceStore {
     public init(sources: [MarketplaceSource],
                 cacheDirectory: URL = MarketplaceStore.cacheDirectory(environment: ProcessInfo.processInfo.environment),
                 policy: MarketplacePolicy = MarketplacePolicy())
-    public nonisolated func layers() -> [DotfolderStack.Layer]  // stable `current` paths, lowest first
+    public nonisolated func marketplaceLayers() -> [MarketplaceLayer]  // stable `current` paths, lowest first
     public func start() async                                   // first sync and check; then the host's schedule, if any
     public func stop()
     public func check() async -> [MarketplaceStatus]            // query only; never installs
@@ -406,6 +412,7 @@ public actor MarketplaceStore {
     public func pin(_ id: String, sha: String) async throws
     public func unpin(_ id: String) async throws
     public nonisolated var events: AsyncStream<MarketplaceEvent> { get }
+    public nonisolated var layerUpdates: AsyncStream<Void> { get }   // the registry rebuilds on each value
     public nonisolated var diagnostics: [MarketplaceDiagnostic] { get }
 }
 

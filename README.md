@@ -65,6 +65,9 @@ dependency:
 
 - [`docs/operations.md`](docs/operations.md) — the six operations, verb
   aliases, and the visibility table.
+- [`docs/marketplaces.md`](docs/marketplaces.md) — remote skill marketplaces:
+  the sources, the layer order, the cache, the checks and the updates, and the
+  `skills marketplace` commands.
 - [`docs/security.md`](docs/security.md) — security posture, context
   compaction, and platform limits. Read this before you load skill directories
   that you do not control.

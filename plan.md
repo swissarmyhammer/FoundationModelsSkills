@@ -801,16 +801,20 @@ Examples/
   ever reads the real home directory. The unit tests load it for golden renders and
   listing snapshots; the demo loads the same directories, so the documented behavior is
   the tested behavior.
-- **`skills-demo`** is one binary, three modes (the NotesTool dual-use shape):
+- **`skills-demo`** is one binary, four modes (the NotesTool dual-use shape):
   - **default — CLI** (§7.2) over the library: `skills-demo skill list`,
     `skills-demo skill search "commit my changes"`,
     `skills-demo skill use --id commit --arguments "fix parser"`.
   - **`--chat`** — a root `LanguageModelSession` with the fused tool + preloaded
     bodies (gated on model availability); scripted prompts drive the
     `search skill` → `use skill` round trip end to end.
-  - **`--watch`** — edit a file under `project/` while running and watch the registry
-    reload propagate: searcher `update(items:)`, refreshed preloads, updated `/`
-    listing — live.
+   - **`--watch`** — edit a file under `project/` while running and watch the registry
+     reload propagate: searcher `update(items:)`, refreshed preloads, updated `/`
+     listing — live.
+   - **`--marketplace`** — the `marketplace` command group (marketplace.md §9.3) over the
+     fixture library: `skills-demo --marketplace list`, `skills-demo --marketplace check`.
+     It reads the `marketplaces.yaml` of that library, and never the file of this
+     repository.
 - The example grows with the milestones — fixtures land at M1 (as test data), watch at
   M2, chat at M4, CLI at M4.5, the full-render fixture skills at M5 — and M7 polishes
   it into the documented sample.

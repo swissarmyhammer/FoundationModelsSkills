@@ -13,6 +13,35 @@ comments:
   id: 01m2kx26vgrdycgsba1rs90acj
   text: 'From ^zn3f3ym (the `skills-demo --marketplace` mode): `plan.md` §11 still says that `skills-demo` is "one binary, three modes" and lists the default CLI, `--chat`, and `--watch`. The binary now holds a fourth mode, `--marketplace`. Correct that line with the other documentation work of this card.'
   timestamp: 2026-09-16T01:24:54.256999+00:00
+- actor: claude-code
+  id: 01m2kybehkvq6stjw270rdx3f9
+  text: |-
+    Research, then the documentation. Each claim comes from the code that shipped, and not from the plan:
+
+    - The cache directory is `SKILLS_MARKETPLACE_CACHE`, else `~/.cache/skills/marketplaces` (`MarketplaceCache.cacheDirectory(environment:)`). `SKILLS_MARKETPLACE_SEED` names the read-only seed folder. `SKILLS_MARKETPLACE_AUTOUPDATE=0` stops every automatic update (`MarketplacePolicy.automaticUpdateVariable`).
+    - The `marketplace` group holds seven subcommands, and each one takes `--include-project`. `MarketplaceCLI.configuration.subcommands` is the list that the new test reads.
+    - `marketplace.md` §6.2 said that `alias` "wins over the catalog name". The code says that the alias is the pre-fetch key (`MarketplaceIdentity.preFetchKey(for:)`), and that the catalog `name` is the display id after a fetch. §5.3 is right, thus §6.2 now agrees with it.
+    - Two more §6.2 lines did not agree with the code: the sketch named `layers() -> [DotfolderStack.Layer]`, and the shipped call is `marketplaceLayers() -> [MarketplaceLayer]`. The sketch also had no `layerUpdates`, which is how the registry learns of an update. Both lines are corrected.
+    - The writer lock is `LOCK_EX | LOCK_NB`, thus it never waits. A wait would hold the thread of the actor that the holder of the lock needs.
+    - The credential rule holds at the parser: `MarketplaceLocation.httpsURL(_:)` throws `credentialsInURL` for a URL with a user name or a password. Thus no stored URL, no row of `marketplace list`, no diagnostic, and no error message can hold a credential.
+    - The grants fold in `SkillsRegistry.effectivePolicy(for:)`: each axis is the more restrictive of the host `RenderPolicy` and the grant of the marketplace.
+
+    `plan.md` §11 said "three modes"; it now says four, and it describes `--marketplace`.
+  timestamp: 2026-09-16T01:47:25.619910+00:00
+- actor: claude-code
+  id: 01m2kybjmwgp0g1y6agn0tqfsq
+  text: |-
+    ### implement — changed
+    - evidence: 7 files — docs/marketplaces.md (new), docs/security.md, docs/operations.md, README.md, marketplace.md, plan.md, Tests/FoundationModelsSkillsTests/MarketplaceDocsTests.swift (new). `swift build --build-tests`: 0 warnings. `swift test`: 700 tests in 54 suites passed (698 in 53 before this card; the new suite holds 2 tests).
+    - next: /review
+  timestamp: 2026-09-16T01:47:29.820700+00:00
+- actor: claude-code
+  id: 01m2kyg3bvc8v9qk45jjvw5s2f
+  text: |-
+    ### test — green
+    - evidence: `swift build --build-tests` clean (0 warnings, 0 errors). `swift test` run 1: 700 tests, 54 suites, 0 failures, 0 warnings. `swift test` run 2: 700 tests, 54 suites, 0 failures, 0 warnings. `MarketplaceDocsTests` suite passed both runs.
+    - next: ready for review.
+  timestamp: 2026-09-16T01:49:58.011440+00:00
 depends_on:
 - 01M2H13QJ24K9102WB19Z3SQS1
 - 01M2H141Y80CJR0NPGAVEGYN0M
@@ -20,8 +49,8 @@ depends_on:
 - 01M2H1PT3B5H48CG7BKZJ5B7R9
 - 01M2H1Q3VS6CRF692A1VX8MZZF
 - 01M2H1QW6Z6BN6YEF4HZN3F3YM
-position_column: todo
-position_ordinal: '9480'
+position_column: doing
+position_ordinal: '80'
 title: 'Document marketplaces: host guide, security posture, CLI, and README link'
 ---
 ## What
@@ -44,19 +73,19 @@ marketplace.md §10 and the MK6 docs item. Write the documentation after the beh
 - `README.md`: add `docs/marketplaces.md` to the Documentation list. Keep the usage block unchanged, so `ReadmeExampleTests` stays green.
 - `marketplace.md`: add a short status line at the top that says the plan is implemented, and link `docs/marketplaces.md`.
 
-- [ ] `docs/marketplaces.md`
-- [ ] The `docs/security.md` section
-- [ ] The `docs/operations.md` note, the README link, and the `marketplace.md` status line
-- [ ] A docs coverage test
+- [x] `docs/marketplaces.md`
+- [x] The `docs/security.md` section
+- [x] The `docs/operations.md` note, the README link, and the `marketplace.md` status line
+- [x] A docs coverage test
 
 ## Acceptance Criteria
-- [ ] Every public environment variable and every `skills marketplace` subcommand is described in `docs/marketplaces.md`
-- [ ] `docs/security.md` has all seven marketplace points
-- [ ] `ReadmeExampleTests` still passes
+- [x] Every public environment variable and every `skills marketplace` subcommand is described in `docs/marketplaces.md`
+- [x] `docs/security.md` has all seven marketplace points
+- [x] `ReadmeExampleTests` still passes
 
 ## Tests
-- [ ] `Tests/FoundationModelsSkillsTests/MarketplaceDocsTests.swift`: read `docs/marketplaces.md` (found from `#filePath`) and assert that it names `SKILLS_MARKETPLACE_CACHE`, `SKILLS_MARKETPLACE_SEED`, `SKILLS_MARKETPLACE_AUTOUPDATE`, and every subcommand name taken from the `MarketplaceCLI` configuration (not a hand-written list); assert that `docs/security.md` has a "Marketplaces" heading
-- [ ] Run `swift test`; all green
+- [x] `Tests/FoundationModelsSkillsTests/MarketplaceDocsTests.swift`: read `docs/marketplaces.md` (found from `#filePath`) and assert that it names `SKILLS_MARKETPLACE_CACHE`, `SKILLS_MARKETPLACE_SEED`, `SKILLS_MARKETPLACE_AUTOUPDATE`, and every subcommand name taken from the `MarketplaceCLI` configuration (not a hand-written list); assert that `docs/security.md` has a "Marketplaces" heading
+- [x] Run `swift test`; all green
 
 ## Workflow
 - Use `/tdd` — write failing tests first, then implement to make them pass. #marketplace

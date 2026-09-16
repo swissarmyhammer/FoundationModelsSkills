@@ -40,6 +40,48 @@
   (`SkillDiagnostic.Provenance.root`), thus a host can show *where* a
   skill came from.
 
+## Marketplaces
+
+A marketplace is a git repository, or a folder on this computer, that gives a
+skill layer below the full local stack. [`marketplaces.md`](marketplaces.md) is
+the host guide. These are the rules that hold for every marketplace:
+
+1. **A marketplace is untrusted content.** It always renders untrusted. Its
+   skills have no `` !`shell` `` injection and no scripts, unless the host sets
+   a grant for that one marketplace. The host `RenderPolicy` always wins: a
+   grant can only keep a capability that the host left on, and the
+   `allowed-tools` grant of the skill is still necessary.
+2. **The allow-list and the block-list run before any I/O.**
+   `MarketplacePolicy.allowedSources` and `MarketplacePolicy.blockedSources`
+   are pure functions of the URL. A refused source gets a diagnostic, and the
+   store makes no cache folder and opens no connection for it.
+3. **A project `marketplaces.yaml` can add a remote source.** A repository that
+   you cloned can carry that file. Load it only for a folder that you trust.
+   The `skills marketplace` commands read it only with `--include-project`.
+4. **The package does not start the `git` binary.** Git work goes through
+   libgit2, which runs no hooks, fetches no submodules, and runs no large file
+   storage filters. SSH uses the system OpenSSH, with the user's ssh-agent and
+   `known_hosts`. HTTPS uses the system trust store.
+5. **A credential stays out of every record.** A credential never appears in a
+   stored URL, in a log line, in a diagnostic, or in an error message. An HTTPS
+   URL that holds a user name or a password is refused when the store parses
+   it, thus no such URL reaches `marketplaces.yaml`, `state.json`, a command
+   line of output, or a message. A credential comes only from
+   `MarketplacePolicy.credentials`, and the transport sends it only to the
+   origin of that one source.
+6. **The materializer validates every file that it writes.** It refuses a path
+   that holds `..` or `/`, a symlink that points out of the skill folder, a
+   submodule entry, and content above the size and file-count limits of the
+   policy. A snapshot that fails validation is deleted, and the last good
+   snapshot stays.
+7. **The model cannot change the source list.** The model surface gets no
+   marketplace operation. Only the host and the command line add, remove, pin,
+   or update a marketplace.
+8. **A remote skill can never replace a local skill.** The order is
+   `url[0] < … < url[n] < defaults < user < project`. Only a local layer
+   shadows a marketplace, and a marketplace can shadow only a marketplace that
+   is before it in the list.
+
 ## Context compaction (note for hosts)
 
 A used skill's rendered body is durable guidance. The session depends on

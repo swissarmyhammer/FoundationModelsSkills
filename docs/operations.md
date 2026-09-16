@@ -14,6 +14,16 @@ tells the model how to correct the call.
 | `read resource` | `id` (req), `path` (req), `start?`, `end?` | Returns a file verbatim, in a line window: 500 lines maximum and 1,000,000 content bytes maximum for each call. The tool never renders the file. It streams the file in 64 KiB parts and never loads the full file. `totalLines` is exact. See [development.md](development.md) for the exact byte-budget rules. |
 | `run script` | `id` (req), `path` (req, in `scripts/`), `arguments?`, `timeout?` | Runs the file directly. The file must have the executable bit and a shebang. Three gates apply: the host policy, the skill's `allowed-tools: Script(<glob>)` grant, and the host trust posture. The process runs in its own process group. A timeout sends `SIGKILL`. |
 
+## Marketplaces
+
+The model surface holds no marketplace operation. A marketplace skill is an
+ordinary row of the same catalog, thus `search skill`, `list skill`, and `use
+skill` show it with no change. A `list skill` row can name the marketplace that
+the skill came from, for example `swissarmyhammer-skills@1.2.0`. The model
+cannot add, remove, pin, or update a marketplace: that work belongs to the host
+and to the `skills marketplace` commands. See
+[marketplaces.md](marketplaces.md).
+
 ## Verb aliases
 
 `find` and `discover` resolve to `search`. `call`, `invoke`, and `get`

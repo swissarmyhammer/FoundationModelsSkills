@@ -110,10 +110,29 @@ comments:
     - Logs: `/private/tmp/claude-501/-Users-wballard-github-swissarmyhammer-FoundationModelsSkills/b9d0155a-2dfe-4435-b619-18918c20ca30/scratchpad/build1.log`, `test1.log`, `test2.log`.
     - next: none. The build is clean.
   timestamp: 2026-09-16T01:36:08.579327+00:00
+- actor: claude-code
+  id: 01m2kxsp4crh2gvk364h1gfp9v
+  text: |
+    ### review — clean
+    - scope: `review sha HEAD~1..HEAD` (commit c636d64), 1 file reviewed, 2 skipped by `.reviewignore`
+    - evidence: findings 0, confirmed 0, refuted 0, attempted 7, failed 0
+    - prior: the 2026-09-15 20:30 finding (`Examples/skills-demo/SkillsDemoMain.swift` no_direct_standard_out_logs) is checked
+    - next: card moved to `done`
+  timestamp: 2026-09-16T01:37:43.564697+00:00
+- actor: claude-code
+  id: 01m2kxt0e0rzcs5bt94emnhd3m
+  text: |-
+    ### finish iteration 2 — clean
+    - implement: changed — Examples/skills-demo/SkillsDemoMain.swift (FileHandle.standardOutput in place of print)
+    - test: green — swift test x2, each 698 tests in 53 suites, 0 failed
+    - commit: c636d64 fix(skills-demo): write output with FileHandle, not print
+    - review: clean — 0 findings, 7 validators, 1 file
+    - result: the card is in done. The iteration 1 finding is corrected and ticked.
+  timestamp: 2026-09-16T01:37:54.112766+00:00
 depends_on:
 - 01M2H13QJ24K9102WB19Z3SQS1
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: e080
 title: Add a skills-demo --marketplace mode
 ---
 ## What
