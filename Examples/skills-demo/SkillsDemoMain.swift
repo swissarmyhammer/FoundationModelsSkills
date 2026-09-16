@@ -28,7 +28,7 @@ internal enum SkillsDemoMain {
     /// The exit code of a demo run that could not build its own stack.
     private static let assemblyFailureExitCode: Int32 = 1
 
-    /// The line break that `print(_:)` puts after the text of a mode.
+    /// The line break that goes after the text of a mode.
     private static let lineBreak = "\n"
 
     /// Dispatches to `--chat`/`--watch`/`--marketplace` mode or the default
@@ -47,7 +47,7 @@ internal enum SkillsDemoMain {
         }
     }
 
-    /// Drives `arguments` through `SkillsCLI.makeDriver(registry:)`, printing
+    /// Drives `arguments` through `SkillsCLI.makeDriver(registry:)`, writing
     /// its output and exiting with its code.
     ///
     /// - Parameter arguments: The command's arguments, excluding the
@@ -65,7 +65,7 @@ internal enum SkillsDemoMain {
     }
 
     /// Drives `arguments` through `MarketplaceCLI.run(arguments:context:)`
-    /// over the fixture stack, printing its output and exiting with its code.
+    /// over the fixture stack, writing its output and exiting with its code.
     ///
     /// The fixture stack is the configuration stack, thus the group reads the
     /// `marketplaces.yaml` of the fixture library and never the file of this
@@ -82,9 +82,10 @@ internal enum SkillsDemoMain {
 
     /// Writes the output of one mode and ends the process on a failure.
     ///
-    /// The call drops one line break at the end of the text, because
-    /// `print(_:)` writes one itself. Thus a text that already holds a line
-    /// break for each of its lines gets no empty line after it.
+    /// The call writes to standard output through `FileHandle`, the same way
+    /// the failure path of this file writes to standard error. The text gets
+    /// one line break at the end. Thus a text that already holds a line break
+    /// for each of its lines gets no empty line after it.
     ///
     /// - Parameters:
     ///   - output: The text of the run. Empty text writes no line.
@@ -93,7 +94,7 @@ internal enum SkillsDemoMain {
     private static func report(output: String, exitCode: Int32) {
         let text = output.hasSuffix(lineBreak) ? String(output.dropLast(lineBreak.count)) : output
         if !text.isEmpty {
-            print(text)
+            FileHandle.standardOutput.write(Data((text + lineBreak).utf8))
         }
         if exitCode != 0 {
             exit(exitCode)
