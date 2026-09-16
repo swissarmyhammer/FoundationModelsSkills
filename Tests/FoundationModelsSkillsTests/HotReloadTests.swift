@@ -387,11 +387,10 @@ struct HotReloadTests {
 
     // MARK: - Update-call subscription
 
-    /// Starts a background task that iterates `registry.onReload` (when
-    /// non-`nil`), forwarding each published metadata list into
-    /// `agent.update(items:)` and tallying the forward into `recorder` --
-    /// the plan.md §7.1 wiring a real host is responsible for, exercised
-    /// here end to end.
+    /// Starts a background task that iterates `registry.onReload`,
+    /// forwarding each published metadata list into `agent.update(items:)`
+    /// and tallying the forward into `recorder` -- the plan.md §7.1 wiring a
+    /// real host is responsible for, exercised here end to end.
     ///
     /// The stream is subscribed on the caller's thread, before the task is
     /// created. A subscription made inside the task registers only when the
@@ -408,14 +407,7 @@ struct HotReloadTests {
     private static func subscribe(
         _ registry: SkillsRegistry, forwardingTo agent: SkillSearchAgent, recordingInto recorder: ReloadTestSupport.EventTally
     ) -> Task<Void, Never> {
-        let stream = registry.onReload
-        return Task {
-            guard let stream else { return }
-            for await metadata in stream {
-                await agent.update(items: metadata)
-                await recorder.record()
-            }
-        }
+        ReloadTestSupport.forward(registry.onReload, to: agent, recordingInto: recorder)
     }
 
     /// Asserts that exactly one new `update(items:)` call lands on `recorder`
@@ -513,119 +505,6 @@ struct HotReloadTests {
         await ReloadTestSupport.poll({ await gate.isBlocked }, until: { $0 }, timeout: timeout)
     }
 
-    // MARK: - Fixture embedder
-
-    /// A deterministic `TextEmbedding` test double, mirroring
-    /// `FoundationModelsMetadataRegistryTests.FakeEmbedder`.
-    ///
-    /// Every text embeds to an all-zero vector -- this scenario never
-    /// asserts on cosine ranking, only on *counts* (how many texts were
-    /// embedded) and on the `.embedCatchUp` diagnostic's presence, so no
-    /// registered vector table is needed. An optional `gate` lets step 1
-    /// deterministically observe an in-flight (not-yet-complete) embed call.
-    private final class FakeEmbedder: TextEmbedding {
-        let dimension: Int
-        private let counter: EmbedCallCounter
-        private let gate: EmbedGate?
-
-        /// Creates a fake embedder that returns an all-zero vector for every
-        /// text.
-        ///
-        /// - Parameters:
-        ///   - dimension: The length of every embedding vector this
-        ///     embedder produces.
-        ///   - gate: Blocks every `embed(_:)` call until the gate is open,
-        ///     or `nil` to never block. Defaults to `nil`.
-        init(dimension: Int, gate: EmbedGate? = nil) {
-            self.dimension = dimension
-            self.counter = EmbedCallCounter()
-            self.gate = gate
-        }
-
-        /// The total number of texts passed to `embed(_:)` across every call
-        /// so far.
-        var embeddedTextCount: Int { counter.count }
-
-        func embed(_ texts: [String]) async throws -> [[Float]] {
-            if let gate { await gate.waitUntilOpen() }
-            counter.increment(by: texts.count)
-            return texts.map { _ in [Float](repeating: 0, count: dimension) }
-        }
-    }
-
-    /// A thread-safe call counter for `FakeEmbedder`.
-    ///
-    /// `@unchecked Sendable`: every access to `value` goes through `count`
-    /// or `increment(by:)`, both of which hold `lock` for their entire
-    /// critical section.
-    private final class EmbedCallCounter: @unchecked Sendable {
-        private let lock = NSLock()
-        private var value = 0
-
-        var count: Int {
-            lock.lock()
-            defer { lock.unlock() }
-            return value
-        }
-
-        /// Adds `amount` to the running count.
-        ///
-        /// - Parameter amount: The amount to add.
-        func increment(by amount: Int) {
-            lock.lock()
-            defer { lock.unlock() }
-            value += amount
-        }
-    }
-
-    /// A gate `FakeEmbedder.embed(_:)` can be told to block on, so step 1 can
-    /// observe a deterministic window where the async embed catch-up is
-    /// confirmed in flight (blocked awaiting this gate) but not yet
-    /// complete -- proving a concurrent keyword search still succeeds during
-    /// that window, per `MetadataSearcher.update(items:)`'s own reentrancy
-    /// documentation (a concurrent `search` interleaves while `update` is
-    /// suspended awaiting the embedder, since both are calls into the same
-    /// actor and `update` is suspended, not synchronously blocking it).
-    ///
-    /// Starts open, so every construction-time embed and every step 2+ embed
-    /// never blocks; step 1 closes it for one deliberate window, then
-    /// reopens it for the rest of the scenario.
-    private actor EmbedGate {
-        private var isOpen = true
-        private var openWaiters: [CheckedContinuation<Void, Never>] = []
-
-        /// Whether some `embed(_:)` call is currently blocked on this gate.
-        /// `waitUntilBlockedOrTimeout(_:timeout:)` polls it, so no caller
-        /// ever suspends on a continuation this gate might never resume.
-        private(set) var isBlocked = false
-
-        /// Closes the gate: every subsequent `embed(_:)` call blocks in
-        /// `waitUntilOpen()` until `open()` runs.
-        func close() {
-            isOpen = false
-            isBlocked = false
-        }
-
-        /// Opens the gate, resuming every call currently blocked in
-        /// `waitUntilOpen()` and letting every future call through
-        /// immediately.
-        func open() {
-            isOpen = true
-            let waiting = openWaiters
-            openWaiters = []
-            for continuation in waiting { continuation.resume() }
-        }
-
-        /// Called by `FakeEmbedder.embed(_:)`: returns immediately while the
-        /// gate is open; otherwise marks the gate blocked (so a poll of
-        /// `isBlocked` observes it) and suspends until `open()` runs.
-        func waitUntilOpen() async {
-            guard !isOpen else { return }
-            isBlocked = true
-            await withCheckedContinuation { openWaiters.append($0) }
-        }
-    }
-
     // MARK: - Scripted AgentSession (selection tier, GPU-free)
 
     /// A scripted `AgentSession` test double, mirroring
@@ -638,7 +517,8 @@ struct HotReloadTests {
     ///
     /// `final class ... @unchecked Sendable`: `respond(to:)` needs to
     /// advance a call index across an `await` boundary; state lives behind
-    /// `lock`, mirroring `EmbedCallCounter`'s pattern in this same file.
+    /// `lock`, mirroring `EmbedCallCounter`'s pattern in
+    /// `HotReloadTestSupport`.
     private final class ScriptedAgentSession: AgentSession, @unchecked Sendable {
         /// Thrown once every scripted response has been consumed -- a test
         /// bug (an under-scripted fixture), never expected in practice.

@@ -1,12 +1,14 @@
 import Foundation
+import FoundationModelsSkills
 import Testing
 
 /// Shared reload/watcher test-support helpers for `HotReloadTests` and
-/// `SkillsRegistryReloadTests`: the count-only event tally, the generic
-/// deadline-polling loop, the "exactly one event, then settles" assertion
-/// both files' own recorders wait on, and the `SKILL.md` fixture-writing
-/// helpers -- each previously reimplemented in parallel across the two
-/// files (review findings, 2026-07-29 21:57).
+/// `SkillsRegistryReloadTests`: the count-only event tally, the forwarding
+/// of one reload stream into a search agent, the generic deadline-polling
+/// loop, the "exactly one event, then settles" assertion both files' own
+/// recorders wait on, and the `SKILL.md` fixture-writing helpers -- each
+/// previously reimplemented in parallel across the two files (review
+/// findings, 2026-07-29 21:57).
 ///
 /// `SkillWatcherTests` and `MarketplaceCatalogTests` also use the `SKILL.md`
 /// helpers, so that the test target has one builder of `SKILL.md` text.
@@ -46,6 +48,37 @@ enum ReloadTestSupport {
         Task {
             guard let stream else { return }
             for await _ in stream { await tally.record() }
+        }
+    }
+
+    /// Starts a background task that iterates `stream` (when non-`nil`),
+    /// forwards each published metadata list into `agent.update(items:)`,
+    /// and records one event into `tally` for each forward -- the plan.md
+    /// §7.1 wiring a real host is responsible for.
+    ///
+    /// The caller evaluates `stream` on its own thread, for the reason
+    /// ``tally(_:into:)`` gives.
+    ///
+    /// `HotReloadTests` and `MarketplaceEndToEndTests` both prove that one
+    /// change gives the searcher exactly one `update(items:)` call, thus the
+    /// helper is here and not in one of the two suites.
+    ///
+    /// - Parameters:
+    ///   - stream: The already-subscribed reload stream to iterate, or `nil`
+    ///     for a registry that never reloads.
+    ///   - agent: The search agent each publication is forwarded to.
+    ///   - tally: The tally each forward is recorded into.
+    /// - Returns: The subscription task; the caller cancels it once done
+    ///   observing.
+    static func forward(
+        _ stream: AsyncStream<[SkillMetadata]>?, to agent: SkillSearchAgent, recordingInto tally: EventTally
+    ) -> Task<Void, Never> {
+        Task {
+            guard let stream else { return }
+            for await metadata in stream {
+                await agent.update(items: metadata)
+                await tally.record()
+            }
         }
     }
 
@@ -92,6 +125,31 @@ enum ReloadTestSupport {
         let afterSettling = await Self.poll(countGetter, until: { $0 >= baseline + 2 }, timeout: settleWindow)
         #expect(afterSettling == baseline + 1)
         return afterSettling
+    }
+
+    /// How long a wait gives an expected publication before it treats the
+    /// absence as a failure. The value is generous against the scheduler
+    /// jitter of a loaded parallel run.
+    static let expectedSignalTimeout: Duration = .seconds(10)
+
+    /// How long a wait keeps watching, after an expected publication
+    /// arrived, to confirm that no second publication follows it.
+    static let noFurtherSignalWindow: Duration = .seconds(1)
+
+    /// Asserts that exactly one new event lands on `tally` after `baseline`,
+    /// with ``expectedSignalTimeout`` and ``noFurtherSignalWindow``.
+    ///
+    /// - Parameters:
+    ///   - tally: The tally to assert against.
+    ///   - baseline: The count observed before the action under test. The
+    ///     default is `0`, for a tally that the action started empty.
+    /// - Returns: The settled count, for chaining a further action's
+    ///   `baseline` in the same test.
+    @discardableResult
+    static func expectExactlyOneEvent(_ tally: EventTally, since baseline: Int = 0) async -> Int {
+        await expectExactlyOneEvent(
+            countGetter: { await tally.count }, since: baseline,
+            signalTimeout: expectedSignalTimeout, settleWindow: noFurtherSignalWindow)
     }
 
     // MARK: - Fixture file helpers

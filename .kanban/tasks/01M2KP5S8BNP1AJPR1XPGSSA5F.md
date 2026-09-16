@@ -63,8 +63,25 @@ comments:
     - confirmed: `aSecondStartFinishesWhileAPassHoldsTheWriterLock()` in `MarketplacePinTests.swift` passed
     - next: ready for review
   timestamp: 2026-09-15T23:44:04.857010+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01m2kqdwz5vkg257en5gwxtz52
+  text: |-
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (commit 912af73) — 0 findings, 0 confirmed, 0 refuted, 7 attempted, 0 failed. 2 files reviewed; 4 `.kanban/` files excluded by `.reviewignore`.
+    - next: all prior checklist items are marked; task moved to `done`.
+  timestamp: 2026-09-15T23:46:25.893833+00:00
+- actor: claude-code
+  id: 01m2kqe6kxa37ksagx138j64er
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — Sources/FoundationModelsSkills/Marketplace/MarketplaceCache.swift, Tests/FoundationModelsSkillsTests/MarketplacePinTests.swift
+    - test: green — swift test, 677 tests in 51 suites, 0 failed, 0 warnings
+    - commit: 912af73 fix(marketplace): make the writer lock non-blocking to stop an actor deadlock
+    - review: clean — review sha HEAD~1..HEAD, 0 findings, 2 files
+    - result: the card is in done
+  timestamp: 2026-09-15T23:46:35.773560+00:00
+position_column: done
+position_ordinal: dd80
 title: 'MarketplaceCache: a blocking flock can wait on a holder that needs the actor'
 ---
 ## What
