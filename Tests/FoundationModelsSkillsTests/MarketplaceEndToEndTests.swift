@@ -383,11 +383,11 @@ struct MarketplaceEndToEndTests {
         private static func tree(
             name: String, header: String, skills: [(id: String, body: String)]
         ) -> [String: GitFixtureRepository.Entry] {
-            let paths = skills.map { #""./skills/\#($0.id)""# }.joined(separator: ", ")
+            let paths = skills.lazy.map { #""./skills/\#($0.id)""# }.joined(separator: ", ")
             let catalog = #"""
                 {"name": "\#(name)", "plugins": [{"name": "skills", "source": "./", "skills": [\#(paths)]}]}
                 """#
-            let skillFiles = skills.map { skill in
+            let skillFiles = skills.lazy.map { skill in
                 (
                     "skills/\(skill.id)/SKILL.md",
                     GitFixtureRepository.Entry.file(

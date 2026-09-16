@@ -3,6 +3,7 @@ import FoundationModels
 import FoundationModelsMetadataRegistry
 import FoundationModelsSkills
 import Operations
+import Synchronization
 import Testing
 
 /// The explicit, named hot-reload end-to-end case (plan.md §13, an M4
@@ -34,18 +35,6 @@ import Testing
 /// waits on the identical reload signal shape (review findings, 2026-07-29
 /// 21:57).
 struct HotReloadTests {
-    /// How long the test waits for an expected `update(items:)` call to
-    /// reach the searcher before treating its absence as a failure.
-    /// Generous relative to `SkillWatcher`'s default 200ms debounce interval
-    /// to absorb scheduler and filesystem-event jitter in a sandboxed test
-    /// environment (mirrors `SkillsRegistryReloadTests.expectedSignalTimeout`).
-    private static let expectedSignalTimeout: Duration = .seconds(10)
-
-    /// How long the test waits, after an expected `update(items:)` call
-    /// already arrived, to confirm no *second* call follows it (mirrors
-    /// `SkillsRegistryReloadTests.noFurtherSignalWindow`).
-    private static let noFurtherSignalWindow: Duration = .seconds(1)
-
     // MARK: - The five §13 steps, in one deterministic scenario
 
     @Test
@@ -182,7 +171,8 @@ struct HotReloadTests {
             extraFrontmatter: "preload: true\ndisable-model-invocation: true\n",
             body: "Preload payload v1 for charlie.")
 
-        let blocked = await Self.waitUntilBlockedOrTimeout(embedGate, timeout: Self.expectedSignalTimeout)
+        let blocked = await Self.waitUntilBlockedOrTimeout(
+            embedGate, timeout: ReloadTestSupport.expectedSignalTimeout)
         #expect(blocked, "expected the embed catch-up to have started (and be blocked on the gate) by now")
 
         let searchJSON = try await tool.call(
@@ -200,7 +190,7 @@ struct HotReloadTests {
         await Self.expectExactlyOneUpdate(updates, since: 0)
 
         let caughtUp = await Self.waitForDiagnostic(
-            diagnostics, timeout: Self.expectedSignalTimeout
+            diagnostics, timeout: ReloadTestSupport.expectedSignalTimeout
         ) { diagnostic in
             if case .embedCatchUp(_, let total) = diagnostic { return total == 2 }
             return false
@@ -238,7 +228,8 @@ struct HotReloadTests {
             extraFrontmatter: "preload: true\ndisable-model-invocation: true\n",
             body: "Preload payload v2 for charlie.")
         await Self.expectExactlyOneUpdate(updates, since: baseline)
-        await Self.waitForEmbeddedTextCount(embedder, atLeast: countBeforeEdit + 1, timeout: Self.expectedSignalTimeout)
+        await Self.waitForEmbeddedTextCount(
+            embedder, atLeast: countBeforeEdit + 1, timeout: ReloadTestSupport.expectedSignalTimeout)
         let countAfterRealEdit = embedder.embeddedTextCount
         #expect(
             countAfterRealEdit == countBeforeEdit + 1,
@@ -412,8 +403,8 @@ struct HotReloadTests {
 
     /// Asserts that exactly one new `update(items:)` call lands on `recorder`
     /// after `baseline`: the count reaches `baseline + 1` within
-    /// `expectedSignalTimeout`, and stays there through
-    /// `noFurtherSignalWindow`.
+    /// `ReloadTestSupport.expectedSignalTimeout`, and stays there through
+    /// `ReloadTestSupport.noFurtherSignalWindow`.
     ///
     /// - Parameters:
     ///   - recorder: The recorder to assert against.
@@ -421,7 +412,8 @@ struct HotReloadTests {
     private static func expectExactlyOneUpdate(_ recorder: ReloadTestSupport.EventTally, since baseline: Int) async {
         await ReloadTestSupport.expectExactlyOneEvent(
             countGetter: { await recorder.count }, since: baseline,
-            signalTimeout: Self.expectedSignalTimeout, settleWindow: Self.noFurtherSignalWindow)
+            signalTimeout: ReloadTestSupport.expectedSignalTimeout,
+            settleWindow: ReloadTestSupport.noFurtherSignalWindow)
     }
 
     // MARK: - Diagnostic recorder
@@ -429,28 +421,20 @@ struct HotReloadTests {
     /// Tallies every `MetadataDiagnostic` the searcher under test emits,
     /// mirroring `FoundationModelsMetadataRegistryTests.DiagnosticRecorder`.
     ///
-    /// `@unchecked Sendable`: every access to `diagnostics` goes through
-    /// `record(_:)` or `snapshot`, both of which hold `lock` for their
-    /// entire critical section.
-    private final class DiagnosticRecorder: @unchecked Sendable {
-        private let lock = NSLock()
-        private var diagnostics: [MetadataDiagnostic] = []
+    /// A `Mutex` holds the recorded diagnostics, thus the compiler itself
+    /// checks the plain `Sendable` conformance.
+    private final class DiagnosticRecorder: Sendable {
+        private let diagnostics = Mutex<[MetadataDiagnostic]>([])
 
         /// Records `diagnostic` as observed.
         ///
         /// - Parameter diagnostic: The diagnostic to record.
         func record(_ diagnostic: MetadataDiagnostic) {
-            lock.lock()
-            defer { lock.unlock() }
-            diagnostics.append(diagnostic)
+            diagnostics.withLock { $0.append(diagnostic) }
         }
 
         /// A snapshot of every diagnostic recorded so far.
-        var snapshot: [MetadataDiagnostic] {
-            lock.lock()
-            defer { lock.unlock() }
-            return diagnostics
-        }
+        var snapshot: [MetadataDiagnostic] { diagnostics.withLock { $0 } }
     }
 
     /// Polls `recorder` until some recorded diagnostic satisfies `matches`,
@@ -515,18 +499,16 @@ struct HotReloadTests {
     /// protocol's default `fork()` (returns `self`) since nothing here needs
     /// to assert on fork call counts.
     ///
-    /// `final class ... @unchecked Sendable`: `respond(to:)` needs to
-    /// advance a call index across an `await` boundary; state lives behind
-    /// `lock`, mirroring `EmbedCallCounter`'s pattern in
-    /// `HotReloadTestSupport`.
-    private final class ScriptedAgentSession: AgentSession, @unchecked Sendable {
+    /// A `Mutex` holds the call index that `respond(to:)` advances across an
+    /// `await` boundary, thus the compiler itself checks the plain
+    /// `Sendable` conformance.
+    private final class ScriptedAgentSession: AgentSession, Sendable {
         /// Thrown once every scripted response has been consumed -- a test
         /// bug (an under-scripted fixture), never expected in practice.
         private struct ExhaustedScriptedResponses: Error {}
 
         private let responses: [String]
-        private let lock = NSLock()
-        private var callIndex = 0
+        private let callIndex = Mutex(0)
 
         /// Creates a scripted session that returns `responses` in order, one
         /// per `respond(to:)` call.
@@ -538,9 +520,9 @@ struct HotReloadTests {
         }
 
         func respond(to prompt: String) async throws -> String {
-            let index = lock.withLock { () -> Int in
-                let index = callIndex
-                callIndex += 1
+            let index = callIndex.withLock { current -> Int in
+                let index = current
+                current += 1
                 return index
             }
             guard index < responses.count else { throw ExhaustedScriptedResponses() }
@@ -557,12 +539,11 @@ struct HotReloadTests {
     /// so `callCount` reaching `2` after a reload is itself proof the tier
     /// was rebuilt, not merely reused.
     ///
-    /// `final class ... @unchecked Sendable`: mirrors `EmbedCallCounter`'s
-    /// lock-guarded-state pattern.
-    private final class SelectionSessionFactory: @unchecked Sendable {
+    /// A `Mutex` holds the call index, thus the compiler itself checks the
+    /// plain `Sendable` conformance.
+    private final class SelectionSessionFactory: Sendable {
         private let responsesPerCall: [[String]]
-        private let lock = NSLock()
-        private var callIndex = 0
+        private let callIndex = Mutex(0)
 
         /// Creates a factory that vends one freshly-scripted session per
         /// call, drawing that call's canned responses from
@@ -575,21 +556,18 @@ struct HotReloadTests {
         }
 
         /// How many times `makeSession()` has been called so far.
-        var callCount: Int {
-            lock.lock()
-            defer { lock.unlock() }
-            return callIndex
-        }
+        var callCount: Int { callIndex.withLock { $0 } }
 
         /// Creates and returns the next freshly-scripted session --
         /// `SelectionConfig`'s `model` factory parameter. The closure
         /// ignores the `instructions` text, because a scripted session
         /// gives the same answers for all instructions.
         func makeSession() -> any AgentSession {
-            lock.lock()
-            let index = callIndex
-            callIndex += 1
-            lock.unlock()
+            let index = callIndex.withLock { current -> Int in
+                let index = current
+                current += 1
+                return index
+            }
             let responses = index < responsesPerCall.count ? responsesPerCall[index] : []
             return ScriptedAgentSession(responses)
         }

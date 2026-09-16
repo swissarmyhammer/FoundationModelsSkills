@@ -16,18 +16,6 @@ import Testing
 /// `ReloadTestSupport`, not reimplemented here -- `HotReloadTests` waits on
 /// the identical reload signal shape (review findings, 2026-07-29 21:57).
 struct SkillsRegistryReloadTests {
-    /// How long a test waits for an expected `onReload` publication to
-    /// arrive before treating its absence as a failure. Generous relative to
-    /// `SkillWatcher`'s default 200ms debounce interval to absorb scheduler
-    /// and filesystem-event jitter in a sandboxed test environment (mirrors
-    /// `SkillWatcherTests.expectedSignalTimeout`).
-    private static let expectedSignalTimeout: Duration = .seconds(10)
-
-    /// How long a test waits, after an expected publication already
-    /// arrived, to confirm no *second* publication follows it (mirrors
-    /// `SkillWatcherTests.noFurtherSignalWindow`).
-    private static let noFurtherSignalWindow: Duration = .seconds(1)
-
     // MARK: - Editing triggers exactly one rebuild and one onReload publication
 
     @Test func editingASkillFileTriggersExactlyOneRebuildAndOneOnReloadPublicationWithRefreshedMetadata()
@@ -273,7 +261,7 @@ struct SkillsRegistryReloadTests {
 
         try ReloadTestSupport.writeSkillFile(id: "static-skill", in: root, descriptionSuffix: "after edit")
         // Gives an incorrectly-wired watcher a chance to fire before asserting nothing changed.
-        try await Task.sleep(for: Self.noFurtherSignalWindow)
+        try await Task.sleep(for: ReloadTestSupport.noFurtherSignalWindow)
 
         let entry = try #require(registry.metadata().first { $0.id == "static-skill" })
         #expect(entry.description.contains("before edit"))
@@ -317,11 +305,11 @@ struct SkillsRegistryReloadTests {
 
         for iteration in 1...5 {
             try ReloadTestSupport.writeSkillFile(id: "burst-skill", in: root, descriptionSuffix: "v\(iteration)")
-            await Self.expectCount(onReloadTally, atLeast: iteration, timeout: Self.expectedSignalTimeout)
+            await Self.expectCount(onReloadTally, atLeast: iteration, timeout: ReloadTestSupport.expectedSignalTimeout)
         }
         // A settling window so a coalesced extra tick (there shouldn't be
         // one) would still show up before the final tally read.
-        try await Task.sleep(for: Self.noFurtherSignalWindow)
+        try await Task.sleep(for: ReloadTestSupport.noFurtherSignalWindow)
 
         let onReloadCount = await onReloadTally.count
         let commandUpdatesCount = await commandUpdatesTally.count
@@ -340,7 +328,7 @@ struct SkillsRegistryReloadTests {
         defer { earlySubscription.cancel() }
 
         try ReloadTestSupport.writeSkillFile(id: "late-subscriber-skill", in: root, descriptionSuffix: "v1")
-        await Self.expectCount(earlyTally, atLeast: 1, timeout: Self.expectedSignalTimeout)
+        await Self.expectCount(earlyTally, atLeast: 1, timeout: ReloadTestSupport.expectedSignalTimeout)
 
         // A fresh subscription, registered only now -- after the first
         // reload already happened -- must still observe every reload from
@@ -350,8 +338,8 @@ struct SkillsRegistryReloadTests {
         defer { lateSubscription.cancel() }
 
         try ReloadTestSupport.writeSkillFile(id: "late-subscriber-skill", in: root, descriptionSuffix: "v2")
-        await Self.expectCount(lateTally, atLeast: 1, timeout: Self.expectedSignalTimeout)
-        await Self.expectCount(earlyTally, atLeast: 2, timeout: Self.expectedSignalTimeout)
+        await Self.expectCount(lateTally, atLeast: 1, timeout: ReloadTestSupport.expectedSignalTimeout)
+        await Self.expectCount(earlyTally, atLeast: 2, timeout: ReloadTestSupport.expectedSignalTimeout)
 
         let lateCount = await lateTally.count
         #expect(lateCount == 1)
@@ -381,8 +369,8 @@ struct SkillsRegistryReloadTests {
         }
         defer { commandUpdatesSubscription.cancel() }
 
-        await Self.expectFinishes(onReloadFinished, timeout: Self.expectedSignalTimeout)
-        await Self.expectFinishes(commandUpdatesFinished, timeout: Self.expectedSignalTimeout)
+        await Self.expectFinishes(onReloadFinished, timeout: ReloadTestSupport.expectedSignalTimeout)
+        await Self.expectFinishes(commandUpdatesFinished, timeout: ReloadTestSupport.expectedSignalTimeout)
     }
 
     // MARK: - Watcher lifecycle owned by the registry
@@ -403,7 +391,7 @@ struct SkillsRegistryReloadTests {
         defer { subscription.cancel() }
 
         try ReloadTestSupport.writeSkillFile(id: "short-lived-skill", in: root, descriptionSuffix: "v2")
-        try await Task.sleep(for: Self.noFurtherSignalWindow)
+        try await Task.sleep(for: ReloadTestSupport.noFurtherSignalWindow)
 
         #expect(await recorder.publications.isEmpty)
     }
@@ -496,8 +484,8 @@ struct SkillsRegistryReloadTests {
 
     /// Asserts that exactly one new publication lands on `recorder` after
     /// `baseline`: the count reaches `baseline + 1` within
-    /// `expectedSignalTimeout`, and stays there through
-    /// `noFurtherSignalWindow`.
+    /// `ReloadTestSupport.expectedSignalTimeout`, and stays there through
+    /// `ReloadTestSupport.noFurtherSignalWindow`.
     ///
     /// Mirrors `SkillWatcherTests.expectExactlyOneSignal(_:since:)`.
     ///
@@ -513,7 +501,7 @@ struct SkillsRegistryReloadTests {
     {
         await ReloadTestSupport.expectExactlyOneEvent(
             countGetter: { await recorder.publications.count }, since: baseline,
-            signalTimeout: Self.expectedSignalTimeout, settleWindow: Self.noFurtherSignalWindow)
+            signalTimeout: ReloadTestSupport.expectedSignalTimeout, settleWindow: ReloadTestSupport.noFurtherSignalWindow)
     }
 
     /// Writes `id/SKILL.md` directly under `directory` with no `description:`

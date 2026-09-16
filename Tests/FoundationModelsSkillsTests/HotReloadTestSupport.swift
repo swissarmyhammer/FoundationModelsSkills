@@ -1,5 +1,6 @@
 import Foundation
 import FoundationModelsMetadataRegistry
+import Synchronization
 
 /// Shared fixture-directory helper for `HotReloadTests` and
 /// `HotReloadLiveTests` -- both drive a real, watched temp `.skills` root and
@@ -72,30 +73,20 @@ final class FakeEmbedder: TextEmbedding {
 
 /// A thread-safe call counter for ``FakeEmbedder``.
 ///
-/// `@unchecked Sendable`: every access to `value` goes through `count`
-/// or `increment(by:)`, both of which hold `lock` for their entire
-/// critical section.
-final class EmbedCallCounter: @unchecked Sendable {
-    /// Guards ``value``.
-    private let lock = NSLock()
+/// A `Mutex` holds the running total, thus the compiler itself checks the
+/// plain `Sendable` conformance.
+final class EmbedCallCounter: Sendable {
+    /// The running total, which the mutex guards.
+    private let total = Mutex(0)
 
-    /// The running total.
-    private var value = 0
-
-    /// The running total, read under the lock.
-    var count: Int {
-        lock.lock()
-        defer { lock.unlock() }
-        return value
-    }
+    /// The running total, read under the mutex.
+    var count: Int { total.withLock { $0 } }
 
     /// Adds `amount` to the running count.
     ///
     /// - Parameter amount: The amount to add.
     func increment(by amount: Int) {
-        lock.lock()
-        defer { lock.unlock() }
-        value += amount
+        total.withLock { $0 += amount }
     }
 }
 

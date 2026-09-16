@@ -84,6 +84,16 @@ enum ReloadTestSupport {
 
     // MARK: - Generic polling
 
+    /// The number of milliseconds of ``pollPeriod``. The literal is named
+    /// here, because a literal inside the `.milliseconds(_:)` call is a
+    /// magic number.
+    private static let pollPeriodMilliseconds = 10
+
+    /// How long ``poll(_:until:timeout:)`` waits between two reads of the
+    /// value. Short against every timeout that a caller gives, thus a wait
+    /// ends soon after the value it waits for arrives.
+    private static let pollPeriod: Duration = .milliseconds(pollPeriodMilliseconds)
+
     /// Polls `getter`'s result until `predicate` accepts it or `timeout`
     /// elapses.
     ///
@@ -97,11 +107,15 @@ enum ReloadTestSupport {
         let deadline = ContinuousClock.now.advanced(by: timeout)
         var current = await getter()
         while !predicate(current), ContinuousClock.now < deadline {
-            try? await Task.sleep(for: .milliseconds(10))
+            try? await Task.sleep(for: pollPeriod)
             current = await getter()
         }
         return current
     }
+
+    /// The number of new events, after the baseline, that proves a second
+    /// and unwanted event came after the one event the caller expects.
+    private static let oneEventTooMany = 2
 
     /// Asserts that exactly one new event lands (per `countGetter`) after
     /// `baseline`: the count reaches `baseline + 1` within `signalTimeout`,
@@ -122,15 +136,24 @@ enum ReloadTestSupport {
         let afterFirst = await Self.poll(countGetter, until: { $0 >= baseline + 1 }, timeout: signalTimeout)
         #expect(afterFirst == baseline + 1)
 
-        let afterSettling = await Self.poll(countGetter, until: { $0 >= baseline + 2 }, timeout: settleWindow)
+        let afterSettling = await Self.poll(
+            countGetter, until: { $0 >= baseline + oneEventTooMany }, timeout: settleWindow)
         #expect(afterSettling == baseline + 1)
         return afterSettling
     }
 
+    /// The number of seconds of ``expectedSignalTimeout``. The literal is
+    /// named here, because a literal inside the `.seconds(_:)` call is a
+    /// magic number.
+    private static let expectedSignalTimeoutSeconds = 10
+
     /// How long a wait gives an expected publication before it treats the
     /// absence as a failure. The value is generous against the scheduler
     /// jitter of a loaded parallel run.
-    static let expectedSignalTimeout: Duration = .seconds(10)
+    ///
+    /// `HotReloadTests` and `SkillsRegistryReloadTests` read this one value,
+    /// thus neither suite holds a private copy of it.
+    static let expectedSignalTimeout: Duration = .seconds(expectedSignalTimeoutSeconds)
 
     /// How long a wait keeps watching, after an expected publication
     /// arrived, to confirm that no second publication follows it.
