@@ -85,12 +85,31 @@ comments:
     - No run was red. No test was skipped.
     - next: hand off to the review step.
   timestamp: 2026-09-16T00:40:33.751925+00:00
+- actor: claude-code
+  id: 01m2ktpv7y91s5jfqwwdgxqm46
+  text: |-
+    ### review — clean
+    - scope: `review sha HEAD~1..HEAD` (commit 08f5cba), 5 files reviewed, 2 excluded by `.reviewignore` (`.kanban/`)
+    - evidence: 0 findings, 0 confirmed, 0 refuted, 7 validators attempted, 0 failed, 0 skipped
+    - prior findings: all three items of the 2026-09-15 19:04 section are checked
+    - next: card moved to `done`. No commit and no push in this step.
+  timestamp: 2026-09-16T00:43:44.766490+00:00
+- actor: claude-code
+  id: 01m2ktq5bmcjxw2tynwkzbhs2v
+  text: |-
+    ### finish iteration 2 — clean
+    - implement: changed — 5 files: HotReloadTestSupport, MarketplaceEndToEndTests, ReloadTestSupport, HotReloadTests, SkillsRegistryReloadTests
+    - test: green — swift test x5, each 678 tests in 52 suites, 0 failed, 0 skipped
+    - commit: 08f5cba fix(tests): use Mutex-backed types and named timeout values
+    - review: clean — 0 findings, 7 validators, 5 files
+    - result: the card is in done. All 3 findings of iteration 1 are corrected and ticked.
+  timestamp: 2026-09-16T00:43:55.124717+00:00
 depends_on:
 - 01M2H125CCEZMT2PZAW6DRYE1R
 - 01M2H0ZGHTB3M84QY776YSQYVJ
 - 01M2H0ZTENV1JH7AW6ABAXZHC5
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: de80
 title: 'End-to-end marketplace test: fetch, local override, scoped partials, update, one reload'
 ---
 ## What

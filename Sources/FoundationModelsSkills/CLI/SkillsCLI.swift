@@ -34,6 +34,42 @@ public enum SkillsCLI {
         return try OperationCLIDriver(tool: tool, executableName: Self.executableName)
     }
 
+    /// The first argument that names the `marketplace` command group.
+    public static let marketplaceCommandName = MarketplaceCLI.commandName
+
+    /// Runs the `marketplace` command group when `arguments` names it
+    /// (marketplace.md §9.2).
+    ///
+    /// This is how a host puts the group next to the `OperationCLIDriver`
+    /// tree that ``makeDriver(registry:)`` builds: the host offers the
+    /// arguments here first, and it gives them to the driver when the call
+    /// gives `nil`. Marketplace control is a host function and a
+    /// command-line function, thus the fused `skills` tool gets no operation
+    /// from it and ``makeDriver(registry:)`` does not change.
+    ///
+    /// ```swift
+    /// let arguments = Array(CommandLine.arguments.dropFirst())
+    /// let result = await SkillsCLI.runMarketplace(arguments: arguments)
+    ///     ?? SkillsCLI.makeDriver(registry: registry).run(arguments: arguments)
+    /// ```
+    ///
+    /// - Parameters:
+    ///   - arguments: The arguments of the command, with no executable name.
+    ///   - context: Where the group reads its configuration and its cache.
+    ///     The default is the `skills` stack of the working folder of this
+    ///     process.
+    /// - Returns: What the group gave, or `nil` when the first argument names
+    ///   another command. A host writes the output of a result with a
+    ///   non-zero exit code to standard error.
+    public static func runMarketplace(
+        arguments: [String], context: MarketplaceCLIContext = MarketplaceCLIContext()
+    ) async -> MarketplaceCLIResult? {
+        guard arguments.first == Self.marketplaceCommandName else {
+            return nil
+        }
+        return await MarketplaceCLI.run(arguments: Array(arguments.dropFirst()), context: context)
+    }
+
     /// Builds the CLI-facing `SkillsToolContext`: `registry` unchanged, a
     /// `visibilityPredicate` matching `registry.commandListing()`'s ids, and
     /// a search agent seeded from that same subset.
