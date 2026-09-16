@@ -52,6 +52,7 @@ internal enum MarketplaceCLITable {
     private static func line(ofCells cells: [String], widths: [Int]) -> String {
         let lastColumn = widths.count - 1
         return widths.indices
+            .lazy
             .map { column in
                 let text = cell(ofRow: cells, atColumn: column)
                 return column == lastColumn ? text : padded(text, toWidth: widths[column])

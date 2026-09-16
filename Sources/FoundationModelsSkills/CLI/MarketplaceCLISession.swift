@@ -80,7 +80,7 @@ internal final class MarketplaceCLISession: Sendable {
     /// - Returns: The text, or the empty text when the run wrote no line or
     ///   when the session writes to standard output.
     func text() -> String {
-        lines.withLock { $0 }.map { "\($0)\(Self.lineBreak)" }.joined()
+        lines.withLock { $0 }.lazy.map { "\($0)\(Self.lineBreak)" }.joined()
     }
 
     // MARK: - The configuration
