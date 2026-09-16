@@ -1,6 +1,8 @@
 import Foundation
 import Testing
 
+@testable import FoundationModelsSkills
+
 /// The living contract test for `Examples/skills-demo` (plan.md §11):
 /// launches the built `skills-demo` executable as a subprocess and asserts
 /// on its stdout/exit codes for every `^spe0vvs` acceptance criterion.
@@ -8,8 +10,8 @@ import Testing
 /// Mirrors `FoundationModelsExtras`'s own `ExtrasDemoIntegrationTests`
 /// subprocess-harness pattern. Deliberately spawns the real binary rather
 /// than importing the demo's own types: the point is proving the example's
-/// own construction path -- CLI, `--chat`, `--watch` -- round-trips end to
-/// end exactly as a user running it would see.
+/// own construction path -- CLI, `--chat`, `--watch`, `--marketplace` --
+/// round-trips end to end exactly as a user running it would see.
 @Suite struct SkillsDemoTests {
 
     // MARK: - Locating the built binary
@@ -129,5 +131,49 @@ import Testing
         process.waitUntilExit()
 
         #expect(process.terminationStatus == 0)
+    }
+
+    // MARK: - `--marketplace` mode: the marketplace command group
+
+    /// The flag that switches the demo into marketplace control mode.
+    private static let marketplaceFlag = "--marketplace"
+
+    /// The alias of the one marketplace of the fixture `marketplaces.yaml`.
+    private static let fixtureMarketplaceAlias = "demo-skills"
+
+    /// A subcommand name that the `marketplace` command group does not hold.
+    private static let unknownSubcommand = "no-such-subcommand"
+
+    @Test func marketplaceModeListsTheConfiguredSources() throws {
+        try WatcherTestSupport.withTempDirectory { cacheDirectory in
+            let result = try Self.run(
+                arguments: [Self.marketplaceFlag, "list"],
+                environment: Self.environment(cacheDirectory: cacheDirectory))
+
+            #expect(result.exitCode == 0)
+            #expect(result.output.contains(Self.fixtureMarketplaceAlias))
+        }
+    }
+
+    @Test func marketplaceModeFailsOnAnUnknownSubcommand() throws {
+        try WatcherTestSupport.withTempDirectory { cacheDirectory in
+            let result = try Self.run(
+                arguments: [Self.marketplaceFlag, Self.unknownSubcommand],
+                environment: Self.environment(cacheDirectory: cacheDirectory))
+
+            #expect(result.exitCode != 0)
+            #expect(result.output.contains(Self.unknownSubcommand))
+        }
+    }
+
+    /// The subprocess environment that names one temporary cache folder, thus
+    /// no marketplace case reads or writes the cache folder of this user.
+    ///
+    /// - Parameter cacheDirectory: The folder that holds the cache.
+    /// - Returns: The environment of this process, with the cache variable set.
+    private static func environment(cacheDirectory: URL) -> [String: String] {
+        var environment = ProcessInfo.processInfo.environment
+        environment[MarketplaceCache.cacheVariable] = cacheDirectory.path
+        return environment
     }
 }

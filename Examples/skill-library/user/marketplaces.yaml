@@ -1,0 +1,10 @@
+# The marketplace source list of the user layer of the fixture library
+# (marketplace.md §6.3). `skills-demo --marketplace list` shows this source.
+#
+# The entry is a `github:owner/repo` form, thus `list` reads only the disk and
+# the demo opens no connection. `autoUpdate` is off, thus no demo run fetches
+# this marketplace by itself.
+marketplaces:
+  - url: github:swissarmyhammer/skills
+    alias: demo-skills
+    autoUpdate: false

@@ -9,6 +9,10 @@ comments:
     - `marketplace.md` §6.2 says that `alias` "wins over the catalog name". The new §5.3 text (commit 9ca51d5) says that the pre-fetch key (alias, else the repository name) sets validation and the cache folder name, and that the catalog name is the display id after a fetch. Change §6.2 so that it agrees with §5.3.
     - ^n3yvh8r added four validation rules that the plan did not state. Describe them in `docs/marketplaces.md`: a git URL must end in `.git`; an HTTPS URL with a user name or a password is refused (credentials come from `MarketplacePolicy.credentials`); a local folder has no ref and no sha; a pre-fetch key that is empty, or that has a `/` or a NUL character, is refused.
   timestamp: 2026-09-15T12:51:53.167809+00:00
+- actor: claude-code
+  id: 01m2kx26vgrdycgsba1rs90acj
+  text: 'From ^zn3f3ym (the `skills-demo --marketplace` mode): `plan.md` §11 still says that `skills-demo` is "one binary, three modes" and lists the default CLI, `--chat`, and `--watch`. The binary now holds a fourth mode, `--marketplace`. Correct that line with the other documentation work of this card.'
+  timestamp: 2026-09-16T01:24:54.256999+00:00
 depends_on:
 - 01M2H13QJ24K9102WB19Z3SQS1
 - 01M2H141Y80CJR0NPGAVEGYN0M
