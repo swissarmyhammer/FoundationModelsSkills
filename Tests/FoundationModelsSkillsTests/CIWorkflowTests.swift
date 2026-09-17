@@ -303,17 +303,15 @@ struct CIWorkflowTests {
 
     /// Reads `.github/workflows/ci.yml` from the package root.
     ///
-    /// The root comes from ``FixtureLibrary/packageRoot(thisFile:)``, which
-    /// walks up from this file's own `#filePath`. This test target resolves
-    /// the package root only there, thus the workflow file is found the same
-    /// way as every fixture.
+    /// The read goes through ``FixtureLibrary/readText(relativePath:thisFile:)``,
+    /// which walks up from the calling file's own `#filePath`. That is the one
+    /// file reader of this test target, thus the workflow file is found the
+    /// same way as every fixture.
     ///
     /// - Returns: Each line of the workflow file.
     /// - Throws: An error when the file cannot be read.
     private static func workflowLines() throws -> [Substring] {
-        let workflow = FixtureLibrary.packageRoot()
-            .appendingPathComponent(".github/workflows/ci.yml")
-        return Self.lines(of: try String(contentsOf: workflow, encoding: .utf8))
+        Self.lines(of: try FixtureLibrary.readText(relativePath: ".github/workflows/ci.yml"))
     }
 
     /// Cuts workflow text into lines.

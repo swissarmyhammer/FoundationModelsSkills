@@ -103,14 +103,56 @@ enum FixtureLibrary {
     ///   - thisFile: Forwarded to `root(thisFile:)`.
     /// - Returns: The resolved fixture URL.
     static func url(relativePath: String, thisFile: String = #filePath) -> URL {
+        resolve(relativePath: relativePath, under: root(thisFile: thisFile))
+    }
+
+    /// Reads the file at `relativePath` -- e.g. `"docs/marketplaces.md"` --
+    /// resolved against `packageRoot(thisFile:)`, as UTF-8 text.
+    ///
+    /// The one file reader of this test target. Suites that hold the
+    /// documentation and the manifests of this package to the behavior that
+    /// shipped read their files through it, thus no suite keeps its own copy
+    /// of the same two lines.
+    ///
+    /// The read is deliberately unguarded: an absent file must fail the case
+    /// that reads it, and must never make that case pass on an empty string.
+    ///
+    /// `relativePath` obeys the same rule as ``url(relativePath:thisFile:)``:
+    /// no `..` component, and no `/` or `~` prefix, thus every file read stays
+    /// under the package root.
+    ///
+    /// - Parameters:
+    ///   - relativePath: A path relative to the package root, with no `..`
+    ///     traversal and no leading `/` or `~`.
+    ///   - thisFile: Forwarded to `packageRoot(thisFile:)`.
+    /// - Returns: The whole text of the file.
+    /// - Throws: An error when the file is not there, or is not UTF-8 text.
+    static func readText(relativePath: String, thisFile: String = #filePath) throws -> String {
+        let file = resolve(relativePath: relativePath, under: packageRoot(thisFile: thisFile))
+        return try String(contentsOf: file, encoding: .utf8)
+    }
+
+    /// Appends `relativePath` to `base`, and refuses a path that could leave
+    /// `base`.
+    ///
+    /// This is test-support code that builds filesystem paths from
+    /// caller-supplied strings. A rejected traversal keeps every resolved URL
+    /// under `base`.
+    ///
+    /// - Parameters:
+    ///   - relativePath: The path to append, with no `..` traversal and no
+    ///     leading `/` or `~`.
+    ///   - base: The directory the path resolves against.
+    /// - Returns: The resolved URL.
+    private static func resolve(relativePath: String, under base: URL) -> URL {
         let components = relativePath.split(separator: "/", omittingEmptySubsequences: true)
         precondition(
             !relativePath.hasPrefix("/") && !relativePath.hasPrefix("~")
                 && !components.contains(".."),
-            "FixtureLibrary.url: relativePath must not be absolute or contain \"..\" "
+            "FixtureLibrary: relativePath must not be absolute or contain \"..\" "
                 + "traversal, got \"\(relativePath)\""
         )
-        return root(thisFile: thisFile).appendingPathComponent(relativePath)
+        return base.appendingPathComponent(relativePath)
     }
 
     /// Builds a `SkillsToolContext` over `registry`, with a real,

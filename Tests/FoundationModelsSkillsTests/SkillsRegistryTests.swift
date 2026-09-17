@@ -640,9 +640,8 @@ struct SkillsRegistryTests {
     // MARK: - No directory-convention literal in registry source
 
     @Test func registrySourceNamesNoDotfolderConventionLiteral() throws {
-        let sourceURL = FixtureLibrary.packageRoot()
-            .appendingPathComponent("Sources/FoundationModelsSkills/Registry/SkillsRegistry.swift")
-        let text = try String(contentsOf: sourceURL, encoding: .utf8)
+        let text = try FixtureLibrary.readText(
+            relativePath: "Sources/FoundationModelsSkills/Registry/SkillsRegistry.swift")
         for forbidden in [".skills", ".config", "~"] {
             #expect(!text.contains(forbidden), "SkillsRegistry.swift must not name \"\(forbidden)\"")
         }

@@ -250,9 +250,8 @@ struct DependencyGraphTests {
     /// copy is indented, because it sits inside a function.
     @Test("the README usage block and the copy the tests compile are the same text")
     func readmeUsageBlockMatchesItsCompiledCopy() throws {
-        let root = FixtureLibrary.packageRoot()
-        let published = try Self.readmeUsageBlock(under: root)
-        let compiled = try Self.compiledUsageBlockCopy(under: root)
+        let published = try Self.readmeUsageBlock()
+        let compiled = try Self.compiledUsageBlockCopy()
         #expect(
             published == compiled,
             """
@@ -278,7 +277,7 @@ struct DependencyGraphTests {
     /// amendments that point at nothing, thus this case pins the heading.
     @Test("plan.md holds the dated decision that records the Router removal")
     func planRecordsTheRouterFreeDecision() throws {
-        let plan = try Self.planText()
+        let plan = try FixtureLibrary.readText(relativePath: Self.planFileName)
         #expect(
             plan.contains(Self.routerFreeDecisionHeading),
             """
@@ -314,19 +313,6 @@ struct DependencyGraphTests {
         )
     }
 
-    /// Reads `plan.md` from the package root.
-    ///
-    /// The read is deliberately unguarded, for the same reason as
-    /// ``resolvedIdentities()``: an absent record must fail the case, and
-    /// never make it pass on an empty string.
-    ///
-    /// - Returns: The whole decision record.
-    /// - Throws: An error when `plan.md` cannot be read.
-    private static func planText() throws -> String {
-        let plan = FixtureLibrary.packageRoot().appendingPathComponent(Self.planFileName)
-        return try String(contentsOf: plan, encoding: .utf8)
-    }
-
     /// Reads the one section of `plan.md` whose heading line begins with
     /// `heading`.
     ///
@@ -340,7 +326,8 @@ struct DependencyGraphTests {
     /// - Throws: ``MissingSectionError`` when no heading line begins with
     ///   `heading`, or an error when `plan.md` cannot be read.
     private static func planSection(startingWith heading: String) throws -> String {
-        let lines = try Self.planText().components(separatedBy: .newlines)
+        let lines = try FixtureLibrary.readText(relativePath: Self.planFileName)
+            .components(separatedBy: .newlines)
         guard let start = lines.firstIndex(where: { $0.hasPrefix(heading) }) else {
             throw MissingSectionError(heading: heading)
         }
@@ -367,15 +354,13 @@ struct DependencyGraphTests {
 
     /// Reads the README's first Swift code fence, without its `import` lines.
     ///
-    /// - Parameter root: The package root.
     /// - Returns: The block, one line for each line of the fence.
     /// - Throws: ``MissingBlockError`` when the README holds no Swift fence,
     ///   or an error when the README cannot be read. An absent block is a
     ///   failure, and never an empty string: two empty strings are equal, and
     ///   a case that compared them would prove nothing.
-    private static func readmeUsageBlock(under root: URL) throws -> String {
-        let readme = try String(
-            contentsOf: root.appendingPathComponent(Self.readmeFileName), encoding: .utf8)
+    private static func readmeUsageBlock() throws -> String {
+        let readme = try FixtureLibrary.readText(relativePath: Self.readmeFileName)
         let lines = readme.components(separatedBy: .newlines)
         guard let open = lines.firstIndex(where: { $0.hasPrefix(Self.swiftFenceOpen) }) else {
             throw MissingBlockError(what: "a \(Self.swiftFenceOpen) fence", file: Self.readmeFileName)
@@ -391,13 +376,12 @@ struct DependencyGraphTests {
     /// ``usageBlockEndMarker`` inside a test function, thus the marker lines
     /// themselves are left out and the body is dedented.
     ///
-    /// - Parameter root: The package root.
     /// - Returns: The copy, one line for each line between the markers.
     /// - Throws: ``MissingBlockError`` when either marker is absent, or an
     ///   error when the file cannot be read.
-    private static func compiledUsageBlockCopy(under root: URL) throws -> String {
-        let file = root.appendingPathComponent(Self.usageBlockCopyPath)
-        let lines = try String(contentsOf: file, encoding: .utf8).components(separatedBy: .newlines)
+    private static func compiledUsageBlockCopy() throws -> String {
+        let lines = try FixtureLibrary.readText(relativePath: Self.usageBlockCopyPath)
+            .components(separatedBy: .newlines)
         guard let start = lines.firstIndex(where: { $0.contains(Self.usageBlockStartMarker) }) else {
             throw MissingBlockError(what: "the start marker", file: Self.usageBlockCopyPath)
         }

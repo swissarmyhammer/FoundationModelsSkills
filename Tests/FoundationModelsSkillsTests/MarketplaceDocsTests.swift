@@ -1,4 +1,3 @@
-import Foundation
 import Operations
 import Testing
 
@@ -69,7 +68,7 @@ struct MarketplaceDocsTests {
 
     @Test(arguments: claims)
     func theDocumentationMakesEveryClaim(claim: DocumentClaim) throws {
-        let text = try Self.text(ofDocument: claim.document)
+        let text = try FixtureLibrary.readText(relativePath: claim.document)
 
         #expect(
             text.contains(claim.text),
@@ -83,16 +82,5 @@ struct MarketplaceDocsTests {
             The marketplace command group named no subcommand, thus the test of the host guide \
             proves nothing
             """)
-    }
-
-    /// Reads one documentation file of this package.
-    ///
-    /// - Parameter relativePath: The path of the file, from the package root.
-    /// - Returns: The full text of the file.
-    /// - Throws: The error of the file read, when the file is not there or is
-    ///   not UTF-8 text.
-    private static func text(ofDocument relativePath: String) throws -> String {
-        let file = FixtureLibrary.packageRoot().appendingPathComponent(relativePath)
-        return try String(contentsOf: file, encoding: .utf8)
     }
 }

@@ -42,6 +42,25 @@ comments:
     - evidence: `swift build --build-tests` clean (0 warnings, 0 errors). `swift test` run 1: 700 tests, 54 suites, 0 failures, 0 warnings. `swift test` run 2: 700 tests, 54 suites, 0 failures, 0 warnings. `MarketplaceDocsTests` suite passed both runs.
     - next: ready for review.
   timestamp: 2026-09-16T01:49:58.011440+00:00
+- actor: claude-code
+  id: 01m2kyrvx7ffkdh7fsnkv6qxks
+  text: |-
+    ### review — clean
+    - scope: `review sha HEAD~1..HEAD` (commit 7876a31)
+    - evidence: 0 findings, 0 confirmed, 2 refuted, 7 attempted, 0 failed. 1 file reviewed; 6 files had no validator that matches (README.md, docs/marketplaces.md, docs/operations.md, docs/security.md, marketplace.md, plan.md); 4 `.kanban/` files excluded by `.reviewignore`.
+    - prior findings: none. All description items are checked.
+    - next: task moved to `done`.
+  timestamp: 2026-09-16T01:54:45.287514+00:00
+- actor: claude-code
+  id: 01m2kys80r7jvxqg9ry9bcygey
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — docs/marketplaces.md (new), docs/security.md, docs/operations.md, README.md, marketplace.md, plan.md, Tests/FoundationModelsSkillsTests/MarketplaceDocsTests.swift (new)
+    - test: green — swift test x2, each 700 tests in 54 suites, 0 failed, 0 warnings
+    - commit: 7876a31 docs(marketplace): add the marketplace guide
+    - review: clean — 0 findings, 2 refuted, 7 validators
+    - result: the card is in done
+  timestamp: 2026-09-16T01:54:57.688565+00:00
 depends_on:
 - 01M2H13QJ24K9102WB19Z3SQS1
 - 01M2H141Y80CJR0NPGAVEGYN0M
@@ -49,8 +68,8 @@ depends_on:
 - 01M2H1PT3B5H48CG7BKZJ5B7R9
 - 01M2H1Q3VS6CRF692A1VX8MZZF
 - 01M2H1QW6Z6BN6YEF4HZN3F3YM
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: e180
 title: 'Document marketplaces: host guide, security posture, CLI, and README link'
 ---
 ## What

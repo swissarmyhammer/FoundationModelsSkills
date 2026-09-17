@@ -74,6 +74,29 @@ private let brokenFixtures = [
     #expect(root.path == "/nonexistent/example-checkout/Examples/skill-library")
 }
 
+/// The package manifest, from the package root. Read as text below, thus the
+/// test proves that ``FixtureLibrary/readText(relativePath:thisFile:)``
+/// resolves from the package root and not from the fixture library.
+private let packageManifestPath = "Package.swift"
+
+/// One fixture, from the fixture-library root.
+private let libraryRelativeFixturePath = "defaults/base-style/SKILL.md"
+
+/// The same fixture, from the package root.
+private let packageRelativeFixturePath = "Examples/skill-library/" + libraryRelativeFixturePath
+
+@Test func fixtureLibraryReadsAPackageFileAsText() throws {
+    let text = try FixtureLibrary.readText(relativePath: packageManifestPath)
+    #expect(text.contains("FoundationModelsSkills"))
+}
+
+@Test func fixtureLibraryReadsAFileGivenFromThePackageRoot() throws {
+    let fromPackageRoot = try FixtureLibrary.readText(relativePath: packageRelativeFixturePath)
+    let fromLibraryRoot = try String(
+        contentsOf: FixtureLibrary.url(relativePath: libraryRelativeFixturePath), encoding: .utf8)
+    #expect(fromPackageRoot == fromLibraryRoot)
+}
+
 @Test(arguments: happyPathFixtures)
 func fixtureLibraryResolvesHappyPathFixture(_ relativePath: String) {
     #expect(FileManager.default.fileExists(atPath: FixtureLibrary.url(relativePath: relativePath).path))
