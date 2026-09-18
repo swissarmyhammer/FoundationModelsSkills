@@ -12,7 +12,7 @@ import Yams
 ///
 /// ```yaml
 /// marketplaces:            # left to right; the last entry wins
-///   - url: git@github.com:swissarmyhammer/skills.git
+///   - url: https://github.com/swissarmyhammer/skills.git
 ///   - url: github:acme/team-skills
 ///     ref: stable
 ///     autoUpdate: false

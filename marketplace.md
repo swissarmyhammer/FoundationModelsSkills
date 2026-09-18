@@ -266,7 +266,7 @@ tag: only `.defaults` renders trusted (`StencilPass.resolvedTrust`).
 
 | Form | Example | Fetch |
 |---|---|---|
-| git SSH | `git@github.com:swissarmyhammer/skills.git` | libgit2, SSH transport |
+| git SSH | `git@github.com:swissarmyhammer/skills.git` | **not supported**: the libgit2 build has no SSH transport, and the URL gives `unsupported URL protocol` |
 | git HTTPS | `https://github.com/swissarmyhammer/skills.git` | libgit2, HTTPS transport |
 | GitHub shorthand | `github:swissarmyhammer/skills` | expands to the HTTPS git URL |
 | ref and pin | `…skills.git#v1.2.0`, or the `ref:` and `sha:` fields | `sha` wins over `ref` |
@@ -279,7 +279,7 @@ We compared the Swift options (September 2026):
 
 | Package | Result |
 |---|---|
-| [`danielctull-forks/swift-libgit2`](https://github.com/danielctull-forks/swift-libgit2) | **Selected.** libgit2 1.9.x built from source as a SwiftPM target (tags to `1.9.7`, last commit 2026-08-20). swift-tools 6.2. Product `libgit2`. HTTPS through SecureTransport. SSH through `GIT_SSH_EXEC` on macOS. An optional `libssh2` trait exists; we do not enable it. |
+| [`danielctull-forks/swift-libgit2`](https://github.com/danielctull-forks/swift-libgit2) | **Selected.** libgit2 1.9.x built from source as a SwiftPM target (tags to `1.9.7`, last commit 2026-08-20). swift-tools 6.2. Product `libgit2`. HTTPS through SecureTransport. No SSH transport: the manifest sets `GIT_SSH_EXEC` with an empty trait list, and SwiftPM never applies such a setting. An optional `libssh2` trait exists; we do not enable it. |
 | [`ibrahimcetin/libgit2`](https://github.com/ibrahimcetin/libgit2) | Same build approach (libgit2 1.9.2, `GIT_SSH_EXEC`, SecureTransport). Less recent (2025-11). This is the fallback if the selected package stops. |
 | [SwiftGitX](https://github.com/ibrahimcetin/SwiftGitX) | Rejected as the API layer. Its `fetch` calls `git_remote_fetch(remote, nil, nil, nil)`: no depth, no credentials, no progress. It has no remote ref listing. |
 | [swift-git](https://github.com/danielctull/swift-git) | Rejected as the API layer. It has `clone` but no fetch options, no remote ref listing, and no credential callbacks. |
@@ -302,10 +302,12 @@ Rules:
 - **`GitTransport` is internal and is a protocol.** The store gets a `GitTransport` value. Tests
   use a counting double (§13). If we must change the libgit2 package, only the concrete type
   changes.
-- **SSH.** `GIT_SSH_EXEC` runs the system OpenSSH. libgit2 reads `GIT_SSH_COMMAND`, then
-  `core.sshCommand`, then uses `ssh`. Thus the user's ssh-agent, `~/.ssh/config`, and
-  `known_hosts` work with no code in this package. The SSH URLs of the swissarmyhammer org
-  work as they do for `git`.
+- **SSH is not supported.** The first plan was the libgit2 exec transport (`GIT_SSH_EXEC`),
+  which runs the system OpenSSH. `swift-libgit2` 1.9.7 does not build that transport on
+  macOS: `git_libgit2_features()` has the `GIT_FEATURE_SSH` bit at `0`, and
+  `git_remote_connect` on an SSH URL gives `unsupported URL protocol` before it starts a
+  process. The user decided on 2026-09-18: no fork of `swift-libgit2`, no `libssh2` trait.
+  Use the HTTPS form of a repository. The parser still accepts the scp-like SSH form.
 - **HTTPS.** SecureTransport uses the system trust store. libgit2 does not run git credential
   helpers. For a private HTTPS source, the host gives
   `MarketplacePolicy.credentials: (URL) async -> MarketplaceCredential?` (a user name and
@@ -373,7 +375,7 @@ import FoundationModelsSkills
 
 // Left to right: the last URL wins over the earlier URLs.
 let store = MarketplaceStore(sources: [
-    MarketplaceSource("git@github.com:swissarmyhammer/skills.git"),
+    MarketplaceSource("https://github.com/swissarmyhammer/skills.git"),
     MarketplaceSource("github:acme/team-skills", autoUpdate: false),
 ])
 
@@ -432,7 +434,7 @@ gives `MarketplaceConfig`. This is a `Codable` file named `marketplaces.yaml`:
 
 ```yaml
 marketplaces:            # left to right; the last entry wins
-  - url: git@github.com:swissarmyhammer/skills.git
+  - url: https://github.com/swissarmyhammer/skills.git
   - url: github:acme/team-skills
     ref: stable
     autoUpdate: false
@@ -542,7 +544,7 @@ The layout follows the Hugging Face hub layout: one folder for each repository, 
   "version": 1,
   "marketplaces": {
     "swissarmyhammer-skills-1a2b3c4d": {
-      "url": "git@github.com:swissarmyhammer/skills.git",
+      "url": "https://github.com/swissarmyhammer/skills.git",
       "ref": "main", "pinnedSha": null,
       "currentSha": "9f8e7d…", "catalogVersion": "1.2.0",
       "lastChecked": "2026-09-14T19:55:43Z", "lastUpdated": "2026-09-12T08:10:00Z",
@@ -694,8 +696,8 @@ skills marketplace remove <id>
 2. The allowlist and the blocklist run before any I/O.
 3. A project `marketplaces.yaml` can add a remote source. Load it only for a trusted folder.
 4. The package does not start the `git` binary. libgit2 runs no hooks, does not fetch
-   submodules, and runs no LFS filters. SSH uses the system OpenSSH and its `known_hosts`.
-   HTTPS uses the system trust store. An HTTPS credential goes only to the origin of its
+   submodules, and runs no LFS filters. SSH URLs are not supported, thus the package starts
+   no `ssh` process. HTTPS uses the system trust store. An HTTPS credential goes only to the origin of its
    source.
 5. The materializer rejects path traversal, escaping symlinks, and oversized content.
 6. The model cannot change the source list.
@@ -815,8 +817,10 @@ The unit tier stays hermetic. It uses no network (CI requires this).
 8. **A new `DotfolderStack.Source.marketplace` case** in Extras. It always renders untrusted.
 9. **Partials are scoped** to the winning marketplace plus the local layers.
 10. **Use libgit2, not the `git` binary.** Depend on `danielctull-forks/swift-libgit2`
-    (`exact: "1.9.7"`) behind an internal `GitTransport` protocol. SSH uses libgit2's exec
-    transport (system OpenSSH).
+    (`exact: "1.9.7"`) behind an internal `GitTransport` protocol. SSH URLs are not supported
+    (amended 2026-09-18): that package builds no SSH transport on macOS, and an SSH URL gives
+    `unsupported URL protocol`. We do not fork the package, and we do not enable its `libssh2`
+    trait. Every example uses the HTTPS form.
 11. **The store is separate from the registry.** The registry reads only disk. It reloads on a
     store event.
 12. **The cache is in `~/.cache/skills/marketplaces`**, with `SKILLS_MARKETPLACE_CACHE` as the
@@ -853,8 +857,8 @@ The unit tier stays hermetic. It uses no network (CI requires this).
 - Local evidence: `~/.claude/plugins/` (`known_marketplaces.json`, `installed_plugins.json`,
   `cache/<mkt>/<plugin>/<version>/.in_use/`, `blocklist.json`, `plugin-catalog-cache.json`)
 - libgit2 SwiftPM packaging (selected) — https://github.com/danielctull-forks/swift-libgit2
-  (`Package.swift`: `GIT_SSH_EXEC` on macOS, SecureTransport; `src/libgit2/transports/ssh_exec.c`:
-  `GIT_SSH_COMMAND` → `core.sshCommand` → `ssh`)
+  (`Package.swift`: SecureTransport; the `GIT_SSH_EXEC` setting has an empty trait list, thus
+  SwiftPM never applies it and the build has no SSH transport)
 - libgit2 SwiftPM packaging (fallback) — https://github.com/ibrahimcetin/libgit2
 - Swift wrappers compared — https://github.com/ibrahimcetin/SwiftGitX,
   https://github.com/danielctull/swift-git, https://github.com/SwiftGit2/SwiftGit2,

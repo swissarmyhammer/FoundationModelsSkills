@@ -324,8 +324,8 @@ public struct MarketplaceCLI: AsyncParsableCommand {
         /// The URL of the new marketplace.
         @Argument(
             help: """
-                The URL of the marketplace: git@host:owner/repo.git, https://host/owner/repo.git, \
-                github:owner/repo, or file:///path. Do not put a credential in the URL.
+                The URL of the marketplace: https://host/owner/repo.git, github:owner/repo, or \
+                file:///path. SSH URLs are not supported. Do not put a credential in the URL.
                 """)
         var url: String
 

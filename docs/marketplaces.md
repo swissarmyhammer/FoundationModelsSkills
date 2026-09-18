@@ -20,7 +20,7 @@ import FoundationModelsSkills
 
 // Left to right: the last source wins over the sources before it.
 let store = MarketplaceStore(sources: [
-    MarketplaceSource("git@github.com:swissarmyhammer/skills.git"),
+    MarketplaceSource("https://github.com/swissarmyhammer/skills.git"),
     MarketplaceSource("github:acme/team-skills", autoUpdate: false),
 ])
 
@@ -58,7 +58,7 @@ await store.start()
 
 ```yaml
 marketplaces:            # left to right; the last entry wins
-  - url: git@github.com:swissarmyhammer/skills.git
+  - url: https://github.com/swissarmyhammer/skills.git
   - url: github:acme/team-skills
     ref: stable
     autoUpdate: false
@@ -94,12 +94,17 @@ layer, is what makes the layer render untrusted and what scopes its partials.
 
 | Form | Example |
 |---|---|
-| git SSH | `git@github.com:swissarmyhammer/skills.git` |
 | git HTTPS | `https://github.com/swissarmyhammer/skills.git` |
 | GitHub shorthand | `github:swissarmyhammer/skills` |
 | git repository on this computer | `file:///Users/me/skills.git` |
 | folder on this computer | `file:///Users/me/skills` |
 | ref suffix on a git form | `…/skills.git#v1.2.0` |
+
+**SSH URLs are not supported.** The libgit2 build of this package has no SSH
+transport. The parser accepts an SSH URL, but the store cannot connect to it:
+the check and the fetch fail, and the diagnostic is `unsupported URL protocol`.
+Use the HTTPS form of the same repository. For a private repository, give a
+token through `MarketplacePolicy.credentials`.
 
 The parser applies these rules to a URL:
 

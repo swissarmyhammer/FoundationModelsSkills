@@ -68,8 +68,31 @@ comments:
     - evidence: swift test — 703 passed, 0 failed, 0 skipped; no warnings found; diagnostics check clean (0 errors, 0 warnings)
     - next: ready for review
   timestamp: 2026-09-18T15:40:44.036163+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01m2tjvt70mcmgwgfhxw2ygj8q
+  text: |-
+    ### commit — changed
+    - evidence: 3e86b91 fix(marketplace): add the libgit2 message to GitTransportError.unreachable
+    - next: none
+  timestamp: 2026-09-18T15:41:19.968382+00:00
+- actor: claude-code
+  id: 01m2tk0wgbxhwdjqm08tr203ja
+  text: |-
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (commit `3e86b91`). Counts: 0 findings, 0 confirmed, 0 refuted, 7 validator runs attempted, 0 failed, 0 skipped. 4 files reviewed. 4 `.kanban/` files were excluded by `.reviewignore`. The card had no prior `## Review Findings` section.
+    - next: the task is in `done`. Card `^nvnv7ep` corrects the documents. Work item 1 (SSH test) stays dropped by the user decision of 2026-09-18.
+  timestamp: 2026-09-18T15:44:06.155406+00:00
+- actor: claude-code
+  id: 01m2tk17dckpym0q97b17g0vdz
+  text: |-
+    ### finish iteration 2 — clean
+    - implement: no new step. The user dropped work item 1 (no SSH, no SSH test). The change from iteration 1 is the full scope.
+    - test: green — swift test, 703 passed, 0 failed, 0 skipped, no warnings
+    - commit: 3e86b91
+    - review: clean — HEAD~1..HEAD, 0 findings, 7 validator runs, 4 files reviewed. The task moved to done.
+  timestamp: 2026-09-18T15:44:17.324176+00:00
+position_column: done
+position_ordinal: ee80
 title: The SSH form of a marketplace URL is unreachable, although git over SSH works
 ---
 ## What

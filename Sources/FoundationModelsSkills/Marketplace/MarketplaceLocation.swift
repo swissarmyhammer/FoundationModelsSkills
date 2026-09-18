@@ -4,7 +4,8 @@ import Foundation
 /// (marketplace.md §5.1).
 ///
 /// The forms are:
-/// - scp-like SSH: `git@github.com:owner/repo.git`
+/// - scp-like SSH: `git@github.com:owner/repo.git`. The parser accepts it, but
+///   the transport does not support SSH (marketplace.md decision 10).
 /// - HTTPS: `https://github.com/owner/repo.git`
 /// - the GitHub shorthand `github:owner/repo`, which expands to
 ///   `https://github.com/owner/repo.git`

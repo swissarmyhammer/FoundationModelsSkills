@@ -60,8 +60,10 @@ the host guide. These are the rules that hold for every marketplace:
    The `skills marketplace` commands read it only with `--include-project`.
 4. **The package does not start the `git` binary.** Git work goes through
    libgit2, which runs no hooks, fetches no submodules, and runs no large file
-   storage filters. SSH uses the system OpenSSH, with the user's ssh-agent and
-   `known_hosts`. HTTPS uses the system trust store.
+   storage filters. HTTPS uses the system trust store. SSH URLs are not
+   supported: the libgit2 build has no SSH transport, thus the package starts
+   no `ssh` process, and an SSH URL gives the diagnostic
+   `unsupported URL protocol`.
 5. **A credential stays out of every record.** A credential never appears in a
    stored URL, in a log line, in a diagnostic, or in an error message. An HTTPS
    URL that holds a user name or a password is refused when the store parses

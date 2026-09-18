@@ -47,6 +47,21 @@ struct MarketplaceDocsTests {
         MarketplacePolicy.automaticUpdateVariable,
     ]
 
+    /// The libgit2 message that an SSH URL gives. `swift-libgit2` builds no
+    /// SSH transport, thus the host guide must tell the user this diagnostic.
+    private static let sshDiagnostic = "unsupported URL protocol"
+
+    /// The start of an scp-like SSH URL, for example
+    /// `git@github.com:owner/repo.git`.
+    private static let sshURLPrefix = "git@"
+
+    /// Each text that recommends a URL form to the user: the message of a URL
+    /// that is not a supported form, and the help of the `add` command.
+    private static let urlFormAdvice = [
+        MarketplaceSourceError.unsupportedForm.description,
+        MarketplaceCLI.Add.helpMessage(),
+    ]
+
     /// The name of each subcommand of the `marketplace` command group, taken
     /// from the configuration of the group itself.
     private static let subcommandNames = MarketplaceCLI.configuration.subcommands
@@ -62,6 +77,7 @@ struct MarketplaceDocsTests {
                 document: hostGuidePath, text: "\(MarketplaceCLI.commandName) \($0)")
         }
         + [
+            DocumentClaim(document: hostGuidePath, text: sshDiagnostic),
             DocumentClaim(document: securityPath, text: securityHeading),
             DocumentClaim(document: readmePath, text: hostGuidePath),
         ]
@@ -73,6 +89,22 @@ struct MarketplaceDocsTests {
         #expect(
             text.contains(claim.text),
             "\(claim.document) must name \"\(claim.text)\"")
+    }
+
+    @Test func theHostGuideGivesNoSSHURLAsAnExample() throws {
+        let text = try FixtureLibrary.readText(relativePath: Self.hostGuidePath)
+
+        #expect(
+            !text.contains(Self.sshURLPrefix),
+            "\(Self.hostGuidePath) must give each example URL in the HTTPS form")
+    }
+
+    @Test(arguments: urlFormAdvice)
+    func theURLFormAdviceNamesNoSSHForm(advice: String) {
+        #expect(!advice.isEmpty)
+        #expect(
+            !advice.contains(Self.sshURLPrefix),
+            "The advice must not recommend an SSH URL: \(advice)")
     }
 
     @Test func theCommandGroupGivesItsSubcommandNames() {

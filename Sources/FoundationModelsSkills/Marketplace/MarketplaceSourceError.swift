@@ -44,7 +44,7 @@ extension MarketplaceSourceError: CustomStringConvertible {
         case .emptyURL:
             "The URL is empty."
         case .unsupportedForm:
-            "The URL is not a supported form. Use git@host:owner/repo.git, https://host/owner/repo.git, github:owner/repo, or file:///path."
+            "The URL is not a supported form. Use https://host/owner/repo.git, github:owner/repo, or file:///path."
         case .missingHost:
             "The URL has no host."
         case .missingRepository:

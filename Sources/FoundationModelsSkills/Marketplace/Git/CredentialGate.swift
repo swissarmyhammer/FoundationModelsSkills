@@ -12,8 +12,8 @@ import Foundation
 /// second request means a bad token: the gate refuses it, and libgit2 stops
 /// instead of a loop. Each refusal sets ``hasRefused``.
 ///
-/// Only an HTTPS source has an origin. An SSH source uses the exec transport,
-/// and a `file://` or plain `http://` source must not get a token. For such a
+/// Only an HTTPS source has an origin. An SSH source has no transport, and a
+/// `file://` or plain `http://` source must not get a token. For such a
 /// source the gate never asks the host, and it refuses each request.
 ///
 /// The gate is a pure value, thus a test needs no server. ``LibGit2Transport``

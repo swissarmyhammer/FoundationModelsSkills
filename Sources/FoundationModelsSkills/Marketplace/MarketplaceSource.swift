@@ -45,14 +45,15 @@ public struct MarketplaceGrants: Sendable, Hashable, Codable {
 ///
 /// ```swift
 /// let sources = [
-///     MarketplaceSource("git@github.com:swissarmyhammer/skills.git"),
+///     MarketplaceSource("https://github.com/swissarmyhammer/skills.git"),
 ///     MarketplaceSource("github:acme/team-skills", autoUpdate: false),
 /// ]
 /// ```
 public struct MarketplaceSource: Sendable, Hashable, Codable {
-    /// The location of the marketplace, in a §5.1 form: an scp-like SSH URL,
-    /// an HTTPS URL that ends in `.git`, `github:owner/repo`, or a `file://`
-    /// URL. A git form can have a `#ref` suffix.
+    /// The location of the marketplace, in a §5.1 form: an HTTPS URL that
+    /// ends in `.git`, `github:owner/repo`, or a `file://` URL. A git form can
+    /// have a `#ref` suffix. The parser also accepts an scp-like SSH URL, but
+    /// the transport does not support SSH, thus such a source never connects.
     public var url: String
 
     /// A branch or a tag. It wins over a `#ref` suffix on ``url``.
