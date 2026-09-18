@@ -32,8 +32,21 @@ comments:
     - evidence: `swift build --build-tests` — 0 warnings, 0 errors; `swift test` — 713 tests in 54 suites passed, 0 failed, 0 skipped
     - next: commit
   timestamp: 2026-09-18T20:10:22.124411+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01m2v2dshz5t6rkrdfyfdc6yay
+  text: |-
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` — 0 findings, 0 confirmed, 0 refuted; 7 validator runs, 0 failed. Not reviewed: README.md, CHANGELOG.md, plan.md (no validator matches), .kanban/ (ignore rule).
+    - next: none; task moved to done
+
+    ### finish iteration 1 — clean
+    - implement: changed — SelectionSessionRequest with id-enum JSON Schema; `session:` closure takes the request; live-session overload removed; SkillSearchAgent retrieval fallback; tests; README + CHANGELOG migration note; plan.md decision #31
+    - test: green — `swift test` 713 tests in 54 suites passed, 0 failed, 0 skipped; 0 build warnings
+    - commit: 1d88b4c
+    - review: clean — 0 findings; task moved to done
+  timestamp: 2026-09-18T20:13:17.759226+00:00
+position_column: done
+position_ordinal: f380
 title: The skills search trusts free text from the selection model, and a bare [explore] fails the whole skills call
 ---
 ## What
