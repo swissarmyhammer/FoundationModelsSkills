@@ -196,4 +196,31 @@ struct SkillSearchAgentTests {
         #expect(before.map(\.id) == ["alpha"])
         #expect(after.map(\.id) == ["gamma"])
     }
+
+    // MARK: - Which tier gave the answer
+
+    /// Shows that an answer of a searcher in `.retrieval` mode does not
+    /// claim the selection tier.
+    @Test func aRetrievalRankIsNotASelection() async throws {
+        let agent = SkillSearchAgent(searcher: MetadataSearcher(items: [Self.alphaSkill], mode: .retrieval))
+
+        let answer = try await agent.answer(query: "alpha", limit: 10)
+
+        #expect(answer.matches.map(\.id) == ["alpha"])
+        #expect(!answer.isSelection)
+    }
+
+    /// Shows that an answer of the retrieval fallback does not claim the
+    /// selection tier, although the wrapped searcher is in `.selection`
+    /// mode.
+    @Test func aRetrievalFallbackAnswerIsNotASelection() async throws {
+        let agent = SkillSearchAgent(
+            searcher: MetadataSearcher(items: [Self.alphaSkill], mode: .selection),
+            retrievalFallback: MetadataSearcher(items: [Self.alphaSkill], mode: .retrieval))
+
+        let answer = try await agent.answer(query: "alpha", limit: 10)
+
+        #expect(answer.matches.map(\.id) == ["alpha"])
+        #expect(!answer.isSelection)
+    }
 }

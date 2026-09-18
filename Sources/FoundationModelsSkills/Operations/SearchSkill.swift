@@ -1,6 +1,7 @@
 import Foundation
 import FoundationModels
 import Operations
+import os
 
 /// The outcome of a `search skill` operation: either the ranked matches or a
 /// corrective message (plan.md §7).
@@ -110,10 +111,13 @@ public struct SearchSkill: OperationDefinition {
     /// - Returns: `.success(_:)` carrying the ranked results on success, or
     ///   `.corrective(_:)` when `query` is blank or when
     ///   `context.visibilityPredicate` accepts no skill in
-    ///   `context.registry`.
+    ///   `context.registry`. Each row carries the `use` call that loads its
+    ///   skill, and a result with a match carries a `next` instruction.
+    ///   When the selection tier chose the first match, the result also
+    ///   carries the body `use skill` renders for it with no argument.
     /// - Throws: Nothing recoverable; the signature carries `throws` to
     ///   satisfy the `OperationDefinition` protocol requirement. Rethrows
-    ///   whatever `SkillSearchAgent.search(query:limit:)` throws -- a
+    ///   whatever `SkillSearchAgent.answer(query:limit:)` throws -- a
     ///   genuinely fatal search-tier failure the host app must handle, not a
     ///   corrective one. An agent with a retrieval fallback, which the
     ///   `SkillsTool.make` factories build, answers a selection answer that
@@ -133,7 +137,7 @@ public struct SearchSkill: OperationDefinition {
 
         let resolvedLimit = limit ?? Self.defaultLimit
         // Search with a generous, effectively-unbounded limit rather than
-        // `resolvedLimit` -- `SkillSearchAgent.search` (via `HybridRanker.
+        // `resolvedLimit` -- `SkillSearchAgent.answer` (via `HybridRanker.
         // topMatches`) only ever returns genuine matches, never zero-score
         // padding, so this recovers the real match count before the
         // `limit` cap, not merely the number of rows displayed. Deriving
@@ -141,12 +145,44 @@ public struct SearchSkill: OperationDefinition {
         // registry and the search agent's own catalog are independently
         // configurable (`SkillsToolContext`'s own doc comment), so nothing
         // guarantees they're the same size.
-        let allMatches = try await context.searchAgent
-            .search(query: query, limit: Self.unboundedSearchLimit)
-            .filter(context.visibilityPredicate)
-        let rows = allMatches.prefix(resolvedLimit).map(SkillRow.init(metadata:))
-        return .success(SearchSkillResult(matches: Array(rows), total: allMatches.count))
+        let answer = try await context.searchAgent.answer(query: query, limit: Self.unboundedSearchLimit)
+        let allMatches = answer.matches.filter(context.visibilityPredicate)
+        let rows = allMatches.prefix(resolvedLimit).map { SkillRow(metadata: $0, use: SkillUseCall(id: $0.id)) }
+        // Only a choice of the selection tier loads a body. A retrieval rank
+        // gives the list and the instruction to load a skill.
+        let skill: UseSkillResult? =
+            if answer.isSelection { await Self.loadedBody(of: rows.first, in: context) } else { nil }
+        return .success(SearchSkillResult(matches: Array(rows), total: allMatches.count, skill: skill))
     }
+
+    /// Renders the body of `row` with the same path as `use skill`, called
+    /// with no argument.
+    ///
+    /// A skill with a required argument gets a corrective from `use skill`,
+    /// thus it gets no body here, and the model loads it with its `use` call.
+    /// A render failure also gives no body: the search itself worked, and
+    /// the failure must not fail the `skills` call. The failure goes to the
+    /// log, and the same `use` call gives the model the same error.
+    ///
+    /// - Parameters:
+    ///   - row: The first match, or `nil` when there is no match.
+    ///   - context: The shared context `use skill` renders against.
+    /// - Returns: The rendered body, or `nil` when there is no body to give.
+    private static func loadedBody(of row: SkillRow?, in context: SkillsToolContext) async -> UseSkillResult? {
+        guard let row else { return nil }
+        do {
+            guard case .success(let result) = try await UseSkill(id: row.id).execute(in: context) else { return nil }
+            return result
+        } catch {
+            logger.error(
+                "The body of the selected skill \(row.id, privacy: .public) did not render, thus the search result carries no body. Cause: \(String(describing: error))"
+            )
+            return nil
+        }
+    }
+
+    /// Where a search records a body render that failed.
+    private static let logger = Logger(subsystem: "FoundationModelsSkills", category: "SearchSkill")
 
     /// The corrective message returned for a blank or whitespace-only
     /// `query`.
@@ -156,7 +192,7 @@ public struct SearchSkill: OperationDefinition {
     /// accepts no skill in the registry's catalog.
     private static let emptyCatalogMessage = "No skills are available."
 
-    /// The limit passed to `SkillSearchAgent.search` to recover every
+    /// The limit passed to `SkillSearchAgent.answer` to recover every
     /// genuine match, not just `resolvedLimit`'s display cap.
     ///
     /// Far beyond any realistic skill catalog's size, so this is

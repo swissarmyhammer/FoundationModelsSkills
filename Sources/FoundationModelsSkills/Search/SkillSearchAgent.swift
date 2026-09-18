@@ -9,8 +9,8 @@ import os
 /// signal weights -- lives entirely in how the caller constructs the
 /// `MetadataSearcher` passed to `init(searcher:retrievalFallback:
 /// visibilityPredicate:)`; this wrapper never configures the searcher itself,
-/// only forwards `search(query:limit:)` and filters `update(items:)`'s input
-/// to `visibilityPredicate`'s subset.
+/// only forwards `search(query:limit:)` and `answer(query:limit:)`, and filters
+/// `update(items:)`'s input to `visibilityPredicate`'s subset.
 ///
 /// A caller can also give a second searcher in `.retrieval` mode, the
 /// retrieval fallback. Then an answer of the selection model that does not
@@ -83,14 +83,37 @@ public struct SkillSearchAgent: Sendable {
     ///   throws. With a retrieval fallback: a cancellation, or whatever the
     ///   fallback throws.
     public func search(query: String, limit: Int) async throws -> [SkillMetadata] {
+        try await answer(query: query, limit: limit).matches
+    }
+
+    /// Searches the wrapped catalog for `query`, and tells which tier chose
+    /// the matches.
+    ///
+    /// The same search as `search(query:limit:)`, with the same fallback.
+    /// A match of the selection tier carries no retrieval signals, and a
+    /// match of the retrieval tier always carries them (`Match.signals`).
+    /// Thus a non-empty answer of the wrapped searcher whose matches carry no
+    /// signals is a selection. An answer of the retrieval fallback is never a
+    /// selection.
+    ///
+    /// - Parameters:
+    ///   - query: The search query.
+    ///   - limit: The maximum number of matches to return.
+    /// - Returns: At most `limit` matching skills' metadata, best first, and
+    ///   whether the selection tier chose them.
+    /// - Throws: The same errors as `search(query:limit:)`.
+    public func answer(query: String, limit: Int) async throws -> SkillSearchAnswer {
         do {
-            return try await searcher.search(intent: query, limit: limit).map(\.item)
+            let matches = try await searcher.search(intent: query, limit: limit)
+            let isSelection = !matches.isEmpty && matches.allSatisfy { $0.signals == nil }
+            return SkillSearchAnswer(matches: matches.map(\.item), isSelection: isSelection)
         } catch {
             guard let retrievalFallback, !Self.isCancellation(error) else { throw error }
             Self.logger.notice(
                 "The selection tier failed, thus the retrieval rank answers this search. Cause: \(String(describing: error))"
             )
-            return try await retrievalFallback.search(intent: query, limit: limit).map(\.item)
+            let matches = try await retrievalFallback.search(intent: query, limit: limit)
+            return SkillSearchAnswer(matches: matches.map(\.item), isSelection: false)
         }
     }
 
