@@ -162,7 +162,7 @@ struct HotReloadTests {
     ///   present.
     private static func stepOneAdd(
         root: URL, registry: SkillsRegistry, updates: ReloadTestSupport.EventTally,
-        diagnostics: DiagnosticRecorder, embedGate: EmbedGate, tool: OperationTool<SkillsToolContext>
+        diagnostics: DiagnosticRecorder, embedGate: EmbedGate, tool: SkillsCatalogTool
     ) async throws -> String {
         await embedGate.close()
         try ReloadTestSupport.writeSkillFile(id: "bravo", in: root, descriptionSuffix: "v1")
@@ -267,7 +267,7 @@ struct HotReloadTests {
     ///   step's reload settles -- `charlie`'s body should be entirely gone.
     private static func stepThreeRemove(
         root: URL, registry: SkillsRegistry, updates: ReloadTestSupport.EventTally,
-        tool: OperationTool<SkillsToolContext>
+        tool: SkillsCatalogTool
     )
         async throws -> String
     {
@@ -308,7 +308,7 @@ struct HotReloadTests {
     ///   - updates: Tallies every forwarded `update(items:)` call.
     ///   - tool: The fused `skills` tool to dispatch through.
     private static func stepFourVisibilityFlip(
-        root: URL, updates: ReloadTestSupport.EventTally, tool: OperationTool<SkillsToolContext>
+        root: URL, updates: ReloadTestSupport.EventTally, tool: SkillsCatalogTool
     ) async throws {
         let baseline = await updates.count
         try ReloadTestSupport.writeSkillFile(
@@ -331,8 +331,8 @@ struct HotReloadTests {
     /// tracked `charlie`'s add/edit/remove across steps 1-3 (not merely
     /// empty because nothing was ever preloaded), and that the fused tool's
     /// schema is byte-identical to what it was before any of the four
-    /// preceding steps ran -- the schema is a pure function of the fixed
-    /// operation set, never of catalog content (plan.md §7).
+    /// preceding steps ran -- the schema, with its `id` enum, is fixed when
+    /// the tool is made, and a hot reload never changes it (plan.md §7).
     ///
     /// - Parameters:
     ///   - registry: The registry under test.
@@ -345,7 +345,7 @@ struct HotReloadTests {
     ///   - preloadedAfterRemove: `registry.preloadedBodies()`, captured
     ///     right after step 3's reload settled.
     private static func stepFivePreloadAndListing(
-        registry: SkillsRegistry, tool: OperationTool<SkillsToolContext>, schemaBefore: String,
+        registry: SkillsRegistry, tool: SkillsCatalogTool, schemaBefore: String,
         preloadedAfterAdd: String, preloadedAfterEdit: String, preloadedAfterRemove: String
     ) async throws {
         // `bravo` is now `disable-model-invocation: true` -- user-invocable
@@ -373,7 +373,7 @@ struct HotReloadTests {
             "the removed preload: true skill must not reappear by the end of the scenario")
 
         let schemaAfter = String(describing: tool.parameters)
-        #expect(schemaAfter == schemaBefore, "the fused tool's schema must never vary with catalog content")
+        #expect(schemaAfter == schemaBefore, "a hot reload must never change the fused tool's schema")
     }
 
     // MARK: - Update-call subscription

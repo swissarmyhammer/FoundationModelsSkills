@@ -185,7 +185,7 @@ struct SkillsReloadFollowerTests {
     /// - Returns: The operation's JSON answer.
     /// - Throws: Whatever `OperationTool.call(arguments:)` throws.
     private static func searchJSON(
-        through tool: OperationTool<SkillsToolContext>, query: String
+        through tool: SkillsCatalogTool, query: String
     ) async throws -> String {
         try await tool.call(arguments: GeneratedContent(properties: ["op": "search skill", "query": query]))
     }
@@ -205,7 +205,7 @@ struct SkillsReloadFollowerTests {
     /// - Returns: The final answer.
     /// - Throws: Whatever `OperationTool.call(arguments:)` throws.
     private static func searchOnceReloaded(
-        through tool: OperationTool<SkillsToolContext>, query: String, until isSatisfied: (String) -> Bool
+        through tool: SkillsCatalogTool, query: String, until isSatisfied: (String) -> Bool
     ) async throws -> String {
         _ = await ReloadTestSupport.poll(
             { (try? await Self.searchJSON(through: tool, query: query)) ?? "" },

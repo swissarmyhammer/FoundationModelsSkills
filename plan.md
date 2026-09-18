@@ -309,7 +309,9 @@ struct UseSkillResult:    Encodable { let id: String; let body: String }  // bod
   between turns, and Apple's enum-enforcement bug (forums 812501/811620) means the model can
   emit values outside an `anyOf` list anyway. An unknown/stale/model-hidden id returns a
   corrective message carrying the current id list; upstream's retry cap (default 2) stops
-  loops. This **supersedes decision #18.** *(decision #22)*
+  loops. This **supersedes decision #18.** *(decision #22)* **Amended 2026-09-18 by
+  ^cbe0fv3:** `id` is now an enum of the visible ids, fixed when the tool is made, and
+  the tool description lists the catalog. Dispatch validation stays. See decision #22.
 - **Resource nouns are fully specified in §7.3 and built at M6:** `list resource`,
   `read resource`, `run script` join the same fused tool — six ops, inside upstream's
   5–15 guidance; a second `OperationTool` only if the vocabulary grows further.
@@ -346,9 +348,11 @@ root — Extras' stack locates, it never watches, #29) fires on add/remove/edit 
 stack → `SkillsRegistry` rebuilds and publishes a **refreshed metadata list** (observable).
 On reload we: (a) forward the refreshed metadata to the searcher's **`update(items:)`**
 (hash-guarded; incremental re-embed; rebuilds the selection prefix + id grammar); (b) refresh the
-**preloaded** bodies in the root; (c) leave the fused tool untouched — its schema is
-id-free and its operations dereference the live registry per dispatch, so hot-reload is
-invisible to the root session. The registry also exposes an **initial** metadata list at
+**preloaded** bodies in the root; (c) leave the fused tool untouched — its operations
+dereference the live registry per dispatch. *(Amended 2026-09-18 by ^cbe0fv3: the schema
+is no longer id-free. Its `id` enum and its catalog description are fixed when the tool is
+made, thus a skill that a reload adds is found by `search skill`, and the next session
+gets it in the description and in the enum.)* The registry also exposes an **initial** metadata list at
 construction and the generic **`call(id:arguments:)`** used by both the ops and any host code.
 
 ### 7.1 How skills reach a session
@@ -597,6 +601,16 @@ Revisit when Apple ships a supported per-process confinement API. *(decision #28
     rows, not operations** — never one op per skill id.
 22. **Skill id → plain string + dispatch validation.** Unknown/stale/model-hidden id returns
     a corrective message listing current ids (upstream pattern); retry cap stops loops.
+    **Amended 2026-09-18 by ^cbe0fv3:** the dispatch validation holds, the plain string
+    does not. In a SWE-bench run the model did not know which skills exist. Now
+    `SkillsTool.make` returns `SkillsCatalogTool`, whose schema makes `id` an enum of the
+    visible ids and whose description lists each visible skill with its description and
+    the rule to load a skill that matches the task. Both are fixed when the tool is made,
+    thus a hot reload does not change the schema: a skill that a reload adds is found by
+    `search skill`, and the next session gets its id in the enum. With no visible skill,
+    `id` stays a plain string. The `Operations` fusion cannot make a per-catalog enum, thus
+    `SkillsToolSchema` builds the same flat union with the `id` enum. See
+    `docs/operations.md`.
 23. **Resource nouns specified in §7.3, built at M6.** `list resource` / `read resource` /
     `run script` join the fused tool — six ops, within upstream's 5–15 guidance;
     partition into a second `OperationTool` only if the vocabulary grows further.

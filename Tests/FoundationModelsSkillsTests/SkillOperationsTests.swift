@@ -28,7 +28,7 @@ struct SkillOperationsTests {
     /// Builds the fused `skills` tool over `makeFixtureContext()`.
     ///
     /// - Throws: Whatever `SkillsTool.make(context:)` throws.
-    private static func makeFixtureTool() throws -> OperationTool<SkillsToolContext> {
+    private static func makeFixtureTool() throws -> SkillsCatalogTool {
         try SkillsTool.make(context: Self.makeFixtureContext())
     }
 

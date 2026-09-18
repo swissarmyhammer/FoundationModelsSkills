@@ -27,11 +27,11 @@ public enum SkillsCLI {
     /// - Parameter registry: The registry to drive the CLI's user-facing
     ///   surface from.
     /// - Returns: The assembled driver.
-    /// - Throws: Whatever `SkillsTool.make(context:)` or
-    ///   `OperationCLIDriver.init(tool:executableName:)` throws.
+    /// - Throws: Whatever `SkillsTool.make(context:catalogCharacterLimit:)`
+    ///   or `OperationCLIDriver.init(tool:executableName:)` throws.
     public static func makeDriver(registry: SkillsRegistry) throws -> OperationCLIDriver {
         let tool = try SkillsTool.make(context: Self.makeContext(registry: registry))
-        return try OperationCLIDriver(tool: tool, executableName: Self.executableName)
+        return try OperationCLIDriver(tool: tool.operationTool, executableName: Self.executableName)
     }
 
     /// The first argument that names the `marketplace` command group.

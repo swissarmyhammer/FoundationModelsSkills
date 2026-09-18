@@ -1,5 +1,4 @@
 import FoundationModelsSkills
-import Operations
 
 /// Builds the registry and the fused `skills` tool every demo mode shares,
 /// over the `FixtureStack` fixture library (plan.md §10's assembly sketch).
@@ -23,7 +22,7 @@ enum SkillsDemoAssembly {
     /// - Parameter registry: The registry to build a tool over.
     /// - Returns: The assembled tool.
     /// - Throws: Whatever `SkillsTool.make(registry:)` throws.
-    static func makeTool(registry: SkillsRegistry) async throws -> OperationTool<SkillsToolContext> {
+    static func makeTool(registry: SkillsRegistry) async throws -> SkillsCatalogTool {
         try await SkillsTool.make(registry: registry)
     }
 }

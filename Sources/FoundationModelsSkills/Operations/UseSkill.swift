@@ -61,13 +61,19 @@ public struct UseSkill: OperationDefinition {
     public static let noun = skillOperationNoun
 
     /// A human- and model-facing summary of what this operation does.
-    public static let operationDescription =
-        "Render and return a skill's body by id, substituting the given arguments."
+    ///
+    /// It says what the model gets: instructions to follow, not a text to
+    /// read.
+    public static let operationDescription = "Load the instructions of a skill. Follow them."
 
     /// This operation's parameters, as the resolver and schema fusion need
     /// them: `id` (required) and `arguments` (optional).
+    ///
+    /// `use skill` is the first operation of the fused tool to declare
+    /// `id`, thus its description is the description of the fused `id`
+    /// field.
     public static let parameterMetadata: [ParamMeta] = [
-        ParamMeta(name: idKey, type: .string, required: true, description: "The skill id to use."),
+        ParamMeta(name: idKey, type: .string, required: true, description: "The id of the skill to load."),
         ParamMeta(
             name: argumentsKey, type: .array(of: .string), required: false,
             description: "Positional arguments substituted into the rendered body."),

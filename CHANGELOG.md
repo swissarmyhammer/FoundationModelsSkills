@@ -5,6 +5,53 @@ change is at the top.
 
 ## Unreleased
 
+### Changed: the `skills` tool shows its catalog and a use rule, and its `id` is an enum
+
+This change breaks the source of a host that names the type
+`OperationTool<SkillsToolContext>`. A host that holds the tool as `any Tool`
+compiles with no change.
+
+**Cause.** In a SWE-bench run, the model searched for a skill but never loaded
+one. The tool description was "Search, list, and use skills from the local
+skill library." It did not say what a skill is, it did not tell the model to
+follow a skill that applies, and the model did not see which skills exist. The
+`id` field was any string, thus the model could not see the valid ids.
+
+**What changed.**
+
+- Every `SkillsTool.make` factory returns `SkillsCatalogTool`, a new `Tool`. It
+  forwards each call to `SkillsCatalogTool.operationTool`, the
+  `OperationTool<SkillsToolContext>` that the factories returned before. It
+  conforms to `ForkableTool` and `OperationDescribing`, and it has
+  `operations` and `skillIDs`. `SkillsCLI` gives `operationTool` to
+  `OperationCLIDriver`.
+- The tool description is made from the catalog when the tool is made:
+  `registry.metadata()`, filtered by the visibility predicate, in catalog
+  order. It has two fixed sentences, then one `- <id>: <description>` line for
+  each skill. With no visible skill, it is the first sentence and
+  `No skills are installed now.`
+- `catalogCharacterLimit` is a new parameter of
+  `SkillsTool.make(context:catalogCharacterLimit:)` and of the two assembly
+  factories that forward to it. The default is
+  `SkillsTool.defaultCatalogCharacterLimit`, 8,000 characters. Over the limit,
+  the list shortens each description to 200 characters, then gives the ids on
+  one line, then gives as many ids as fit and
+  ``<N> more skills are not listed. Find them with `search skill`.`` The fixed
+  sentences are never cut.
+- The `id` field of the fused schema is an enum of the visible ids. With no
+  visible skill, it stays a plain string. The schema root has no description.
+- The description and the enum are fixed when the tool is made. A skill that
+  a hot reload adds is found by `search skill`, but the model cannot load it
+  with `use skill` until the next session makes a new tool.
+- New operation texts. `use skill`: "Load the instructions of a skill. Follow
+  them." `search skill`: "Find the skills for the kind of work that you will
+  do next, for example explore code, find callers, or run tests. Search by the
+  kind of work, not by the topic of the task." `list skill`: "List each skill
+  with its description." The `id` parameter of `use skill`: "The id of the
+  skill to load."
+
+See [docs/operations.md](docs/operations.md) for the description and the enum.
+
 ### Added: a `search skill` result tells the model to use a skill that applies, and how
 
 This change breaks no host source. The new fields are JSON for the model, and

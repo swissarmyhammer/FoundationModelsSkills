@@ -256,7 +256,7 @@ struct MarketplaceEndToEndTests {
         let registry: SkillsRegistry
 
         /// The fused `skills` tool over ``registry``.
-        let tool: OperationTool<SkillsToolContext>
+        let tool: SkillsCatalogTool
 
         /// Counts each `onReload` publication of ``registry``.
         let reloads = ReloadTestSupport.EventTally()

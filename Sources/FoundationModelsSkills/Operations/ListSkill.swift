@@ -38,8 +38,10 @@ public struct ListSkill: OperationDefinition {
     public static let noun = skillOperationNoun
 
     /// A human- and model-facing summary of what this operation does.
-    public static let operationDescription =
-        "List the skill library, optionally filtered by a case-insensitive substring over id and description."
+    ///
+    /// It says what the model gets: each skill with its description. The
+    /// `filter` parameter describes the filter.
+    public static let operationDescription = "List each skill with its description."
 
     /// This operation's parameters, as the resolver and schema fusion need
     /// them: an optional `filter`.

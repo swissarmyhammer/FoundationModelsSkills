@@ -913,17 +913,22 @@ public struct SkillsRegistry: Sendable {
     /// The maximum `description` length `commandListing()` shows in the
     /// user `/` menu (plan.md §6.1: "rendered, truncated for the menu").
     /// `metadata()` renders the same description full-length -- this cap
-    /// applies only to the menu surface.
+    /// applies only to the menu surface and to the shortened step of the
+    /// `skills` tool description (`SkillsToolDescription`).
     private static let menuDescriptionMaxLength = 200
 
     /// Truncates `text` to at most `menuDescriptionMaxLength` characters,
     /// breaking on the last word boundary at or before the limit where one
     /// exists and appending an ellipsis.
     ///
+    /// The `/` menu and the shortened step of `SkillsToolDescription` both
+    /// use this one function, thus the two surfaces shorten a description in
+    /// the same way.
+    ///
     /// - Parameter text: The rendered description to truncate.
     /// - Returns: `text` unchanged when it already fits within the limit;
     ///   otherwise the truncated, ellipsis-suffixed text.
-    private static func truncatedForMenu(_ text: String) -> String {
+    internal static func truncatedForMenu(_ text: String) -> String {
         guard text.count > menuDescriptionMaxLength else { return text }
         let limit = text.index(text.startIndex, offsetBy: menuDescriptionMaxLength)
         let breakIndex = text[..<limit].lastIndex(of: " ") ?? limit

@@ -10,11 +10,12 @@ import Operations
 /// its session, and no factory here makes a session of its own.
 ///
 /// The result goes straight into `LanguageModelSession(tools:)`, because
-/// `OperationTool` conforms to the FoundationModels `Tool` protocol.
+/// `SkillsCatalogTool` conforms to the FoundationModels `Tool` protocol.
 ///
-/// `SkillsTool.make(context:)` stays as it is. It is the low-level door for
-/// a host that tunes the searcher itself: a different `SearchMode`, other
-/// signal weights, or its own diagnostic sink.
+/// `SkillsTool.make(context:catalogCharacterLimit:)` is the low-level door
+/// for a host that tunes the searcher itself: a different `SearchMode`,
+/// other signal weights, or its own diagnostic sink. Each factory here
+/// forwards `catalogCharacterLimit` to it.
 extension SkillsTool {
     /// Builds the fused `skills` tool over `registry`, with a selection tier
     /// that asks the host for a new session for each assembled candidate
@@ -52,26 +53,32 @@ extension SkillsTool {
     ///     leaves the cosine signal out.
     ///   - followReloads: Whether the tool follows `registry.onReload`
     ///     itself. Defaults to `true`. See `assemble(registry:mode:embedder:
-    ///     selection:followReloads:visibilityPredicate:)`.
+    ///     selection:followReloads:catalogCharacterLimit:visibilityPredicate:)`.
+    ///   - catalogCharacterLimit: The most characters the catalog list of
+    ///     the tool description may have. Defaults to
+    ///     `defaultCatalogCharacterLimit`. See `make(context:catalogCharacterLimit:)`.
     ///   - visibilityPredicate: Which catalog entries this tool presents.
     ///     Defaults to `SkillMetadata.isModelVisible`, the model-facing
     ///     surface.
     /// - Returns: The fused `skills` tool, ready to register on a
     ///   `LanguageModelSession`.
-    /// - Throws: Whatever `SkillsTool.make(context:)` throws.
+    /// - Throws: Whatever `SkillsTool.make(context:catalogCharacterLimit:)`
+    ///   throws.
     public static func make(
         registry: SkillsRegistry,
         session: @escaping @Sendable (SelectionSessionRequest) -> any AgentSession,
         embedder: (any TextEmbedding)? = nil,
         followReloads: Bool = true,
+        catalogCharacterLimit: Int = defaultCatalogCharacterLimit,
         visibilityPredicate: @escaping @Sendable (SkillMetadata) -> Bool = { $0.isModelVisible }
-    ) async throws -> OperationTool<SkillsToolContext> {
+    ) async throws -> SkillsCatalogTool {
         try await assemble(
             registry: registry,
             mode: .auto,
             embedder: embedder,
             selection: makeSelection(registry: registry, session: session, visibilityPredicate: visibilityPredicate),
             followReloads: followReloads,
+            catalogCharacterLimit: catalogCharacterLimit,
             visibilityPredicate: visibilityPredicate)
     }
 
@@ -97,25 +104,31 @@ extension SkillsTool {
     ///     leaves the cosine signal out.
     ///   - followReloads: Whether the tool follows `registry.onReload`
     ///     itself. Defaults to `true`. See `assemble(registry:mode:embedder:
-    ///     selection:followReloads:visibilityPredicate:)`.
+    ///     selection:followReloads:catalogCharacterLimit:visibilityPredicate:)`.
+    ///   - catalogCharacterLimit: The most characters the catalog list of
+    ///     the tool description may have. Defaults to
+    ///     `defaultCatalogCharacterLimit`. See `make(context:catalogCharacterLimit:)`.
     ///   - visibilityPredicate: Which catalog entries this tool presents.
     ///     Defaults to `SkillMetadata.isModelVisible`, the model-facing
     ///     surface.
     /// - Returns: The fused `skills` tool, ready to drive from a host with
     ///   no model.
-    /// - Throws: Whatever `SkillsTool.make(context:)` throws.
+    /// - Throws: Whatever `SkillsTool.make(context:catalogCharacterLimit:)`
+    ///   throws.
     public static func make(
         registry: SkillsRegistry,
         embedder: (any TextEmbedding)? = nil,
         followReloads: Bool = true,
+        catalogCharacterLimit: Int = defaultCatalogCharacterLimit,
         visibilityPredicate: @escaping @Sendable (SkillMetadata) -> Bool = { $0.isModelVisible }
-    ) async throws -> OperationTool<SkillsToolContext> {
+    ) async throws -> SkillsCatalogTool {
         try await assemble(
             registry: registry,
             mode: .retrieval,
             embedder: embedder,
             selection: nil,
             followReloads: followReloads,
+            catalogCharacterLimit: catalogCharacterLimit,
             visibilityPredicate: visibilityPredicate)
     }
 
@@ -159,7 +172,7 @@ extension SkillsTool {
     /// Reads `registry.metadata()` and keeps the `visibilityPredicate`
     /// subset, builds the `MetadataSearcher` over that subset, wraps it in a
     /// `SkillSearchAgent` with the same predicate, and gives the resulting
-    /// `SkillsToolContext` to `SkillsTool.make(context:)`.
+    /// `SkillsToolContext` to `SkillsTool.make(context:catalogCharacterLimit:)`.
     ///
     /// - Parameters:
     ///   - registry: The registry the assembled context wraps.
@@ -169,18 +182,22 @@ extension SkillsTool {
     ///     selection tier.
     ///   - followReloads: Whether the assembled context carries a
     ///     `SkillsReloadFollower`.
+    ///   - catalogCharacterLimit: The most characters the catalog list of
+    ///     the tool description may have.
     ///   - visibilityPredicate: Which catalog entries the assembled tool
     ///     presents.
     /// - Returns: The fused `skills` tool.
-    /// - Throws: Whatever `SkillsTool.make(context:)` throws.
+    /// - Throws: Whatever `SkillsTool.make(context:catalogCharacterLimit:)`
+    ///   throws.
     private static func assemble(
         registry: SkillsRegistry,
         mode: SearchMode,
         embedder: (any TextEmbedding)?,
         selection: SelectionConfig?,
         followReloads: Bool,
+        catalogCharacterLimit: Int,
         visibilityPredicate: @escaping @Sendable (SkillMetadata) -> Bool
-    ) async throws -> OperationTool<SkillsToolContext> {
+    ) async throws -> SkillsCatalogTool {
         let context = await makeContext(
             registry: registry,
             mode: mode,
@@ -188,12 +205,12 @@ extension SkillsTool {
             selection: selection,
             followReloads: followReloads,
             visibilityPredicate: visibilityPredicate)
-        return try make(context: context)
+        return try make(context: context, catalogCharacterLimit: catalogCharacterLimit)
     }
 
     /// Builds the `SkillsToolContext` `assemble(registry:mode:embedder:
-    /// selection:followReloads:visibilityPredicate:)` hands to
-    /// `SkillsTool.make(context:)`.
+    /// selection:followReloads:catalogCharacterLimit:visibilityPredicate:)`
+    /// hands to `SkillsTool.make(context:catalogCharacterLimit:)`.
     ///
     /// The searcher, the agent, and the context all get the same
     /// `visibilityPredicate`. Thus one surface holds for the first search,

@@ -66,7 +66,7 @@ struct ReadmeExampleTests {
             registry: registry,
             session: { request in LanguageModelSession(model: .default, instructions: request.instructions) })
 
-        // A lean root session: one tool, preloaded bodies, no full catalog in context.
+        // A lean root session: one tool and the preloaded bodies. Other bodies load on use.
         let session = LanguageModelSession(
             tools: [skillsTool],
             instructions: Instructions {
@@ -87,9 +87,8 @@ struct ReadmeExampleTests {
     /// `SkillsToolAssemblyTests` proves the same factory ranks. This case
     /// proves something that suite cannot: it dispatches an operation and
     /// reads the answer from a file whose imports are only the two modules
-    /// the README names. `SkillsToolAssemblyTests` needs `import Operations`
-    /// to name `OperationTool` in its own dispatch helper, thus it shows
-    /// nothing about the import surface a host lives with.
+    /// the README names. `SkillsToolAssemblyTests` imports `Operations`,
+    /// thus it shows nothing about the import surface a host lives with.
     @Test func theNoSessionFormOfTheFactoryRanksTheFixtureCatalogWithNoModel() async throws {
         let registry = SkillsRegistry(stack: FixtureLibrary.stack())
 

@@ -1,5 +1,54 @@
 ---
-position_column: todo
+comments:
+- actor: claude-code
+  id: 01m2v6v8pv72av3be6jgbj7z5f
+  text: |-
+    Research (implement):
+    - The factories `SkillsTool.make(registry:session:...)` and `SkillsTool.make(registry:embedder:...)` in `Operations/SkillsToolAssembly.swift` return `OperationTool<SkillsToolContext>`. `make(context:)` in `Operations/SkillsTool.swift` gives a fixed description "Search, list, and use skills from the local skill library."
+    - The Extras `OperationTool` gets its schema only from `SchemaFusion.fuse`. That function does not read `ParamMeta.allowedValues` (a documented decision in Extras), and `ParamMeta` is static on each operation type. Thus the Extras API cannot give an `id` enum, and a factory that returns `OperationTool` cannot give another schema or `nil`.
+    - The four operations `use skill`, `list resource`, `read resource` and `run script` all use the same fused `id` field, and each one takes a skill id. Thus one enum on `id` is correct for all of them.
+    - plan.md decisions #18 and #22 say "no dynamic id enum". This card reverses that, thus plan.md must record the change.
+    - ACPAgent `ToolCatalog.makeSkillsTool` returns `(any FoundationModels.Tool)?`, thus an optional return from the factory compiles there with no change, and `nil` means "do not register".
+
+    Decisions (made by the implementer, as the coordinator asked):
+    1. Work stays in this tree (no Extras change). A new public `SkillsCatalogTool: Tool` wraps the `OperationTool`. It gives its own fused schema (same `op` enum and same field union as the Extras fusion), where `id` is an enum of the visible skill ids. It forwards `call`, `operations`, `forked()` and `OperationDescribing`.
+    2. The two registry factories return `SkillsCatalogTool?`. They return `nil` when no skill is visible. This breaks host source; the CHANGELOG records it.
+    3. `make(context:)` stays the low-level door and still returns `OperationTool`. It now also takes its description from the catalog of the context (visible skills), so each door gets the catalog and the use rule. The wrapper schema has no root description, thus the catalog is not in the prompt two times.
+    4. The catalog list has a budget of 8,000 characters (the Codex value when the context window is not known). Over the budget: shorten each description to one common length (not below a minimum), then give the remaining skills by id only on one line, then drop ids, and add a note that `search skill` finds the others.
+    5. The word-break truncation of `SkillsRegistry.truncatedForMenu` moves to one shared `String` helper, so the menu and the catalog use one function.
+  timestamp: 2026-09-18T21:30:33.563404+00:00
+- actor: claude-code
+  id: 01m2v7fvszt9eay400sq6y5xtt
+  text: |-
+    Implementation landed. It follows the decisions of the card author (session foundationmodelsacpagent-08). These replace decision 2 of my earlier comment: no factory returns `nil`.
+
+    - New `SkillsCatalogTool` (public `Tool`, `ForkableTool`, `OperationDescribing`). It wraps `OperationTool<SkillsToolContext>` (`operationTool`), forwards `call`, `perform`, `operations` and `operationDescriptors`, and has its own schema from the new internal `SkillsToolSchema`. That schema is the same flat union as the Extras fusion, except that `id` is an enum of the visible ids. With no visible skill, `id` stays a plain string. The schema root has no description.
+    - Every `SkillsTool.make` overload returns `SkillsCatalogTool`, and has `catalogCharacterLimit: Int = SkillsTool.defaultCatalogCharacterLimit` (8_000). `make(context:catalogCharacterLimit:)` reads `context.registry.metadata()` filtered by `context.visibilityPredicate` one time, and builds the description with the new internal `SkillsToolDescription`. The steps are (a) full, (b) `SkillsRegistry.truncatedForMenu` (now internal, not private; 200 characters), (c) one comma-separated id line, (d) the ids that fit plus "<N> more skills are not listed. Find them with `search skill`." The fixed sentences are never cut.
+    - My reading of author item 5: with no visible skill, the description is "Skills are procedures for kinds of work." + newline + "No skills are installed now." (the first sentence only, word for word).
+    - Operation texts and the `id` parameter text are changed as the author wrote them.
+    - `SkillsCLI` gives `tool.operationTool` to `OperationCLIDriver`. The demo `makeTool` returns `SkillsCatalogTool`. ACPAgent `ToolCatalog.makeSkillsTool` returns `(any Tool)?`, thus it compiles with no change.
+    - Docs: `docs/operations.md` (new section on the description, the enum, and hot reload), README, CHANGELOG (with `catalogCharacterLimit`), plan.md (amendments to decision #22, the §7 id bullet, and the reload paragraph).
+    - Tests: new `SkillsToolDescriptionTests` (6 cases: steps a–d, one line, no skill) and `SkillsCatalogToolTests` (7 cases: description, limit, enum, op enum and field union, no skill, dispatch, op texts). I checked two mutants: with the enum off, and with step (b) skipped, the tests fail.
+    - Existing test helpers now name `SkillsCatalogTool` in place of `OperationTool<SkillsToolContext>`. The HotReloadTests step-5 text now says that the schema is fixed when the tool is made.
+    - Full suite: `swift test`, 735 tests in 56 suites pass. The build has no warnings.
+
+    A process note: I made one edit to `SkillsToolAssembly.swift` with a python script, not with the edit tool. The build and the tests cover the result.
+  timestamp: 2026-09-18T21:41:48.479745+00:00
+- actor: claude-code
+  id: 01m2v7g0fab05h8q1m3sdhzzx0
+  text: |-
+    ### implement — changed
+    - evidence: 3 new source files (Operations/SkillsCatalogTool.swift, Operations/SkillsToolDescription.swift, Operations/SkillsToolSchema.swift); 7 changed source files (SkillsTool.swift, SkillsToolAssembly.swift, UseSkill.swift, SearchSkill.swift, ListSkill.swift, CLI/SkillsCLI.swift, Registry/SkillsRegistry.swift); 1 changed demo file (Examples/skills-demo/SkillsDemoAssembly.swift); 2 new test files (SkillsCatalogToolTests.swift, SkillsToolDescriptionTests.swift); 8 changed test files; 4 changed docs (README.md, CHANGELOG.md, docs/operations.md, plan.md). `swift test`: 735 tests in 56 suites pass, 0 warnings.
+    - next: /review
+  timestamp: 2026-09-18T21:41:53.258825+00:00
+- actor: claude-code
+  id: 01m2v7rj2w9pmbxbt1vpygkjhr
+  text: |-
+    ### test — green
+    - evidence: swift build (clean rebuild) — 0 warnings, 0 errors; swift build --build-tests — 0 warnings; swift test — 735 tests, 56 suites, 0 failed, 0 skipped
+    - next: no action needed. Board can move this task forward.
+  timestamp: 2026-09-18T21:46:33.436451+00:00
+position_column: doing
 position_ordinal: '80'
 title: The skills tool must show its catalog and a use rule in its description, and give plain operation texts
 ---

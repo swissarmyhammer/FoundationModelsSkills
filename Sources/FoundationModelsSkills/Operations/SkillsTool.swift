@@ -1,41 +1,60 @@
 import FoundationModels
 import Operations
 
-/// Builds the fused `skills` tool: `SearchSkill`, `ListSkill`, and `UseSkill`
-/// presented to a model (or the CLI) as one `OperationTool` (plan.md §7,
-/// decision #20).
+/// Builds the fused `skills` tool: `SearchSkill`, `ListSkill`, `UseSkill`,
+/// and the three resource operations presented to a model (or the CLI) as
+/// one `SkillsCatalogTool` over one `OperationTool` (plan.md §7, decision
+/// #20).
 ///
-/// The fusion, the flat-union schema, the forgiving op/parameter resolution,
-/// and the return-don't-throw retry cap are all inherited from the upstream
-/// `Operations` runtime -- this type only supplies the operation set and the
-/// verb aliases decision #21 asks for.
+/// The forgiving op/parameter resolution and the return-don't-throw retry
+/// cap are inherited from the upstream `Operations` runtime. This type
+/// supplies the operation set, the verb aliases decision #21 asks for, and
+/// the catalog: the tool description and the `id` enum of the schema.
 public enum SkillsTool {
     /// The fused tool's model- and CLI-facing name.
     private static let toolName = "skills"
 
-    /// A human- and model-facing summary of the fused tool.
-    private static let toolDescription = "Search, list, and use skills from the local skill library."
+    /// The default `catalogCharacterLimit` of every `make` factory: the most
+    /// characters the catalog list of the tool description may have.
+    ///
+    /// 8,000 characters is the value Codex uses when it does not know the
+    /// size of the context window.
+    public static let defaultCatalogCharacterLimit = 8_000
 
-    /// Builds the fused `skills` `OperationTool` over `context`.
+    /// Builds the fused `skills` tool over `context`.
     ///
     /// The six operations dispatch through `AnyOperation` against the
     /// shared `context`, in the order `search` / `list` / `use` / `list
     /// resource` / `read resource` / `run script` -- the order the fused
     /// schema's `op` enum and any unknown-operation corrective list them in.
     ///
-    /// - Parameter context: The shared context every operation's
-    ///   `execute(in:)` runs against.
+    /// The description and the `id` enum of the schema come from the
+    /// catalog one time, here: `context.registry.metadata()`, filtered by
+    /// `context.visibilityPredicate`, in catalog order. A hot reload does not
+    /// change them. See `SkillsCatalogTool`.
+    ///
+    /// - Parameters:
+    ///   - context: The shared context every operation's `execute(in:)` runs
+    ///     against.
+    ///   - catalogCharacterLimit: The most characters the catalog list of
+    ///     the description may have. Defaults to
+    ///     `defaultCatalogCharacterLimit`. See `SkillsToolDescription` for
+    ///     the steps that make a large catalog fit.
     /// - Returns: The fused `skills` tool, ready to register on a
-    ///   `LanguageModelSession` or drive from the CLI.
+    ///   `LanguageModelSession`. A command-line host drives
+    ///   `SkillsCatalogTool.operationTool`.
     /// - Throws: `SchemaFusionError.reservedParameterName` if an operation
     ///   declares a parameter colliding with the `op` discriminator (not
     ///   expected for this fixed operation set, but propagated per
     ///   `OperationTool.init`'s contract); rethrows `GenerationSchema.SchemaError`
     ///   on any other schema-fusion failure.
-    public static func make(context: SkillsToolContext) throws -> OperationTool<SkillsToolContext> {
-        try OperationTool(
+    public static func make(
+        context: SkillsToolContext, catalogCharacterLimit: Int = defaultCatalogCharacterLimit
+    ) throws -> SkillsCatalogTool {
+        let catalog = context.registry.metadata().filter(context.visibilityPredicate)
+        let operationTool = try OperationTool(
             name: toolName,
-            description: toolDescription,
+            description: SkillsToolDescription.make(catalog: catalog, characterLimit: catalogCharacterLimit),
             context: context,
             operations: [
                 AnyOperation(SearchSkill.self),
@@ -47,6 +66,7 @@ public enum SkillsTool {
             ],
             resolver: makeResolver()
         )
+        return try SkillsCatalogTool(operationTool: operationTool, skillIDs: catalog.map(\.id))
     }
 
     /// Builds the forgiving resolver `make(context:)` fuses the tool with.

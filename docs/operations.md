@@ -1,15 +1,68 @@
 # Operations
 
 The `skills` tool is one fused tool with six operations. The schema is a
-flat union: an `op` discriminator plus every field as an optional. An
-invalid input does not throw. The tool returns a corrective message that
-tells the model how to correct the call.
+flat union: an `op` discriminator plus every field as an optional. The `id`
+field is an enum of the visible skill ids. An invalid input does not throw.
+The tool returns a corrective message that tells the model how to correct the
+call.
+
+## The tool description and the `id` enum
+
+A model reads the name, the description, and the schema of a tool before it
+plans. Thus `SkillsTool.make` puts the catalog in the description and in the
+schema. It reads `registry.metadata()` one time, keeps the skills that the
+visibility predicate accepts, and keeps the catalog order.
+
+The description has two fixed sentences, then one line for each skill:
+
+```text
+Skills are procedures for kinds of work. Each one tells you how to do the work and which tools to use.
+When a task matches a skill below, you must load that skill with `use skill` and follow its instructions before you do the work.
+
+- explore: Understand how unfamiliar code works before planning or changing it.
+- code-context: Find symbols, callers, and the blast radius of a change.
+```
+
+The list has a limit, `catalogCharacterLimit`. The default is 8,000
+characters (`SkillsTool.defaultCatalogCharacterLimit`). The fixed sentences
+do not count against it and are never cut. The tool tries these steps in
+order, and stops at the first one that fits:
+
+1. Each skill with its full description.
+2. Each description shortened to 200 characters, with the same truncation as
+   the user `/` menu.
+3. The ids only, on one comma-separated line.
+4. As many ids as fit, then the line
+   ``<N> more skills are not listed. Find them with `search skill`.``
+
+When no skill is visible, the description is `Skills are procedures for kinds
+of work.` and the line `No skills are installed now.`
+
+The `id` field of the schema is an enum of the visible ids, thus the model
+cannot invent an id. When no skill is visible, `id` stays a plain string,
+because an empty enum accepts no value. The `id` field has the description
+`The id of the skill to load.` The schema root has no description, thus the
+catalog is not in the prompt two times.
+
+### Hot reload
+
+A tool description and a schema are fixed when a session is made. A hot
+reload does not rebuild the tool:
+
+- `search skill` and `list skill` find a skill that a hot reload adds.
+- The description of the tool does not show that skill, and the `id` enum
+  does not hold its id. Thus the model cannot load it with `use skill` in the
+  current session.
+- The next session gets a new tool, thus the skill is in its description and
+  in its `id` enum.
+
+## The operations
 
 | op | parameters | behavior |
 |---|---|---|
-| `search skill` | `query` (req), `limit?` | Returns ranked matches from `SkillSearchAgent` over the model-visible catalog. Each match carries the `use` call that loads it, and the result tells the model to use a skill that applies. See [The `search skill` result](#the-search-skill-result). |
-| `list skill` | `filter?` | Returns the model-visible catalog (with an optional filter), in catalog order, with no ranking. |
-| `use skill` | `id` (req), `arguments?` | Renders the pipeline (plan.md §5) with `arguments`. An unknown or hidden `id` returns a corrective message that contains the current id list. |
+| `search skill` | `query` (req), `limit?` | Finds the skills for the kind of work that the model will do next. Search by the kind of work, not by the topic of the task. Returns ranked matches from `SkillSearchAgent` over the model-visible catalog. Each match carries the `use` call that loads it, and the result tells the model to use a skill that applies. See [The `search skill` result](#the-search-skill-result). |
+| `list skill` | `filter?` | Lists each skill with its description: the model-visible catalog (with an optional filter), in catalog order, with no ranking. |
+| `use skill` | `id` (req), `arguments?` | Loads the instructions of a skill for the model to follow: renders the pipeline (plan.md §5) with `arguments`. An unknown or hidden `id` returns a corrective message that contains the current id list. |
 | `list resource` | `id` (req) | Lists each file in the skill's directory except `SKILL.md`. The list stops at 100 rows. |
 | `read resource` | `id` (req), `path` (req), `start?`, `end?` | Returns a file verbatim, in a line window: 500 lines maximum and 1,000,000 content bytes maximum for each call. The tool never renders the file. It streams the file in 64 KiB parts and never loads the full file. `totalLines` is exact. See [development.md](development.md) for the exact byte-budget rules. |
 | `run script` | `id` (req), `path` (req, in `scripts/`), `arguments?`, `timeout?` | Runs the file directly. The file must have the executable bit and a shebang. Three gates apply: the host policy, the skill's `allowed-tools: Script(<glob>)` grant, and the host trust posture. The process runs in its own process group. A timeout sends `SIGKILL`. |

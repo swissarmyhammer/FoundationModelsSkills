@@ -28,7 +28,7 @@ struct ResourceOpsTests {
     }
 
     /// Builds the fused `skills` tool over `makeContext(roots:)`.
-    private static func makeTool(roots: [URL] = [Self.projectSkillsRoot]) throws -> OperationTool<SkillsToolContext> {
+    private static func makeTool(roots: [URL] = [Self.projectSkillsRoot]) throws -> SkillsCatalogTool {
         try SkillsTool.make(context: Self.makeContext(roots: roots))
     }
 

@@ -55,8 +55,12 @@ public struct SearchSkill: OperationDefinition {
     public static let noun = skillOperationNoun
 
     /// A human- and model-facing summary of what this operation does.
+    ///
+    /// It tells the model what to search for: the kind of work it does
+    /// next, not the topic of its task.
     public static let operationDescription =
-        "Search the skill library by query, returning ranked matches best-first."
+        "Find the skills for the kind of work that you will do next, for example explore code, "
+        + "find callers, or run tests. Search by the kind of work, not by the topic of the task."
 
     /// This operation's parameters, as the resolver and schema fusion need
     /// them: `query` (required) and `limit` (optional).

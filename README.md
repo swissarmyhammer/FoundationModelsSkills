@@ -33,7 +33,7 @@ let skillsTool = try await SkillsTool.make(
     registry: registry,
     session: { request in LanguageModelSession(model: .default, instructions: request.instructions) })
 
-// A lean root session: one tool, preloaded bodies, no full catalog in context.
+// A lean root session: one tool and the preloaded bodies. Other bodies load on use.
 let session = LanguageModelSession(
     tools: [skillsTool],
     instructions: Instructions {
@@ -42,11 +42,19 @@ let session = LanguageModelSession(
     })
 ```
 
-`SkillsTool.make` gives an `OperationTool`, which conforms to the
+`SkillsTool.make` gives a `SkillsCatalogTool`, which conforms to the
 FoundationModels `Tool` protocol — it goes into any standard session with no
 adapter. The search tier runs on the session you pass, and this package makes
 no session of its own. Omit the `session:` argument and each search uses
 keyword retrieval, with no model at all.
+
+The tool shows the catalog to the model before it plans. Its description lists
+each visible skill with its description, and tells the model to load a skill
+that matches the task with `use skill`. The `id` field of its schema is an enum
+of the visible skill ids. Both are fixed when the tool is made: a skill that a
+hot reload adds is found by `search skill`, and the next session gets it in the
+description and in the enum. `catalogCharacterLimit` (8,000 characters by
+default) limits the list. See [`docs/operations.md`](docs/operations.md).
 
 The `session:` closure gets a `SelectionSessionRequest`. The request holds the
 instructions, the candidate skill ids, and `jsonSchema`: a JSON Schema that

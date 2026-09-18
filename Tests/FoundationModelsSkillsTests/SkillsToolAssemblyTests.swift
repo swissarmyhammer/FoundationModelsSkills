@@ -421,7 +421,7 @@ struct SkillsToolAssemblyTests {
     /// - Throws: Whatever `OperationTool.call(arguments:)` or the JSON
     ///   decode throws.
     private static func searchIDs(
-        through tool: OperationTool<SkillsToolContext>, query: String
+        through tool: SkillsCatalogTool, query: String
     ) async throws -> [String] {
         try await search(through: tool, query: query).matches.map(\.id)
     }
@@ -436,7 +436,7 @@ struct SkillsToolAssemblyTests {
     /// - Throws: Whatever `OperationTool.call(arguments:)` or the JSON
     ///   decode throws.
     private static func search(
-        through tool: OperationTool<SkillsToolContext>, query: String
+        through tool: SkillsCatalogTool, query: String
     ) async throws -> SearchResponse {
         let json = try await searchJSON(through: tool, query: query)
         return try JSONDecoder().decode(SearchResponse.self, from: Data(json.utf8))
@@ -451,7 +451,7 @@ struct SkillsToolAssemblyTests {
     /// - Returns: The JSON text the tool gives the model.
     /// - Throws: Whatever `OperationTool.call(arguments:)` throws.
     private static func searchJSON(
-        through tool: OperationTool<SkillsToolContext>, query: String
+        through tool: SkillsCatalogTool, query: String
     ) async throws -> String {
         try await tool.call(arguments: GeneratedContent(properties: ["op": "search skill", "query": query]))
     }
@@ -467,7 +467,7 @@ struct SkillsToolAssemblyTests {
     /// - Throws: Whatever `OperationTool.call(arguments:)` throws, or a
     ///   decode error when the tool gives a corrective, not a body.
     private static func use(
-        through tool: OperationTool<SkillsToolContext>, op: String, id: String
+        through tool: SkillsCatalogTool, op: String, id: String
     ) async throws -> UseResponse {
         let json = try await tool.call(arguments: GeneratedContent(properties: ["op": op, "id": id]))
         return try JSONDecoder().decode(UseResponse.self, from: Data(json.utf8))

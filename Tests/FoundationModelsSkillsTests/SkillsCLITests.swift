@@ -325,7 +325,7 @@ struct SkillsCLITests {
     /// Builds the model-facing fused tool over `registry`, via the same
     /// `FixtureLibrary.makeSkillsToolContext(registry:)` helper
     /// `SkillOperationsTests.makeFixtureContext()` uses.
-    private static func makeModelTool(registry: SkillsRegistry) throws -> OperationTool<SkillsToolContext> {
+    private static func makeModelTool(registry: SkillsRegistry) throws -> SkillsCatalogTool {
         try SkillsTool.make(context: FixtureLibrary.makeSkillsToolContext(registry: registry))
     }
 }
