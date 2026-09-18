@@ -52,8 +52,31 @@ comments:
     - The known timing test `SkillWatcherTests.burstOfWritesWithinTheDebounceWindowProducesExactlyOneCallback` passed. No change was made to `SkillWatcher`.
     - next: send this task for review.
   timestamp: 2026-09-18T15:53:27.934593+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01m2tkkvzv3q8pc6yc6zhx7twg
+  text: |-
+    ### commit — changed
+    - evidence: 5a8aab4 docs(marketplace): say SSH URLs are not supported; use HTTPS in examples
+    - next: none
+  timestamp: 2026-09-18T15:54:28.219231+00:00
+- actor: claude-code
+  id: 01m2tksk14t7mcydb2vefkntqg
+  text: |-
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (commit 5a8aab4). Counts: 0 findings, 0 confirmed, 0 refuted, 7 validator runs attempted, 0 failed. 8 files reviewed. Not reviewed: 6 `.kanban/` files (`.reviewignore`), and `docs/marketplaces.md`, `docs/security.md`, `marketplace.md` (no validator matches these files). The card has no prior `## Review Findings` section.
+    - next: none. The task is in `done`.
+  timestamp: 2026-09-18T15:57:35.652608+00:00
+- actor: claude-code
+  id: 01m2tksz27rezfk9an0qf5md4w
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 11 files
+    - test: green — swift test, 705 tests in 54 suites passed, 0 failed, 0 skipped
+    - commit: 5a8aab4
+    - review: clean — HEAD~1..HEAD, 0 findings, 7 validator runs, 8 files reviewed. No validator matches the 3 Markdown files. The task moved to done.
+  timestamp: 2026-09-18T15:57:47.975626+00:00
+position_column: done
+position_ordinal: ef80
 title: State in the documents that marketplace sources do not support SSH URLs
 ---
 ## What

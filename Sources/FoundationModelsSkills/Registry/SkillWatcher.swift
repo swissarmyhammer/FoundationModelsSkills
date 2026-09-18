@@ -49,8 +49,32 @@ public final class SkillWatcher: @unchecked Sendable {
     /// this immutable `OptionSet` of raw bits is trivially safe to share.
     nonisolated(unsafe) private static let directoryEventMask: DispatchSource.FileSystemEvent = [.write, .delete, .rename]
 
+    /// Starts one debounce timer: calls `fire` on `queue` when `interval`
+    /// is complete.
+    ///
+    /// The watcher starts a new timer for each event and never cancels an
+    /// earlier one. An earlier timer that fires later finds that it is
+    /// stale and does nothing (see `flushIfCurrent(_:)`). A timer must call
+    /// `fire` on `queue`, because `fire` touches state that only `queue`
+    /// guards.
+    ///
+    /// This is the seam that lets a test own the length of the quiet
+    /// period. A test that waits on the real clock races its own file work
+    /// against the interval, and a loaded host then divides one burst into
+    /// two callbacks.
+    typealias DebounceTimer = @Sendable (
+        _ interval: DispatchTimeInterval, _ queue: DispatchQueue, _ fire: @escaping @Sendable () -> Void
+    ) -> Void
+
+    /// The production debounce timer: `fire` runs on `queue` when
+    /// `interval` of real time is complete.
+    private static let startDispatchTimer: DebounceTimer = { interval, queue, fire in
+        queue.asyncAfter(deadline: .now() + interval, execute: fire)
+    }
+
     private let roots: [URL]
     private let debounceInterval: DispatchTimeInterval
+    private let startDebounceTimer: DebounceTimer
     private let onChange: @Sendable () -> Void
     private let queue: DispatchQueue
 
@@ -74,11 +98,13 @@ public final class SkillWatcher: @unchecked Sendable {
     /// Read and mutated only while running on `queue`.
     private var openDescriptorCount = 0
 
-    /// The in-flight debounce timer, if a burst is currently being
-    /// coalesced.
+    /// The number of the newest debounce timer. Each event increases it and
+    /// starts a timer that remembers the new value, and `stop()` increases
+    /// it too. A timer whose value is not the newest one is stale: a later
+    /// event replaced it, or the watcher stopped.
     ///
     /// Read and mutated only while running on `queue`.
-    private var pendingFlush: DispatchWorkItem?
+    private var newestTimerNumber = 0
 
     /// Whether `start()` has run without a matching `stop()` since.
     ///
@@ -99,13 +125,40 @@ public final class SkillWatcher: @unchecked Sendable {
     ///   - onChange: Called at most once per quiet period, on an
     ///     unspecified queue, whenever something changed under any watched
     ///     root. Never called again once `stop()` returns.
-    public init(
+    public convenience init(
         roots: [URL],
         debounceInterval: DispatchTimeInterval = .milliseconds(200),
         onChange: @escaping @Sendable () -> Void
     ) {
+        self.init(
+            roots: roots, debounceInterval: debounceInterval, startDebounceTimer: Self.startDispatchTimer,
+            onChange: onChange)
+    }
+
+    /// Creates a watcher over `roots` with a given debounce timer, not yet
+    /// watching.
+    ///
+    /// Internal, `@testable`-only: a test gives a timer that the test ends
+    /// by hand, so the speed of the host cannot divide one burst into two
+    /// callbacks.
+    ///
+    /// - Parameters:
+    ///   - roots: The layer roots to watch, as in the public initializer.
+    ///   - debounceInterval: The interval that `startDebounceTimer`
+    ///     receives.
+    ///   - startDebounceTimer: Starts one debounce timer. See
+    ///     `DebounceTimer` for the contract.
+    ///   - onChange: Called at most once per quiet period, as in the public
+    ///     initializer.
+    init(
+        roots: [URL],
+        debounceInterval: DispatchTimeInterval,
+        startDebounceTimer: @escaping DebounceTimer,
+        onChange: @escaping @Sendable () -> Void
+    ) {
         self.roots = roots
         self.debounceInterval = debounceInterval
+        self.startDebounceTimer = startDebounceTimer
         self.onChange = onChange
         queue = DispatchQueue(label: "FoundationModelsSkills.SkillWatcher")
         queue.setSpecific(key: Self.queueSpecificKey, value: true)
@@ -137,8 +190,10 @@ public final class SkillWatcher: @unchecked Sendable {
         runOnQueue {
             guard self.isWatching else { return }
             self.isWatching = false
-            self.pendingFlush?.cancel()
-            self.pendingFlush = nil
+            // Makes each timer that is still in flight stale, so a timer
+            // from before this `stop()` cannot flush after a later
+            // `start()`.
+            self.newestTimerNumber += 1
             self.cancelAllWatchedSources()
         }
     }
@@ -357,17 +412,28 @@ public final class SkillWatcher: @unchecked Sendable {
         handleRawEvent()
     }
 
-    /// Restarts the shared debounce timer.
+    /// Restarts the shared debounce timer: starts a new timer, and the new
+    /// timer number makes each earlier timer stale.
     ///
     /// Always called on `queue`, from a `DispatchSource` event handler.
     private func handleRawEvent() {
         guard isWatching else { return }
-        pendingFlush?.cancel()
-        let flush = DispatchWorkItem { [weak self] in
-            self?.flush()
+        newestTimerNumber += 1
+        let timerNumber = newestTimerNumber
+        startDebounceTimer(debounceInterval, queue) { [weak self] in
+            self?.flushIfCurrent(timerNumber)
         }
-        pendingFlush = flush
-        queue.asyncAfter(deadline: .now() + debounceInterval, execute: flush)
+    }
+
+    /// Flushes when the timer that fired is the newest one, and does
+    /// nothing for a stale timer.
+    ///
+    /// Always called on `queue`, from a debounce timer.
+    ///
+    /// - Parameter timerNumber: The number of the timer that fired.
+    private func flushIfCurrent(_ timerNumber: Int) {
+        guard timerNumber == newestTimerNumber else { return }
+        flush()
     }
 
     /// Fires the coalesced `onChange` callback once, then rebuilds the
@@ -383,7 +449,6 @@ public final class SkillWatcher: @unchecked Sendable {
     /// it.
     private func flush() {
         guard isWatching else { return }
-        pendingFlush = nil
         onChange()
         guard isWatching else { return }
         cancelAllWatchedSources()

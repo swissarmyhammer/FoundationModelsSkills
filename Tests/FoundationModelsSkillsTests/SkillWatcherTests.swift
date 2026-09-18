@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 import Testing
 
 @testable import FoundationModelsSkills
@@ -18,105 +19,130 @@ import Testing
 /// listed before its own parent leaks no descriptor, and `stop()` ends
 /// delivery.
 struct SkillWatcherTests {
-    /// How long a watcher under test waits for a quiet period before firing
-    /// its coalesced callback. Short relative to the wait timeouts below so
-    /// tests run quickly without being so short that real filesystem event
-    /// latency splits a single burst into two callbacks.
+    /// The debounce interval of each watcher under test.
+    ///
+    /// A test that asserts "exactly one callback" gives the watcher a
+    /// `ManualDebounceTimer`, and the watcher then never counts this
+    /// interval: the test ends the quiet period itself. The file work of a
+    /// test and the quiet period of the watcher thus do not race on the
+    /// real clock, and a slow host cannot divide one burst into two
+    /// callbacks. Only the tests of `stop()` and of the descriptor count
+    /// use the real timer with this interval, and they assert no count
+    /// that the speed of the host can change.
     private static let testDebounceInterval: DispatchTimeInterval = .milliseconds(150)
 
-    /// How long a test waits for an expected callback to arrive before
-    /// treating its absence as a failure. Generous relative to
-    /// `testDebounceInterval` to absorb scheduler and filesystem-event
-    /// jitter in a sandboxed test environment.
+    /// How long a test waits for an expected event or callback to arrive
+    /// before treating its absence as a failure. Generous, to absorb
+    /// scheduler and filesystem-event jitter in a sandboxed test
+    /// environment. A longer wait can only make a test slower; it cannot
+    /// change a result.
     private static let expectedSignalTimeout: Duration = .seconds(10)
 
-    /// How long a test waits, after an expected callback already arrived,
-    /// to confirm no *second* callback follows it. Comfortably longer than
-    /// `testDebounceInterval` so a slow-to-arrive coalesced flush isn't
-    /// mistaken for a genuine second burst.
+    /// How long a test waits to confirm that something does NOT occur: no
+    /// second callback after the expected one, and no timer start for
+    /// activity the watcher must ignore.
     private static let noFurtherSignalWindow: Duration = .seconds(1)
+
+    /// How many times the burst test writes `SKILL.md`.
+    private static let burstWriteCount = 5
+
+    /// The smallest number of debounce timer starts the burst test waits
+    /// for before it ends the quiet period. The skill folder and
+    /// `SKILL.md` each have a source of their own, and the burst changes
+    /// the two, so the watcher starts a timer two times or more. Fewer
+    /// than two starts cannot show that a later start replaces an earlier
+    /// one.
+    private static let burstTimerStartFloor = 2
 
     // MARK: - Create / edit / delete each coalesce to exactly one callback
 
     @Test func creatingASkillFileProducesExactlyOneCoalescedCallback() async throws {
-        try await Self.withWatchedTempRoot { root, recorder in
+        try await Self.withWatchedTempRoot { root, signals in
             try ReloadTestSupport.writeSkillFile(id: "new-skill", in: root)
-            _ = await Self.expectExactlyOneSignal(recorder, since: 0)
+            _ = await Self.expectExactlyOneSignal(signals, since: 0)
         }
     }
 
     @Test func editingASkillFileProducesExactlyOneCoalescedCallback() async throws {
-        try await Self.withWatchedTempRoot { root, recorder in
+        try await Self.withWatchedTempRoot { root, signals in
             try ReloadTestSupport.writeSkillFile(id: "existing-skill", in: root)
-            let baseline = await Self.expectExactlyOneSignal(recorder, since: 0)
+            let baseline = await Self.expectExactlyOneSignal(signals, since: 0)
 
             try ReloadTestSupport.writeSkillFile(id: "existing-skill", in: root, descriptionSuffix: "edited")
-            _ = await Self.expectExactlyOneSignal(recorder, since: baseline)
+            _ = await Self.expectExactlyOneSignal(signals, since: baseline)
         }
     }
 
     @Test func deletingASkillFileProducesExactlyOneCoalescedCallback() async throws {
-        try await Self.withWatchedTempRoot { root, recorder in
+        try await Self.withWatchedTempRoot { root, signals in
             try ReloadTestSupport.writeSkillFile(id: "doomed-skill", in: root)
-            let baseline = await Self.expectExactlyOneSignal(recorder, since: 0)
+            let baseline = await Self.expectExactlyOneSignal(signals, since: 0)
 
             try FileManager.default.removeItem(
                 at: root.appendingPathComponent("doomed-skill", isDirectory: true))
-            _ = await Self.expectExactlyOneSignal(recorder, since: baseline)
+            _ = await Self.expectExactlyOneSignal(signals, since: baseline)
         }
     }
 
     // MARK: - Burst coalescing
 
     @Test func burstOfWritesWithinTheDebounceWindowProducesExactlyOneCallback() async throws {
-        try await Self.withWatchedTempRoot { root, recorder in
+        try await Self.withWatchedTempRoot { root, signals in
+            // The first flush makes the watch tree again, so the skill
+            // folder and `SKILL.md` each have a source of their own before
+            // the burst starts.
+            try ReloadTestSupport.writeSkillFile(id: "burst-skill", in: root)
+            let baseline = await Self.expectExactlyOneSignal(signals, since: 0)
+
             let skillFile = root
                 .appendingPathComponent("burst-skill", isDirectory: true)
                 .appendingPathComponent("SKILL.md")
-            try FileManager.default.createDirectory(
-                at: skillFile.deletingLastPathComponent(), withIntermediateDirectories: true)
-
-            for iteration in 0..<5 {
+            for iteration in 0..<Self.burstWriteCount {
                 try ReloadTestSupport.skillFileContents(id: "burst-skill", descriptionSuffix: "rev\(iteration)")
                     .write(to: skillFile, atomically: true, encoding: .utf8)
             }
 
-            _ = await Self.expectExactlyOneSignal(recorder, since: 0)
+            // The quiet period ends only when the test says so, thus the
+            // full burst is in one debounce window on a host of any speed.
+            // A watcher that did not replace the earlier timer fires one
+            // callback for each timer start, and this expectation fails.
+            _ = await Self.expectExactlyOneSignal(
+                signals, since: baseline, afterTimerStarts: Self.burstTimerStartFloor)
         }
     }
 
     // MARK: - Recursion: nested SKILL.md and _partials/ both count
 
     @Test func skillFileNestedTwoLevelsDeepIsDetected() async throws {
-        try await Self.withWatchedTempRoot { root, recorder in
+        try await Self.withWatchedTempRoot { root, signals in
             try ReloadTestSupport.writeSkillFile(id: "nested-skill", in: root)
-            _ = await Self.expectExactlyOneSignal(recorder, since: 0)
+            _ = await Self.expectExactlyOneSignal(signals, since: 0)
         }
     }
 
     @Test func editingAFileUnderPartialsIsDetected() async throws {
-        try await Self.withWatchedTempRoot { root, recorder in
+        try await Self.withWatchedTempRoot { root, signals in
             let partialsDirectory = root.appendingPathComponent("_partials", isDirectory: true)
             try FileManager.default.createDirectory(at: partialsDirectory, withIntermediateDirectories: true)
-            let baseline = await Self.expectExactlyOneSignal(recorder, since: 0)
+            let baseline = await Self.expectExactlyOneSignal(signals, since: 0)
 
             try "header text".write(
                 to: partialsDirectory.appendingPathComponent("header.md"), atomically: true, encoding: .utf8)
-            _ = await Self.expectExactlyOneSignal(recorder, since: baseline)
+            _ = await Self.expectExactlyOneSignal(signals, since: baseline)
         }
     }
 
     // MARK: - Unfiltered directories still coalesce safely
 
     @Test func eventsUnderAGitDirectoryStillCoalesceWithoutCrashing() async throws {
-        try await Self.withWatchedTempRoot { root, recorder in
+        try await Self.withWatchedTempRoot { root, signals in
             let gitDirectory = root.appendingPathComponent(".git", isDirectory: true)
             try FileManager.default.createDirectory(at: gitDirectory, withIntermediateDirectories: true)
-            let baseline = await Self.expectExactlyOneSignal(recorder, since: 0)
+            let baseline = await Self.expectExactlyOneSignal(signals, since: 0)
 
             try "ref: refs/heads/main\n".write(
                 to: gitDirectory.appendingPathComponent("HEAD"), atomically: true, encoding: .utf8)
-            _ = await Self.expectExactlyOneSignal(recorder, since: baseline)
+            _ = await Self.expectExactlyOneSignal(signals, since: baseline)
         }
     }
 
@@ -129,75 +155,62 @@ struct SkillWatcherTests {
         // shared temp root sees constant, unrelated activity from every
         // other test's own `makeTempDirectory()` call, which would make the
         // "exactly one signal" assertion below flaky.
-        let privateDirectory = try WatcherTestSupport.makeTempDirectory()
-        defer { try? FileManager.default.removeItem(at: privateDirectory) }
-        let bogusRoot = privateDirectory.appendingPathComponent("does-not-exist", isDirectory: true)
-        let realRoot = try WatcherTestSupport.makeTempDirectory()
-        defer { try? FileManager.default.removeItem(at: realRoot) }
-
-        let (onChange, recorder) = Self.makeSignalRecorder()
-        let watcher = SkillWatcher(
-            roots: [bogusRoot, realRoot], debounceInterval: Self.testDebounceInterval, onChange: onChange)
-        watcher.start()
-        defer { watcher.stop() }
-
-        try ReloadTestSupport.writeSkillFile(id: "still-works", in: realRoot)
-        _ = await Self.expectExactlyOneSignal(recorder, since: 0)
+        try await Self.withTempDirectory { privateDirectory in
+            let bogusRoot = privateDirectory.appendingPathComponent("does-not-exist", isDirectory: true)
+            try await Self.withTempDirectory { realRoot in
+                try await Self.withWatcher(over: [bogusRoot, realRoot]) { signals in
+                    try ReloadTestSupport.writeSkillFile(id: "still-works", in: realRoot)
+                    _ = await Self.expectExactlyOneSignal(signals, since: 0)
+                }
+            }
+        }
     }
 
     // MARK: - Late root creation (^80kravf): armed via nearest existing ancestor
 
     @Test func creatingARootThatDidNotExistAtStartIsDetected() async throws {
-        let privateDirectory = try WatcherTestSupport.makeTempDirectory()
-        defer { try? FileManager.default.removeItem(at: privateDirectory) }
-        let lateRoot = privateDirectory.appendingPathComponent("skills-arrive-later", isDirectory: true)
-
-        let (onChange, recorder) = Self.makeSignalRecorder()
-        let watcher = SkillWatcher(roots: [lateRoot], debounceInterval: Self.testDebounceInterval, onChange: onChange)
-        watcher.start()
-        defer { watcher.stop() }
-
-        try ReloadTestSupport.writeSkillFile(id: "arrived-skill", in: lateRoot)
-        _ = await Self.expectExactlyOneSignal(recorder, since: 0)
+        try await Self.withTempDirectory { privateDirectory in
+            let lateRoot = privateDirectory.appendingPathComponent("skills-arrive-later", isDirectory: true)
+            try await Self.withWatcher(over: [lateRoot]) { signals in
+                try ReloadTestSupport.writeSkillFile(id: "arrived-skill", in: lateRoot)
+                _ = await Self.expectExactlyOneSignal(signals, since: 0)
+            }
+        }
     }
 
     @Test func deletingAndRecreatingARootKeepsEventsFlowing() async throws {
-        let privateDirectory = try WatcherTestSupport.makeTempDirectory()
-        defer { try? FileManager.default.removeItem(at: privateDirectory) }
-        let root = privateDirectory.appendingPathComponent("comes-and-goes", isDirectory: true)
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try await Self.withTempDirectory { privateDirectory in
+            let root = privateDirectory.appendingPathComponent("comes-and-goes", isDirectory: true)
+            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+            try await Self.withWatcher(over: [root]) { signals in
+                try ReloadTestSupport.writeSkillFile(id: "before-delete", in: root)
+                let afterFirstCreate = await Self.expectExactlyOneSignal(signals, since: 0)
 
-        let (onChange, recorder) = Self.makeSignalRecorder()
-        let watcher = SkillWatcher(roots: [root], debounceInterval: Self.testDebounceInterval, onChange: onChange)
-        watcher.start()
-        defer { watcher.stop() }
+                try FileManager.default.removeItem(at: root)
+                let afterDelete = await Self.expectExactlyOneSignal(signals, since: afterFirstCreate)
 
-        try ReloadTestSupport.writeSkillFile(id: "before-delete", in: root)
-        let afterFirstCreate = await Self.expectExactlyOneSignal(recorder, since: 0)
-
-        try FileManager.default.removeItem(at: root)
-        let afterDelete = await Self.expectExactlyOneSignal(recorder, since: afterFirstCreate)
-
-        // The root is gone -- `flush()`'s rebuild must have fallen back to
-        // arming `privateDirectory` (the now-nearest existing ancestor), not
-        // silently stopped watching anything at all.
-        try ReloadTestSupport.writeSkillFile(id: "after-recreate", in: root)
-        _ = await Self.expectExactlyOneSignal(recorder, since: afterDelete)
+                // The root is gone -- `flush()`'s rebuild must have fallen
+                // back to arming `privateDirectory` (the now-nearest existing
+                // ancestor), not silently stopped watching anything at all.
+                try ReloadTestSupport.writeSkillFile(id: "after-recreate", in: root)
+                _ = await Self.expectExactlyOneSignal(signals, since: afterDelete)
+            }
+        }
     }
 
     @Test func editingAFileUnderALateCreatedRootFiresAfterEscalation() async throws {
         try await Self.withTempDirectory { privateDirectory in
             let lateRoot = privateDirectory.appendingPathComponent("skills-arrive-later", isDirectory: true)
-            try await Self.withWatcher(over: [lateRoot]) { recorder in
+            try await Self.withWatcher(over: [lateRoot]) { signals in
                 try ReloadTestSupport.writeSkillFile(id: "arrived-skill", in: lateRoot)
-                let afterCreate = await Self.expectExactlyOneSignal(recorder, since: 0)
+                let afterCreate = await Self.expectExactlyOneSignal(signals, since: 0)
 
                 // The flush above rebuilt the watch tree, so `lateRoot` is
                 // now watched recursively. An edit two levels under it never
                 // touches `privateDirectory`, so only the recursive watch
                 // can see it -- the ancestor watch alone cannot.
                 try ReloadTestSupport.writeSkillFile(id: "arrived-skill", in: lateRoot, descriptionSuffix: "edited")
-                _ = await Self.expectExactlyOneSignal(recorder, since: afterCreate)
+                _ = await Self.expectExactlyOneSignal(signals, since: afterCreate)
             }
         }
     }
@@ -205,7 +218,7 @@ struct SkillWatcherTests {
     @Test func unrelatedActivityUnderAnArmedAncestorProducesNoCallback() async throws {
         try await Self.withTempDirectory { privateDirectory in
             let lateRoot = privateDirectory.appendingPathComponent("skills-arrive-later", isDirectory: true)
-            try await Self.withWatcher(over: [lateRoot]) { recorder in
+            try await Self.withWatcher(over: [lateRoot]) { signals in
                 // `privateDirectory` is the armed ancestor. Activity directly
                 // under it that does not create `lateRoot` must not reach
                 // `onChange`.
@@ -213,12 +226,17 @@ struct SkillWatcherTests {
                 try FileManager.default.createDirectory(at: unrelated, withIntermediateDirectories: true)
                 try "noise".write(to: unrelated.appendingPathComponent("noise.txt"), atomically: true, encoding: .utf8)
                 try FileManager.default.removeItem(at: unrelated)
-                let afterNoise = await Self.waitForCount(recorder, atLeast: 1, timeout: Self.noFurtherSignalWindow)
-                #expect(afterNoise == 0)
+                // The ancestor filter must drop the noise before it starts a
+                // debounce timer. With the manual timer, a callback count of
+                // zero proves nothing by itself, so the timer starts are the
+                // evidence.
+                await Self.waitUntil(timeout: Self.noFurtherSignalWindow) { signals.timer.pendingCount > 0 }
+                #expect(signals.timer.pendingCount == 0)
+                #expect(await signals.recorder.count == 0)
 
                 // Creating the awaited root itself still fires.
                 try ReloadTestSupport.writeSkillFile(id: "arrived-skill", in: lateRoot)
-                _ = await Self.expectExactlyOneSignal(recorder, since: 0)
+                _ = await Self.expectExactlyOneSignal(signals, since: 0)
             }
         }
     }
@@ -233,17 +251,17 @@ struct SkillWatcherTests {
                 .appendingPathComponent("b", isDirectory: true)
                 .appendingPathComponent("c", isDirectory: true)
                 .appendingPathComponent("skills", isDirectory: true)
-            try await Self.withWatcher(over: [deepRoot]) { recorder in
+            try await Self.withWatcher(over: [deepRoot]) { signals in
                 // Creating the whole chain at once makes `a` appear directly
                 // under the armed ancestor, which is the awaited child.
                 try ReloadTestSupport.writeSkillFile(id: "deep-skill", in: deepRoot)
-                let afterCreate = await Self.expectExactlyOneSignal(recorder, since: 0)
+                let afterCreate = await Self.expectExactlyOneSignal(signals, since: 0)
 
                 // The flush above escalated to a real recursive watch of
                 // `deepRoot`; an edit four levels below `privateDirectory`
                 // is only visible through that watch.
                 try ReloadTestSupport.writeSkillFile(id: "deep-skill", in: deepRoot, descriptionSuffix: "edited")
-                _ = await Self.expectExactlyOneSignal(recorder, since: afterCreate)
+                _ = await Self.expectExactlyOneSignal(signals, since: afterCreate)
             }
         }
     }
@@ -261,9 +279,9 @@ struct SkillWatcherTests {
             // `start()` lists `root`, reaches `locked`, and must treat its
             // failed listing as "no entries" rather than throwing or
             // abandoning the rest of the tree.
-            try await Self.withWatcher(over: [root]) { recorder in
+            try await Self.withWatcher(over: [root]) { signals in
                 try ReloadTestSupport.writeSkillFile(id: "readable-skill", in: root)
-                _ = await Self.expectExactlyOneSignal(recorder, since: 0)
+                _ = await Self.expectExactlyOneSignal(signals, since: 0)
             }
         }
     }
@@ -408,19 +426,92 @@ struct SkillWatcherTests {
         }
     }
 
+    /// A debounce timer that a test ends by hand.
+    ///
+    /// `start` records each timer the watcher starts and never fires one by
+    /// itself. `endQuietPeriod()` fires them. The length of the quiet period
+    /// is thus a decision of the test, not a race between the file work of
+    /// the test and the real clock.
+    ///
+    /// A `Mutex` guards the list, thus the compiler checks the plain
+    /// `Sendable` conformance.
+    private final class ManualDebounceTimer: Sendable {
+        /// One timer the watcher started: the queue to fire on, and the
+        /// closure to fire.
+        private struct StartedTimer: Sendable {
+            let queue: DispatchQueue
+            let fire: @Sendable () -> Void
+        }
+
+        /// The timers the watcher started that `endQuietPeriod()` did not
+        /// fire yet, in start order.
+        private let startedTimers = Mutex<[StartedTimer]>([])
+
+        /// The closure to give to `SkillWatcher` as its debounce timer.
+        var start: SkillWatcher.DebounceTimer {
+            { [self] _, queue, fire in
+                startedTimers.withLock { $0.append(StartedTimer(queue: queue, fire: fire)) }
+            }
+        }
+
+        /// The number of timers the watcher started that are not fired yet.
+        var pendingCount: Int {
+            startedTimers.withLock { $0.count }
+        }
+
+        /// Fires each started timer on its queue, in start order, until none
+        /// is left.
+        ///
+        /// An event that arrived immediately before this call can start one
+        /// more timer while the earlier ones fire. That start makes the
+        /// earlier ones stale, thus one pass is not sufficient. `sync` also
+        /// makes sure that the flush, and the new watch tree that the flush
+        /// makes, are complete when this method returns.
+        func endQuietPeriod() {
+            var due = takeStartedTimers()
+            while !due.isEmpty {
+                for timer in due {
+                    timer.queue.sync(execute: timer.fire)
+                }
+                due = takeStartedTimers()
+            }
+        }
+
+        /// Removes and returns each timer that is not fired yet.
+        ///
+        /// - Returns: The timers, in start order.
+        private func takeStartedTimers() -> [StartedTimer] {
+            startedTimers.withLock { timers in
+                defer { timers.removeAll() }
+                return timers
+            }
+        }
+    }
+
+    /// What a test of a watcher with a manual debounce timer observes and
+    /// controls: the callbacks that arrived, and the end of the quiet
+    /// period.
+    private struct WatchedSignals {
+        /// The tally of `onChange` calls.
+        let recorder: SignalRecorder
+
+        /// The debounce timer of the watcher.
+        let timer: ManualDebounceTimer
+    }
+
     /// Starts a `SkillWatcher` over a fresh temporary root, hands the root
-    /// and its signal recorder to `body`, then tears the watcher and the
-    /// temporary directory down unconditionally.
+    /// and its signals to `body`, then tears the watcher and the temporary
+    /// directory down unconditionally.
     ///
     /// - Parameter body: The test body, given the watched root and the
-    ///   recorder of coalesced signals it produces.
+    ///   signals of the watcher.
     /// - Throws: Whatever `body` or the temp-directory setup throws.
     private static func withWatchedTempRoot(
-        _ body: (URL, SignalRecorder) async throws -> Void
+        _ body: (URL, WatchedSignals) async throws -> Void
     ) async throws {
         try await Self.withTempDirectory { root in
-            try await Self.withWatcher(over: [root]) { recorder in
-                try await body(root, recorder)
+            try await Self.withWatcher(over: [root]) { signals in
+                try await body(root, signals)
             }
         }
     }
@@ -436,19 +527,22 @@ struct SkillWatcherTests {
         try await body(directory)
     }
 
-    /// Starts a `SkillWatcher` over `roots`, hands its signal recorder to
-    /// `body`, then stops the watcher unconditionally.
+    /// Starts a `SkillWatcher` with a manual debounce timer over `roots`,
+    /// hands its signals to `body`, then stops the watcher unconditionally.
     ///
     /// - Parameters:
     ///   - roots: The roots to watch, in the order the watcher receives them.
-    ///   - body: The test body, given the recorder of coalesced signals.
+    ///   - body: The test body, given the signals of the watcher.
     /// - Throws: Whatever `body` throws.
-    private static func withWatcher(over roots: [URL], _ body: (SignalRecorder) async throws -> Void) async throws {
+    private static func withWatcher(over roots: [URL], _ body: (WatchedSignals) async throws -> Void) async throws {
         let (onChange, recorder) = Self.makeSignalRecorder()
-        let watcher = SkillWatcher(roots: roots, debounceInterval: Self.testDebounceInterval, onChange: onChange)
+        let timer = ManualDebounceTimer()
+        let watcher = SkillWatcher(
+            roots: roots, debounceInterval: Self.testDebounceInterval, startDebounceTimer: timer.start,
+            onChange: onChange)
         watcher.start()
         defer { watcher.stop() }
-        try await body(recorder)
+        try await body(WatchedSignals(recorder: recorder, timer: timer))
     }
 
     /// Builds a `SkillWatcher.onChange` closure paired with the
@@ -464,23 +558,39 @@ struct SkillWatcherTests {
         return (onChange, recorder)
     }
 
-    /// Asserts that exactly one new signal lands on `recorder` after
-    /// `baseline`: the count reaches `baseline + 1` within
-    /// `expectedSignalTimeout`, and stays there through
+    /// Asserts that the file work the test did immediately before makes
+    /// exactly one new signal after `baseline`.
+    ///
+    /// The steps: wait until the watcher started `minimumTimerStarts`
+    /// debounce timers, confirm that the events made no callback by
+    /// themselves, end the quiet period, then confirm that the count
+    /// reaches `baseline + 1` and stays there through
     /// `noFurtherSignalWindow`.
     ///
     /// - Parameters:
-    ///   - recorder: The recorder to assert against.
+    ///   - signals: The signals of the watcher under test.
     ///   - baseline: The count observed before the action under test.
+    ///   - minimumTimerStarts: How many timer starts to wait for before the
+    ///     quiet period ends.
     /// - Returns: The settled count, for chaining a further action's
     ///   `baseline` in the same test.
     @discardableResult
-    private static func expectExactlyOneSignal(_ recorder: SignalRecorder, since baseline: Int) async -> Int {
-        let afterFirst = await Self.waitForCount(recorder, atLeast: baseline + 1, timeout: Self.expectedSignalTimeout)
+    private static func expectExactlyOneSignal(
+        _ signals: WatchedSignals, since baseline: Int, afterTimerStarts minimumTimerStarts: Int = 1
+    ) async -> Int {
+        await Self.waitUntil(timeout: Self.expectedSignalTimeout) {
+            signals.timer.pendingCount >= minimumTimerStarts
+        }
+        #expect(signals.timer.pendingCount >= minimumTimerStarts)
+        #expect(await signals.recorder.count == baseline)
+
+        signals.timer.endQuietPeriod()
+        let afterFirst = await Self.waitForCount(
+            signals.recorder, atLeast: baseline + 1, timeout: Self.expectedSignalTimeout)
         #expect(afterFirst == baseline + 1)
 
         let afterSettling = await Self.waitForCount(
-            recorder, atLeast: baseline + 2, timeout: Self.noFurtherSignalWindow)
+            signals.recorder, atLeast: baseline + 2, timeout: Self.noFurtherSignalWindow)
         #expect(afterSettling == baseline + 1)
         return afterSettling
     }
