@@ -19,8 +19,8 @@ comments:
 
     The card stays in todo. It needs one word from a person: push, or do not push.
   timestamp: 2026-09-17T15:28:12.837340+00:00
-position_column: todo
-position_ordinal: '9280'
+position_column: done
+position_ordinal: eb80
 title: The skills marketplace depends on FoundationModelsSkills main, which has no marketplace code yet
 ---
 ## What

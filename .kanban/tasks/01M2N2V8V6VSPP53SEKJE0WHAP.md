@@ -140,8 +140,40 @@ comments:
 
     - guardrail: 1 stuck entry. The guardrail needs 3 and is not reached.
   timestamp: 2026-09-17T14:17:18.392108+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01m2tatz22h7jyzz73bccnafwt
+  text: |-
+    ### review — clean
+
+    Scope: commit `b414515` in `/Users/wballard/github/swissarmyhammer/FoundationModelsACPAgent`, by hand. The engine reads the Skills repository only, thus it cannot read the other repository.
+
+    All seven checks hold.
+
+    1. Pool named. `EchoModel.makeRouter` gives `pool: ModelPool()` to `Router`. The doc comment tells the first-loader-wins rule: a pool holds one container for each model identity, and the first loader that reaches a key keeps it.
+    2. Repair proved, not only present. I removed `pool: ModelPool()`, thus the router used the default `ModelPool.shared` again. `ScriptedModelIsolationTests` became RED with the two-agents message: `agentText(in: secondUpdates)` gave `"the first agent answers"`, and the test wanted `"the second agent answers"`. I put `pool: ModelPool()` back. The test became green. The work tree is clean again. Only `acp-agent.score_fix1.json` and `logs/` stay untracked.
+    3. No second copy of the reader. `Tests/.../Support/ScriptedTurnFixture.swift` holds the only `agentText(in:)`, and it calls the only chunk reader, `agentChunkTexts(in:)`. The other `agentMessageChunk` matches in the test tree read the message identifier, thus they are a different question.
+    4. Suite green two times. `swift test` gave 564 tests in 61 suites, 0 failures, 1 known issue. `swift test --no-parallel` gave the same 564 tests in 61 suites, 0 failures, 1 known issue. A clean `swift package clean` and `swift build --build-tests` gave zero Swift compile warnings from this repository. One build-system warning stays: `missing creator for mutated node` for the `mlx-swift_Cmlx.bundle` path of the dependency. It is not a Swift compile warning, and `b414515` did not cause it.
+    5. No new time value. The only time word the commit adds is `.timeLimit(.minutes(1))` on the new test. This is the guard that the test tree uses 158 times. The commit adds no interval, no sleep, no jitter, no debounce, no age limit and no settle budget.
+    6. No `guard` in a test body. The added lines hold no `guard`.
+    7. No debug waste. `b414515` writes three files only: `EchoModel.swift`, `ScriptedModelIsolationTests.swift` and `ScriptedTurnFixture.swift`. `acp-agent.score_fix1.json` and `logs/` stay untracked and unchanged.
+
+    The defect of this card is closed. The 15 issues that stayed came from card ^fry23gm, and that card is done.
+
+    - evidence: swift test 564 tests / 61 suites / 0 failures / 1 known issue, parallel and --no-parallel; falsification run made ScriptedModelIsolationTests RED with "the first agent answers"
+    - next: none. The card moves to done.
+  timestamp: 2026-09-18T13:21:03.554086+00:00
+- actor: claude-code
+  id: 01m2tavr1tpf1fgpyrbapg2s68
+  text: |-
+    ### finish iteration 2 — clean
+    - implement: no-change — the repair of cause one was already in b414515. Cause two, the 15 remaining issues, belonged to ^fry23gm, which is now done (103f78d, a5d76ff, 3842457).
+    - test: green — swift test, 564 tests in 61 suites, 0 failures, 1 known issue; the same with --no-parallel
+    - commit: b414515 (no new commit this iteration)
+    - review: clean — 0 findings. A falsification run removed pool: ModelPool(), and ScriptedModelIsolationTests went red with "the first agent answers"; restored, green, tree clean.
+    - card: done
+  timestamp: 2026-09-18T13:21:29.146867+00:00
+position_column: done
+position_ordinal: ed80
 title: 'ACPAgent: the scripted-turn and recording test suites are red on main'
 ---
 ## What
