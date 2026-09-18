@@ -58,8 +58,37 @@ comments:
     - evidence: swift test — 708 tests, 54 suites, 0 failed, 0 skipped (first run: SkillsRegistryReloadTests.twoConcurrentConsumersBothObserveEveryReloadInAFiveReloadBurst failed with "expected at least 5 events, observed 4"; this is the known flaky test on card ^sz7fz7n and its code was not changed; second run: all 708 tests passed)
     - next: ready for review
   timestamp: 2026-09-18T18:04:47.301099+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01m2tv3jbxk5870mgs4f1kfzq2
+  text: |-
+    ### commit — changed
+    - evidence: 002c1a0 fix(marketplace): stop a child process from holding the flock lock
+    - next: none
+  timestamp: 2026-09-18T18:05:22.685653+00:00
+- actor: claude-code
+  id: 01m2tvb4529nktjz2b7vjc1qt6
+  text: |-
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (commit 002c1a0). Counts: 0 findings, 0 confirmed, 1 refuted, 7 attempted, 0 failed. 3 files reviewed. 6 `.kanban/` files not reviewed (`.reviewignore`). The description has no prior `## Review Findings` section.
+    - subtask note: the subtask "Make sure that 25 loaded full runs pass" stays unchecked. This step did not check it and did not change the description. The `review` skill gates the move to `done` on new findings and on prior `## Review Findings` items only. It has no rule about an unchecked subtask. Thus the task moved to `done`. The 1 failed run of 25 is `SkillsRegistryReloadTests.twoConcurrentConsumersBothObserveEveryReloadInAFiveReloadBurst`, which card `^sz7fz7n` holds.
+    - next: a person decides if the unchecked subtask must be checked, or if the task must go back to `review` until card `^sz7fz7n` is done.
+  timestamp: 2026-09-18T18:09:30.274043+00:00
+- actor: claude-code
+  id: 01m2tvbjnwvdp16mkvjvqgj8pm
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 3 files (MarketplaceCache.swift, MarketplaceCacheTests.swift, MarketplaceTestSupport.swift). Cause: `O_CLOEXEC` alone lets a `posix_spawn` child hold the `flock` lock between the fork step and the exec step. Correction: `O_CLOEXEC | O_CLOFORK`.
+    - test: green — swift test, 708 tests in 54 suites, 0 failed, 0 skipped on the second run. The first run failed one time in `SkillsRegistryReloadTests.twoConcurrentConsumersBothObserveEveryReloadInAFiveReloadBurst` (card `^sz7fz7n`).
+    - commit: 002c1a0
+    - review: clean — HEAD~1..HEAD, 0 findings, 1 refuted, 7 validator runs, 3 files reviewed. The task moved to done.
+    - open: subtask 3 ("25 loaded full runs pass") is not checked. 0 marketplace failures in 25 loaded runs; 1 run failed in the `^sz7fz7n` test. Run the 25 loaded runs again after `^sz7fz7n` is done, and then check the subtask.
+  timestamp: 2026-09-18T18:09:45.148030+00:00
+- actor: claude-code
+  id: 01m2twzc50s1p68ckjmzv71mdt
+  text: 'The subtask "Make sure that 25 loaded full runs pass" is now checked. Card `^sz7fz7n` corrected the defect in `SkillWatcher.flush()` that lost one reload. After that correction: 25 loaded full runs of `swift test --skip-build --filter FoundationModelsSkillsTests` with 64 `yes > /dev/null` load processes (batches of 12, 12, and 1). Result: 25 of 25 runs passed, 709 tests in each run, 0 failures of any test. Counts by test name: `MarketplaceCacheTests.aLeaseHoldsItsSnapshotUntilItIsReleased` 0 failures, `MarketplaceCacheTests.cleanupKeepsASnapshotThatASharedLockHolds` 0 failures, `SkillsRegistryReloadTests.twoConcurrentConsumersBothObserveEveryReloadInAFiveReloadBurst` 0 failures. No trace code was in the tree during these runs.'
+  timestamp: 2026-09-18T18:38:02.400871+00:00
+position_column: done
+position_ordinal: f180
 title: 'MarketplaceCacheTests: two lock tests fail now and then in a loaded full parallel run'
 ---
 ## What
@@ -79,4 +108,4 @@ Card `^01M2K8A6` found that a forked child process (from `RunScriptTests` or `Sh
 
 - [x] Reproduce the two failures under a loaded full parallel run. Use `lsof` on the lock file at the moment of failure to name the process that holds the lock.
 - [x] Find the cause and correct it. Do not add a retry, a skip, or a longer wait.
-- [ ] Make sure that 25 loaded full runs pass. (State after the implement step: 25 loaded full runs gave 0 failures of a marketplace test. 1 of the 25 runs failed in `SkillsRegistryReloadTests.twoConcurrentConsumersBothObserveEveryReloadInAFiveReloadBurst`, which is a different defect. Card `^sz7fz7n` holds it.)
+- [x] Make sure that 25 loaded full runs pass. (State after the implement step: 25 loaded full runs gave 0 failures of a marketplace test. 1 of the 25 runs failed in `SkillsRegistryReloadTests.twoConcurrentConsumersBothObserveEveryReloadInAFiveReloadBurst`, which is a different defect. Card `^sz7fz7n` holds it. State after the correction of `^sz7fz7n`: 25 of 25 loaded full runs passed, with 0 failures of any test.)

@@ -436,23 +436,28 @@ public final class SkillWatcher: @unchecked Sendable {
         flush()
     }
 
-    /// Fires the coalesced `onChange` callback once, then rebuilds the
-    /// watch tree from the roots' current on-disk state so entries created
-    /// or removed during the burst are (or are no longer) watched going
-    /// forward.
+    /// Rebuilds the watch tree from the roots' current on-disk state, so
+    /// entries created or removed during the burst are (or are no longer)
+    /// watched, then fires the coalesced `onChange` callback once.
+    ///
+    /// The sequence is load-bearing. `onChange` tells the caller to read
+    /// the tree, and a caller can change the tree again as soon as it
+    /// knows about the reload. The new sources are thus open before
+    /// `onChange` runs: a change before that point is one that `onChange`
+    /// reads, and a change after that point is one that a new source
+    /// reports. A rebuild after `onChange` loses a change between the two:
+    /// `cancel()` drops the event that the old source holds, and the new
+    /// source opens after the change (^sz7fz7n).
     ///
     /// Always called on `queue`, at the end of a quiet period. `onChange`
     /// is free to call `stop()` reentrantly (`runOnQueue(_:)` makes that
-    /// safe); `isWatching` is re-checked afterward so a callback that
-    /// stops the watcher is honored immediately, rather than having the
-    /// rebuild below silently resurrect a fresh set of sources underneath
-    /// it.
+    /// safe); that `stop()` cancels the sources that this rebuild opened,
+    /// and nothing after `onChange` opens a source again.
     private func flush() {
-        guard isWatching else { return }
-        onChange()
         guard isWatching else { return }
         cancelAllWatchedSources()
         armRoots()
+        onChange()
     }
 
     // MARK: - Directory listing

@@ -313,6 +313,37 @@ struct SkillWatcherTests {
         }
     }
 
+    // MARK: - A change made while onChange runs is not lost (^sz7fz7n)
+
+    /// A host that sees a reload can change a file immediately, while the
+    /// watcher is still in the flush that made the reload. The edit here is
+    /// made inside `onChange`, thus it is in that flush on a host of any
+    /// speed. A watcher that opens its new sources only after `onChange`
+    /// drops the event: the old sources are cancelled with the event
+    /// pending, and the new sources open after the edit.
+    @Test func aChangeMadeWhileOnChangeRunsIsReportedAfterTheFlush() async throws {
+        try await Self.withTempDirectory { root in
+            try ReloadTestSupport.writeSkillFile(id: "edited-in-flush", in: root)
+            let edit = OneTimeEdit(skillID: "edited-in-flush", root: root)
+
+            try await Self.withWatcher(over: [root], duringOnChange: edit.run) { signals in
+                try ReloadTestSupport.writeSkillFile(id: "edited-in-flush", in: root, descriptionSuffix: "first edit")
+                await Self.waitUntil(timeout: Self.expectedSignalTimeout) { signals.timer.pendingCount >= 1 }
+                signals.timer.endQuietPeriod()
+
+                // The edit inside `onChange` must start a new timer.
+                // `endQuietPeriod()` fires that timer itself when the event
+                // arrives before its loop ends, and the second callback is
+                // then the evidence.
+                await Self.waitUntil(timeout: Self.expectedSignalTimeout) {
+                    await Self.reportedTheEditInsideOnChange(signals)
+                }
+                #expect(edit.failure == nil)
+                #expect(await Self.reportedTheEditInsideOnChange(signals))
+            }
+        }
+    }
+
     // MARK: - Stop prevents further callbacks
 
     @Test func stopPreventsFurtherCallbacksAfterAChange() async throws {
@@ -348,9 +379,9 @@ struct SkillWatcherTests {
         #expect(afterFirstFlush == 1)
 
         // The reentrant `stop()` must have actually torn every source
-        // down, not just flipped a flag: `flush()`'s post-`onChange`
-        // rebuild must not silently reopen sources underneath a watcher
-        // that was just told to stop.
+        // down, not just flipped a flag: the sources that `flush()` opened
+        // before `onChange` must not stay open underneath a watcher that
+        // was just told to stop.
         #expect(box.watcher?.watchedSourceCountForTesting == 0)
 
         // The reentrant `stop()` above ran synchronously inside `onChange`
@@ -532,17 +563,87 @@ struct SkillWatcherTests {
     ///
     /// - Parameters:
     ///   - roots: The roots to watch, in the order the watcher receives them.
+    ///   - work: More work that `onChange` does after it records the
+    ///     callback, on the queue of the watcher. The default does nothing.
     ///   - body: The test body, given the signals of the watcher.
     /// - Throws: Whatever `body` throws.
-    private static func withWatcher(over roots: [URL], _ body: (WatchedSignals) async throws -> Void) async throws {
-        let (onChange, recorder) = Self.makeSignalRecorder()
+    private static func withWatcher(
+        over roots: [URL], duringOnChange work: @escaping @Sendable () -> Void = {},
+        _ body: (WatchedSignals) async throws -> Void
+    ) async throws {
+        let (recordSignal, recorder) = Self.makeSignalRecorder()
         let timer = ManualDebounceTimer()
         let watcher = SkillWatcher(
-            roots: roots, debounceInterval: Self.testDebounceInterval, startDebounceTimer: timer.start,
-            onChange: onChange)
+            roots: roots, debounceInterval: Self.testDebounceInterval, startDebounceTimer: timer.start
+        ) {
+            recordSignal()
+            work()
+        }
         watcher.start()
         defer { watcher.stop() }
         try await body(WatchedSignals(recorder: recorder, timer: timer))
+    }
+
+    /// Edits one `SKILL.md` the first time `run()` is called, and does
+    /// nothing on each later call.
+    ///
+    /// A test gives `run` to a watcher as work inside `onChange`. The edit
+    /// is then in the flush that made the callback, and only the first
+    /// flush makes an edit, thus the test has an end.
+    ///
+    /// A `Mutex` guards each mutable value, thus the compiler checks the
+    /// plain `Sendable` conformance.
+    private final class OneTimeEdit: Sendable {
+        private let skillID: String
+        private let root: URL
+        private let hasRun = Mutex(false)
+        private let failureText = Mutex<String?>(nil)
+
+        /// The error text of an edit that failed, or `nil`.
+        var failure: String? {
+            failureText.withLock { $0 }
+        }
+
+        /// - Parameters:
+        ///   - skillID: The id of the skill whose `SKILL.md` the edit writes.
+        ///   - root: The watched root that holds the skill.
+        init(skillID: String, root: URL) {
+            self.skillID = skillID
+            self.root = root
+        }
+
+        /// Writes the file on the first call only. A write error goes to
+        /// `failure`, because `onChange` cannot throw.
+        @Sendable func run() {
+            let isFirstCall = hasRun.withLock { hasRun in
+                defer { hasRun = true }
+                return !hasRun
+            }
+            guard isFirstCall else { return }
+            do {
+                try ReloadTestSupport.writeSkillFile(id: skillID, in: root, descriptionSuffix: "edit inside onChange")
+            } catch {
+                failureText.withLock { $0 = String(describing: error) }
+            }
+        }
+    }
+
+    /// The number of callbacks that shows that the watcher reported the
+    /// edit of a `OneTimeEdit`: one for the flush that holds the edit, and
+    /// one for the edit.
+    private static let callbacksWithTheEditInsideOnChange = 2
+
+    /// Whether the watcher reported the edit that a `OneTimeEdit` made
+    /// inside `onChange`: a debounce timer is pending, or the callback for
+    /// the edit arrived already.
+    ///
+    /// - Parameter signals: The signals of the watcher under test.
+    /// - Returns: `true` when the watcher reported the edit.
+    private static func reportedTheEditInsideOnChange(_ signals: WatchedSignals) async -> Bool {
+        if signals.timer.pendingCount >= 1 {
+            return true
+        }
+        return await signals.recorder.count >= Self.callbacksWithTheEditInsideOnChange
     }
 
     /// Builds a `SkillWatcher.onChange` closure paired with the
