@@ -290,6 +290,48 @@ struct MarketplaceCacheTests {
         #expect(!SnapshotLockProbe.isLocked(directory: directory))
     }
 
+    // MARK: - Lock descriptors and child processes
+
+    @Test func aLeaseDescriptorStaysOutOfEachChildProcess() throws {
+        let fixture = try CacheFixture()
+        defer { fixture.remove() }
+        let held = try #require(Self.exampleShas.first)
+        try fixture.install(sha: held)
+        let directory = try fixture.cache.snapshotDirectory(forSha: held)
+        let taken = try fixture.cache.leaseCurrentSnapshot()
+        let lease = try #require(taken)
+        defer { lease.releaseNow() }
+
+        let flags = OpenDescriptorProbe.descriptorFlags(ofOpensAt: directory.path)
+
+        #expect(flags == [OpenDescriptorProbe.noInheritanceFlags])
+    }
+
+    @Test func aSnapshotInUseDescriptorStaysOutOfEachChildProcess() throws {
+        let fixture = try CacheFixture()
+        defer { fixture.remove() }
+        let held = try #require(Self.exampleShas.first)
+        try fixture.install(sha: held)
+
+        let flags = try fixture.cache.withSnapshotInUse(sha: held) { directory in
+            OpenDescriptorProbe.descriptorFlags(ofOpensAt: directory.path)
+        }
+
+        #expect(flags == [OpenDescriptorProbe.noInheritanceFlags])
+    }
+
+    @Test func theWriterLockDescriptorStaysOutOfEachChildProcess() throws {
+        let fixture = try CacheFixture()
+        defer { fixture.remove() }
+        try fixture.cache.makeFolders()
+
+        let flags = try fixture.cache.withWriterLock {
+            OpenDescriptorProbe.descriptorFlags(ofOpensAt: fixture.cache.lockFile.path)
+        }
+
+        #expect(flags == [OpenDescriptorProbe.noInheritanceFlags])
+    }
+
     // MARK: - Path safety
 
     /// The values that must never name a snapshot folder: an empty value, the

@@ -74,8 +74,31 @@ comments:
     - no change made to MarketplaceCache.
     - next: none, ready for review.
   timestamp: 2026-09-18T17:02:30.051551+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01m2tqhtzmg5v449mwdyqjt7df
+  text: |-
+    ### commit — changed
+    - evidence: 5c07ea6 fix(tests): use a DebounceTimer seam so SkillWatcher debounce tests do not wait on host speed
+    - next: none, ready for review.
+  timestamp: 2026-09-18T17:03:15.956042+00:00
+- actor: claude-code
+  id: 01m2tqqnr3y7ba8e1171eaznvj
+  text: |-
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (commit 5c07ea6). Counts: findings 0, confirmed 0, refuted 2, attempted 7, failed 0, skipped 0. 2 files reviewed: `Sources/.../Registry/SkillWatcher.swift` and `SkillWatcherTests.swift`. 6 `.kanban/` files were not reviewed because of `.reviewignore`. The description has no prior `## Review Findings` section, thus no prior item is open.
+    - next: none. The task is in `done`.
+  timestamp: 2026-09-18T17:06:27.203685+00:00
+- actor: claude-code
+  id: 01m2tqr3k89yph80762k1qb08m
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 2 files (SkillWatcher.swift, SkillWatcherTests.swift)
+    - test: green — swift test, 705 tests in 54 suites, 0 failures, 0 warnings, 0 skipped (two clean runs)
+    - commit: 5c07ea6
+    - review: clean — HEAD~1..HEAD, findings 0, refuted 2, 7 validator runs, 2 files reviewed. The task moved to done.
+  timestamp: 2026-09-18T17:06:41.384663+00:00
+position_column: done
+position_ordinal: f080
 title: 'SkillWatcherTests: the debounce burst test fails now and then in a full parallel run'
 ---
 ## What
