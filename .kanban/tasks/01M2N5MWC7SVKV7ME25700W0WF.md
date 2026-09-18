@@ -57,8 +57,25 @@ comments:
     - run 2 log: /private/tmp/claude-501/-Users-wballard-github-swissarmyhammer-FoundationModelsSkills/b9d0155a-2dfe-4435-b619-18918c20ca30/scratchpad/test_run2.log
     - next: hand off to review
   timestamp: 2026-09-17T14:25:51.331366+00:00
-position_column: doing
-position_ordinal: '8180'
+- actor: claude-code
+  id: 01m2qwajgab44b3t3ctq32vh7s
+  text: |
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (commit 441ba4d) — 0 findings, 0 confirmed, 0 refuted; 7 validators attempted, 0 failed; 6 files reviewed
+    - next: task moved to `done`; all prior checklist items are checked
+  timestamp: 2026-09-17T14:28:57.482855+00:00
+- actor: claude-code
+  id: 01m2qwavyy0cz87zzvsamb5cw0
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 6 files: FixtureLibrary, FixtureLibraryTests, MarketplaceDocsTests, DependencyGraphTests, CIWorkflowTests, SkillsRegistryTests
+    - test: green — swift test x2, each 702 tests in 54 suites, 0 failed, 0 warnings
+    - commit: 441ba4d refactor(tests): use one file-read method in FixtureLibrary
+    - review: clean — 0 findings, 7 validators, 6 files
+    - result: the card is in done. The implementer found two more sites of the same cause (CIWorkflowTests, SkillsRegistryTests) and removed those also.
+  timestamp: 2026-09-17T14:29:07.166342+00:00
+position_column: done
+position_ordinal: e780
 title: MarketplaceDocsTests duplicates the fixture file-reading helper
 ---
 ## What

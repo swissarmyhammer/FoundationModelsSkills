@@ -1,6 +1,24 @@
 ---
 assignees:
 - claude-code
+comments:
+- actor: claude-code
+  id: 01m2qzq2h5afzbtm06mqjsfb8g
+  text: |-
+    ### finish — stuck, a person must decide
+
+    This card asks a person to decide whether to push the FoundationModelsSkills marketplace commits to origin/main. The loop cannot decide it.
+
+    The user approved three network steps by name: create swissarmyhammer/skills as a public repository and push it, push the ACPAgent fix, and tag v1.0.0. All three are done. That approval did not name a push of FoundationModelsSkills, and an approval of one action does not carry to another. Thus the loop stops here.
+
+    The state, as measured:
+    - FoundationModelsSkills holds 10 local commits that nobody pushed, db1aedc through 441ba4d.
+    - `swift package resolve` in ../skills gives FoundationModelsSkills at 4a4befc, the head of the published main.
+    - Thus the CI of swissarmyhammer/skills builds a client that holds no marketplace code, and the `skills marketplace add` line of the new README names a command the published client does not have.
+    - The CI of swissarmyhammer/skills is green on all six pushes, because the marketplace tests need only SkillsRegistry, which the old client has.
+
+    The card stays in todo. It needs one word from a person: push, or do not push.
+  timestamp: 2026-09-17T15:28:12.837340+00:00
 position_column: todo
 position_ordinal: '9280'
 title: The skills marketplace depends on FoundationModelsSkills main, which has no marketplace code yet
