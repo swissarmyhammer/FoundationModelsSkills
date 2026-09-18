@@ -48,8 +48,31 @@ comments:
     - evidence: swift build (clean rebuild) — 0 warnings, 0 errors; swift build --build-tests — 0 warnings; swift test — 735 tests, 56 suites, 0 failed, 0 skipped
     - next: no action needed. Board can move this task forward.
   timestamp: 2026-09-18T21:46:33.436451+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01m2v7t4tqmkxawhnb2h4d3kmn
+  text: |-
+    ### commit — changed
+    - evidence: aee3f74 feat(skills): show the catalog and a use rule in the skills tool description
+    - next: /review
+  timestamp: 2026-09-18T21:47:25.399449+00:00
+- actor: claude-code
+  id: 01m2v87kqvr84sd8nm99jnzna8
+  text: |-
+    ### review — clean
+    - evidence: review sha HEAD~1..HEAD; 0 findings, 0 confirmed, 0 refuted; 21 files examined, 0 failed. No validator applies to CHANGELOG.md, README.md, docs/operations.md, plan.md. The .reviewignore file excludes the .kanban/ files.
+    - next: none. The task is in done.
+  timestamp: 2026-09-18T21:54:46.651860+00:00
+- actor: claude-code
+  id: 01m2v88tfws9epfqfykb40fqn5
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 3 new + 7 changed source files, 2 new + 8 changed test files, 4 docs
+    - test: green — swift test, 735 passed, 0 warnings
+    - commit: aee3f74
+    - review: clean — 0 findings on HEAD~1..HEAD
+  timestamp: 2026-09-18T21:55:26.332626+00:00
+position_column: done
+position_ordinal: f580
 title: The skills tool must show its catalog and a use rule in its description, and give plain operation texts
 ---
 ## What
