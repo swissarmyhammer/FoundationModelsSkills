@@ -193,6 +193,16 @@ struct MarketplaceEndToEndTests {
         let events = await fixture.store.update()
 
         #expect(events == [.failed(id: marketplaceAID, error: failureText(ofFirst: events), keptVersion: keptCommit)])
+        let movedDirectoryName = fixture.marketplaceA.directory.lastPathComponent
+        #expect(
+            failureText(ofFirst: events).contains(movedDirectoryName),
+            "the event says the libgit2 message, which names the path that failed; got: \(failureText(ofFirst: events))")
+        let failureDiagnostics = fixture.store.diagnostics.filter {
+            $0.severity == .error && $0.marketplaceID == marketplaceAID
+        }
+        #expect(
+            failureDiagnostics.contains { $0.message.contains(movedDirectoryName) },
+            "the diagnostic says the libgit2 message, not only `unreachable`; got: \(failureDiagnostics)")
         #expect(fixture.store.marketplaceLayers().first?.provenance.sha == keptCommit)
         #expect(try fixture.registry.call(id: alphaID).contains(alphaBodyAfterTheUpdate))
     }

@@ -73,14 +73,17 @@ struct GitTransportTests {
         }
     }
 
-    @Test func remoteHeadThrowsUnreachableForAMissingPath() async throws {
+    @Test func remoteHeadThrowsUnreachableWithTheLibgit2MessageForAMissingPath() async throws {
         let parent = try WatcherTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: parent) }
         let absent = parent.appendingPathComponent("absent", isDirectory: true).absoluteString
 
-        await #expect(throws: GitTransportError.unreachable) {
+        let error = try await #require(throws: GitTransportError.self) {
             try await transport.remoteHead(url: absent, ref: "main", credentials: nil)
         }
+
+        let message = try #require(Self.unreachableMessage(of: error), "expected unreachable, got \(error)")
+        #expect(message.contains("absent"), "the libgit2 message names the path that failed; got: \(message)")
     }
 
     // MARK: - fetch
@@ -156,15 +159,18 @@ struct GitTransportTests {
         }
     }
 
-    @Test func fetchThrowsUnreachableForAMissingPath() async throws {
+    @Test func fetchThrowsUnreachableWithTheLibgit2MessageForAMissingPath() async throws {
         let destination = try Self.makeDestination()
         defer { Self.removeDestination(destination) }
         let absent = destination.deletingLastPathComponent()
             .appendingPathComponent("absent", isDirectory: true).absoluteString
 
-        await #expect(throws: GitTransportError.unreachable) {
+        let error = try await #require(throws: GitTransportError.self) {
             try await transport.fetch(url: absent, revision: "main", intoBareRepository: destination, credentials: nil)
         }
+
+        let message = try #require(Self.unreachableMessage(of: error), "expected unreachable, got \(error)")
+        #expect(message.contains("absent"), "the libgit2 message names the path that failed; got: \(message)")
     }
 
     @Test func fetchInACancelledTaskThrowsCancelled() async throws {
@@ -279,11 +285,11 @@ struct GitTransportTests {
     }
 
     @Test(arguments: LibGit2Transport.Phase.allCases)
-    func aStopFromARefusedCredentialRequestIsUnreachable(phase: LibGit2Transport.Phase) {
+    func aStopFromARefusedCredentialRequestIsUnreachableWithTheFixedMessage(phase: LibGit2Transport.Phase) {
         let error = LibGit2Transport.transportError(
             code: GIT_EUSER.rawValue, message: "stopped", phase: phase, credentialRefused: true)
 
-        #expect(error == .unreachable)
+        #expect(error == .unreachable(message: LibGit2Transport.credentialRefusedMessage))
     }
 
     @Test(arguments: LibGit2Transport.Phase.allCases)
@@ -293,11 +299,17 @@ struct GitTransportTests {
         #expect(error == .timedOut)
     }
 
-    @Test func anyOtherConnectFailureIsUnreachable() {
-        let error = LibGit2Transport.transportError(
-            code: GIT_ERROR.rawValue, message: "failed to resolve address", phase: .connecting)
+    @Test(arguments: ["failed to resolve address", "unsupported URL protocol"])
+    func anyOtherConnectFailureIsUnreachableWithTheLibgit2Message(message: String) {
+        let error = LibGit2Transport.transportError(code: GIT_ERROR.rawValue, message: message, phase: .connecting)
 
-        #expect(error == .unreachable)
+        #expect(error == .unreachable(message: message))
+    }
+
+    @Test func theTextOfAnUnreachableErrorSaysTheLibgit2Message() {
+        let error = GitTransportError.unreachable(message: "unsupported URL protocol")
+
+        #expect(String(describing: error).contains("unsupported URL protocol"))
     }
 
     @Test func aMissingObjectDuringTheFetchIsRefNotFound() {
@@ -320,6 +332,18 @@ struct GitTransportTests {
     /// temporary directory.
     private static func makeDestination() throws -> URL {
         try WatcherTestSupport.makeTempDirectory().appendingPathComponent("repo.git", isDirectory: true)
+    }
+
+    /// Gives the message of a ``GitTransportError/unreachable(message:)``
+    /// error.
+    ///
+    /// - Parameter error: The error.
+    /// - Returns: The message, or `nil` for another case.
+    private static func unreachableMessage(of error: GitTransportError) -> String? {
+        guard case .unreachable(let message) = error else {
+            return nil
+        }
+        return message
     }
 
     /// Removes the temporary directory that ``makeDestination()`` made.

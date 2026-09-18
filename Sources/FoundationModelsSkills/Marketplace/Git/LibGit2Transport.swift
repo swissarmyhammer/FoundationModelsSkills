@@ -4,7 +4,12 @@ import libgit2
 /// The libgit2 ``GitTransport`` (marketplace.md §5.1).
 ///
 /// libgit2 builds from source as a SwiftPM target. HTTPS uses the system trust
-/// store. SSH uses the libgit2 exec transport, which runs the system OpenSSH.
+/// store. SSH is planned to use the libgit2 exec transport, which runs the
+/// system OpenSSH. `swift-libgit2` 1.9.7 does not build that transport: its
+/// manifest sets `GIT_SSH_EXEC` with an empty trait list, and SwiftPM never
+/// applies such a setting. Thus an SSH URL fails now with
+/// ``GitTransportError/unreachable(message:)`` and the libgit2 message
+/// `unsupported URL protocol` (card `^vf3a6an`).
 /// No call starts the `git` binary, runs a hook, or fetches a submodule.
 ///
 /// Each call runs libgit2 on the thread of its task. The `transfer_progress`
@@ -15,7 +20,7 @@ import libgit2
 /// time, before the first libgit2 call. The libgit2 `credentials` callback
 /// then gives that credential through a ``CredentialGate``: one time, and
 /// only to the origin of the source. Any other request stops libgit2, and the
-/// call throws ``GitTransportError/unreachable``.
+/// call throws ``GitTransportError/unreachable(message:)``.
 internal struct LibGit2Transport: GitTransport {
     /// The step in which a libgit2 call failed. The step decides which
     /// ``GitTransportError`` the failure becomes.
@@ -52,6 +57,11 @@ internal struct LibGit2Transport: GitTransport {
 
     /// The value that a progress callback returns to let libgit2 continue.
     private static let continueTransfer: Int32 = 0
+
+    /// The message of ``GitTransportError/unreachable(message:)`` after the
+    /// ``CredentialGate`` refused a request. The text is fixed, thus this
+    /// failure never repeats text from libgit2.
+    internal static let credentialRefusedMessage = "the credential request was refused"
 
     /// Starts libgit2 one time for the process. The value is the start count,
     /// or a negative libgit2 error code.
@@ -320,12 +330,14 @@ internal struct LibGit2Transport: GitTransport {
     /// Maps a libgit2 failure to a ``GitTransportError``.
     ///
     /// `GIT_EUSER` comes from a callback that stopped libgit2. After a refused
-    /// credential request it is ``GitTransportError/unreachable``, the
-    /// authentication failure. Else it comes from a progress callback that
-    /// stopped for a cancelled task, thus it is
-    /// ``GitTransportError/cancelled`` in every phase. `GIT_TIMEOUT` is
+    /// credential request it is ``GitTransportError/unreachable(message:)``
+    /// with ``credentialRefusedMessage``, the authentication failure. Else it
+    /// comes from a progress callback that stopped for a cancelled task, thus
+    /// it is ``GitTransportError/cancelled`` in every phase. `GIT_TIMEOUT` is
     /// ``GitTransportError/timedOut`` in every phase. Any other failure while
-    /// connecting is ``GitTransportError/unreachable``. A missing object while
+    /// connecting is ``GitTransportError/unreachable(message:)`` with
+    /// `message`, thus the caller can tell a URL protocol that this libgit2
+    /// build does not have from a host that is down. A missing object while
     /// fetching is ``GitTransportError/refNotFound``.
     ///
     /// - Parameters:
@@ -340,7 +352,7 @@ internal struct LibGit2Transport: GitTransport {
     ) -> GitTransportError {
         switch code {
         case GIT_EUSER.rawValue where credentialRefused:
-            .unreachable
+            .unreachable(message: credentialRefusedMessage)
         case GIT_EUSER.rawValue:
             .cancelled
         case GIT_TIMEOUT.rawValue:
@@ -354,7 +366,7 @@ internal struct LibGit2Transport: GitTransport {
     private static func phaseError(code: Int32, message: String, phase: Phase) -> GitTransportError {
         switch phase {
         case .connecting:
-            .unreachable
+            .unreachable(message: message)
         case .fetching where code == GIT_ENOTFOUND.rawValue:
             .refNotFound
         case .fetching, .localRepository:

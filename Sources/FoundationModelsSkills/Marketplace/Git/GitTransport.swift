@@ -56,13 +56,18 @@ internal protocol GitTransport: Sendable {
 /// read of a fetched commit through ``GitTreeFileSource``.
 ///
 /// No case carries a credential. A refused credential is
-/// ``GitTransportError/unreachable``, with no text.
+/// ``GitTransportError/unreachable(message:)`` with a fixed message, never
+/// with text from libgit2.
 internal enum GitTransportError: Error, Equatable, Sendable {
     /// The remote cannot be reached: the host, the network, the
-    /// authentication, or the path failed before the remote listed its refs.
-    /// A credential that the remote refused, or no credential where the remote
-    /// asks for one, is also this case.
-    case unreachable
+    /// authentication, the path, or the URL protocol failed before the remote
+    /// listed its refs. A credential that the remote refused, or no credential
+    /// where the remote asks for one, is also this case.
+    ///
+    /// `message` says why. For a libgit2 failure it is the libgit2 message,
+    /// thus a host that is down and a transport that the libgit2 build does
+    /// not have give different text (for example `unsupported URL protocol`).
+    case unreachable(message: String)
 
     /// The remote has no ref or object with the requested name.
     case refNotFound
