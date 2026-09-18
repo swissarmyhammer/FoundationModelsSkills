@@ -60,8 +60,33 @@ comments:
     - evidence: `swift test` — 709 tests passed, 0 failed, 0 skipped, 54 suites; 0 warnings. New test `aChangeMadeWhileOnChangeRunsIsReportedAfterTheFlush` passed. No temp trace code found (`TEMPTRACE`, `TRC`, `usleep`, `TemporaryTrace`) in Sources or Tests.
     - next: ready for review.
   timestamp: 2026-09-18T18:39:22.309930+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01m2tx2rsp7d90cxas9g2xjxe5
+  text: |-
+    ### commit — changed
+    - evidence: 75ef62a fix(watcher): open new sources before onChange in flush
+    - next: none
+  timestamp: 2026-09-18T18:39:53.654851+00:00
+- actor: claude-code
+  id: 01m2tx6de9c7p2gbshv90sxjfp
+  text: |-
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (commit 75ef62a), task-mode. Counts: 0 findings, 0 confirmed, 0 refuted, 7 validator runs attempted, 0 failed, 0 skipped. 2 files reviewed (`Sources/FoundationModelsSkills/Registry/SkillWatcher.swift`, `Tests/FoundationModelsSkillsTests/SkillWatcherTests.swift`). 4 `.kanban/` files were not reviewed because `.reviewignore` excludes them. The description had no prior `## Review Findings` section, thus no prior item is open.
+    - notes from the implementer: (1) the new test uses the `waitUntil(timeout:_:)` poll of the suite to wait for the kernel event; (2) the natural failure did not occur under load, and the reproduction was a causal experiment. The engine reviewed the changed lines and gave no finding on them. The review skill makes the engine the analysis, thus the reviewer added no finding and dropped no finding. A person who does not agree with note (1) must decide on the acceptance text; the engine does not examine acceptance text.
+    - next: none. The task moved to `done`.
+  timestamp: 2026-09-18T18:41:53.097882+00:00
+- actor: claude-code
+  id: 01m2tx6w94aasrqwwar0az9wvt
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 2 files (SkillWatcher.swift, SkillWatcherTests.swift). Cause: `flush()` called `onChange()` before it opened the new event sources, thus a write during the rebuild was lost. Correction: open the new sources first.
+    - test: green — swift test, 709 passed, 0 failed, 0 skipped, 54 suites, 0 warnings (first run)
+    - commit: 75ef62a
+    - review: clean — HEAD~1..HEAD, 0 findings, 7 validator runs, 2 files reviewed. The task moved to done.
+    - loaded runs: 25 of 25 passed with 64 load processes. Subtask 3 of `^wycfkqk` is now checked.
+  timestamp: 2026-09-18T18:42:08.292481+00:00
+position_column: done
+position_ordinal: f280
 title: 'SkillsRegistryReloadTests: the five-reload burst test loses one reload now and then in a loaded full parallel run'
 ---
 ## What
