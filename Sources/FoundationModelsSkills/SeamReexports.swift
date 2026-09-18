@@ -2,7 +2,7 @@
 // API, so one `import FoundationModelsSkills` is sufficient for a host.
 //
 // A host must give the fused `SkillsTool` a `MetadataSearcher<SkillMetadata>`
-// (`SkillSearchAgent.init(searcher:visibilityPredicate:)`) and a set of layer
+// (`SkillSearchAgent.init(searcher:retrievalFallback:visibilityPredicate:)`) and a set of layer
 // roots, which `DotfolderStack` computes. Those two types come from two
 // different sibling packages. Without these re-exports, the host must also
 // write `import FoundationModelsMetadataRegistry` and

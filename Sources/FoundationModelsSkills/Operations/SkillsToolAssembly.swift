@@ -17,22 +17,36 @@ import Operations
 /// signal weights, or its own diagnostic sink.
 extension SkillsTool {
     /// Builds the fused `skills` tool over `registry`, with a selection tier
-    /// that makes a new session for each assembled candidate prefix.
+    /// that asks the host for a new session for each assembled candidate
+    /// prefix.
     ///
-    /// Matches `SelectionConfig.init(model:preamble:capacityCharacterLimit:
-    /// candidateLimit:)`. The searcher runs in `.auto` mode, thus the
-    /// selection tier answers every search, and the retrieval tier ranks the
-    /// candidates the tier chooses among.
+    /// The package owns the shape of the selection answer (plan.md decision
+    /// #31). Each `SelectionSessionRequest` carries the JSON Schema that
+    /// limits an answer to `{"ids": [String]}` over the candidate skill ids,
+    /// and the host makes a session that applies it. A session with no
+    /// constraint can still answer with another shape, and that answer does
+    /// not fail the call: the search then gives the rank of the retrieval
+    /// tier.
     ///
-    /// This factory is `async` because a non-`nil` `embedder` needs
-    /// `MetadataSearcher`'s own `async` initializer, which embeds every
+    /// The searcher runs in `.auto` mode, thus the selection tier answers
+    /// every search. A second searcher in `.retrieval` mode shares the first
+    /// one's index, and is the fallback of `SkillSearchAgent`. With an
+    /// `embedder`, the index is embedded one time for both searchers. A hot
+    /// reload updates both searchers, thus a block that the reload changed is
+    /// embedded one time for each searcher.
+    ///
+    /// This factory is `async` because a non-`nil` `embedder` embeds every
     /// item's block while it builds the index.
     ///
     /// - Parameters:
     ///   - registry: The registry every operation dereferences at dispatch
     ///     time.
-    ///   - session: Makes a session seeded with the given instructions text.
-    ///     Every selection call goes to a session this closure made.
+    ///   - session: Makes a session from a `SelectionSessionRequest`. Every
+    ///     selection call goes to a session this closure made. A session
+    ///     whose model takes a JSON Schema grammar applies
+    ///     `request.jsonSchema`. A `LanguageModelSession` needs only
+    ///     `request.instructions`, because its guided generation constrains
+    ///     the answer shape itself.
     ///   - embedder: The embedder that embeds every item's block at build
     ///     time, and the query at search time. Defaults to `nil`, which
     ///     leaves the cosine signal out.
@@ -47,7 +61,7 @@ extension SkillsTool {
     /// - Throws: Whatever `SkillsTool.make(context:)` throws.
     public static func make(
         registry: SkillsRegistry,
-        session: @escaping @Sendable (String) -> any AgentSession,
+        session: @escaping @Sendable (SelectionSessionRequest) -> any AgentSession,
         embedder: (any TextEmbedding)? = nil,
         followReloads: Bool = true,
         visibilityPredicate: @escaping @Sendable (SkillMetadata) -> Bool = { $0.isModelVisible }
@@ -56,51 +70,7 @@ extension SkillsTool {
             registry: registry,
             mode: .auto,
             embedder: embedder,
-            selection: SelectionConfig(model: session),
-            followReloads: followReloads,
-            visibilityPredicate: visibilityPredicate)
-    }
-
-    /// Builds the fused `skills` tool over `registry`, with a selection tier
-    /// that reuses one live session the host already holds.
-    ///
-    /// Matches `SelectionConfig.init(session:preamble:
-    /// capacityCharacterLimit:candidateLimit:)`. A live session takes no new
-    /// instructions, thus the tier forks it for each call and puts the
-    /// assembled prefix in the prompt. The searcher runs in `.auto` mode,
-    /// thus the selection tier answers every search.
-    ///
-    /// This factory is `async` for the same reason as the one above: a
-    /// non-`nil` `embedder` needs `MetadataSearcher`'s `async` initializer.
-    ///
-    /// - Parameters:
-    ///   - registry: The registry every operation dereferences at dispatch
-    ///     time.
-    ///   - session: The session every selection call forks a child from.
-    ///   - embedder: The embedder that embeds every item's block at build
-    ///     time, and the query at search time. Defaults to `nil`, which
-    ///     leaves the cosine signal out.
-    ///   - followReloads: Whether the tool follows `registry.onReload`
-    ///     itself. Defaults to `true`. See `assemble(registry:mode:embedder:
-    ///     selection:followReloads:visibilityPredicate:)`.
-    ///   - visibilityPredicate: Which catalog entries this tool presents.
-    ///     Defaults to `SkillMetadata.isModelVisible`, the model-facing
-    ///     surface.
-    /// - Returns: The fused `skills` tool, ready to register on a
-    ///   `LanguageModelSession`.
-    /// - Throws: Whatever `SkillsTool.make(context:)` throws.
-    public static func make(
-        registry: SkillsRegistry,
-        session: any AgentSession,
-        embedder: (any TextEmbedding)? = nil,
-        followReloads: Bool = true,
-        visibilityPredicate: @escaping @Sendable (SkillMetadata) -> Bool = { $0.isModelVisible }
-    ) async throws -> OperationTool<SkillsToolContext> {
-        try await assemble(
-            registry: registry,
-            mode: .auto,
-            embedder: embedder,
-            selection: SelectionConfig(session: session),
+            selection: makeSelection(registry: registry, session: session, visibilityPredicate: visibilityPredicate),
             followReloads: followReloads,
             visibilityPredicate: visibilityPredicate)
     }
@@ -115,9 +85,9 @@ extension SkillsTool {
     /// model, such as a command-line driver or a typeahead field, uses this
     /// one.
     ///
-    /// This factory is `async` for the same reason as the two above: a
-    /// non-`nil` `embedder` needs `MetadataSearcher`'s `async` initializer.
-    /// A `nil` `embedder` leaves the search keyword-only.
+    /// This factory is `async` for the same reason as the one above: a
+    /// non-`nil` `embedder` embeds every item's block while it builds the
+    /// index. A `nil` `embedder` leaves the search keyword-only.
     ///
     /// - Parameters:
     ///   - registry: The registry every operation dereferences at dispatch
@@ -149,7 +119,42 @@ extension SkillsTool {
             visibilityPredicate: visibilityPredicate)
     }
 
-    /// The assembly steps all three factories above share.
+    /// Makes the selection tier configuration that asks `session` for each
+    /// new session.
+    ///
+    /// The tier's factory takes the instructions alone, thus the candidate
+    /// ids come from the live `registry` through `visibilityPredicate` when
+    /// the tier asks. The tier asks when it makes its root session, and a
+    /// reload replaces the tier, thus the ids follow each reload. Over the
+    /// character budget, the tier prompts one run of candidates at a time
+    /// while the schema permits every visible id. The tier drops an answered
+    /// id that is not in the prompt's run.
+    ///
+    /// When the request cannot be made, the tier gets an
+    /// `UnavailableSelectionSession`. Its failure reaches `SkillSearchAgent`,
+    /// which records it and gives the retrieval rank.
+    ///
+    /// - Parameters:
+    ///   - registry: The registry the candidate ids come from.
+    ///   - session: The host's session factory.
+    ///   - visibilityPredicate: Which catalog entries are candidates.
+    /// - Returns: The selection tier configuration.
+    private static func makeSelection(
+        registry: SkillsRegistry,
+        session: @escaping @Sendable (SelectionSessionRequest) -> any AgentSession,
+        visibilityPredicate: @escaping @Sendable (SkillMetadata) -> Bool
+    ) -> SelectionConfig {
+        SelectionConfig(model: { instructions in
+            let candidateIDs = registry.metadata().filter(visibilityPredicate).map(\.id)
+            do {
+                return session(try SelectionSessionRequest(instructions: instructions, candidateIDs: candidateIDs))
+            } catch {
+                return UnavailableSelectionSession(cause: error)
+            }
+        })
+    }
+
+    /// The assembly steps both factories above share.
     ///
     /// Reads `registry.metadata()` and keeps the `visibilityPredicate`
     /// subset, builds the `MetadataSearcher` over that subset, wraps it in a
@@ -195,6 +200,11 @@ extension SkillsTool {
     /// for every later hot reload, and for the `list skill` and `use skill`
     /// operations.
     ///
+    /// With a `selection` configuration, the agent also gets a retrieval
+    /// fallback: a second searcher in `.retrieval` mode over the same index.
+    /// The index is built one time, thus an `embedder` embeds each block one
+    /// time for both searchers.
+    ///
     /// The reload stream is taken before the seed catalog is read, and that
     /// order matters: `registry.onReload` carries every publication from the
     /// point of subscription forward, thus reading `metadata()` first would
@@ -223,12 +233,15 @@ extension SkillsTool {
         visibilityPredicate: @escaping @Sendable (SkillMetadata) -> Bool
     ) async -> SkillsToolContext {
         let reloads = followReloads ? registry.onReload : nil
-        let searcher = await MetadataSearcher(
+        let index = await MetadataIndex.build(
             items: registry.metadata().filter(visibilityPredicate),
-            mode: mode,
-            embedder: embedder,
-            selection: selection)
-        let agent = SkillSearchAgent(searcher: searcher, visibilityPredicate: visibilityPredicate)
+            embedder: embedder)
+        let searcher = MetadataSearcher(index: index, mode: mode, embedder: embedder, selection: selection)
+        let retrievalFallback = selection.map { _ in
+            MetadataSearcher(index: index, mode: .retrieval, embedder: embedder)
+        }
+        let agent = SkillSearchAgent(
+            searcher: searcher, retrievalFallback: retrievalFallback, visibilityPredicate: visibilityPredicate)
         return SkillsToolContext(
             registry: registry,
             searchAgent: agent,

@@ -14,6 +14,15 @@ struct SkillSearchAgentTests {
 
     private static let projectSkillsRoot = FixtureLibrary.url(relativePath: "project/.skills")
 
+    /// A model-visible skill that the `update(items:)` and fallback cases
+    /// start from.
+    private static let alphaSkill = SkillMetadata(
+        id: "alpha", description: "Handles alpha workflow tasks.", isModelVisible: true)
+
+    /// A model-visible skill that the `update(items:)` and fallback cases add.
+    private static let gammaSkill = SkillMetadata(
+        id: "gamma", description: "Handles gamma workflow tasks.", isModelVisible: true)
+
     // MARK: - `TextEmbedding` test double (plan.md §13)
 
     /// A deterministic `TextEmbedding` test double: returns a caller-
@@ -125,9 +134,9 @@ struct SkillSearchAgentTests {
     // MARK: - `update(items:)` round trip
 
     @Test func updateItemsMakesANewIdSearchableAndDropsARemovedIdWhileFilteringModelHidden() async throws {
-        let alpha = SkillMetadata(id: "alpha", description: "Handles alpha workflow tasks.", isModelVisible: true)
+        let alpha = Self.alphaSkill
         let beta = SkillMetadata(id: "beta", description: "Handles beta workflow tasks.", isModelVisible: false)
-        let gamma = SkillMetadata(id: "gamma", description: "Handles gamma workflow tasks.", isModelVisible: true)
+        let gamma = Self.gammaSkill
 
         let searcher = MetadataSearcher(items: [alpha])
         let agent = SkillSearchAgent(searcher: searcher)
@@ -148,5 +157,43 @@ struct SkillSearchAgentTests {
 
         let afterBeta = try await agent.search(query: "beta", limit: 10)
         #expect(afterBeta.isEmpty)
+    }
+
+    // MARK: - Retrieval fallback
+
+    /// Shows that a searcher failure goes to the caller when the agent has
+    /// no retrieval fallback.
+    ///
+    /// A searcher in `.selection` mode with no selection tier throws
+    /// `SelectionTierUnavailable` on each search, with no session and no
+    /// model. Thus it is the failing searcher of these cases.
+    @Test func anAgentWithNoRetrievalFallbackGivesTheSearcherFailureToTheCaller() async throws {
+        let alpha = Self.alphaSkill
+        let agent = SkillSearchAgent(searcher: MetadataSearcher(items: [alpha], mode: .selection))
+
+        await #expect(throws: SelectionTierUnavailable.self) {
+            try await agent.search(query: "alpha", limit: 10)
+        }
+    }
+
+    /// Shows that the retrieval fallback ranks the query when the searcher
+    /// fails, and that `update(items:)` reaches the fallback too.
+    ///
+    /// Both searchers start over `alpha`. The update adds `gamma`, and only
+    /// the fallback can rank a search, thus a `gamma` match proves that the
+    /// update reached the fallback.
+    @Test func theRetrievalFallbackRanksTheQueryWhenTheSearcherFailsAndFollowsUpdates() async throws {
+        let alpha = Self.alphaSkill
+        let gamma = Self.gammaSkill
+        let agent = SkillSearchAgent(
+            searcher: MetadataSearcher(items: [alpha], mode: .selection),
+            retrievalFallback: MetadataSearcher(items: [alpha], mode: .retrieval))
+
+        let before = try await agent.search(query: "alpha", limit: 10)
+        await agent.update(items: [alpha, gamma])
+        let after = try await agent.search(query: "gamma", limit: 10)
+
+        #expect(before.map(\.id) == ["alpha"])
+        #expect(after.map(\.id) == ["gamma"])
     }
 }

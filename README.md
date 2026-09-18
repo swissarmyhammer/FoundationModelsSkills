@@ -31,7 +31,7 @@ let registry = SkillsRegistry(stack: stack, watch: true)
 // The session you supply runs the selection tier. Nothing is hardcoded.
 let skillsTool = try await SkillsTool.make(
     registry: registry,
-    session: { prefix in LanguageModelSession(model: .default, instructions: prefix) })
+    session: { request in LanguageModelSession(model: .default, instructions: request.instructions) })
 
 // A lean root session: one tool, preloaded bodies, no full catalog in context.
 let session = LanguageModelSession(
@@ -48,6 +48,14 @@ adapter. The search tier runs on the session you pass, and this package makes
 no session of its own. Omit the `session:` argument and each search uses
 keyword retrieval, with no model at all.
 
+The `session:` closure gets a `SelectionSessionRequest`. The request holds the
+instructions, the candidate skill ids, and `jsonSchema`: a JSON Schema that
+limits the answer to `{"ids": [...]}`, where each id is a candidate. A session
+whose model takes a JSON Schema grammar must apply `jsonSchema`. A
+`LanguageModelSession` constrains the answer shape with its own guided
+generation. If the selection answer does not decode, the search gives the
+keyword rank, and the `skills` call does not fail.
+
 [`Examples/skills-demo`](Examples/skills-demo) is the compiled, always-current
 version of that example. `swift build` builds it with the library, and the
 tests run it as a subprocess.
@@ -59,6 +67,27 @@ dependency:
 
 ```swift
 .package(url: "git@github.com:swissarmyhammer/FoundationModelsSkills.git", branch: "main")
+```
+
+## Migration: the `session:` closure takes a request
+
+The `session:` closure of `SkillsTool.make` took the instructions as a
+`String`. It now takes a `SelectionSessionRequest`. The overload that took one
+live `any AgentSession` is removed, because one live session cannot apply a
+new JSON Schema for each call. [`CHANGELOG.md`](CHANGELOG.md) has the full
+note. A host whose model takes a grammar changes its closure as follows:
+
+```swift
+// Before:
+SkillsTool.make(registry: registry, session: { instructions in
+    SelectionAgentSession(session: profile.flash.makeSession(instructions: instructions))
+})
+
+// After:
+SkillsTool.make(registry: registry, session: { request in
+    SelectionAgentSession(session: profile.flash.makeGuidedSession(
+        grammar: .jsonSchema(request.jsonSchema), instructions: request.instructions))
+})
 ```
 
 ## Documentation

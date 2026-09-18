@@ -707,6 +707,20 @@ Revisit when Apple ships a supported per-process confinement API. *(decision #28
     Only this decision speaks in the present tense about the Router. #17 and #26 keep
     their original text, because a decision record that rewrites its own history stops
     being a record.
+31. **The package owns the shape of the selection answer.**
+    *(Decided 2026-09-18. Amends #30.)* A SWE-bench run of a host showed the cause: the
+    host gave a session with no constraint, the selection model wrote `[explore]`, not
+    `{"ids": ["explore"]}`, the decode failed, and the whole `skills` call failed. The rule
+    that the session must constrain the answer was only a doc comment in the ranker.
+
+    Consequences: (a) the `session:` closure of `SkillsTool.make(registry:session:)` takes
+    a `SelectionSessionRequest`, which carries the instructions, the candidate ids, and the
+    id-enum JSON Schema of those ids (`SelectionTier.idEnumSchema(ids:)`); a session whose
+    model takes a grammar applies the schema; (b) the overload that took one live session
+    is removed, because a live session cannot apply a new schema for each call — this
+    replaces the live-session half of #30 (a); (c) the factory gives `SkillSearchAgent` a
+    second searcher in `.retrieval` mode over the same index, and an answer that does not
+    decode gives that searcher's rank, with the failure in the log, not a failed call.
 
 **All open items resolved — the plan is decision-complete.**
 
@@ -729,18 +743,18 @@ let registry = SkillsRegistry(
 )
 
 // Layer 4 — the host makes the selection session; this package makes none (#30).
+// The package owns the answer shape (#31): each request carries the id-enum
+// JSON Schema, and a session whose model takes a grammar applies it.
 // `FoundationModelsRanker` conforms `LanguageModelSession` to `AgentSession`,
-// thus a standard session goes straight in.
-let selection = LanguageModelSession(
-  model: .default,
-  instructions: "You choose skill ids from a catalog."
-)
+// and its guided generation constrains the shape, thus it reads only the instructions.
 
 // One call fuses the ops over one context: SkillsTool.make(registry:session:).
 // It is `async throws` — a non-nil `embedder` builds the index while it runs.
 let skillsTool = try await SkillsTool.make(
   registry: registry,                            // dereferenced live, per dispatch
-  session: selection                             // any AgentSession; omit for keyword-only
+  session: { request in                          // SelectionSessionRequest; omit for keyword-only
+    LanguageModelSession(model: .default, instructions: request.instructions)
+  }
 )
 
 // Lean root session: one tool + preloaded bodies, NO full catalog inline:

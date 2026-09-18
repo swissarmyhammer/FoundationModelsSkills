@@ -64,7 +64,7 @@ struct ReadmeExampleTests {
         // The session you supply runs the selection tier. Nothing is hardcoded.
         let skillsTool = try await SkillsTool.make(
             registry: registry,
-            session: { prefix in LanguageModelSession(model: .default, instructions: prefix) })
+            session: { request in LanguageModelSession(model: .default, instructions: request.instructions) })
 
         // A lean root session: one tool, preloaded bodies, no full catalog in context.
         let session = LanguageModelSession(

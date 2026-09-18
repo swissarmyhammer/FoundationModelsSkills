@@ -115,7 +115,10 @@ public struct SearchSkill: OperationDefinition {
     ///   satisfy the `OperationDefinition` protocol requirement. Rethrows
     ///   whatever `SkillSearchAgent.search(query:limit:)` throws -- a
     ///   genuinely fatal search-tier failure the host app must handle, not a
-    ///   corrective one.
+    ///   corrective one. An agent with a retrieval fallback, which the
+    ///   `SkillsTool.make` factories build, answers a selection answer that
+    ///   does not decode with the retrieval rank, thus that answer does not
+    ///   reach this method as an error.
     public func execute(in context: SkillsToolContext) async throws -> SearchSkillOutput {
         guard !query.isBlank else {
             return .corrective(Self.blankQueryMessage)

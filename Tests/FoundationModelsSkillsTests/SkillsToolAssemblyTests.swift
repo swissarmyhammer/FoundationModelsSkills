@@ -2,6 +2,7 @@ import Foundation
 import FoundationModels
 import FoundationModelsSkills
 import Operations
+import Synchronization
 import Testing
 
 /// Tests for the one-call `SkillsTool` factories in
@@ -51,20 +52,82 @@ struct SkillsToolAssemblyTests {
 
         let tool = try await SkillsTool.make(
             registry: Self.makeFixtureRegistry(), session: { _ in session })
-        let ids = try await Self.searchIDs(through: tool, query: "anything at all")
+        let ids = try await Self.searchIDs(through: tool, query: Self.anyQuery)
 
         #expect(session.respondCallCount == 1)
         #expect(ids == [Self.alignedSkillID])
     }
 
-    @Test func theInjectedLiveSessionIsTheOneThatBacksSelection() async throws {
+    // MARK: - The package owns the shape of the selection answer
+
+    /// Shows that the session factory gets the id-enum JSON Schema of the
+    /// candidates, and that the candidates are the visible skills.
+    ///
+    /// The schema must hold the answer to `{"ids": [String]}`, with each id
+    /// from the visible fixture catalog, and with no more ids than
+    /// candidates. The model-hidden skill is not a candidate, thus the
+    /// schema must not permit it.
+    @Test func theSessionRequestCarriesTheIdEnumSchemaOfTheVisibleCandidates() async throws {
+        let registry = Self.makeFixtureRegistry()
+        let visibleIDs = registry.metadata().filter(\.isModelVisible).map(\.id)
+        let recorder = RequestRecorder()
         let session = RecordingAgentSession(answer: Self.selectionAnswer)
 
-        let tool = try await SkillsTool.make(registry: Self.makeFixtureRegistry(), session: session)
-        let ids = try await Self.searchIDs(through: tool, query: "anything at all")
+        let tool = try await SkillsTool.make(
+            registry: registry,
+            session: { request in
+                recorder.record(request)
+                return session
+            })
+        _ = try await Self.searchIDs(through: tool, query: Self.anyQuery)
+
+        let request = try #require(recorder.requests.first)
+        let schema = try Self.idsSchema(in: request.jsonSchema)
+        #expect(recorder.requests.count == 1)
+        #expect(request.candidateIDs == visibleIDs)
+        #expect(schema.enumIDs == visibleIDs)
+        #expect(schema.maxItems == visibleIDs.count)
+        #expect(!schema.enumIDs.contains(Self.modelHiddenSkillID))
+        #expect(request.instructions.contains("## \(Self.alignedSkillID)"))
+    }
+
+    // MARK: - One bad answer does not fail the call
+
+    /// Shows that a selection answer with the wrong shape gives the
+    /// retrieval rank, not a failed `skills` call.
+    ///
+    /// The session answers `[commit]`: the correct skill, in the shape a small
+    /// model wrote in the SWE-bench run, not `{"ids": ["commit"]}`. The
+    /// decode of that answer throws. The search must then give the same rank
+    /// as the keyword-only factory, and the session must have been asked, or
+    /// the case proves nothing about the fallback.
+    @Test func aBareIDListAnswerGivesTheRetrievalRankNotAFailedCall() async throws {
+        let registry = Self.makeFixtureRegistry()
+        let session = RecordingAgentSession(answer: Self.bareIDListAnswer)
+
+        let selectionTool = try await SkillsTool.make(registry: registry, session: { _ in session })
+        let retrievalTool = try await SkillsTool.make(registry: registry)
+        let fallbackIDs = try await Self.searchIDs(through: selectionTool, query: Self.keywordQuery)
+        let retrievalIDs = try await Self.searchIDs(through: retrievalTool, query: Self.keywordQuery)
 
         #expect(session.respondCallCount == 1)
-        #expect(ids == [Self.alignedSkillID])
+        #expect(fallbackIDs.first == Self.alignedSkillID)
+        #expect(fallbackIDs == retrievalIDs)
+    }
+
+    /// Shows that a session that fails for another reason also gives the
+    /// retrieval rank, not a failed `skills` call.
+    @Test func aSessionThatThrowsGivesTheRetrievalRankNotAFailedCall() async throws {
+        let registry = Self.makeFixtureRegistry()
+
+        let selectionTool = try await SkillsTool.make(
+            registry: registry, session: { _ in ThrowingAgentSession() })
+        let retrievalTool = try await SkillsTool.make(registry: registry)
+        let fallbackIDs = try await Self.searchIDs(through: selectionTool, query: Self.keywordQuery)
+        let retrievalIDs = try await Self.searchIDs(through: retrievalTool, query: Self.keywordQuery)
+
+        #expect(fallbackIDs.first == Self.alignedSkillID)
+        #expect(fallbackIDs == retrievalIDs)
     }
 
     // MARK: - An empty catalog asks the model nothing
@@ -82,9 +145,9 @@ struct SkillsToolAssemblyTests {
         defer { try? FileManager.default.removeItem(at: root) }
         let session = RecordingAgentSession(answer: Self.proseAnswer)
 
-        let tool = try await SkillsTool.make(registry: SkillsRegistry(roots: [root]), session: session)
+        let tool = try await SkillsTool.make(registry: SkillsRegistry(roots: [root]), session: { _ in session })
         let json = try await tool.call(
-            arguments: GeneratedContent(properties: ["op": "search skill", "query": "anything at all"]))
+            arguments: GeneratedContent(properties: ["op": "search skill", "query": Self.anyQuery]))
 
         #expect(json == #""No skills are available.""#)
         #expect(session.respondCallCount == 0)
@@ -165,13 +228,55 @@ struct SkillsToolAssemblyTests {
         SkillsRegistry(stack: FixtureLibrary.stack())
     }
 
-    /// The answer the two selection cases give to their `AgentSession`
-    /// doubles: the selection tier reads it as the ids it must return.
+    /// The answer the selection cases give to their `AgentSession` doubles:
+    /// the selection tier reads it as the ids it must return.
     private static let selectionAnswer = #"{"ids":["\#(alignedSkillID)"]}"#
 
     /// A prose answer that is not JSON: the shape the real model gave when
     /// the selection prompt held no candidate.
     private static let proseAnswer = "There are no candidates to choose from."
+
+    /// A bare list of the correct id, with no quotes and no `ids` object: the
+    /// shape a small model gave in the SWE-bench run, which does not decode.
+    private static let bareIDListAnswer = "[\(alignedSkillID)]"
+
+    /// A query whose keywords rank `alignedSkillID` first in the retrieval
+    /// tier, as `ReadmeExampleTests` and the `skills-demo` CLI case show.
+    private static let keywordQuery = "commit my changes"
+
+    /// A query for the cases whose selection double answers the same ids for
+    /// every prompt, thus the words of the query do not matter.
+    private static let anyQuery = "anything at all"
+
+    // MARK: - Reading the schema back
+
+    /// The parts of an id-enum JSON Schema that these cases assert on.
+    private struct IDsSchema {
+        /// The ids the `items` subschema of `ids` permits, in schema order.
+        let enumIDs: [String]
+
+        /// The `maxItems` bound of the `ids` array.
+        let maxItems: Int
+    }
+
+    /// Reads the `ids` array subschema out of a JSON Schema text.
+    ///
+    /// - Parameter jsonSchema: The schema text a `SelectionSessionRequest`
+    ///   carries.
+    /// - Returns: The enum ids and the `maxItems` bound of `ids`.
+    /// - Throws: An error when the text is not JSON, and a
+    ///   `#require` failure when the schema does not have the
+    ///   `properties.ids.items.enum` shape.
+    private static func idsSchema(in jsonSchema: String) throws -> IDsSchema {
+        let root = try #require(
+            try JSONSerialization.jsonObject(with: Data(jsonSchema.utf8)) as? [String: Any])
+        let properties = try #require(root["properties"] as? [String: Any])
+        let ids = try #require(properties["ids"] as? [String: Any])
+        let items = try #require(ids["items"] as? [String: Any])
+        return IDsSchema(
+            enumIDs: try #require(items["enum"] as? [String]),
+            maxItems: try #require(ids["maxItems"] as? Int))
+    }
 
     // MARK: - Dispatch
 
@@ -227,12 +332,11 @@ struct SkillsToolAssemblyTests {
     /// Uses the protocol default `fork()`, which gives back `self`. Thus a
     /// forked child records its calls on the same counter.
     ///
-    /// `final class ... @unchecked Sendable`: the call count changes across
-    /// an `await` boundary, thus `lock` holds it.
-    private final class RecordingAgentSession: AgentSession, @unchecked Sendable {
+    /// The call count changes across an `await` boundary, thus a `Mutex`
+    /// holds it, and the class is `Sendable` with no unchecked claim.
+    private final class RecordingAgentSession: AgentSession, Sendable {
         private let answer: String
-        private let lock = NSLock()
-        private var calls = 0
+        private let calls = Mutex(0)
 
         /// Creates a double that gives `answer` for every prompt.
         ///
@@ -246,12 +350,44 @@ struct SkillsToolAssemblyTests {
 
         /// How many times `respond(to:)` has run.
         var respondCallCount: Int {
-            lock.withLock { calls }
+            calls.withLock { $0 }
         }
 
         func respond(to prompt: String) async throws -> String {
-            lock.withLock { calls += 1 }
+            calls.withLock { $0 += 1 }
             return answer
+        }
+    }
+
+    /// An `AgentSession` double whose every call throws, as a session does
+    /// when its model or its transport fails.
+    private struct ThrowingAgentSession: AgentSession {
+        /// The error every call of this double throws.
+        struct SessionFailure: Error {}
+
+        func respond(to prompt: String) async throws -> String {
+            throw SessionFailure()
+        }
+    }
+
+    /// Records each `SelectionSessionRequest` the factory gives the host's
+    /// session closure.
+    ///
+    /// The closure runs in the selection tier, across an `await` boundary
+    /// from the case that reads the records, thus a `Mutex` holds them.
+    private final class RequestRecorder: Sendable {
+        private let recorded = Mutex<[SelectionSessionRequest]>([])
+
+        /// Every request recorded so far, in the order the factory made them.
+        var requests: [SelectionSessionRequest] {
+            recorded.withLock { $0 }
+        }
+
+        /// Records `request`.
+        ///
+        /// - Parameter request: The request the factory gave the closure.
+        func record(_ request: SelectionSessionRequest) {
+            recorded.withLock { $0.append(request) }
         }
     }
 
