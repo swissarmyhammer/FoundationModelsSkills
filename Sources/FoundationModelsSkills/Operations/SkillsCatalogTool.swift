@@ -104,7 +104,27 @@ public struct SkillsCatalogTool: Tool {
     ///   operation, or a corrective message.
     /// - Throws: Whatever `OperationTool.call(arguments:)` throws.
     public func call(arguments: GeneratedContent) async throws -> String {
-        let answer = try await operationTool.call(arguments: arguments)
+        try await dispatchAsPlainText(arguments, through: operationTool.call(arguments:))
+    }
+
+    /// Dispatches `arguments` with `dispatch`, and gives the answer as plain
+    /// text when the payload is `use skill`.
+    ///
+    /// `call(arguments:)` and `perform(_:)` dispatch through a different
+    /// method of `operationTool`. Both then decode the answer here, thus the
+    /// two entry points cannot give a different answer for one payload.
+    ///
+    /// - Parameters:
+    ///   - arguments: The payload of the model or the command line.
+    ///   - dispatch: The method of `operationTool` that dispatches the
+    ///     payload.
+    /// - Returns: The plain text of `use skill`, the JSON output of another
+    ///   operation, or a corrective message.
+    /// - Throws: Whatever `dispatch` throws.
+    private func dispatchAsPlainText(
+        _ arguments: GeneratedContent, through dispatch: (GeneratedContent) async throws -> String
+    ) async throws -> String {
+        let answer = try await dispatch(arguments)
         return await plainTextOperations.text(of: answer, for: arguments)
     }
 }
@@ -133,7 +153,6 @@ extension SkillsCatalogTool: OperationDescribing {
     ///   another operation.
     /// - Throws: Whatever `OperationTool.perform(_:)` throws.
     public func perform(_ arguments: GeneratedContent) async throws -> String {
-        let answer = try await operationTool.perform(arguments)
-        return await plainTextOperations.text(of: answer, for: arguments)
+        try await dispatchAsPlainText(arguments, through: operationTool.perform)
     }
 }

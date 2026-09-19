@@ -9,11 +9,15 @@ import Testing
 /// The model reads the answer as the procedure to follow. Thus the answer is
 /// the rendered body of the skill as plain text: no JSON object, no `body`
 /// key, no `id` key, and no escape sequences. An error is a plain sentence.
+///
+/// Each alias of `use skill` gives the same answer. Thus each test runs once
+/// for each op spelling in `useSkillOps`.
 struct UseSkillPlainTextTests {
     // MARK: - Constants
 
-    /// The op of the `use skill` operation, as a model writes it.
-    private static let useSkillOp = "use skill"
+    /// Each op spelling of the `use skill` operation that a model can write:
+    /// the canonical op and its `call`, `invoke`, and `get` aliases.
+    private static let useSkillOps = ["use skill", "skill_call", "skill_invoke", "skill_get"]
 
     /// The fixture skill with one required argument and a body of more than
     /// one line, thus JSON would escape its line breaks.
@@ -33,20 +37,22 @@ struct UseSkillPlainTextTests {
 
     // MARK: - The answer is the rendered body
 
-    @Test func theAnswerIsTheRenderedBodyCharacterForCharacter() async throws {
+    @Test(arguments: useSkillOps)
+    func theAnswerIsTheRenderedBodyCharacterForCharacter(op: String) async throws {
         let registry = Self.makeFixtureRegistry()
         let tool = try Self.makeTool(registry: registry)
         let renderedBody = try registry.call(id: Self.commitSkillID, arguments: [Self.commitMessage])
 
-        let answer = try await tool.call(arguments: Self.useCommitArguments(op: Self.useSkillOp))
+        let answer = try await tool.call(arguments: Self.useCommitArguments(op: op))
 
         #expect(answer == renderedBody)
     }
 
-    @Test func theAnswerHoldsNoJSONStructureAroundTheBody() async throws {
+    @Test(arguments: useSkillOps)
+    func theAnswerHoldsNoJSONStructureAroundTheBody(op: String) async throws {
         let tool = try Self.makeTool(registry: Self.makeFixtureRegistry())
 
-        let answer = try await tool.call(arguments: Self.useCommitArguments(op: Self.useSkillOp))
+        let answer = try await tool.call(arguments: Self.useCommitArguments(op: op))
 
         #expect(!answer.hasPrefix("{"))
         #expect(!answer.hasPrefix("\""))
@@ -56,35 +62,27 @@ struct UseSkillPlainTextTests {
         #expect(answer.contains("\n"))
     }
 
-    @Test func aVerbAliasOfUseSkillAlsoGivesTheRenderedBody() async throws {
+    @Test(arguments: useSkillOps)
+    func performGivesTheRenderedBodyToo(op: String) async throws {
         let registry = Self.makeFixtureRegistry()
         let tool = try Self.makeTool(registry: registry)
         let renderedBody = try registry.call(id: Self.commitSkillID, arguments: [Self.commitMessage])
 
-        let answer = try await tool.call(arguments: Self.useCommitArguments(op: "skill_invoke"))
-
-        #expect(answer == renderedBody)
-    }
-
-    @Test func performGivesTheRenderedBodyToo() async throws {
-        let registry = Self.makeFixtureRegistry()
-        let tool = try Self.makeTool(registry: registry)
-        let renderedBody = try registry.call(id: Self.commitSkillID, arguments: [Self.commitMessage])
-
-        let answer = try await tool.perform(Self.useCommitArguments(op: Self.useSkillOp))
+        let answer = try await tool.perform(Self.useCommitArguments(op: op))
 
         #expect(answer == renderedBody)
     }
 
     // MARK: - An error is a plain sentence
 
-    @Test func anUnknownIDGivesAPlainSentenceThatNamesTheValidIDs() async throws {
+    @Test(arguments: useSkillOps)
+    func anUnknownIDGivesAPlainSentenceThatNamesTheValidIDs(op: String) async throws {
         let registry = Self.makeFixtureRegistry()
         let tool = try Self.makeTool(registry: registry)
         let validIDs = registry.metadata().filter(\.isModelVisible).map(\.id).sorted()
 
         let answer = try await tool.call(
-            arguments: GeneratedContent(properties: ["op": Self.useSkillOp, "id": Self.unknownSkillID]))
+            arguments: GeneratedContent(properties: ["op": op, "id": Self.unknownSkillID]))
 
         #expect(
             answer
@@ -92,11 +90,12 @@ struct UseSkillPlainTextTests {
                 + "Currently usable ids: \(validIDs.joined(separator: ", ")).")
     }
 
-    @Test func aMissingRequiredArgumentGivesAPlainSentence() async throws {
+    @Test(arguments: useSkillOps)
+    func aMissingRequiredArgumentGivesAPlainSentence(op: String) async throws {
         let tool = try Self.makeTool(registry: Self.makeFixtureRegistry())
 
         let answer = try await tool.call(
-            arguments: GeneratedContent(properties: ["op": Self.useSkillOp, "id": Self.commitSkillID]))
+            arguments: GeneratedContent(properties: ["op": op, "id": Self.commitSkillID]))
 
         #expect(answer == "Missing required argument `message` for this skill.")
     }
