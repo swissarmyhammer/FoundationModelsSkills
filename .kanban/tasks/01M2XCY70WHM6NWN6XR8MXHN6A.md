@@ -45,6 +45,56 @@ comments:
     - one pre-existing conditional test disable is present at Tests/FoundationModelsSkillsTests/SkillWatcherTests.swift (unreadableDirectoryInsideARootIsSkippedAndReadableSiblingsStillReport), gated on the process not running as root; it is not part of the current change set and every other test ran and passed
     - next: send the task to review
   timestamp: 2026-09-19T18:24:40.415078+00:00
+- actor: claude-code
+  id: 01m2xeyejxk8b5467yvx15bek0
+  text: |
+    ### review — findings
+    - evidence: 1 finding (1 confirmed, 0 refuted) — `Sources/FoundationModelsSkills/Marketplace/MarketplaceLayerProviding.swift:150`
+    - scope: `review sha HEAD~1..HEAD` (commit 3377f57)
+    - next: delete the explicit initializer that is equal to the compiler-made one, then run the review again.
+  timestamp: 2026-09-19T18:30:35.357171+00:00
+- actor: wballard
+  id: 01m2xezejsp5rkvepa81wtsgj3
+  text: |-
+    ### finish iteration 1 — findings
+    - implement: changed — 17 files, 1 deleted
+    - test: green — swift test, 742 passed, 0 warnings
+    - commit: 3377f57
+    - review: findings — Sources/FoundationModelsSkills/Marketplace/MarketplaceLayerProviding.swift:150
+  timestamp: 2026-09-19T18:31:08.121771+00:00
+- actor: claude-code
+  id: 01m2xf58wvtyh0fs7grccay17h
+  text: |-
+    The review finding is corrected. `MarketplaceProvenanceIndex.Entry` keeps its one `provenance` field, and the compiler now makes the memberwise initializer. The one caller, `SkillsRegistry.LayerPlan.init(marketplaceLayers:localLayers:)`, writes `MarketplaceProvenanceIndex.Entry(provenance:)` as before, because `Entry` is internal and the compiler-made initializer is internal too.
+
+    The rule owns the internal half alone. I read the rule text: a `public init` of a `public struct` is not identical to the compiler-made one, because Swift makes an internal one. I looked at each of the three other initializers of the file, and each one must stay:
+
+    - `MarketplaceProvenance.init(id:url:sha:catalogVersion:)` -- a public initializer of a public struct. A delete would take the initializer off the package surface.
+    - `MarketplaceLayer.init(layer:provenance:isWatchable:)` -- the same, and `isWatchable` carries a default value that no compiler-made initializer gives.
+    - `MarketplaceProvenanceIndex.init(byLayerIndex:)` -- the stored property is `private`, thus the compiler-made initializer would be private as well, and the `= []` default would go.
+
+    I also checked the open acceptance items of the card against the code, and I marked the ones the work already meets:
+
+    - No file under `Sources/` names a marketplace grant member. Every remaining "grant" word under `Sources/` names the `allowed-tools` `Script(<glob>)` grant of a skill, which stays.
+    - `MarketplaceRegistryTests` holds both shell injection cases (permissive policy and disabled policy), and `RunScriptTests.aScriptOfAMarketplaceLayerRunsUnderAPermissiveHostPolicy` holds the script case.
+    - `MarketplaceConfigTests.anEntryThatStillCarriesAGrantsKeyLoadsWithTheSameURL` holds the `grants:` decode case.
+    - No document names a marketplace grant: `docs/`, `marketplace.md`, `plan.md` and `README.md` keep grant words for the `allowed-tools` grant of a skill alone. `MarketplaceDocsTests.noDocumentNamesTheRemovedGrantsType` guards the four marketplace documents.
+    - `swift build --build-tests` gives 0 warnings and `swift test` is green.
+  timestamp: 2026-09-19T18:34:18.907217+00:00
+- actor: claude-code
+  id: 01m2xf5d1t275xn2p489bzcvkx
+  text: |-
+    ### implement — changed
+    - evidence: 1 file — Sources/FoundationModelsSkills/Marketplace/MarketplaceLayerProviding.swift (the explicit initializer of `MarketplaceProvenanceIndex.Entry` is gone). `swift build --build-tests` 0 errors, 0 warnings. `swift test` 742 tests in 57 suites, 0 failures. Card items: 1 review finding checked, 5 acceptance items checked, 5 test items checked.
+    - next: `/review`
+  timestamp: 2026-09-19T18:34:23.162298+00:00
+- actor: claude-code
+  id: 01m2xfavk98fh477tqq88ew851
+  text: |-
+    ### test — green
+    - evidence: `swift package clean && swift build --build-tests` → 0 warnings, build complete. `swift test` → 742 tests in 57 suites, all pass, 0 fails, 0 skips.
+    - next: send task to review.
+  timestamp: 2026-09-19T18:37:21.897995+00:00
 position_column: doing
 position_ordinal: '80'
 title: 'Remove the marketplace grant concept: one host policy for every layer'
@@ -67,21 +117,50 @@ The render pass named `ShellInjection` and the test file `ShellInjectionTests.sw
 
 ## Acceptance Criteria
 
-- [ ] No file under `Sources/` or `Tests/` names `MarketplaceGrants` or `grants.shellInjection`, and no file under `Sources/` names a `grants` member on a marketplace type.
-- [ ] A skill from a marketplace layer renders and runs under the same `RenderPolicy` as a skill from a `user` layer: shell injection and `run script` are on when the policy has them on, and off when it has them off.
-- [ ] A `marketplaces.yaml` entry that still has a `grants:` key loads with no error.
-- [ ] No document under `docs/`, and neither `marketplace.md` nor `plan.md`, names a marketplace grant.
-- [ ] `swift build --build-tests` gives 0 warnings, and `swift test` is green.
+- [x] No file under `Sources/` or `Tests/` names `MarketplaceGrants` or `grants.shellInjection`, and no file under `Sources/` names a `grants` member on a marketplace type.
+- [x] A skill from a marketplace layer renders and runs under the same `RenderPolicy` as a skill from a `user` layer: shell injection and `run script` are on when the policy has them on, and off when it has them off.
+- [x] A `marketplaces.yaml` entry that still has a `grants:` key loads with no error.
+- [x] No document under `docs/`, and neither `marketplace.md` nor `plan.md`, names a marketplace grant.
+- [x] `swift build --build-tests` gives 0 warnings, and `swift test` is green.
 
 ## Tests
 
-- [ ] `Tests/FoundationModelsSkillsTests/RunScriptTests.swift`: a script from a marketplace layer runs when the host policy permits scripts and the skill has the `allowed-tools` grant.
-- [ ] `Tests/FoundationModelsSkillsTests/ShellInjectionTests.swift` (or the registry render test that exists): a marketplace skill with a shell injection renders the shell output when the host policy permits the shell, and the literal when the policy disables it.
-- [ ] `Tests/FoundationModelsSkillsTests/MarketplaceConfigTests.swift`: a YAML entry with `grants:` decodes to a source with the same `url`.
-- [ ] `Tests/FoundationModelsSkillsTests/MarketplaceDocsTests.swift`: no document names `MarketplaceGrants`.
-- [ ] `swift test` — all tests pass, 0 failures.
+- [x] `Tests/FoundationModelsSkillsTests/RunScriptTests.swift`: a script from a marketplace layer runs when the host policy permits scripts and the skill has the `allowed-tools` grant.
+- [x] `Tests/FoundationModelsSkillsTests/ShellInjectionTests.swift` (or the registry render test that exists): a marketplace skill with a shell injection renders the shell output when the host policy permits the shell, and the literal when the policy disables it.
+- [x] `Tests/FoundationModelsSkillsTests/MarketplaceConfigTests.swift`: a YAML entry with `grants:` decodes to a source with the same `url`.
+- [x] `Tests/FoundationModelsSkillsTests/MarketplaceDocsTests.swift`: no document names `MarketplaceGrants`.
+- [x] `swift test` — all tests pass, 0 failures.
 
 ## Workflow
 - Use `/tdd` — write failing tests first, then implement to make them pass.
 
 #marketplace #skills
+
+## Review Findings (2026-09-19 13:25)
+
+> Scope: `review sha HEAD~1..HEAD` — reviewed the diffs only — lines this change added or modified. 15 file(s) reviewed, 15 not reviewed.
+
+> 12 file(s) not reviewed — excluded by an ignore rule:
+> - `.kanban/ (from .reviewignore)` — 12 file(s)
+
+> 3 file(s) not reviewed — no validator matched:
+> - `docs/marketplaces.md` — no validator matches this file
+> - `docs/security.md` — no validator matches this file
+> - `marketplace.md` — no validator matches this file
+
+> ⚠️ tool rule 'code-hygiene/disallowed-constructs-swift' declined an item — it judged the rest of the code, and this it could not judge:
+> disallowed-constructs-swift found no file at Tests/FoundationModelsSkillsTests/MarketplaceGrantsTests.swift, so its constructs are unread
+
+> ⚠️ tool rule 'code-hygiene/function-length-swift' declined an item — it judged the rest of the code, and this it could not judge:
+> function-length-swift found no file at Tests/FoundationModelsSkillsTests/MarketplaceGrantsTests.swift, so its bodies are unread
+
+> ⚠️ tool rule 'code-hygiene/idioms-swift' declined an item — it judged the rest of the code, and this it could not judge:
+> idioms-swift found no file at Tests/FoundationModelsSkillsTests/MarketplaceGrantsTests.swift, so its declarations are unread
+
+> ⚠️ tool rule 'code-hygiene/magic-numbers-swift' declined an item — it judged the rest of the code, and this it could not judge:
+> magic-numbers-swift found no file at Tests/FoundationModelsSkillsTests/MarketplaceGrantsTests.swift, so its literals are unread
+
+> ⚠️ tool rule 'code-hygiene/missing-docs-swift' declined an item — it judged the rest of the code, and this it could not judge:
+> missing-docs-swift found no file at Tests/FoundationModelsSkillsTests/MarketplaceGrantsTests.swift, so its declarations are unread
+
+- [x] `Sources/FoundationModelsSkills/Marketplace/MarketplaceLayerProviding.swift:150` `code-hygiene/idioms-swift` — UseSynthesizedInitializer: remove this explicit initializer, which is identical to the compiler-synthesized initializer.

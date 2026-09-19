@@ -143,13 +143,6 @@ internal struct MarketplaceProvenanceIndex: Sendable {
     internal struct Entry: Sendable {
         /// Where the skills of the layer came from.
         let provenance: MarketplaceProvenance
-
-        /// Creates an entry.
-        ///
-        /// - Parameter provenance: Where the skills of the layer came from.
-        init(provenance: MarketplaceProvenance) {
-            self.provenance = provenance
-        }
     }
 
     /// One entry for each layer, in layer order; `nil` for a local layer.
