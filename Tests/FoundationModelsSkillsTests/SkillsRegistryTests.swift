@@ -1,7 +1,8 @@
 import Foundation
 import FoundationModelsExtras
-import FoundationModelsSkills
 import Testing
+
+@testable import FoundationModelsSkills
 
 /// Tests for `SkillsRegistry`'s static core (plan.md §3, §6, §6.1, §7.1;
 /// decisions #13/#25/#28/#29): the fixture-root construction snapshot, the
@@ -635,6 +636,83 @@ struct SkillsRegistryTests {
         #expect(diagnostic.severity == .skip)
         #expect(diagnostic.message.hasPrefix("SKILL.md could not be read:"))
         #expect(diagnostic.provenance.root.path == root.path)
+    }
+
+    // MARK: - The catalog entry carries every contributing layer directory
+
+    /// Writes a minimal `SKILL.md` for `id` under `root`, whose frontmatter
+    /// states a name and a description only.
+    ///
+    /// The contributing-directory tests put the same id in more than one
+    /// layer root, so one writer serves each of those roots.
+    ///
+    /// - Parameters:
+    ///   - id: The skill id -- both the subdirectory name and `name:`.
+    ///   - root: The layer root to write the skill's own subdirectory under.
+    /// - Throws: Whatever `writeSkillFixture(id:skillMarkdown:in:)` throws.
+    private static func writeSharedIDSkill(id: String, in root: URL) throws {
+        try writeSkillFixture(
+            id: id,
+            skillMarkdown: """
+                ---
+                name: \(id)
+                description: A registry test fixture that more than one layer gives.
+                ---
+                Body text, unused by this fixture's own tests.
+                """,
+            in: root)
+    }
+
+    /// The layer directory of `id` under `root`.
+    ///
+    /// - Parameters:
+    ///   - id: The skill id.
+    ///   - root: The layer root.
+    /// - Returns: The path of `root/<id>/`, to compare a contributing
+    ///   directory against.
+    private static func skillDirectoryPath(id: String, in root: URL) -> String {
+        root.appendingPathComponent(id, isDirectory: true).path
+    }
+
+    @Test func aCatalogEntryCarriesTheLayerDirectoryOfEachLayerThatGivesTheSkillLowestPrecedenceFirst() {
+        // `base-style` is the one fixture id that two of the three §11 layer
+        // roots hold, so it is the two-directory case.
+        let registry = SkillsRegistry(roots: Self.fixtureRoots)
+
+        let contributing = registry.contributingDirectories(id: "base-style")
+
+        #expect(
+            contributing.map(\.directory.path) == [
+                Self.skillDirectoryPath(id: "base-style", in: Self.defaultsRoot),
+                Self.skillDirectoryPath(id: "base-style", in: Self.userRoot),
+            ])
+    }
+
+    @Test func aMarketplaceLayerBelowALocalLayerIsTheFirstContributingDirectoryAndKeepsItsMarketplaceSource()
+        throws
+    {
+        let marketplaceRoot = try Self.makeTempDirectory()
+        let localRoot = try Self.makeTempDirectory()
+        defer {
+            try? FileManager.default.removeItem(at: marketplaceRoot)
+            try? FileManager.default.removeItem(at: localRoot)
+        }
+        try Self.writeSharedIDSkill(id: "shared-id", in: marketplaceRoot)
+        try Self.writeSharedIDSkill(id: "shared-id", in: localRoot)
+
+        let registry = SkillsRegistry(layers: [
+            DotfolderStack.Layer(source: .marketplace, root: marketplaceRoot),
+            DotfolderStack.Layer(source: .user, root: localRoot),
+        ])
+
+        let contributing = registry.contributingDirectories(id: "shared-id")
+
+        #expect(contributing.map(\.layer.source) == [.marketplace, .user])
+        #expect(
+            contributing.map(\.directory.path) == [
+                Self.skillDirectoryPath(id: "shared-id", in: marketplaceRoot),
+                Self.skillDirectoryPath(id: "shared-id", in: localRoot),
+            ])
     }
 
     // MARK: - No directory-convention literal in registry source

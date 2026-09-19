@@ -454,6 +454,27 @@ public struct SkillsRegistry: Sendable {
         /// - Parameter index: The index of the layer.
         /// - Returns: The grants, or `nil` for a local layer -- a local
         ///   skill is gated by the host policy alone.
+        /// The layer directories that give the files of `discovered`,
+        /// lowest precedence first, each with the layer that gives it.
+        ///
+        /// Discovery names the layer of each contributing directory by its
+        /// index in the layer list it ran over, which is this plan's own
+        /// `layers`. An index this plan does not hold is dropped rather
+        /// than trapped: the plan is recomputed for every rebuild, so a
+        /// stale record must cost one directory and never the whole
+        /// catalog.
+        ///
+        /// - Parameter discovered: The discovery record of one skill.
+        /// - Returns: One entry per contributing directory, in the order
+        ///   discovery gives them.
+        func contributingDirectories(for discovered: DiscoveredSkill) -> [ContributingDirectory] {
+            discovered.contributingDirectories.compactMap { contributing in
+                guard layers.indices.contains(contributing.rootIndex) else { return nil }
+                return ContributingDirectory(
+                    directory: contributing.skillDirectory, layer: layers[contributing.rootIndex])
+            }
+        }
+
         func grants(atLayerIndex index: Int) -> MarketplaceGrants? {
             if let grants = marketplaces.grants(atLayerIndex: index) {
                 return grants
@@ -509,6 +530,35 @@ public struct SkillsRegistry: Sendable {
 
     // MARK: - Catalog
 
+    /// One layer directory that gives files of a skill, with the layer that
+    /// gives that directory.
+    ///
+    /// The unit of override is the file, thus a skill of the combined view
+    /// has one of these for each layer that holds a directory of its id.
+    /// A directory here gives every file that no higher layer holds, even
+    /// when the winning `SKILL.md` is in another layer -- which is why the
+    /// layer of each directory is here, and not the layer of `SKILL.md`
+    /// alone.
+    internal struct ContributingDirectory: Sendable {
+        /// The layer directory itself, the directory of the skill's id
+        /// under `layer.root`.
+        internal let directory: URL
+
+        /// The layer that gives `directory`. A resource operation reads its
+        /// source to say which layer a file comes from.
+        internal let layer: DotfolderStack.Layer
+
+        /// Creates a `ContributingDirectory`.
+        ///
+        /// - Parameters:
+        ///   - directory: The layer directory itself.
+        ///   - layer: The layer that gives that directory.
+        internal init(directory: URL, layer: DotfolderStack.Layer) {
+            self.directory = directory
+            self.layer = layer
+        }
+    }
+
     /// One skill that survived validation un-hidden, with everything a
     /// render call or a listing/metadata row needs.
     private struct CatalogEntry: Sendable {
@@ -517,6 +567,13 @@ public struct SkillsRegistry: Sendable {
         let body: String
         let skillDirectory: URL
         let winningLayer: DotfolderStack.Layer
+        /// Every layer directory of this skill, lowest precedence first,
+        /// each with the layer that gives it.
+        ///
+        /// `skillDirectory` and `winningLayer` name the one directory that
+        /// gives `SKILL.md`; this list names each directory that gives any
+        /// file at all, that one included.
+        let contributingDirectories: [ContributingDirectory]
         /// What the marketplace of `winningLayer` lets this skill run, or
         /// `nil` for a local skill (marketplace.md §6.6).
         let grants: MarketplaceGrants?
@@ -537,19 +594,24 @@ public struct SkillsRegistry: Sendable {
         ///     own directory.
         ///   - winningLayer: The `Layer` `discovered.rootIndex` resolves
         ///     to.
+        ///   - contributingDirectories: Every layer directory of this
+        ///     skill, lowest precedence first, each with the layer that
+        ///     gives it.
         ///   - grants: What the marketplace of that layer lets this skill
         ///     run, or `nil` for a local skill.
         ///   - marketplace: The marketplace that layer came from, or `nil`
         ///     for a local skill.
         init(
             validated: ValidatedSkill, discovered: DiscoveredSkill, winningLayer: DotfolderStack.Layer,
-            grants: MarketplaceGrants?, marketplace: MarketplaceProvenance?
+            contributingDirectories: [ContributingDirectory], grants: MarketplaceGrants?,
+            marketplace: MarketplaceProvenance?
         ) {
             id = validated.id
             frontmatter = validated.frontmatter
             body = validated.body
             skillDirectory = discovered.skillDirectory
             self.winningLayer = winningLayer
+            self.contributingDirectories = contributingDirectories
             self.grants = grants
             self.marketplace = marketplace
 
@@ -622,6 +684,7 @@ public struct SkillsRegistry: Sendable {
             catalog[discovered.id] = CatalogEntry(
                 validated: validated, discovered: discovered,
                 winningLayer: plan.layers[discovered.rootIndex],
+                contributingDirectories: plan.contributingDirectories(for: discovered),
                 grants: plan.grants(atLayerIndex: discovered.rootIndex),
                 marketplace: plan.marketplaces.provenance(atLayerIndex: discovered.rootIndex))
         }
@@ -1020,6 +1083,21 @@ public struct SkillsRegistry: Sendable {
     ///   currently in the catalog.
     internal func skillDirectory(id: String) -> URL? {
         catalogBox.snapshot.catalog[id]?.skillDirectory
+    }
+
+    /// Every layer directory of `id`'s current catalog entry, lowest
+    /// precedence first, each with the layer that gives it.
+    ///
+    /// The unit of override is the file, so a resource operation reads
+    /// these directories from the highest down and takes the first copy of
+    /// a file it finds. `skillDirectory(id:)` names one of them -- the one
+    /// that gives `SKILL.md`.
+    ///
+    /// - Parameter id: The skill id to look up.
+    /// - Returns: The contributing directories, or an empty list when `id`
+    ///   is not currently in the catalog.
+    internal func contributingDirectories(id: String) -> [ContributingDirectory] {
+        catalogBox.snapshot.catalog[id]?.contributingDirectories ?? []
     }
 
     /// `id`'s current catalog entry's tokenized `allowed-tools:` frontmatter

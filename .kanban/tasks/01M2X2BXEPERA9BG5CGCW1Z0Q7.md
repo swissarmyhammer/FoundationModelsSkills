@@ -30,8 +30,24 @@ comments:
     - command: swift test — 747 tests in 58 suites passed, 0 failed, 0 skipped/disabled
     - next: ready for review
   timestamp: 2026-09-19T17:53:56.524012+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01m2xd2fzd5ytgqedxxsbw1z0g
+  text: |-
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (933ce71) — 0 findings, 0 confirmed, 0 refuted; 7 validators ran, 0 failed; 9 files reviewed, 20 files excluded by the `.reviewignore` rule for `.kanban/`
+    - next: no open findings, and each prior item is checked. The card moves to done.
+  timestamp: 2026-09-19T17:57:50.701577+00:00
+- actor: wballard
+  id: 01m2xd3d93hvjrrbedsvwfx58t
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 9 files, 1 new
+    - test: green — swift test, 747 passed, 0 warnings
+    - commit: 933ce71
+    - review: clean — 0 findings; task moved to done
+  timestamp: 2026-09-19T17:58:20.707831+00:00
+position_column: done
+position_ordinal: f880
 title: Give SkillDiscovery a combined view over the layer directories
 ---
 ## What
