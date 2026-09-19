@@ -1,9 +1,9 @@
 import Foundation
 
-/// Shared fixture helpers for the tests of the combined view of one skill --
-/// `PathConfinementTests` and `SkillOverlayTests`. Both make more than one
-/// layer directory on real disk and put files in them, thus the two need the
-/// same helpers.
+/// Shared fixture helpers for the tests that make layer directories on real
+/// disk and put files in them -- `PathConfinementTests`, `SkillOverlayTests`
+/// and `SkillDiscoveryTests`. The three need the same helpers, thus the
+/// helpers are in this one file.
 ///
 /// `WatcherTestSupport` gives the temporary directory, thus this file makes
 /// none of its own.
@@ -18,7 +18,7 @@ enum LayerFixtureSupport {
     }
 
     /// Removes each directory of `directories`, for the cleanup of a test that
-    /// made more than one of them.
+    /// made one directory or more.
     ///
     /// - Parameter directories: The directories to remove.
     static func removeDirectories(_ directories: [URL]) {

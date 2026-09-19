@@ -76,8 +76,8 @@ struct SkillDiscoveryTests {
     // MARK: - .git / node_modules exclusion
 
     @Test func gitAndNodeModulesDirectoriesAreSkippedOverATempDirectory() throws {
-        let root = try Self.makeTempDirectory()
-        defer { try? FileManager.default.removeItem(at: root) }
+        let root = try WatcherTestSupport.makeTempDirectory()
+        defer { LayerFixtureSupport.removeDirectories([root]) }
 
         try Self.writeSkillFile(in: root.appendingPathComponent("real-skill", isDirectory: true))
         try Self.writeSkillFile(in: root.appendingPathComponent(".git", isDirectory: true))
@@ -93,8 +93,8 @@ struct SkillDiscoveryTests {
     /// discovered -- an id is a child directory of a layer root, and the
     /// `SKILL.md` of that child directory is the only one discovery reads.
     @Test func nestedTwoLevelsBelowRootIsNotDiscovered() throws {
-        let root = try Self.makeTempDirectory()
-        defer { try? FileManager.default.removeItem(at: root) }
+        let root = try WatcherTestSupport.makeTempDirectory()
+        defer { LayerFixtureSupport.removeDirectories([root]) }
 
         try Self.writeSkillFile(in: root.appendingPathComponent("shallow-skill", isDirectory: true))
         try Self.writeSkillFile(
@@ -108,8 +108,8 @@ struct SkillDiscoveryTests {
     /// any subdirectory) is not discovered -- an id is a child directory of a
     /// layer root, and `root` is never one of its own child directories.
     @Test func aSkillFileDirectlyAtTheRootItselfIsNotDiscovered() throws {
-        let root = try Self.makeTempDirectory()
-        defer { try? FileManager.default.removeItem(at: root) }
+        let root = try WatcherTestSupport.makeTempDirectory()
+        defer { LayerFixtureSupport.removeDirectories([root]) }
 
         try Self.writeSkillFile(in: root.appendingPathComponent("shallow-skill", isDirectory: true))
         try "---\nname: root-level\ndescription: test fixture.\n---\nBody.\n"
@@ -126,16 +126,16 @@ struct SkillDiscoveryTests {
     /// reference file only. The three layer directories all contribute, lowest
     /// precedence first.
     @Test func aSkillThatThreeLayersGiveHasThreeContributingDirectoriesLowestFirst() throws {
-        let roots = try Self.makeTempDirectories(count: 3)
-        defer { Self.removeDirectories(roots) }
+        let roots = try LayerFixtureSupport.makeLayerDirectories(count: 3)
+        defer { LayerFixtureSupport.removeDirectories(roots) }
 
         try Self.writeSkillFile(in: roots[0].appendingPathComponent("review", isDirectory: true))
-        try Self.writeTextFile(at: roots[0].appendingPathComponent("review/references/rules.md"))
-        try Self.writeTextFile(at: roots[0].appendingPathComponent("review/scripts/lint.sh"))
-        try Self.writeTextFile(at: roots[0].appendingPathComponent("review/scripts/report.sh"))
+        try LayerFixtureSupport.writeTextFile(at: "review/references/rules.md", in: roots[0])
+        try LayerFixtureSupport.writeTextFile(at: "review/scripts/lint.sh", in: roots[0])
+        try LayerFixtureSupport.writeTextFile(at: "review/scripts/report.sh", in: roots[0])
         try Self.writeSkillFile(in: roots[1].appendingPathComponent("review", isDirectory: true))
-        try Self.writeTextFile(at: roots[1].appendingPathComponent("review/scripts/lint.sh"))
-        try Self.writeTextFile(at: roots[2].appendingPathComponent("review/references/house-style.md"))
+        try LayerFixtureSupport.writeTextFile(at: "review/scripts/lint.sh", in: roots[1])
+        try LayerFixtureSupport.writeTextFile(at: "review/references/house-style.md", in: roots[2])
 
         let discovered = SkillDiscovery(roots: roots).discover()
         let review = try #require(discovered.first { $0.id == "review" })
@@ -153,11 +153,11 @@ struct SkillDiscoveryTests {
     /// A higher layer that holds `<id>/` with no `SKILL.md` contributes its
     /// files, and the `SKILL.md` of the lower layer still wins.
     @Test func aLayerDirectoryWithNoSkillFileIsStillAContributingDirectory() throws {
-        let roots = try Self.makeTempDirectories(count: 2)
-        defer { Self.removeDirectories(roots) }
+        let roots = try LayerFixtureSupport.makeLayerDirectories(count: 2)
+        defer { LayerFixtureSupport.removeDirectories(roots) }
 
         try Self.writeSkillFile(in: roots[0].appendingPathComponent("review", isDirectory: true))
-        try Self.writeTextFile(at: roots[1].appendingPathComponent("review/references/house-style.md"))
+        try LayerFixtureSupport.writeTextFile(at: "review/references/house-style.md", in: roots[1])
 
         let review = try #require(SkillDiscovery(roots: roots).discover().first { $0.id == "review" })
 
@@ -169,11 +169,11 @@ struct SkillDiscoveryTests {
     /// An id that no layer gives a `SKILL.md` for is not a skill, however many
     /// layers hold a directory of that name.
     @Test func anIDThatNoLayerGivesASkillFileForIsNotDiscovered() throws {
-        let roots = try Self.makeTempDirectories(count: 2)
-        defer { Self.removeDirectories(roots) }
+        let roots = try LayerFixtureSupport.makeLayerDirectories(count: 2)
+        defer { LayerFixtureSupport.removeDirectories(roots) }
 
-        try Self.writeTextFile(at: roots[0].appendingPathComponent("notes/references/rules.md"))
-        try Self.writeTextFile(at: roots[1].appendingPathComponent("notes/scripts/lint.sh"))
+        try LayerFixtureSupport.writeTextFile(at: "notes/references/rules.md", in: roots[0])
+        try LayerFixtureSupport.writeTextFile(at: "notes/scripts/lint.sh", in: roots[1])
 
         #expect(SkillDiscovery(roots: roots).discover().isEmpty)
     }
@@ -181,8 +181,8 @@ struct SkillDiscoveryTests {
     // MARK: - Multi-layer chain
 
     @Test func threeLayersOfOneIDGiveThreeContributingDirectoriesAndTheHighestSkillFile() throws {
-        let roots = try Self.makeTempDirectories(count: 3)
-        defer { Self.removeDirectories(roots) }
+        let roots = try LayerFixtureSupport.makeLayerDirectories(count: 3)
+        defer { LayerFixtureSupport.removeDirectories(roots) }
 
         for root in roots {
             try Self.writeSkillFile(in: root.appendingPathComponent("shared-skill", isDirectory: true))
@@ -200,8 +200,8 @@ struct SkillDiscoveryTests {
     // MARK: - Root edge cases
 
     @Test func rootThatIsARegularFileIsSkippedWithoutThrowing() throws {
-        let parent = try Self.makeTempDirectory()
-        defer { try? FileManager.default.removeItem(at: parent) }
+        let parent = try WatcherTestSupport.makeTempDirectory()
+        defer { LayerFixtureSupport.removeDirectories([parent]) }
         let fileRoot = parent.appendingPathComponent("not-a-directory")
         try "not a directory".write(to: fileRoot, atomically: true, encoding: .utf8)
 
@@ -254,19 +254,6 @@ struct SkillDiscoveryTests {
             }
     }
 
-    /// Creates a fresh, empty temporary directory for a test that needs real
-    /// disk structure (`.git`/`node_modules` exclusion), so a side effect
-    /// from one test can never be observed by another.
-    ///
-    /// - Throws: Whatever `FileManager.createDirectory` throws.
-    /// - Returns: The new directory's URL.
-    private static func makeTempDirectory() throws -> URL {
-        let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString, isDirectory: true)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        return directory
-    }
-
     /// Writes a minimal but structurally valid `SKILL.md` directly under
     /// `directory`, creating `directory` first if it does not already exist.
     ///
@@ -278,37 +265,5 @@ struct SkillDiscoveryTests {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let text = "---\nname: \(directory.lastPathComponent)\ndescription: test fixture.\n---\nBody.\n"
         try text.write(to: directory.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
-    }
-
-    /// Creates `count` fresh, empty temporary directories for a test that
-    /// needs more than one layer root on real disk.
-    ///
-    /// - Parameter count: How many directories to create.
-    /// - Throws: Whatever `FileManager.createDirectory` throws.
-    /// - Returns: The new directories, in the order they were created.
-    private static func makeTempDirectories(count: Int) throws -> [URL] {
-        try (0..<count).map { _ in try makeTempDirectory() }
-    }
-
-    /// Removes each directory of `directories`, for the cleanup of a test that
-    /// made more than one of them.
-    ///
-    /// - Parameter directories: The directories to remove.
-    private static func removeDirectories(_ directories: [URL]) {
-        for directory in directories {
-            try? FileManager.default.removeItem(at: directory)
-        }
-    }
-
-    /// Writes a small text file at `url`, creating the directories above it
-    /// first -- a file of a skill that is not its `SKILL.md`.
-    ///
-    /// - Parameter url: The file to write.
-    /// - Throws: Whatever `FileManager.createDirectory` or `String.write`
-    ///   throws.
-    private static func writeTextFile(at url: URL) throws {
-        try FileManager.default.createDirectory(
-            at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try "Text of \(url.lastPathComponent).\n".write(to: url, atomically: true, encoding: .utf8)
     }
 }

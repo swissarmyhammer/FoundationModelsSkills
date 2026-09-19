@@ -38,10 +38,26 @@ comments:
     - evidence: swift build --build-tests exit 0, no warnings; swift test — Test run with 783 tests in 63 suites passed after 10.140 seconds, 0 failed, 0 warnings, 0 skipped
     - next: ready for review
   timestamp: 2026-09-19T21:01:26.883406+00:00
+- actor: claude-code
+  id: 01m2xqt9c8tzcjeszswt1p56bm
+  text: |-
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (commit e8b6c29) — 0 findings, 0 confirmed, 0 refuted; 7 validators ran, 0 failed; 5 files reviewed, 10 files excluded by the `.reviewignore` rule for `.kanban/`.
+    - next: the card moves to done. No finding text to act on.
+  timestamp: 2026-09-19T21:05:36.136133+00:00
+- actor: wballard
+  id: 01m2xqv6996gh7z8pp1feqzbqv
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 5 files, 3 new
+    - test: green — swift test, 783 passed, 0 warnings
+    - commit: e8b6c29
+    - review: clean — 0 findings; task moved to done
+  timestamp: 2026-09-19T21:06:05.737800+00:00
 depends_on:
 - 01M2X2BXEPERA9BG5CGCW1Z0Q7
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: fd80
 title: Resolve a skill file across the contributing directories
 ---
 ## What
