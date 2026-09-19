@@ -95,8 +95,24 @@ comments:
     - evidence: `swift package clean && swift build --build-tests` → 0 warnings, build complete. `swift test` → 742 tests in 57 suites, all pass, 0 fails, 0 skips.
     - next: send task to review.
   timestamp: 2026-09-19T18:37:21.897995+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01m2xfega7nysz3zsndvrp9wjq
+  text: |-
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (efc9b01) — 0 findings, 0 confirmed, 0 refuted, 7 attempted. Every prior finding is checked.
+    - next: none. The task moved to done.
+  timestamp: 2026-09-19T18:39:21.415710+00:00
+- actor: wballard
+  id: 01m2xffg4nz0jgwj2epq8h7et8
+  text: |-
+    ### finish iteration 2 — clean
+    - implement: changed — 1 file, 1 of 1 findings checked
+    - test: green — swift test, 742 passed, 0 warnings
+    - commit: efc9b01
+    - review: clean — 0 findings; task moved to done
+  timestamp: 2026-09-19T18:39:54.005831+00:00
+position_column: done
+position_ordinal: f980
 title: 'Remove the marketplace grant concept: one host policy for every layer'
 ---
 ## What
