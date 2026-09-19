@@ -529,16 +529,6 @@ public struct SkillsRegistry: Sendable {
         /// The layer that gives `directory`. A resource operation reads its
         /// source to say which layer a file comes from.
         internal let layer: DotfolderStack.Layer
-
-        /// Creates a `ContributingDirectory`.
-        ///
-        /// - Parameters:
-        ///   - directory: The layer directory itself.
-        ///   - layer: The layer that gives that directory.
-        internal init(directory: URL, layer: DotfolderStack.Layer) {
-            self.directory = directory
-            self.layer = layer
-        }
     }
 
     /// One skill that survived validation un-hidden, with everything a
