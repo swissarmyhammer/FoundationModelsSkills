@@ -32,6 +32,24 @@ struct SkillOperationsTests {
         try SkillsTool.make(context: Self.makeFixtureContext())
     }
 
+    /// The body that `use skill` renders for the `commit` fixture skill with
+    /// the argument `fix parser`: the exact text the tool gives the model.
+    ///
+    /// - Returns: The rendered body.
+    /// - Throws: Whatever `SkillsRegistry.call(id:arguments:)` throws.
+    private static func renderedCommitBody() throws -> String {
+        try SkillsRegistry(roots: [projectSkillsRoot]).call(id: "commit", arguments: ["fix parser"])
+    }
+
+    /// The rendered body of a successful `use skill` outcome.
+    ///
+    /// - Parameter output: The outcome of `UseSkill.execute(in:)`.
+    /// - Returns: The body, or `nil` for a corrective outcome.
+    private static func renderedBody(of output: UseSkillOutput) -> String? {
+        guard case .success(let body) = output else { return nil }
+        return body
+    }
+
     // MARK: - Known deviation: op-level correctives never hit upstream's retry cap
 
     /// Pins the README's documented deviation (`## Known deviations`):
@@ -56,8 +74,7 @@ struct SkillOperationsTests {
         // so its retry-state actor is shared across every call below.
         for _ in 1...5 {
             let json = try await tool.call(arguments: arguments)
-            #expect(json.hasPrefix("\""))
-            #expect(json.contains("not currently usable"))
+            #expect(json.hasPrefix("The skill id `totally-made-up` is not currently usable."))
             #expect(!json.contains("Too many invalid operation attempts"))
         }
     }
@@ -94,8 +111,7 @@ struct SkillOperationsTests {
 
         let json = try await tool.call(arguments: arguments)
 
-        #expect(json.contains("\"id\":\"commit\""))
-        #expect(json.contains("fix parser"))
+        #expect(json == (try Self.renderedCommitBody()))
     }
 
     // MARK: - Corrective matrix (§7)
@@ -207,13 +223,11 @@ struct SkillOperationsTests {
     @Test func useSkillOnAModelVisibleButUserHiddenSkillStillSucceeds() async throws {
         // `lint` carries `user-invocable: false` but stays fully model-visible
         // -- confirms the model-hidden guard doesn't over-reject.
-        let output = try await UseSkill(id: "lint", arguments: nil).execute(in: Self.makeFixtureContext())
+        let context = Self.makeFixtureContext()
 
-        guard case .success(let result) = output else {
-            Issue.record("expected a result outcome, got \(output)")
-            return
-        }
-        #expect(result.id == "lint")
+        let output = try await UseSkill(id: "lint", arguments: nil).execute(in: context)
+
+        #expect(output == .success(try context.registry.call(id: "lint")))
     }
 
     @Test func useSkillWithAMissingRequiredArgumentReturnsACorrectiveNamingIt() async throws {
@@ -231,11 +245,8 @@ struct SkillOperationsTests {
         let output = try await UseSkill(id: "commit", arguments: ["fix parser"]).execute(
             in: Self.makeFixtureContext())
 
-        guard case .success(let result) = output else {
-            Issue.record("expected a result outcome, got \(output)")
-            return
-        }
-        #expect(result.body.contains("fix parser"))
+        let body = try #require(Self.renderedBody(of: output))
+        #expect(body.contains("fix parser"))
     }
 
     // MARK: - Missing-argument check consults SkillParameter.required directly (^dw132bc)
@@ -300,11 +311,8 @@ struct SkillOperationsTests {
 
         let output = try await UseSkill(id: "widget", arguments: ["production"]).execute(in: context)
 
-        guard case .success(let result) = output else {
-            Issue.record("expected a result outcome, got \(output)")
-            return
-        }
-        #expect(result.body.contains("production"))
+        let body = try #require(Self.renderedBody(of: output))
+        #expect(body.contains("production"))
     }
 
     @Test func useSkillWithAnUnbracketedHintAndTheArgumentMissingSucceeds() async throws {
@@ -420,12 +428,9 @@ struct SkillOperationsTests {
 
         let output = try await UseSkill(id: "widget", arguments: ["production", "extra-flag"]).execute(in: context)
 
-        guard case .success(let result) = output else {
-            Issue.record("expected a result outcome, got \(output)")
-            return
-        }
-        #expect(result.body.contains("Value: production"))
-        #expect(result.body.contains("ARGUMENTS: production extra-flag"))
+        let body = try #require(Self.renderedBody(of: output))
+        #expect(body.contains("Value: production"))
+        #expect(body.contains("ARGUMENTS: production extra-flag"))
     }
 
     // MARK: - Hot-reload race: the id vanishes between the lookup and the call (^xv4x99j)
@@ -544,7 +549,7 @@ struct SkillOperationsTests {
 
         let json = try await tool.call(arguments: arguments)
 
-        #expect(json.contains("\"body\""))
+        #expect(json == (try Self.renderedCommitBody()))
     }
 
     @Test func resolverAcceptsTheReversedSingularSpellingSkillList() async throws {
@@ -638,7 +643,7 @@ struct SkillOperationsTests {
 
         let json = try await tool.call(arguments: arguments)
 
-        #expect(json.contains("\"body\""))
+        #expect(json == (try Self.renderedCommitBody()))
     }
 
     @Test func invokeSkillAliasesToUseSkill() async throws {
@@ -648,7 +653,7 @@ struct SkillOperationsTests {
 
         let json = try await tool.call(arguments: arguments)
 
-        #expect(json.contains("\"body\""))
+        #expect(json == (try Self.renderedCommitBody()))
     }
 
     @Test func getSkillAliasesToUseSkill() async throws {
@@ -658,7 +663,7 @@ struct SkillOperationsTests {
 
         let json = try await tool.call(arguments: arguments)
 
-        #expect(json.contains("\"body\""))
+        #expect(json == (try Self.renderedCommitBody()))
     }
 
     // MARK: - generatedContent / init(_:) round trips

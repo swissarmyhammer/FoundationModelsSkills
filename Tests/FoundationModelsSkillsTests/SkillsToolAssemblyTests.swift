@@ -157,8 +157,7 @@ struct SkillsToolAssemblyTests {
         let loaded = try await Self.use(through: tool, op: use.op, id: use.id)
 
         #expect(use.id == Self.noArgumentSkillID)
-        #expect(loaded.id == Self.noArgumentSkillID)
-        #expect(!loaded.body.isEmpty)
+        #expect(loaded == (try Self.makeFixtureRegistry().call(id: Self.noArgumentSkillID)))
     }
 
     /// Shows that a result with a match tells the model to load a skill
@@ -197,7 +196,7 @@ struct SkillsToolAssemblyTests {
 
         #expect(response.matches.map(\.id) == [Self.noArgumentSkillID])
         #expect(loaded.id == Self.noArgumentSkillID)
-        #expect(loaded.body == used.body)
+        #expect(loaded.body == used)
         #expect(response.next == Self.loadedInstruction)
     }
 
@@ -457,30 +456,18 @@ struct SkillsToolAssemblyTests {
     }
 
     /// Dispatches one `use` call through `tool`, as a model sends it, and
-    /// gives back the decoded body.
+    /// gives back the answer: the rendered body as plain text.
     ///
     /// - Parameters:
     ///   - tool: The assembled `skills` tool to dispatch through.
     ///   - op: The op of the call.
     ///   - id: The id of the skill to use.
-    /// - Returns: The decoded `use skill` result.
-    /// - Throws: Whatever `OperationTool.call(arguments:)` throws, or a
-    ///   decode error when the tool gives a corrective, not a body.
+    /// - Returns: The text the tool gives the model.
+    /// - Throws: Whatever `SkillsCatalogTool.call(arguments:)` throws.
     private static func use(
         through tool: SkillsCatalogTool, op: String, id: String
-    ) async throws -> UseResponse {
-        let json = try await tool.call(arguments: GeneratedContent(properties: ["op": op, "id": id]))
-        return try JSONDecoder().decode(UseResponse.self, from: Data(json.utf8))
-    }
-
-    /// One `use skill` result, as this suite reads it back: the id and the
-    /// rendered body of the skill.
-    private struct UseResponse: Decodable {
-        /// The skill's canonical id.
-        let id: String
-
-        /// The skill's rendered body.
-        let body: String
+    ) async throws -> String {
+        try await tool.call(arguments: GeneratedContent(properties: ["op": op, "id": id]))
     }
 
     /// One `search skill` result, as this suite reads it back.
@@ -513,9 +500,18 @@ struct SkillsToolAssemblyTests {
         /// The instruction to the model, or `nil` when the result has none.
         let next: String?
 
+        /// The first match and its loaded body.
+        struct LoadedSkill: Decodable {
+            /// The skill's canonical id.
+            let id: String
+
+            /// The skill's rendered body.
+            let body: String
+        }
+
         /// The loaded body of the first match, or `nil` when the result
         /// carries no body.
-        let skill: UseResponse?
+        let skill: LoadedSkill?
     }
 
     // MARK: - AgentSession double

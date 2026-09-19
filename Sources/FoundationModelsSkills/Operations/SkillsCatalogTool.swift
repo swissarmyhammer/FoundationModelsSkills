@@ -23,11 +23,17 @@ import Operations
 /// Each call goes to `operationTool`, the `OperationTool` of the
 /// `Operations` runtime. It resolves the payload, dispatches the operation,
 /// and keeps the retry cap.
+///
+/// The answer of `use skill` is plain text: the rendered body of the skill,
+/// or a corrective sentence. The runtime encodes it as a JSON string, and
+/// this tool gives the decoded text (`PlainTextOperations`). The answer of
+/// each other operation is JSON, as the runtime gives it.
 public struct SkillsCatalogTool: Tool {
     /// The raw payload: an `op` and the fields of one operation.
     public typealias Arguments = GeneratedContent
 
-    /// The JSON output of the operation, or a corrective message.
+    /// The plain text of `use skill`, the JSON output of another operation,
+    /// or a corrective message.
     public typealias Output = String
 
     /// The tool that resolves and dispatches each call.
@@ -45,19 +51,28 @@ public struct SkillsCatalogTool: Tool {
     /// The fused schema, with the `id` field made an enum of `skillIDs`.
     public let parameters: GenerationSchema
 
+    /// Finds the payloads of `use skill` and decodes their answers to plain
+    /// text.
+    private let plainTextOperations: PlainTextOperations
+
     /// Wraps `operationTool` and builds the schema over `skillIDs`.
     ///
     /// - Parameters:
     ///   - operationTool: The tool that resolves and dispatches each call.
     ///     Its description is the description of this tool.
     ///   - skillIDs: The visible skill ids, in catalog order.
+    ///   - resolver: The resolver of `operationTool`. It finds the payloads
+    ///     of `use skill` with the same rules as the dispatch.
     /// - Throws: Whatever `SkillsToolSchema.make(name:operations:skillIDs:)`
-    ///   throws.
-    internal init(operationTool: OperationTool<SkillsToolContext>, skillIDs: [String]) throws {
+    ///   or `PlainTextOperations.init(resolver:)` throws.
+    internal init(
+        operationTool: OperationTool<SkillsToolContext>, skillIDs: [String], resolver: OperationResolver
+    ) throws {
         self.operationTool = operationTool
         self.skillIDs = skillIDs
         parameters = try SkillsToolSchema.make(
             name: operationTool.name, operations: operationTool.operations, skillIDs: skillIDs)
+        plainTextOperations = try PlainTextOperations(resolver: resolver)
     }
 
     /// The model-facing and command-line name of the tool: `skills`.
@@ -85,10 +100,12 @@ public struct SkillsCatalogTool: Tool {
     /// `operationTool`.
     ///
     /// - Parameter arguments: The payload of the model or the command line.
-    /// - Returns: The JSON output of the operation, or a corrective message.
+    /// - Returns: The plain text of `use skill`, the JSON output of another
+    ///   operation, or a corrective message.
     /// - Throws: Whatever `OperationTool.call(arguments:)` throws.
     public func call(arguments: GeneratedContent) async throws -> String {
-        try await operationTool.call(arguments: arguments)
+        let answer = try await operationTool.call(arguments: arguments)
+        return await plainTextOperations.text(of: answer, for: arguments)
     }
 }
 
@@ -112,9 +129,11 @@ extension SkillsCatalogTool: OperationDescribing {
     ///
     /// - Parameter arguments: The payload with the `op` key and the fields
     ///   of one operation.
-    /// - Returns: The JSON output of the operation.
+    /// - Returns: The plain text of `use skill`, or the JSON output of
+    ///   another operation.
     /// - Throws: Whatever `OperationTool.perform(_:)` throws.
     public func perform(_ arguments: GeneratedContent) async throws -> String {
-        try await operationTool.perform(arguments)
+        let answer = try await operationTool.perform(arguments)
+        return await plainTextOperations.text(of: answer, for: arguments)
     }
 }

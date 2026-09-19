@@ -8,7 +8,11 @@ import Operations
 /// An unusable id (unknown, stale, or model-hidden) or a missing required
 /// argument is the two conditions `UseSkill.execute(in:)` fails
 /// correctively on.
-public typealias UseSkillOutput = CorrectiveOutcome<UseSkillResult>
+///
+/// The success value is the rendered body and nothing else. Both cases
+/// encode as one JSON string, and `SkillsCatalogTool` gives the model that
+/// string as plain text: the body, or the corrective sentence.
+public typealias UseSkillOutput = CorrectiveOutcome<String>
 
 /// Renders and returns a skill's body by id, substituting the given
 /// arguments (plan.md §5, §7).
@@ -139,8 +143,7 @@ public struct UseSkill: OperationDefinition {
         }
 
         do {
-            let body = try context.registry.call(id: id, arguments: supplied)
-            return .success(UseSkillResult(id: id, body: body))
+            return .success(try context.registry.call(id: id, arguments: supplied))
         } catch is UnknownSkillError {
             // The live catalog changed between the lookup above and this
             // call (a race with a hot reload) -- report it the same way as

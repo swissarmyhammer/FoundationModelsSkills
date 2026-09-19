@@ -52,6 +52,7 @@ public enum SkillsTool {
         context: SkillsToolContext, catalogCharacterLimit: Int = defaultCatalogCharacterLimit
     ) throws -> SkillsCatalogTool {
         let catalog = context.registry.metadata().filter(context.visibilityPredicate)
+        let resolver = makeResolver()
         let operationTool = try OperationTool(
             name: toolName,
             description: SkillsToolDescription.make(catalog: catalog, characterLimit: catalogCharacterLimit),
@@ -64,9 +65,9 @@ public enum SkillsTool {
                 AnyOperation(ReadResource.self),
                 AnyOperation(RunScript.self),
             ],
-            resolver: makeResolver()
+            resolver: resolver
         )
-        return try SkillsCatalogTool(operationTool: operationTool, skillIDs: catalog.map(\.id))
+        return try SkillsCatalogTool(operationTool: operationTool, skillIDs: catalog.map(\.id), resolver: resolver)
     }
 
     /// Builds the forgiving resolver `make(context:)` fuses the tool with.

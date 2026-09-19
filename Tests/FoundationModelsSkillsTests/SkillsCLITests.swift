@@ -1,3 +1,4 @@
+import Foundation
 import FoundationModels
 import FoundationModelsSkills
 import Operations
@@ -50,8 +51,9 @@ struct SkillsCLITests {
         let result = await driver.run(arguments: ["skill", "use", "--id", "commit", "--arguments", "fix parser"])
 
         #expect(result.exitCode == 0)
-        #expect(result.output.contains("\"id\":\"commit\""))
-        #expect(result.output.contains("fix parser"))
+        #expect(
+            try Self.decodedText(result.output)
+                == Self.makeFixtureRegistry().call(id: "commit", arguments: ["fix parser"]))
     }
 
     // MARK: - CLI syntax: positional id vs --id flag (§7.2, resolved contract)
@@ -83,7 +85,9 @@ struct SkillsCLITests {
         let result = await driver.run(arguments: ["skill", "use", "--id", "deploy", "--arguments", "production"])
 
         #expect(result.exitCode == 0)
-        #expect(result.output.contains("\"id\":\"deploy\""))
+        #expect(
+            try Self.decodedText(result.output)
+                == Self.makeFixtureRegistry().call(id: "deploy", arguments: ["production"]))
     }
 
     @Test func useVerbHonorsShellExecutionDisabledPolicy() async throws {
@@ -131,7 +135,7 @@ struct SkillsCLITests {
         let result = await driver.run(arguments: ["skill", "use", "--id", "deploy"])
 
         #expect(result.exitCode == 0)
-        #expect(result.output.contains("\"id\":\"deploy\""))
+        #expect(try Self.decodedText(result.output) == Self.makeFixtureRegistry().call(id: "deploy"))
     }
 
     @Test func useVerbRefusesLintWhichIsModelOnly() async throws {
@@ -254,8 +258,10 @@ struct SkillsCLITests {
         let modelOutput = try await modelTool.call(
             arguments: GeneratedContent(properties: ["op": "use skill", "id": "commit", "arguments": ["fix parser"]]))
 
+        // The CLI prints the JSON string of the body; the model gets the
+        // same body as plain text.
         #expect(cliResult.exitCode == 0)
-        #expect(cliResult.output == modelOutput)
+        #expect(try Self.decodedText(cliResult.output) == modelOutput)
     }
 
     @Test func resourceListVerbRoundTripsToTheIdenticalModelDispatchOutput() async throws {
@@ -320,6 +326,19 @@ struct SkillsCLITests {
     /// - Returns: `json` with its `durationMs` value normalized to `0`.
     private static func strippingDurationMs(from json: String) -> String {
         json.replacingOccurrences(of: #""durationMs":\d+"#, with: "\"durationMs\":0", options: .regularExpression)
+    }
+
+    /// Decodes the CLI output of `skill use`: one JSON string, the rendered
+    /// body or a corrective sentence.
+    ///
+    /// The CLI prints the JSON of each operation. The model surface gives
+    /// the same string as plain text.
+    ///
+    /// - Parameter output: The printed output of the CLI.
+    /// - Returns: The string value.
+    /// - Throws: A decode error when `output` is not one JSON string.
+    private static func decodedText(_ output: String) throws -> String {
+        try JSONDecoder().decode(String.self, from: Data(output.utf8))
     }
 
     /// Builds the model-facing fused tool over `registry`, via the same

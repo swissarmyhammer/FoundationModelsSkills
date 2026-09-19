@@ -5,6 +5,36 @@ change is at the top.
 
 ## Unreleased
 
+### Changed: `use skill` gives the text of the skill, not JSON
+
+This change breaks the source of a host that reads `UseSkillOutput` or
+`UseSkill.execute(in:)`. The success value is now the rendered body, a
+`String`, not a `UseSkillResult`. A host that gives the `skills` tool to a
+session, and does not read the answer, compiles with no change.
+
+**Cause.** In a SWE-bench run, `use skill` gave
+`{"body": "…", "id": "explore"}`. The procedure was an escaped JSON string
+(`\n`, `\/`), not text, and the model did not follow it.
+
+**What changed.**
+
+- The answer of `{"op": "use skill", "id": "<id>"}` from
+  `SkillsCatalogTool.call(arguments:)` and `SkillsCatalogTool.perform(_:)` is
+  the rendered body of the skill as plain text, and nothing else: no JSON, no
+  `body` key, no `id` key, no escape sequences, and no tag, marker, or
+  wrapper. Each verb alias of `use skill` (`call`, `invoke`, `get`) gives the
+  same answer.
+- An error of `use skill` is a plain sentence, not a quoted JSON string. An
+  unknown or hidden id names the ids that the model can use. A missing
+  required argument names the argument.
+- `UseSkillOutput` is now `CorrectiveOutcome<String>`. `UseSkillResult` stays:
+  it is the `skill` field of a `search skill` result.
+- The other operations keep their JSON answers.
+- The command line prints the JSON of each operation, thus `skills skill use`
+  prints the body as one JSON string.
+
+See [docs/operations.md](docs/operations.md) for the new answer.
+
 ### Changed: the `skills` tool shows its catalog and a use rule, and its `id` is an enum
 
 This change breaks the source of a host that names the type

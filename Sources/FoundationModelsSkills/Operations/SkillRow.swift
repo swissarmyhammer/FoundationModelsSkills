@@ -193,8 +193,11 @@ public struct ListSkillResult: Encodable, Sendable, Equatable {
     }
 }
 
-/// The successful result of a `use skill` operation: the skill's fully
-/// rendered body (plan.md §5, §7).
+/// One skill and its fully rendered body (plan.md §5, §7): the `skill`
+/// field of a `search skill` result.
+///
+/// The body is the same text that `use skill` gives with no argument. The
+/// answer of `use skill` itself is that text alone, not this type.
 public struct UseSkillResult: Encodable, Sendable, Equatable {
     /// The used skill's canonical id.
     public let id: String

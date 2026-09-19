@@ -62,10 +62,44 @@ reload does not rebuild the tool:
 |---|---|---|
 | `search skill` | `query` (req), `limit?` | Finds the skills for the kind of work that the model will do next. Search by the kind of work, not by the topic of the task. Returns ranked matches from `SkillSearchAgent` over the model-visible catalog. Each match carries the `use` call that loads it, and the result tells the model to use a skill that applies. See [The `search skill` result](#the-search-skill-result). |
 | `list skill` | `filter?` | Lists each skill with its description: the model-visible catalog (with an optional filter), in catalog order, with no ranking. |
-| `use skill` | `id` (req), `arguments?` | Loads the instructions of a skill for the model to follow: renders the pipeline (plan.md §5) with `arguments`. An unknown or hidden `id` returns a corrective message that contains the current id list. |
+| `use skill` | `id` (req), `arguments?` | Loads the instructions of a skill for the model to follow: renders the pipeline (plan.md §5) with `arguments`. The answer is the rendered body as plain text. An unknown or hidden `id` returns a corrective sentence that contains the current id list. See [The `use skill` answer](#the-use-skill-answer). |
 | `list resource` | `id` (req) | Lists each file in the skill's directory except `SKILL.md`. The list stops at 100 rows. |
 | `read resource` | `id` (req), `path` (req), `start?`, `end?` | Returns a file verbatim, in a line window: 500 lines maximum and 1,000,000 content bytes maximum for each call. The tool never renders the file. It streams the file in 64 KiB parts and never loads the full file. `totalLines` is exact. See [development.md](development.md) for the exact byte-budget rules. |
 | `run script` | `id` (req), `path` (req, in `scripts/`), `arguments?`, `timeout?` | Runs the file directly. The file must have the executable bit and a shebang. Three gates apply: the host policy, the skill's `allowed-tools: Script(<glob>)` grant, and the host trust posture. The process runs in its own process group. A timeout sends `SIGKILL`. |
+
+## The `use skill` answer
+
+The model reads the answer of `use skill` as the procedure to follow. Thus
+the answer is the rendered body of the skill, and nothing else. It is plain
+text: no JSON object, no `body` key, no `id` key, and no escape sequences.
+The tool adds no tag, marker, or wrapper.
+
+For the call `{"op": "use skill", "id": "explore"}`, the answer is the text of
+the skill, with its line breaks, as the render pipeline gives it:
+
+```text
+…the rendered body of explore, line for line…
+```
+
+Before, the answer was a JSON object:
+`{"body": "…the rendered body, with \n escapes…", "id": "explore"}`.
+
+An error is a plain sentence too. It says what is wrong. For an unknown or
+hidden id, it names the ids that the model can use:
+
+```text
+The skill id `totally-made-up` is not currently usable. Currently usable ids: commit, env-report, lint.
+```
+
+A missing required argument of the skill gives:
+
+```text
+Missing required argument `message` for this skill.
+```
+
+The other operations keep their JSON answers. The command line
+(`SkillsCLI`) prints the JSON of each operation, thus `skills skill use`
+prints the body as one JSON string.
 
 ## The `search skill` result
 

@@ -96,11 +96,12 @@ struct SkillsCatalogToolTests {
     // MARK: - The tool still works
 
     @Test func theToolDispatchesAUseCallForAVisibleID() async throws {
-        let tool = try await SkillsTool.make(registry: Self.makeFixtureRegistry())
+        let registry = Self.makeFixtureRegistry()
+        let tool = try await SkillsTool.make(registry: registry)
 
-        let json = try await tool.call(arguments: GeneratedContent(properties: ["op": "use skill", "id": "lint"]))
+        let answer = try await tool.call(arguments: GeneratedContent(properties: ["op": "use skill", "id": "lint"]))
 
-        #expect(json.contains(#""id":"lint""#))
+        #expect(answer == (try registry.call(id: "lint")))
     }
 
     // MARK: - The operation texts

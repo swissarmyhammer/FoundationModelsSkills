@@ -175,8 +175,8 @@ public struct SearchSkill: OperationDefinition {
     private static func loadedBody(of row: SkillRow?, in context: SkillsToolContext) async -> UseSkillResult? {
         guard let row else { return nil }
         do {
-            guard case .success(let result) = try await UseSkill(id: row.id).execute(in: context) else { return nil }
-            return result
+            guard case .success(let body) = try await UseSkill(id: row.id).execute(in: context) else { return nil }
+            return UseSkillResult(id: row.id, body: body)
         } catch {
             logger.error(
                 "The body of the selected skill \(row.id, privacy: .public) did not render, thus the search result carries no body. Cause: \(String(describing: error))"
