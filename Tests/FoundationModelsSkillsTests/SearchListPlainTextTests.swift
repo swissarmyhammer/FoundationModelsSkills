@@ -1,5 +1,5 @@
 import FoundationModels
-import FoundationModelsSkills
+@testable import FoundationModelsSkills
 import Operations
 import Testing
 
@@ -160,13 +160,19 @@ struct SearchListPlainTextTests {
 
     /// The expected line of each skill in `ids`, in the order of `ids`.
     ///
+    /// Writes each line with `SkillCatalogText`, the one place that makes a
+    /// skill line. Thus the expected text holds an empty description and a
+    /// description of more than one line the same way the answer does.
+    ///
     /// - Parameters:
     ///   - ids: The skill ids, in the order the answer must give them.
     ///   - registry: The registry that holds the description of each id.
-    /// - Returns: One `- <id>: <description>` line for each id.
+    /// - Returns: One line for each id.
     private static func skillLines(ids: [String], in registry: SkillsRegistry) -> String {
         let descriptions = Dictionary(uniqueKeysWithValues: registry.metadata().map { ($0.id, $0.description) })
-        return ids.map { "- \($0): \(descriptions[$0] ?? "")" }.joined(separator: "\n")
+        return ids
+            .map { SkillCatalogText.line(id: $0, description: SkillCatalogText.oneLine(descriptions[$0] ?? "")) }
+            .joined(separator: SkillCatalogText.lineBreak)
     }
 
     /// The four lines of the load instruction, word for word from the card.

@@ -43,6 +43,50 @@ comments:
     - evidence: `swift package clean && swift build --build-tests` — build is OK, 0 warnings, 0 errors. `swift test` — 742 tests in 58 suites pass, 0 failures, 0 known issues, 0 skips.
     - note: `swiftlint` and `swiftformat` show many findings across the whole code base. These findings are old. They are present in files that this task did not change (for example `MarketplaceStore.swift`). No `.swiftlint.yml` or `.swiftformat` file is in the repo root. The task text names `swift build --build-tests` and `swift test` as the commands to run. This comment does not fix the old findings, because the fix would touch almost every file in the repo and is not part of this task.
   timestamp: 2026-09-19T14:13:25.224081+00:00
+- actor: claude-code
+  id: 01m2x0zmry9rc5mwrzcfxv8c1t
+  text: |-
+    ### review — findings
+    - evidence: 2 findings (2 confirmed, 1 refuted) from `review sha HEAD~1..HEAD` (65b677a) — Tests/FoundationModelsSkillsTests/SearchListPlainTextTests.swift:167, Tests/FoundationModelsSkillsTests/SkillOperationsTests.swift:59
+    - next: correct the two findings in the section "## Review Findings (2026-09-19 09:14)", then review the card again.
+  timestamp: 2026-09-19T14:26:34.398390+00:00
+- actor: claude-code
+  id: 01m2x10gfyks7xcx1cbzjt6c3d
+  text: |-
+    ### finish iteration 1 — findings
+    - implement: changed — 25 files, 3 new
+    - test: green — swift test, 742 passed, 0 warnings
+    - commit: 65b677a
+    - review: findings — Tests/FoundationModelsSkillsTests/SearchListPlainTextTests.swift:167, Tests/FoundationModelsSkillsTests/SkillOperationsTests.swift:59
+  timestamp: 2026-09-19T14:27:02.782970+00:00
+- actor: claude-code
+  id: 01m2x16qn3hw63qky8sa6fzswc
+  text: |-
+    Corrected the two findings of the section "## Review Findings (2026-09-19 09:14)".
+
+    Finding 1 — `SearchListPlainTextTests.swift` `skillLines()`. The helper wrote the skill line by hand, thus an empty description kept the colon and a description of more than one line broke the expected text. `skillLines()` now calls `SkillCatalogText.line(id:description:)` with `SkillCatalogText.oneLine()` on each description, and joins with `SkillCatalogText.lineBreak` — the same three calls that `SkillCatalogText.lines(for:)` makes. `SkillCatalogText` is internal, thus the file now reads `@testable import FoundationModelsSkills`, the same as `SkillsToolDescriptionTests`.
+
+    Checked the whole file for the same cause: no other helper of the file writes a skill line. `loadInstruction(exampleID:)`, `descriptionUseRule` and `descriptionPurpose` are the literal text of the card, they read no registry data and they have no empty or multi-line case. They stay literal, thus the tests still pin the words of the card.
+
+    Finding 2 — `SkillOperationsTests.swift` `successText(of:)`. `SearchSkillOutput` and `UseSkillOutput` are both `CorrectiveOutcome<String>`, thus the old call compiled, but the type of the reader did not say so. Added the shared generic helper `successValue<Value: Encodable & Sendable & Equatable>(of: CorrectiveOutcome<Value>) -> Value?`. `renderedBody(of:)` and `successText(of:)` both call it, thus one `guard case .success` reads either outcome and each reader keeps its own output type.
+
+    Only the two test files changed. No source file and no document changed.
+  timestamp: 2026-09-19T14:30:26.723566+00:00
+- actor: claude-code
+  id: 01m2x16w6agtjn67pq83exwp2p
+  text: |-
+    ### implement — changed
+    - evidence: 2 files — Tests/FoundationModelsSkillsTests/SearchListPlainTextTests.swift, Tests/FoundationModelsSkillsTests/SkillOperationsTests.swift. `swift build --build-tests` — build is OK, 0 errors, 0 warnings. `swift test` — 742 tests in 58 suites pass, 0 failures.
+    - findings: 2 of 2 in the section "## Review Findings (2026-09-19 09:14)" are corrected and marked `- [x]`. 0 open.
+    - next: /review
+  timestamp: 2026-09-19T14:30:31.370295+00:00
+- actor: claude-code
+  id: 01m2x1b6aty6csg508h50a4ten
+  text: |-
+    ### test — green
+    - evidence: `swift build --build-tests -Xswiftc -warnings-as-errors` — build complete, 0 warnings; `swift test` — 742 passed, 0 failed, 0 skipped, 58 suites
+    - next: ready for review
+  timestamp: 2026-09-19T14:32:52.826772+00:00
 depends_on:
 - 01M2WWWJ05944J8A9G1VA3JM8Z
 position_column: doing
@@ -101,3 +145,33 @@ No tag, marker or wrapper is added to the text.
 ## Where it was found
 
 `FoundationModelsACPAgent`, SWE-bench run of 2026-09-19 07:28, transcript `bench/preds.code-context.transcripts/django__django-13447`. Depends on the card "`use skill` must give the text of the skill…". #search #skills #cross-repo
+
+## Review Findings (2026-09-19 09:14)
+
+> Scope: `review sha HEAD~1..HEAD` — reviewed the diffs only — lines this change added or modified. 22 file(s) reviewed, 7 not reviewed.
+
+> 4 file(s) not reviewed — excluded by an ignore rule:
+> - `.kanban/ (from .reviewignore)` — 4 file(s)
+
+> 3 file(s) not reviewed — no validator matched:
+> - `CHANGELOG.md` — no validator matches this file
+> - `docs/marketplaces.md` — no validator matches this file
+> - `docs/operations.md` — no validator matches this file
+
+> ⚠️ tool rule 'code-hygiene/disallowed-constructs-swift' declined an item — it judged the rest of the code, and this it could not judge:
+> disallowed-constructs-swift found no file at Sources/FoundationModelsSkills/Operations/SkillRow.swift, so its constructs are unread
+
+> ⚠️ tool rule 'code-hygiene/function-length-swift' declined an item — it judged the rest of the code, and this it could not judge:
+> function-length-swift found no file at Sources/FoundationModelsSkills/Operations/SkillRow.swift, so its bodies are unread
+
+> ⚠️ tool rule 'code-hygiene/idioms-swift' declined an item — it judged the rest of the code, and this it could not judge:
+> idioms-swift found no file at Sources/FoundationModelsSkills/Operations/SkillRow.swift, so its declarations are unread
+
+> ⚠️ tool rule 'code-hygiene/magic-numbers-swift' declined an item — it judged the rest of the code, and this it could not judge:
+> magic-numbers-swift found no file at Sources/FoundationModelsSkills/Operations/SkillRow.swift, so its literals are unread
+
+> ⚠️ tool rule 'code-hygiene/missing-docs-swift' declined an item — it judged the rest of the code, and this it could not judge:
+> missing-docs-swift found no file at Sources/FoundationModelsSkills/Operations/SkillRow.swift, so its declarations are unread
+
+- [x] `Tests/FoundationModelsSkillsTests/SearchListPlainTextTests.swift:167` `reuse/reuse` — The `skillLines()` function reimplements the skill line formatting logic that `SkillCatalogText.line()` and `SkillCatalogText.oneLine()` already provide. The test hardcodes the format as `- <id>: <description>` without checking for empty descriptions, while `SkillCatalogText.line()` omits the colon when description is empty. The test should call the shared functions to ensure consistency and handle edge cases correctly. Rewrite `skillLines()` to use `SkillCatalogText.line(id:description:)` with `SkillCatalogText.oneLine()` applied to each description: `ids.map { id in SkillCatalogText.line(id: id, description: SkillCatalogText.oneLine(metadataByID[id]?.description ?? "")) }.joined(separator: "\n")`. This ensures the test expectations match the actual implementation's behavior for empty and multi-line descriptions.
+- [x] `Tests/FoundationModelsSkillsTests/SkillOperationsTests.swift:59` `completeness/invariant-propagation` — The new `successText(of:)` helper extracts the success case from SearchSkillOutput by calling `renderedBody(of:)`, which is typed to accept UseSkillOutput, not SearchSkillOutput. If these output types are not identical, this creates a type mismatch — the same outcome-extraction pattern should be applied consistently across all operation result types. The function should either have its own implementation of the extraction logic (matching the pattern used by `renderedBody`), or both functions should delegate to a shared generic helper. Either make `successText` implement its own success-extraction logic inline (copying the guard-case pattern from `renderedBody`), or create a shared generic function `extractSuccess<Output>(from:)` that both `renderedBody` and `successText` call, so the pattern is unified and the type safety is explicit.

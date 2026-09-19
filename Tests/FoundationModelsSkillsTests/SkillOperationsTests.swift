@@ -41,13 +41,27 @@ struct SkillOperationsTests {
         try SkillsRegistry(roots: [projectSkillsRoot]).call(id: "commit", arguments: ["fix parser"])
     }
 
+    /// The value of a successful outcome of any operation.
+    ///
+    /// `SearchSkill` and `UseSkill` both answer a `CorrectiveOutcome`. This
+    /// one function reads the success of either, thus the two readers below
+    /// share one extraction and each keeps its own output type.
+    ///
+    /// - Parameter output: The outcome of an `execute(in:)` call.
+    /// - Returns: The value, or `nil` for a corrective outcome.
+    private static func successValue<Value: Encodable & Sendable & Equatable>(
+        of output: CorrectiveOutcome<Value>
+    ) -> Value? {
+        guard case .success(let value) = output else { return nil }
+        return value
+    }
+
     /// The rendered body of a successful `use skill` outcome.
     ///
     /// - Parameter output: The outcome of `UseSkill.execute(in:)`.
     /// - Returns: The body, or `nil` for a corrective outcome.
     private static func renderedBody(of output: UseSkillOutput) -> String? {
-        guard case .success(let body) = output else { return nil }
-        return body
+        successValue(of: output)
     }
 
     /// The plain text of a successful `search skill` outcome.
@@ -56,7 +70,7 @@ struct SkillOperationsTests {
     /// - Returns: The text of the answer.
     /// - Throws: A `#require` failure for a corrective outcome.
     private static func successText(of output: SearchSkillOutput) throws -> String {
-        try #require(renderedBody(of: output), "expected a success outcome, got \(output)")
+        try #require(successValue(of: output), "expected a success outcome, got \(output)")
     }
 
     // MARK: - Known deviation: op-level correctives never hit upstream's retry cap
