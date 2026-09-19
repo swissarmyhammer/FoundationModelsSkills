@@ -18,12 +18,13 @@ struct SkillsCatalogToolTests {
     /// the default visibility predicate must hide it.
     private static let modelHiddenSkillID = "deploy"
 
-    /// The two fixed sentences of the description, word for word from the
-    /// card.
+    /// The fixed text at the start of the description, word for word from
+    /// the card: what a skill is, and the rule to load a skill that matches
+    /// the task.
     private static let fixedSentences =
         "Skills are procedures for kinds of work. Each one tells you how to do the work and which tools to use.\n"
-        + "When a task matches a skill below, you must load that skill with `use skill` "
-        + "and follow its instructions before you do the work."
+        + #"When a task matches a skill below, load it: call this tool with {"op": "use skill", "id": "<id>"}. "#
+        + "The answer is the text of the skill. Do the work the way it says."
 
     /// The line the description gives when no skill is visible.
     private static let noSkillsLine = "No skills are installed now."

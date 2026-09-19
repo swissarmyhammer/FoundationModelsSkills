@@ -315,9 +315,11 @@ refused source gets a diagnostic, and it has no layer.
 ## Provenance
 
 `MarketplaceProvenance` names the marketplace of each skill: the display id,
-the URL of the source, the commit, and the version of the catalog. The `list
-skill` operation and the `/` command listing show the text of that provenance,
-for example `swissarmyhammer-skills@1.2.0`. The text never holds the URL. A
+the URL of the source, the commit, and the version of the catalog. The `/`
+command listing shows the text of that provenance, for example
+`swissarmyhammer-skills@1.2.0`, and `SkillMetadata.source` holds the same text
+for a host. The model-facing `search skill` and `list skill` lines give the id
+and the description only. The text never holds the URL. A
 shadow diagnostic names both sides, thus a user can see that a local skill
 shadows a marketplace skill.
 

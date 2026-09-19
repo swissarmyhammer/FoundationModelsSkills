@@ -175,10 +175,10 @@ struct HotReloadTests {
             embedGate, timeout: ReloadTestSupport.expectedSignalTimeout)
         #expect(blocked, "expected the embed catch-up to have started (and be blocked on the gate) by now")
 
-        let searchJSON = try await tool.call(
+        let searchAnswer = try await tool.call(
             arguments: GeneratedContent(properties: ["op": "search skill", "query": "bravo"]))
         #expect(
-            searchJSON.contains("\"id\":\"bravo\""),
+            SkillLineReader.ids(in: searchAnswer).contains("bravo"),
             "keyword/trigram search must succeed on a newly added item while its embed catch-up is still pending")
 
         // `charlie` (`disable-model-invocation: true`) never reaches the
@@ -276,17 +276,19 @@ struct HotReloadTests {
         try FileManager.default.removeItem(at: root.appendingPathComponent("charlie", isDirectory: true))
         await Self.expectExactlyOneUpdate(updates, since: baseline)
 
-        let searchJSON = try await tool.call(
+        let searchAnswer = try await tool.call(
             arguments: GeneratedContent(properties: ["op": "search skill", "query": "alpha"]))
-        #expect(!searchJSON.contains("\"id\":\"alpha\""))
+        #expect(!SkillLineReader.ids(in: searchAnswer).contains("alpha"))
 
-        let listJSON = try await tool.call(arguments: GeneratedContent(properties: ["op": "list skill"]))
-        #expect(!listJSON.contains("\"id\":\"alpha\""))
+        let listAnswer = try await tool.call(arguments: GeneratedContent(properties: ["op": "list skill"]))
+        let listedIDs = SkillLineReader.ids(in: listAnswer)
+        #expect(!listedIDs.isEmpty, "the list must still hold a skill, or the check below proves nothing")
+        #expect(!listedIDs.contains("alpha"))
 
-        let useJSON = try await tool.call(
+        let useAnswer = try await tool.call(
             arguments: GeneratedContent(properties: ["op": "use skill", "id": "alpha"]))
-        #expect(useJSON.contains("not currently usable"))
-        #expect(useJSON.contains("bravo"), "the corrective should carry the current (still-usable) id list")
+        #expect(useAnswer.contains("not currently usable"))
+        #expect(useAnswer.contains("bravo"), "the corrective should carry the current (still-usable) id list")
 
         let preloadedAfterRemove = registry.preloadedBodies()
         #expect(
@@ -315,13 +317,13 @@ struct HotReloadTests {
             id: "bravo", in: root, descriptionSuffix: "v2", extraFrontmatter: "disable-model-invocation: true\n")
         await Self.expectExactlyOneUpdate(updates, since: baseline)
 
-        let searchJSON = try await tool.call(
+        let searchAnswer = try await tool.call(
             arguments: GeneratedContent(properties: ["op": "search skill", "query": "bravo"]))
-        #expect(!searchJSON.contains("\"id\":\"bravo\""))
+        #expect(!SkillLineReader.ids(in: searchAnswer).contains("bravo"))
 
-        let useJSON = try await tool.call(
+        let useAnswer = try await tool.call(
             arguments: GeneratedContent(properties: ["op": "use skill", "id": "bravo"]))
-        #expect(useJSON.contains("not currently usable"))
+        #expect(useAnswer.contains("not currently usable"))
     }
 
     // MARK: - Step 5: preload + listing refresh, schema stability

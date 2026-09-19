@@ -6,10 +6,11 @@ import Operations
 /// plain text, not as JSON.
 ///
 /// The `Operations` runtime encodes the output of each operation as JSON.
-/// The output of `use skill` is one string, the rendered body or a
-/// corrective sentence, thus its JSON is a quoted string with escapes. The
-/// model must read the body as a procedure, thus `SkillsCatalogTool` gives
-/// it the decoded text.
+/// The output of `search skill`, `list skill`, and `use skill` is one
+/// string: the lines of the skills with the load instruction, the rendered
+/// body, or a corrective sentence. Thus its JSON is a quoted string with
+/// escapes. The model must read the text as text, thus `SkillsCatalogTool`
+/// gives it the decoded text.
 ///
 /// To find the payloads of these operations, this type holds a second
 /// `OperationTool` over one marker for each operation, with the resolver of
@@ -30,7 +31,11 @@ internal struct PlainTextOperations: Sendable {
             name: Self.matcherName,
             description: Self.matcherName,
             context: PlainTextMarkerContext(),
-            operations: [AnyOperation(PlainTextMarker<UseSkill>.self)],
+            operations: [
+                AnyOperation(PlainTextMarker<SearchSkill>.self),
+                AnyOperation(PlainTextMarker<ListSkill>.self),
+                AnyOperation(PlainTextMarker<UseSkill>.self),
+            ],
             resolver: resolver
         )
     }

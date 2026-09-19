@@ -93,10 +93,13 @@ struct ReadmeExampleTests {
         let registry = SkillsRegistry(stack: FixtureLibrary.stack())
 
         let skillsTool = try await SkillsTool.make(registry: registry)
-        let json = try await skillsTool.call(
+        let answer = try await skillsTool.call(
             arguments: GeneratedContent(properties: ["op": "search skill", "query": Self.searchQuery]))
 
-        #expect(Self.rankedIDs(in: json).first == Self.bestMatchSkillID)
+        // `search skill` answers with plain text, one skill on each line, best
+        // first. `SkillLineReader` imports nothing, thus the import list of this
+        // file stays the same.
+        #expect(SkillLineReader.ids(in: answer).first == Self.bestMatchSkillID)
     }
 
     // MARK: - Reading the results back
@@ -112,27 +115,5 @@ struct ReadmeExampleTests {
             names.append(contentsOf: instructions.toolDefinitions.map(\.name))
         }
         return names
-    }
-
-    /// The skill ids in a `search skill` answer, best first.
-    ///
-    /// `search skill` answers with JSON, and this file imports no
-    /// `Foundation`, thus it has no `JSONDecoder`. The ids come out of the
-    /// text instead. Every row of the answer carries exactly one `"id"`
-    /// field, and the rows stand in rank order, thus the order the ids
-    /// appear in the text is the rank order.
-    ///
-    /// - Parameter json: One `search skill` answer.
-    /// - Returns: The matching skill ids, best first.
-    private static func rankedIDs(in json: String) -> [String] {
-        let marker = "\"id\":\""
-        var ids: [String] = []
-        var remainder = Substring(json)
-        while let markerRange = remainder.firstRange(of: marker) {
-            let afterMarker = remainder[markerRange.upperBound...]
-            ids.append(String(afterMarker.prefix { $0 != "\"" }))
-            remainder = afterMarker
-        }
-        return ids
     }
 }

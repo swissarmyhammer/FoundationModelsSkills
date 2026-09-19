@@ -24,16 +24,17 @@ import Operations
 /// `Operations` runtime. It resolves the payload, dispatches the operation,
 /// and keeps the retry cap.
 ///
-/// The answer of `use skill` is plain text: the rendered body of the skill,
-/// or a corrective sentence. The runtime encodes it as a JSON string, and
-/// this tool gives the decoded text (`PlainTextOperations`). The answer of
-/// each other operation is JSON, as the runtime gives it.
+/// The answers of `search skill`, `list skill`, and `use skill` are plain
+/// text: the lines of the skills with the load instruction, the rendered body
+/// of the skill, or a corrective sentence. The runtime encodes each one as a
+/// JSON string, and this tool gives the decoded text (`PlainTextOperations`).
+/// The answer of each resource operation is JSON, as the runtime gives it.
 public struct SkillsCatalogTool: Tool {
     /// The raw payload: an `op` and the fields of one operation.
     public typealias Arguments = GeneratedContent
 
-    /// The plain text of `use skill`, the JSON output of another operation,
-    /// or a corrective message.
+    /// The plain text of a skill operation, the JSON output of a resource
+    /// operation, or a corrective message.
     public typealias Output = String
 
     /// The tool that resolves and dispatches each call.
@@ -51,8 +52,8 @@ public struct SkillsCatalogTool: Tool {
     /// The fused schema, with the `id` field made an enum of `skillIDs`.
     public let parameters: GenerationSchema
 
-    /// Finds the payloads of `use skill` and decodes their answers to plain
-    /// text.
+    /// Finds the payloads of `search skill`, `list skill`, and `use skill`,
+    /// and decodes their answers to plain text.
     private let plainTextOperations: PlainTextOperations
 
     /// Wraps `operationTool` and builds the schema over `skillIDs`.
@@ -62,7 +63,7 @@ public struct SkillsCatalogTool: Tool {
     ///     Its description is the description of this tool.
     ///   - skillIDs: The visible skill ids, in catalog order.
     ///   - resolver: The resolver of `operationTool`. It finds the payloads
-    ///     of `use skill` with the same rules as the dispatch.
+    ///     of the skill operations with the same rules as the dispatch.
     /// - Throws: Whatever `SkillsToolSchema.make(name:operations:skillIDs:)`
     ///   or `PlainTextOperations.init(resolver:)` throws.
     internal init(
@@ -100,15 +101,15 @@ public struct SkillsCatalogTool: Tool {
     /// `operationTool`.
     ///
     /// - Parameter arguments: The payload of the model or the command line.
-    /// - Returns: The plain text of `use skill`, the JSON output of another
-    ///   operation, or a corrective message.
+    /// - Returns: The plain text of a skill operation, the JSON output of a
+    ///   resource operation, or a corrective message.
     /// - Throws: Whatever `OperationTool.call(arguments:)` throws.
     public func call(arguments: GeneratedContent) async throws -> String {
         try await dispatchAsPlainText(arguments, through: operationTool.call(arguments:))
     }
 
     /// Dispatches `arguments` with `dispatch`, and gives the answer as plain
-    /// text when the payload is `use skill`.
+    /// text when the payload is `search skill`, `list skill`, or `use skill`.
     ///
     /// `call(arguments:)` and `perform(_:)` dispatch through a different
     /// method of `operationTool`. Both then decode the answer here, thus the
@@ -118,8 +119,8 @@ public struct SkillsCatalogTool: Tool {
     ///   - arguments: The payload of the model or the command line.
     ///   - dispatch: The method of `operationTool` that dispatches the
     ///     payload.
-    /// - Returns: The plain text of `use skill`, the JSON output of another
-    ///   operation, or a corrective message.
+    /// - Returns: The plain text of a skill operation, the JSON output of a
+    ///   resource operation, or a corrective message.
     /// - Throws: Whatever `dispatch` throws.
     private func dispatchAsPlainText(
         _ arguments: GeneratedContent, through dispatch: (GeneratedContent) async throws -> String
@@ -149,8 +150,8 @@ extension SkillsCatalogTool: OperationDescribing {
     ///
     /// - Parameter arguments: The payload with the `op` key and the fields
     ///   of one operation.
-    /// - Returns: The plain text of `use skill`, or the JSON output of
-    ///   another operation.
+    /// - Returns: The plain text of a skill operation, or the JSON output of
+    ///   a resource operation.
     /// - Throws: Whatever `OperationTool.perform(_:)` throws.
     public func perform(_ arguments: GeneratedContent) async throws -> String {
         try await dispatchAsPlainText(arguments, through: operationTool.perform)

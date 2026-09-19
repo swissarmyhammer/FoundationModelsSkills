@@ -1,16 +1,18 @@
 import Foundation
 import FoundationModels
 import Operations
-import os
 
-/// The outcome of a `search skill` operation: either the ranked matches or a
-/// corrective message (plan.md §7).
+/// The outcome of a `search skill` operation: either the plain text of the
+/// ranked matches or a corrective message (plan.md §7).
 ///
 /// `SearchSkill.execute(in:)` fails correctively on two conditions only: a
 /// blank or whitespace-only `query`, and a catalog in which the context's
 /// visibility predicate accepts no skill. Every other query -- including one
-/// matching nothing -- succeeds with an empty `matches` array.
-public typealias SearchSkillOutput = CorrectiveOutcome<SearchSkillResult>
+/// matching nothing -- succeeds.
+///
+/// Both cases encode as one JSON string, and `SkillsCatalogTool` gives the
+/// model that string as plain text.
+public typealias SearchSkillOutput = CorrectiveOutcome<String>
 
 /// Searches the calling context's visible skill catalog by query, ranked
 /// best match first (plan.md §7, decision #26).
@@ -20,14 +22,19 @@ public typealias SearchSkillOutput = CorrectiveOutcome<SearchSkillResult>
 /// underlying `MetadataSearcher` has nothing meaningful to rank against
 /// empty input. A visible catalog with no skill also returns a corrective
 /// message instead of searching, since a search over zero skills has no
-/// meaning, and a selection tier would still send the model a prompt. Every
-/// other query -- including one matching nothing -- succeeds with an empty
-/// `matches` array.
+/// meaning, and a selection tier would still send the model a prompt.
+///
+/// The answer is plain text: the query line, one `- <id>: <description>`
+/// line for each match in rank order, and the load instruction, which names
+/// the exact `use skill` call (`SkillCatalogText`). A query that matches
+/// nothing gives the one line "No skill matches this search." The answer
+/// holds no body: `use skill` is the one way to get a skill.
 public struct SearchSkill: OperationDefinition {
     /// The shared context this operation dispatches against.
     public typealias Context = SkillsToolContext
 
-    /// This operation's result: the ranked matches, or a corrective message.
+    /// This operation's result: the plain text of the ranked matches, or a
+    /// corrective message.
     public typealias Output = SearchSkillOutput
 
     /// The search query.
@@ -112,13 +119,10 @@ public struct SearchSkill: OperationDefinition {
     /// - Parameter context: The shared context supplying the registry, the
     ///   search agent, and which entries `context.visibilityPredicate`
     ///   accepts.
-    /// - Returns: `.success(_:)` carrying the ranked results on success, or
-    ///   `.corrective(_:)` when `query` is blank or when
+    /// - Returns: `.success(_:)` carrying the plain text of the ranked
+    ///   matches, or `.corrective(_:)` when `query` is blank or when
     ///   `context.visibilityPredicate` accepts no skill in
-    ///   `context.registry`. Each row carries the `use` call that loads its
-    ///   skill, and a result with a match carries a `next` instruction.
-    ///   When the selection tier chose the first match, the result also
-    ///   carries the body `use skill` renders for it with no argument.
+    ///   `context.registry`.
     /// - Throws: Nothing recoverable; the signature carries `throws` to
     ///   satisfy the `OperationDefinition` protocol requirement. Rethrows
     ///   whatever `SkillSearchAgent.answer(query:limit:)` throws -- a
@@ -139,54 +143,31 @@ public struct SearchSkill: OperationDefinition {
             return .corrective(Self.emptyCatalogMessage)
         }
 
-        let resolvedLimit = limit ?? Self.defaultLimit
         // Search with a generous, effectively-unbounded limit rather than
-        // `resolvedLimit` -- `SkillSearchAgent.answer` (via `HybridRanker.
-        // topMatches`) only ever returns genuine matches, never zero-score
-        // padding, so this recovers the real match count before the
-        // `limit` cap, not merely the number of rows displayed. Deriving
-        // the bound from `context.registry` instead would be wrong: the
-        // registry and the search agent's own catalog are independently
-        // configurable (`SkillsToolContext`'s own doc comment), so nothing
-        // guarantees they're the same size.
+        // `limit`, and cap after the visibility filter below. The registry
+        // and the search agent's own catalog are independently configurable
+        // (`SkillsToolContext`'s own doc comment), thus the agent can rank a
+        // skill that `context.visibilityPredicate` hides. A cap before the
+        // filter would then give fewer lines than `limit`, although more
+        // visible matches exist.
         let answer = try await context.searchAgent.answer(query: query, limit: Self.unboundedSearchLimit)
-        let allMatches = answer.matches.filter(context.visibilityPredicate)
-        let rows = allMatches.prefix(resolvedLimit).map { SkillRow(metadata: $0, use: SkillUseCall(id: $0.id)) }
-        // Only a choice of the selection tier loads a body. A retrieval rank
-        // gives the list and the instruction to load a skill.
-        let skill: UseSkillResult? =
-            if answer.isSelection { await Self.loadedBody(of: rows.first, in: context) } else { nil }
-        return .success(SearchSkillResult(matches: Array(rows), total: allMatches.count, skill: skill))
+        let matches = answer.matches.filter(context.visibilityPredicate).prefix(limit ?? Self.defaultLimit)
+        return .success(
+            SkillCatalogText.listing(Array(matches), heading: Self.heading(for: query), emptyMessage: Self.noMatchMessage))
     }
 
-    /// Renders the body of `row` with the same path as `use skill`, called
-    /// with no argument.
+    /// Gives the first line of a search answer with matches.
     ///
-    /// A skill with a required argument gets a corrective from `use skill`,
-    /// thus it gets no body here, and the model loads it with its `use` call.
-    /// A render failure also gives no body: the search itself worked, and
-    /// the failure must not fail the `skills` call. The failure goes to the
-    /// log, and the same `use` call gives the model the same error.
-    ///
-    /// - Parameters:
-    ///   - row: The first match, or `nil` when there is no match.
-    ///   - context: The shared context `use skill` renders against.
-    /// - Returns: The rendered body, or `nil` when there is no body to give.
-    private static func loadedBody(of row: SkillRow?, in context: SkillsToolContext) async -> UseSkillResult? {
-        guard let row else { return nil }
-        do {
-            guard case .success(let body) = try await UseSkill(id: row.id).execute(in: context) else { return nil }
-            return UseSkillResult(id: row.id, body: body)
-        } catch {
-            logger.error(
-                "The body of the selected skill \(row.id, privacy: .public) did not render, thus the search result carries no body. Cause: \(String(describing: error))"
-            )
-            return nil
-        }
+    /// - Parameter query: The query of the search, as the model wrote it.
+    /// - Returns: The line that names the query.
+    private static func heading(for query: String) -> String {
+        "Skills that match \"\(query)\":"
     }
 
-    /// Where a search records a body render that failed.
-    private static let logger = Logger(subsystem: "FoundationModelsSkills", category: "SearchSkill")
+    /// The answer of a search that matches no skill. It gives no load
+    /// instruction, thus it never tells the model to load a skill that is
+    /// not there.
+    private static let noMatchMessage = "No skill matches this search."
 
     /// The corrective message returned for a blank or whitespace-only
     /// `query`.
@@ -194,10 +175,10 @@ public struct SearchSkill: OperationDefinition {
 
     /// The corrective message returned when `context.visibilityPredicate`
     /// accepts no skill in the registry's catalog.
-    private static let emptyCatalogMessage = "No skills are available."
+    private static let emptyCatalogMessage = SkillCatalogText.emptyCatalogMessage
 
     /// The limit passed to `SkillSearchAgent.answer` to recover every
-    /// genuine match, not just `resolvedLimit`'s display cap.
+    /// genuine match before the visibility filter and the `limit` cap.
     ///
     /// Far beyond any realistic skill catalog's size, so this is
     /// effectively "no cap" without risking `Int.max`-scale arithmetic in

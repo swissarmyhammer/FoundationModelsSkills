@@ -5,18 +5,23 @@ import Operations
 /// Lists the calling context's visible skill catalog, optionally filtered
 /// (plan.md §7).
 ///
-/// Never fails correctively: a `filter` matching nothing returns an empty
-/// `skills` array with `total: 0`, not an error. Reads the live registry's
-/// rendered metadata directly -- no session, no ranking, no tokens. Which
-/// entries count as visible is `context.visibilityPredicate`'s call, not
-/// this operation's -- model dispatch and `SkillsCLI` supply different
-/// predicates over the same registry (plan.md §7.2).
+/// The answer is plain text: one `- <id>: <description>` line for each skill
+/// in catalog order, and then the same load instruction as `search skill`
+/// (`SkillCatalogText`). Never fails correctively: a `filter` matching
+/// nothing gives the one line "No skill matches this filter.", not an error.
+/// Reads the live registry's rendered metadata directly -- no session, no
+/// ranking, no tokens. Which entries count as visible is
+/// `context.visibilityPredicate`'s call, not this operation's -- model
+/// dispatch and `SkillsCLI` supply different predicates over the same
+/// registry (plan.md §7.2).
 public struct ListSkill: OperationDefinition {
     /// The shared context this operation dispatches against.
     public typealias Context = SkillsToolContext
 
-    /// This operation's result: the matching rows, always a success.
-    public typealias Output = ListSkillResult
+    /// This operation's result: the plain text of the matching skills,
+    /// always a success. It encodes as one JSON string, and
+    /// `SkillsCatalogTool` gives the model that string as plain text.
+    public typealias Output = String
 
     /// A case-insensitive substring to match against a skill's id or
     /// description; `nil` or blank lists the whole catalog.
@@ -79,14 +84,29 @@ public struct ListSkill: OperationDefinition {
     ///
     /// - Parameter context: The shared context supplying the registry and
     ///   which entries `context.visibilityPredicate` accepts.
-    /// - Returns: The matching rows in catalog order, with `total` reporting
-    ///   their count.
+    /// - Returns: The plain text of the matching skills in catalog order,
+    ///   with the load instruction. With no match, one line: "No skill
+    ///   matches this filter." for a filter, or "No skills are available."
+    ///   with no filter.
     /// - Throws: Nothing; the signature carries `throws` to satisfy the
     ///   `OperationDefinition` protocol requirement.
-    public func execute(in context: SkillsToolContext) async throws -> ListSkillResult {
+    public func execute(in context: SkillsToolContext) async throws -> String {
         let visible = context.registry.metadata().filter(context.visibilityPredicate)
-        let rows = Self.matching(visible, where: filter).map(SkillRow.init(metadata:))
-        return ListSkillResult(skills: rows, total: rows.count)
+        let emptyMessage = Self.isFiltering(filter) ? Self.noMatchMessage : SkillCatalogText.emptyCatalogMessage
+        return SkillCatalogText.listing(Self.matching(visible, where: filter), heading: nil, emptyMessage: emptyMessage)
+    }
+
+    /// The answer of a filter that matches no visible skill.
+    private static let noMatchMessage = "No skill matches this filter."
+
+    /// Whether `filter` narrows the catalog.
+    ///
+    /// - Parameter filter: The filter, or `nil`.
+    /// - Returns: `false` for `nil` or a blank filter, which lists the whole
+    ///   catalog.
+    private static func isFiltering(_ filter: String?) -> Bool {
+        guard let filter else { return false }
+        return !filter.isBlank
     }
 
     /// Filters `catalog` to entries whose id or description contains
@@ -100,7 +120,7 @@ public struct ListSkill: OperationDefinition {
     /// - Returns: `catalog` unchanged when `filter` is `nil` or blank;
     ///   otherwise only the entries whose id or description contains it.
     private static func matching(_ catalog: [SkillMetadata], where filter: String?) -> [SkillMetadata] {
-        guard let filter, !filter.isBlank else {
+        guard let filter, isFiltering(filter) else {
             return catalog
         }
         let needle = filter.lowercased()

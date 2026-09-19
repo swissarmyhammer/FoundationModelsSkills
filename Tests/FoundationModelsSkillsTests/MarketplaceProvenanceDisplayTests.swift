@@ -6,10 +6,15 @@ import Operations
 import Testing
 
 /// Tests for the marketplace source text of a display row (marketplace.md
-/// §9.1): a `list skill` row and a `commandListing()` row both name the
-/// marketplace a skill came from, a local skill names none, and a
-/// marketplace whose catalog carries no version falls back to the short
-/// commit.
+/// §9.1).
+///
+/// A `commandListing()` row names the marketplace that a skill came from. A
+/// local skill names no marketplace. When the catalog of the marketplace has
+/// no version, the row shows the short commit.
+///
+/// The model-facing `list skill` answer gives one line for each skill:
+/// `- <id>: <description>`. That line does not show the source, and it never
+/// shows the URL of a marketplace.
 struct MarketplaceProvenanceDisplayTests {
     /// The display id of the marketplace every case here builds.
     private static let marketplaceID = "swissarmyhammer-skills"
@@ -30,41 +35,21 @@ struct MarketplaceProvenanceDisplayTests {
     /// The id of the skill that only the local root holds.
     private static let localSkillID = "commit"
 
+    /// The text that starts the path of a URL. No `list skill` answer may
+    /// hold it.
+    private static let urlSchemeSeparator = "://"
+
     // MARK: - list skill
-
-    @Test func theListSkillRowOfAMarketplaceSkillNamesTheMarketplaceAndTheCatalogVersion() async throws {
-        let fixture = try Fixture()
-
-        let rows = try await fixture.listSkillRows()
-
-        let row = try #require(rows.first { $0.id == Self.marketplaceSkillID })
-        #expect(row.source == "\(Self.marketplaceID)@\(Self.catalogVersion)")
-    }
-
-    @Test func theListSkillRowOfALocalSkillNamesNoSource() async throws {
-        let fixture = try Fixture()
-
-        let rows = try await fixture.listSkillRows()
-
-        let row = try #require(rows.first { $0.id == Self.localSkillID })
-        #expect(row.source == nil)
-    }
-
-    @Test func theListSkillRowFallsBackToTheShortCommitWhenTheCatalogHasNoVersion() async throws {
-        let fixture = try Fixture(catalogVersion: nil)
-
-        let rows = try await fixture.listSkillRows()
-
-        let row = try #require(rows.first { $0.id == Self.marketplaceSkillID })
-        #expect(row.source == "\(Self.marketplaceID)@\(Self.shortCommit)")
-    }
 
     @Test func noListSkillRowShowsTheURLOfTheMarketplace() async throws {
         let fixture = try Fixture()
 
-        let rows = try await fixture.listSkillRows()
+        let answer = try await fixture.listSkillAnswer()
 
-        #expect(rows.allSatisfy { $0.source?.contains("://") != true })
+        #expect(
+            SkillLineReader.ids(in: answer).contains(Self.marketplaceSkillID),
+            "the answer must list the marketplace skill, or the check below proves nothing")
+        #expect(!answer.contains(Self.urlSchemeSeparator))
     }
 
     // MARK: - commandListing()
@@ -144,37 +129,16 @@ struct MarketplaceProvenanceDisplayTests {
         }
 
         /// Dispatches one `list skill` operation through the fused tool and
-        /// decodes the rows it returned.
+        /// gives the plain answer.
         ///
-        /// Goes through the real tool, and not through `SkillRow` directly,
-        /// so that the case reads the JSON a host actually sees.
+        /// The case goes through the real tool, thus it reads the text that
+        /// the model sees.
         ///
-        /// - Returns: The rows of the catalog.
-        /// - Throws: Whatever the factory, the dispatch, or the JSON decode
-        ///   throws.
-        func listSkillRows() async throws -> [Row] {
+        /// - Returns: The plain text of the `list skill` answer.
+        /// - Throws: Whatever the factory or the dispatch throws.
+        func listSkillAnswer() async throws -> String {
             let tool = try await SkillsTool.make(registry: makeRegistry())
-            let json = try await tool.call(
-                arguments: GeneratedContent(properties: ["op": "list skill"]))
-            return try JSONDecoder().decode(ListResponse.self, from: Data(json.utf8)).skills
+            return try await tool.call(arguments: GeneratedContent(properties: ["op": "list skill"]))
         }
-    }
-
-    /// One `list skill` row, as this suite reads it back.
-    ///
-    /// A decode-side mirror of `SkillRow`, which is `Encodable` only. It
-    /// names the two fields these cases assert on.
-    private struct Row: Decodable {
-        /// The skill's canonical id.
-        let id: String
-
-        /// The marketplace the skill came from, or `nil` for a local skill.
-        let source: String?
-    }
-
-    /// One `list skill` result, as this suite reads it back.
-    private struct ListResponse: Decodable {
-        /// The rows of the catalog.
-        let skills: [Row]
     }
 }

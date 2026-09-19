@@ -12,7 +12,10 @@ import Operations
 /// the catalog: the tool description and the `id` enum of the schema.
 public enum SkillsTool {
     /// The fused tool's model- and CLI-facing name.
-    private static let toolName = "skills"
+    ///
+    /// `SkillCatalogText` names the tool in the load instruction of a
+    /// `search skill` or `list skill` answer.
+    internal static let toolName = "skills"
 
     /// The default `catalogCharacterLimit` of every `make` factory: the most
     /// characters the catalog list of the tool description may have.

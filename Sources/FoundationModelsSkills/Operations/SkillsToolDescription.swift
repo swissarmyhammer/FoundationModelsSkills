@@ -25,10 +25,9 @@ internal enum SkillsToolDescription {
     /// The second fixed sentence: what a skill gives the model.
     private static let guidance = "Each one tells you how to do the work and which tools to use."
 
-    /// The rule that tells the model to load a skill that matches its task.
-    private static let useRule =
-        "When a task matches a skill below, you must load that skill with `use skill` "
-        + "and follow its instructions before you do the work."
+    /// The rule that tells the model to load a skill that matches its task,
+    /// with the exact `use skill` call.
+    private static let useRule = SkillCatalogText.descriptionUseRule
 
     /// The line that replaces the list when no skill is visible.
     private static let noSkillsLine = "No skills are installed now."
@@ -40,7 +39,7 @@ internal enum SkillsToolDescription {
     private static let idSeparator = ", "
 
     /// The text between two lines of the description.
-    private static let lineBreak = "\n"
+    private static let lineBreak = SkillCatalogText.lineBreak
 
     /// Builds the description for `catalog`.
     ///
@@ -66,7 +65,7 @@ internal enum SkillsToolDescription {
     ///   - characterLimit: The most characters the list may have.
     /// - Returns: The list.
     private static func list(for catalog: [SkillMetadata], characterLimit: Int) -> String {
-        let entries = catalog.map { (id: $0.id, description: oneLine($0.description)) }
+        let entries = catalog.map { (id: $0.id, description: SkillCatalogText.oneLine($0.description)) }
         let ids = entries.map(\.id)
         let fullList = describedList(entries)
         let shortenedList = describedList(
@@ -82,9 +81,7 @@ internal enum SkillsToolDescription {
     /// - Parameter entries: The ids and the descriptions, each on one line.
     /// - Returns: The lines, joined with line breaks.
     private static func describedList(_ entries: [(id: String, description: String)]) -> String {
-        entries.map { entry in
-            entry.description.isEmpty ? "- \(entry.id)" : "- \(entry.id): \(entry.description)"
-        }.joined(separator: lineBreak)
+        entries.map { SkillCatalogText.line(id: $0.id, description: $0.description) }.joined(separator: lineBreak)
     }
 
     /// Gives as many ids as fit `characterLimit` on one line, then the line
@@ -119,14 +116,5 @@ internal enum SkillsToolDescription {
     /// - Returns: The count line.
     private static func notListedLine(count: Int) -> String {
         "\(count) \(notListedNote)"
-    }
-
-    /// Puts `text` on one line: each run of white space, line breaks too,
-    /// becomes one space.
-    ///
-    /// - Parameter text: A skill description.
-    /// - Returns: The description on one line.
-    private static func oneLine(_ text: String) -> String {
-        text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
     }
 }

@@ -132,100 +132,67 @@ struct SkillsToolAssemblyTests {
 
     // MARK: - The result tells the model what to do next
 
-    /// Shows that each match carries the `skills` call that loads it: the op
-    /// of `use skill` and the id of the match.
-    @Test func eachMatchCarriesTheUseCallThatLoadsIt() async throws {
+    /// Shows that the answer names the exact `skills` call that loads the
+    /// first match: the op of `use skill` and the id of the match.
+    @Test func theAnswerNamesTheUseCallOfTheFirstMatch() async throws {
         let tool = try await SkillsTool.make(registry: Self.makeFixtureRegistry())
 
-        let response = try await Self.search(through: tool, query: Self.keywordQuery)
+        let answer = try await Self.searchText(through: tool, query: Self.keywordQuery)
 
-        #expect(!response.matches.isEmpty, "the query must give a match, or this case proves nothing")
-        for row in response.matches {
-            let use = try #require(row.use)
-            #expect(use.op == Self.useSkillOp)
-            #expect(use.id == row.id)
-        }
+        let firstID = try #require(
+            SkillLineReader.ids(in: answer).first, "the query must give a match, or this case proves nothing")
+        #expect(answer.contains(#"For example: {"op": "\#(Self.useSkillOp)", "id": "\#(firstID)"}"#))
     }
 
-    /// Shows that the `use` call of a match, sent back to the tool as it is,
-    /// gives the body of that skill.
+    /// Shows that the call the answer names, sent back to the tool, gives
+    /// the body of that skill.
     @Test func theUseCallOfAMatchResolvesToUseSkillForThatID() async throws {
         let tool = try await SkillsTool.make(registry: Self.makeFixtureRegistry())
 
-        let response = try await Self.search(through: tool, query: Self.noArgumentSkillID)
-        let use = try #require(response.matches.first?.use)
-        let loaded = try await Self.use(through: tool, op: use.op, id: use.id)
+        let answer = try await Self.searchText(through: tool, query: Self.noArgumentSkillID)
+        let firstID = try #require(SkillLineReader.ids(in: answer).first)
+        let loaded = try await Self.use(through: tool, op: Self.useSkillOp, id: firstID)
 
-        #expect(use.id == Self.noArgumentSkillID)
+        #expect(firstID == Self.noArgumentSkillID)
         #expect(loaded == (try Self.makeFixtureRegistry().call(id: Self.noArgumentSkillID)))
     }
 
     /// Shows that a result with a match tells the model to load a skill
-    /// that applies, and that a retrieval rank loads no body.
-    @Test func aRetrievalResultWithAMatchCarriesTheUseInstructionAndNoBody() async throws {
+    /// that fits its task.
+    @Test func aRetrievalResultWithAMatchCarriesTheLoadInstruction() async throws {
         let tool = try await SkillsTool.make(registry: Self.makeFixtureRegistry())
 
-        let response = try await Self.search(through: tool, query: Self.keywordQuery)
+        let answer = try await Self.searchText(through: tool, query: Self.keywordQuery)
 
-        #expect(response.next == Self.useInstruction)
-        #expect(response.skill == nil)
+        #expect(answer.hasSuffix(Self.loadInstructionLastLine))
     }
 
-    /// Shows that a result with no match has no `next` field at all, thus it
-    /// never tells the model to load a skill that is not there.
-    @Test func aResultWithNoMatchCarriesNoNextField() async throws {
-        let tool = try await SkillsTool.make(registry: Self.makeFixtureRegistry())
-
-        let json = try await Self.searchJSON(through: tool, query: Self.cosineOnlyQuery)
-        let response = try JSONDecoder().decode(SearchResponse.self, from: Data(json.utf8))
-
-        #expect(response.matches.isEmpty)
-        #expect(!json.contains(#""next""#))
-        #expect(response.skill == nil)
-    }
-
-    /// Shows that a first match the selection tier chose comes back with its
-    /// rendered body, and that the body is the text `use skill` gives.
-    @Test func aSelectionAnswerLoadsTheBodyOfTheFirstMatch() async throws {
+    /// Shows that a first match the selection tier chose comes back as a
+    /// line, and that the answer holds no body, although `use skill` renders
+    /// that skill with no argument.
+    @Test func aSelectionAnswerGivesTheChosenLineAndNoBody() async throws {
         let session = RecordingAgentSession(answer: Self.idsAnswer(for: Self.noArgumentSkillID))
         let tool = try await SkillsTool.make(registry: Self.makeFixtureRegistry(), session: { _ in session })
 
-        let response = try await Self.search(through: tool, query: Self.anyQuery)
-        let loaded = try #require(response.skill)
-        let used = try await Self.use(through: tool, op: Self.useSkillOp, id: Self.noArgumentSkillID)
+        let answer = try await Self.searchText(through: tool, query: Self.anyQuery)
+        let body = try await Self.use(through: tool, op: Self.useSkillOp, id: Self.noArgumentSkillID)
 
-        #expect(response.matches.map(\.id) == [Self.noArgumentSkillID])
-        #expect(loaded.id == Self.noArgumentSkillID)
-        #expect(loaded.body == used)
-        #expect(response.next == Self.loadedInstruction)
+        #expect(SkillLineReader.ids(in: answer) == [Self.noArgumentSkillID])
+        #expect(!answer.contains(body))
+        #expect(answer.hasSuffix(Self.loadInstructionLastLine))
     }
 
-    /// Shows that an answer of the retrieval fallback loads no body, and that
-    /// its `next` text is the instruction to load a skill.
-    @Test func aRetrievalFallbackAnswerLoadsNoBody() async throws {
+    /// Shows that an answer of the retrieval fallback gives the retrieval
+    /// rank and the load instruction.
+    @Test func aRetrievalFallbackAnswerGivesTheLoadInstruction() async throws {
         let session = RecordingAgentSession(answer: Self.bareIDListAnswer)
         let tool = try await SkillsTool.make(registry: Self.makeFixtureRegistry(), session: { _ in session })
 
-        let response = try await Self.search(through: tool, query: Self.keywordQuery)
+        let answer = try await Self.searchText(through: tool, query: Self.keywordQuery)
 
         #expect(session.respondCallCount == 1)
-        #expect(response.matches.first?.id == Self.alignedSkillID)
-        #expect(response.skill == nil)
-        #expect(response.next == Self.useInstruction)
-    }
-
-    /// Shows that a selected first match with a required argument loads no
-    /// body, because `use skill` with no argument gives a corrective for it.
-    /// The `next` text is then the instruction to load a skill.
-    @Test func aSelectedFirstMatchThatNeedsAnArgumentLoadsNoBody() async throws {
-        let session = RecordingAgentSession(answer: Self.idsAnswer(for: Self.alignedSkillID))
-        let tool = try await SkillsTool.make(registry: Self.makeFixtureRegistry(), session: { _ in session })
-
-        let response = try await Self.search(through: tool, query: Self.anyQuery)
-
-        #expect(response.matches.map(\.id) == [Self.alignedSkillID])
-        #expect(response.skill == nil)
-        #expect(response.next == Self.useInstruction)
+        #expect(SkillLineReader.ids(in: answer).first == Self.alignedSkillID)
+        #expect(answer.hasSuffix(Self.loadInstructionLastLine))
     }
 
     // MARK: - An empty catalog asks the model nothing
@@ -244,10 +211,9 @@ struct SkillsToolAssemblyTests {
         let session = RecordingAgentSession(answer: Self.proseAnswer)
 
         let tool = try await SkillsTool.make(registry: SkillsRegistry(roots: [root]), session: { _ in session })
-        let json = try await tool.call(
-            arguments: GeneratedContent(properties: ["op": "search skill", "query": Self.anyQuery]))
+        let answer = try await Self.searchText(through: tool, query: Self.anyQuery)
 
-        #expect(json == #""No skills are available.""#)
+        #expect(answer == "No skills are available.")
         #expect(session.respondCallCount == 0)
     }
 
@@ -346,15 +312,9 @@ struct SkillsToolAssemblyTests {
     /// The op of the `use skill` operation, as a model writes it.
     private static let useSkillOp = "use skill"
 
-    /// The `next` text of a result whose matches carry no loaded body.
-    private static let useInstruction =
-        "If a skill in this list applies to your task, you must use it. Load it now with its `use` call, "
-        + "and follow its instructions before you continue with the task."
-
-    /// The `next` text of a result that carries the body of its first match.
-    private static let loadedInstruction =
-        "The first skill is loaded below. If it applies to your task, you must follow it. "
-        + "If a different skill applies, load it with its `use` call."
+    /// The last line of the load instruction of an answer with a match.
+    private static let loadInstructionLastLine =
+        "If a skill in this list fits your task, load it now, and do the work the way it says."
 
     /// A prose answer that is not JSON: the shape the real model gave when
     /// the selection prompt held no candidate.
@@ -407,49 +367,29 @@ struct SkillsToolAssemblyTests {
     /// Dispatches one `search skill` operation through `tool` and gives back
     /// the ranked ids.
     ///
-    /// Follows the dispatch pattern in `SkillOperationsTests`, but decodes
-    /// the returned JSON instead of matching text in it. `AnyOperation`
-    /// encodes with `JSONEncoder.OutputFormatting.sortedKeys`, thus the key
-    /// order in the text does not follow the declaration order, and a
-    /// decoded value is the only stable way to read the rank order.
+    /// Follows the dispatch pattern in `SkillOperationsTests`, and reads the
+    /// ids from the plain lines of the answer, in rank order.
     ///
     /// - Parameters:
     ///   - tool: The assembled `skills` tool to dispatch through.
     ///   - query: The search query.
     /// - Returns: The matching skill ids, best first.
-    /// - Throws: Whatever `OperationTool.call(arguments:)` or the JSON
-    ///   decode throws.
+    /// - Throws: Whatever `SkillsCatalogTool.call(arguments:)` throws.
     private static func searchIDs(
         through tool: SkillsCatalogTool, query: String
     ) async throws -> [String] {
-        try await search(through: tool, query: query).matches.map(\.id)
+        SkillLineReader.ids(in: try await searchText(through: tool, query: query))
     }
 
     /// Dispatches one `search skill` operation through `tool` and gives back
-    /// the decoded result.
+    /// the plain text of the answer.
     ///
     /// - Parameters:
     ///   - tool: The assembled `skills` tool to dispatch through.
     ///   - query: The search query.
-    /// - Returns: The decoded result.
-    /// - Throws: Whatever `OperationTool.call(arguments:)` or the JSON
-    ///   decode throws.
-    private static func search(
-        through tool: SkillsCatalogTool, query: String
-    ) async throws -> SearchResponse {
-        let json = try await searchJSON(through: tool, query: query)
-        return try JSONDecoder().decode(SearchResponse.self, from: Data(json.utf8))
-    }
-
-    /// Dispatches one `search skill` operation through `tool` and gives back
-    /// the JSON text of the result, for a case that reads which keys it has.
-    ///
-    /// - Parameters:
-    ///   - tool: The assembled `skills` tool to dispatch through.
-    ///   - query: The search query.
-    /// - Returns: The JSON text the tool gives the model.
-    /// - Throws: Whatever `OperationTool.call(arguments:)` throws.
-    private static func searchJSON(
+    /// - Returns: The text the tool gives the model.
+    /// - Throws: Whatever `SkillsCatalogTool.call(arguments:)` throws.
+    private static func searchText(
         through tool: SkillsCatalogTool, query: String
     ) async throws -> String {
         try await tool.call(arguments: GeneratedContent(properties: ["op": "search skill", "query": query]))
@@ -468,50 +408,6 @@ struct SkillsToolAssemblyTests {
         through tool: SkillsCatalogTool, op: String, id: String
     ) async throws -> String {
         try await tool.call(arguments: GeneratedContent(properties: ["op": op, "id": id]))
-    }
-
-    /// One `search skill` result, as this suite reads it back.
-    ///
-    /// A decode-side mirror of `SearchSkillResult`, which is `Encodable`
-    /// only. It names the fields these cases assert on.
-    private struct SearchResponse: Decodable {
-        /// The `skills` call that loads one match.
-        struct UseCall: Decodable {
-            /// The op of the call.
-            let op: String
-
-            /// The id of the skill the call loads.
-            let id: String
-        }
-
-        /// One ranked row.
-        struct Row: Decodable {
-            /// The skill's canonical id.
-            let id: String
-
-            /// The call that loads this skill, or `nil` when the row has
-            /// none.
-            let use: UseCall?
-        }
-
-        /// The ranked rows, best first.
-        let matches: [Row]
-
-        /// The instruction to the model, or `nil` when the result has none.
-        let next: String?
-
-        /// The first match and its loaded body.
-        struct LoadedSkill: Decodable {
-            /// The skill's canonical id.
-            let id: String
-
-            /// The skill's rendered body.
-            let body: String
-        }
-
-        /// The loaded body of the first match, or `nil` when the result
-        /// carries no body.
-        let skill: LoadedSkill?
     }
 
     // MARK: - AgentSession double

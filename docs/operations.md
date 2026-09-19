@@ -17,7 +17,7 @@ The description has two fixed sentences, then one line for each skill:
 
 ```text
 Skills are procedures for kinds of work. Each one tells you how to do the work and which tools to use.
-When a task matches a skill below, you must load that skill with `use skill` and follow its instructions before you do the work.
+When a task matches a skill below, load it: call this tool with {"op": "use skill", "id": "<id>"}. The answer is the text of the skill. Do the work the way it says.
 
 - explore: Understand how unfamiliar code works before planning or changing it.
 - code-context: Find symbols, callers, and the blast radius of a change.
@@ -60,8 +60,8 @@ reload does not rebuild the tool:
 
 | op | parameters | behavior |
 |---|---|---|
-| `search skill` | `query` (req), `limit?` | Finds the skills for the kind of work that the model will do next. Search by the kind of work, not by the topic of the task. Returns ranked matches from `SkillSearchAgent` over the model-visible catalog. Each match carries the `use` call that loads it, and the result tells the model to use a skill that applies. See [The `search skill` result](#the-search-skill-result). |
-| `list skill` | `filter?` | Lists each skill with its description: the model-visible catalog (with an optional filter), in catalog order, with no ranking. |
+| `search skill` | `query` (req), `limit?` | Finds the skills for the kind of work that the model will do next. Search by the kind of work, not by the topic of the task. The answer is plain text: one line for each match from `SkillSearchAgent` over the model-visible catalog, in rank order, and the instruction that names the exact `use skill` call. See [The `search skill` and `list skill` answers](#the-search-skill-and-list-skill-answers). |
+| `list skill` | `filter?` | Lists each skill with its description: the model-visible catalog (with an optional filter), in catalog order, with no ranking. The answer is the same plain lines and the same instruction as `search skill`. |
 | `use skill` | `id` (req), `arguments?` | Loads the instructions of a skill for the model to follow: renders the pipeline (plan.md §5) with `arguments`. The answer is the rendered body as plain text. An unknown or hidden `id` returns a corrective sentence that contains the current id list. See [The `use skill` answer](#the-use-skill-answer). |
 | `list resource` | `id` (req) | Lists each file in the skill's directory except `SKILL.md`. The list stops at 100 rows. |
 | `read resource` | `id` (req), `path` (req), `start?`, `end?` | Returns a file verbatim, in a line window: 500 lines maximum and 1,000,000 content bytes maximum for each call. The tool never renders the file. It streams the file in 64 KiB parts and never loads the full file. `totalLines` is exact. See [development.md](development.md) for the exact byte-budget rules. |
@@ -97,79 +97,79 @@ A missing required argument of the skill gives:
 Missing required argument `message` for this skill.
 ```
 
-The other operations keep their JSON answers. The command line
-(`SkillsCLI`) prints the JSON of each operation, thus `skills skill use`
-prints the body as one JSON string.
+The resource operations keep their JSON answers. The command line
+(`SkillsCLI`) prints the JSON of each operation, thus `skills skill search`,
+`skills skill list`, and `skills skill use` print the text as one JSON string.
 
-## The `search skill` result
+## The `search skill` and `list skill` answers
 
 A list of matches alone is a menu. A model can read it as information and
-continue with no skill. Thus the result tells the model what to do, and how.
+continue with no skill. Thus the answer names the exact call that loads a
+skill, and tells the model to load a skill that fits its task. The answer is
+plain text: no JSON object, no `use` field, no `next` field, and no body of a
+skill. `use skill` is the one way to get a skill. The tool adds no tag, marker,
+or wrapper.
 
-- Each match has a `use` field. It holds the exact arguments of the `skills`
-  call that loads that skill. The model can send it back as it is.
-- A result with at least one match has a `next` field: one plain instruction.
-- A result with no match has no `next` field. It never tells the model to load
-  a skill that is not there.
+For the call `{"op": "search skill", "query": "explore codebase and find symbol"}`,
+the answer is:
 
-When the retrieval tier gives the matches (a host with no model, or the
-retrieval fallback after a selection answer that did not decode), the result
-holds the list only:
+```text
+Skills that match "explore codebase and find symbol":
 
-```json
-{
-  "matches": [
-    {
-      "description": "Understand how unfamiliar code works before planning or changing it.",
-      "id": "explore",
-      "parameters": [],
-      "use": { "id": "explore", "op": "use skill" }
-    }
-  ],
-  "next": "If a skill in this list applies to your task, you must use it. Load it now with its `use` call, and follow its instructions before you continue with the task.",
-  "total": 1
-}
+- explore: Understand how unfamiliar code works before planning or changing it.
+- code-context: Find symbols, callers, and the blast radius of a change.
+- lsp: Diagnose the language servers of the workspace.
+
+To load a skill, call the `skills` tool with {"op": "use skill", "id": "<id>"}.
+For example: {"op": "use skill", "id": "explore"}
+The answer is the text of the skill: the steps of the work and the tools to use.
+If a skill in this list fits your task, load it now, and do the work the way it says.
 ```
 
-When the selection tier chose the first match, the result also has a `skill`
-field. It holds the rendered body of that one skill, from the same render path
-as `use skill` with no argument. Then `next` changes:
+- The first line names the query of the call.
+- Each match is on one line, `- <id>: <description>`, in rank order. `limit`
+  sets the most lines. A description on more than one line becomes one line.
+- The example call loads the first match.
 
-```json
-{
-  "matches": [
-    {
-      "description": "Understand how unfamiliar code works before planning or changing it.",
-      "id": "explore",
-      "parameters": [],
-      "use": { "id": "explore", "op": "use skill" }
-    }
-  ],
-  "next": "The first skill is loaded below. If it applies to your task, you must follow it. If a different skill applies, load it with its `use` call.",
-  "skill": { "body": "…the rendered body of explore…", "id": "explore" },
-  "total": 1
-}
+A search with no match gives one line, with no load instruction. Thus the
+answer never tells the model to load a skill that is not there:
+
+```text
+No skill matches this search.
 ```
 
-Only the first match gets a body, to keep the result small. A first match with
-a required argument gets no body, because `use skill` with no argument gives a
-corrective for it. A body that does not render also gives no body: the failure
-goes to the log, and the search result stays a success. In both cases `next` is
-the instruction to load a skill.
+`list skill` gives the same lines and the same four instruction lines, in
+catalog order, with no first line. For the call `{"op": "list skill"}`, the
+answer is:
 
-The tool encodes the JSON with sorted keys, thus `skill` comes after `next`.
-A `list skill` row has no `use` field, and a `list skill` result has no `next`
-field.
+```text
+- code-context: Find symbols, callers, and the blast radius of a change.
+- explore: Understand how unfamiliar code works before planning or changing it.
+
+To load a skill, call the `skills` tool with {"op": "use skill", "id": "<id>"}.
+For example: {"op": "use skill", "id": "code-context"}
+The answer is the text of the skill: the steps of the work and the tools to use.
+If a skill in this list fits your task, load it now, and do the work the way it says.
+```
+
+A `filter` that matches no skill gives the one line
+`No skill matches this filter.` With no visible skill, `search skill` and
+`list skill` give `No skills are available.`
+
+Before, the answer was a JSON object with `matches`, `total`, a `use` object
+for each match, a `next` field, and, when the selection tier chose the first
+match, the rendered body of that match in a `skill` field.
 
 ## Marketplaces
 
 The model surface holds no marketplace operation. A marketplace skill is an
-ordinary row of the same catalog, thus `search skill`, `list skill`, and `use
-skill` show it with no change. A `list skill` row can name the marketplace that
-the skill came from, for example `swissarmyhammer-skills@1.2.0`. The model
-cannot add, remove, pin, or update a marketplace: that work belongs to the host
-and to the `skills marketplace` commands. See
-[marketplaces.md](marketplaces.md).
+ordinary skill of the same catalog, thus `search skill`, `list skill`, and `use
+skill` show it with no change. A `search skill` or `list skill` line gives the
+id and the description only. The `/` command listing
+(`registry.commandListing()`) names the marketplace that the skill came from,
+for example `swissarmyhammer-skills@1.2.0`. The model cannot add, remove, pin,
+or update a marketplace: that work belongs to the host and to the
+`skills marketplace` commands. See [marketplaces.md](marketplaces.md).
 
 ## Verb aliases
 

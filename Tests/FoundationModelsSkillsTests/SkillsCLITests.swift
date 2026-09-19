@@ -33,7 +33,7 @@ struct SkillsCLITests {
         let result = await driver.run(arguments: ["skill", "list"])
 
         #expect(result.exitCode == 0)
-        #expect(result.output.contains("\"id\":\"commit\""))
+        #expect(try Self.listedIDs(result.output).contains("commit"))
     }
 
     @Test func searchVerbSearchesTheUserVisibleCatalog() async throws {
@@ -42,7 +42,7 @@ struct SkillsCLITests {
         let result = await driver.run(arguments: ["skill", "search", "--query", "commit"])
 
         #expect(result.exitCode == 0)
-        #expect(result.output.contains("\"id\":\"commit\""))
+        #expect(try Self.listedIDs(result.output).contains("commit"))
     }
 
     @Test func useVerbRendersCommitSubstitutingArguments() async throws {
@@ -114,9 +114,9 @@ struct SkillsCLITests {
 
         // `deploy` (`disable-model-invocation: true`) is model-hidden but
         // user-visible -- the opposite polarity from `SkillOperationsTests`'
-        // `listSkillDispatchReturnsCatalogRowsWithTotal`, which asserts the
-        // model surface never lists it.
-        #expect(result.output.contains("\"id\":\"deploy\""))
+        // `listSkillDispatchReturnsTheLineOfEachVisibleSkill`, which asserts
+        // the model surface never lists it.
+        #expect(try Self.listedIDs(result.output).contains("deploy"))
     }
 
     @Test func listVerbExcludesLintWhichIsModelOnly() async throws {
@@ -126,7 +126,9 @@ struct SkillsCLITests {
 
         // `lint` (`user-invocable: false`) is model-only background work --
         // never listed on this user-facing CLI surface.
-        #expect(!result.output.contains("\"id\":\"lint\""))
+        let ids = try Self.listedIDs(result.output)
+        #expect(!ids.isEmpty, "the list must give skill lines, or this case proves nothing")
+        #expect(!ids.contains("lint"))
     }
 
     @Test func useVerbRendersDeployWhichIsHiddenFromTheModelSurface() async throws {
@@ -230,8 +232,10 @@ struct SkillsCLITests {
         let cliResult = await driver.run(arguments: ["skill", "search", "--query", "commit"])
         let modelOutput = try await modelTool.call(arguments: GeneratedContent(properties: ["op": "search skill", "query": "commit"]))
 
+        // The CLI prints the JSON string of the answer; the model gets the
+        // same answer as plain text.
         #expect(cliResult.exitCode == 0)
-        #expect(cliResult.output == modelOutput)
+        #expect(try Self.decodedText(cliResult.output) == modelOutput)
     }
 
     @Test func listVerbRoundTripsToTheIdenticalModelDispatchOutputForAModelVisibleFilter() async throws {
@@ -246,7 +250,7 @@ struct SkillsCLITests {
         let modelOutput = try await modelTool.call(arguments: GeneratedContent(properties: ["op": "list skill", "filter": "commit"]))
 
         #expect(cliResult.exitCode == 0)
-        #expect(cliResult.output == modelOutput)
+        #expect(try Self.decodedText(cliResult.output) == modelOutput)
     }
 
     @Test func useVerbRoundTripsToTheIdenticalModelDispatchOutputForCommit() async throws {
@@ -328,8 +332,9 @@ struct SkillsCLITests {
         json.replacingOccurrences(of: #""durationMs":\d+"#, with: "\"durationMs\":0", options: .regularExpression)
     }
 
-    /// Decodes the CLI output of `skill use`: one JSON string, the rendered
-    /// body or a corrective sentence.
+    /// Decodes the CLI output of `skill search`, `skill list`, or
+    /// `skill use`: one JSON string, the plain text of the answer or a
+    /// corrective sentence.
     ///
     /// The CLI prints the JSON of each operation. The model surface gives
     /// the same string as plain text.
@@ -339,6 +344,16 @@ struct SkillsCLITests {
     /// - Throws: A decode error when `output` is not one JSON string.
     private static func decodedText(_ output: String) throws -> String {
         try JSONDecoder().decode(String.self, from: Data(output.utf8))
+    }
+
+    /// The skill ids of the CLI output of `skill search` or `skill list`, in
+    /// the order of the answer.
+    ///
+    /// - Parameter output: The printed output of the CLI.
+    /// - Returns: The id of each skill line.
+    /// - Throws: A decode error when `output` is not one JSON string.
+    private static func listedIDs(_ output: String) throws -> [String] {
+        SkillLineReader.ids(in: try decodedText(output))
     }
 
     /// Builds the model-facing fused tool over `registry`, via the same

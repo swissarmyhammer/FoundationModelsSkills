@@ -5,6 +5,48 @@ change is at the top.
 
 ## Unreleased
 
+### Changed: `search skill` and `list skill` give plain text that names the load command
+
+This change breaks the source of a host that reads `SearchSkillOutput`,
+`SearchSkill.execute(in:)`, `ListSkill.execute(in:)`, or one of the removed
+types below. A host that gives the `skills` tool to a session, and does not
+read the answer, compiles with no change.
+
+**Cause.** In a SWE-bench run, `search skill` gave one JSON object of 9,343
+characters: a `matches` array with a `use` object for each skill, the body of
+the first match as an escaped JSON string, and a `next` text that did not say
+what the load command is. The model did not load a skill, and it did not
+follow one.
+
+**What changed.**
+
+- `search skill` gives plain text: the line `Skills that match "<query>":`,
+  one line `- <id>: <description>` for each match in rank order, and four
+  lines that name the exact load call, `{"op": "use skill", "id": "<id>"}`,
+  with an example for the first match. `limit` and the rank order do not
+  change.
+- The body of a skill is no longer in the search result. There is no `use`
+  object, no `next` field, no `total`, and no `skill` field. `use skill` is the
+  one way to get a skill.
+- A search with no match gives the one line `No skill matches this search.`,
+  with no load instruction.
+- `list skill` gives the same lines, in catalog order, and the same load
+  instruction. A `filter` that matches nothing gives
+  `No skill matches this filter.` A `list skill` line no longer shows the
+  marketplace source. `SkillMetadata.source` and the `/` command listing still
+  have it.
+- The second sentence of the tool description is now: "When a task matches a
+  skill below, load it: call this tool with {"op": "use skill", "id": "<id>"}.
+  The answer is the text of the skill. Do the work the way it says."
+- `SearchSkillOutput` is now `CorrectiveOutcome<String>`. `ListSkill.Output` is
+  now `String`.
+- Removed: `SkillRow`, `SkillUseCall`, `SearchSkillResult`, `ListSkillResult`,
+  and `UseSkillResult`. No operation gives these types now.
+- The command line prints the JSON of each operation, thus `skills skill search`
+  and `skills skill list` print the text as one JSON string.
+
+See [docs/operations.md](docs/operations.md) for the new answers.
+
 ### Changed: `use skill` gives the text of the skill, not JSON
 
 This change breaks the source of a host that reads `UseSkillOutput` or

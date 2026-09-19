@@ -58,12 +58,12 @@ struct SkillsReloadFollowerTests {
         let tool = try await SkillsTool.make(registry: SkillsRegistry(roots: [root], watch: true))
         try ReloadTestSupport.writeSkillFile(id: Self.reloadedSkillID, in: root)
 
-        let json = try await Self.searchOnceReloaded(through: tool, query: Self.reloadedSkillID) {
-            $0.contains(Self.idField(Self.reloadedSkillID))
+        let answer = try await Self.searchOnceReloaded(through: tool, query: Self.reloadedSkillID) {
+            Self.lists(Self.reloadedSkillID, in: $0)
         }
 
         #expect(
-            json.contains(Self.idField(Self.reloadedSkillID)),
+            Self.lists(Self.reloadedSkillID, in: answer),
             "the factory must follow the registry's reloads itself, with no host loop between")
     }
 
@@ -77,19 +77,19 @@ struct SkillsReloadFollowerTests {
         try ReloadTestSupport.writeSkillFile(id: Self.reloadedSkillID, in: root)
 
         let tool = try await SkillsTool.make(registry: SkillsRegistry(roots: [root], watch: true))
-        let seeded = try await Self.searchJSON(through: tool, query: Self.reloadedSkillID)
+        let seeded = try await Self.searchText(through: tool, query: Self.reloadedSkillID)
         #expect(
-            seeded.contains(Self.idField(Self.reloadedSkillID)),
+            Self.lists(Self.reloadedSkillID, in: seeded),
             "the seeded catalog must carry the skill this case removes, or the case proves nothing")
 
         try FileManager.default.removeItem(
             at: root.appendingPathComponent(Self.reloadedSkillID, isDirectory: true))
 
-        let json = try await Self.searchOnceReloaded(through: tool, query: Self.reloadedSkillID) {
-            !$0.contains(Self.idField(Self.reloadedSkillID))
+        let answer = try await Self.searchOnceReloaded(through: tool, query: Self.reloadedSkillID) {
+            !Self.lists(Self.reloadedSkillID, in: $0)
         }
 
-        #expect(!json.contains(Self.idField(Self.reloadedSkillID)))
+        #expect(!Self.lists(Self.reloadedSkillID, in: answer))
     }
 
     // MARK: - Which registry gets a follower
@@ -182,9 +182,9 @@ struct SkillsReloadFollowerTests {
     /// - Parameters:
     ///   - tool: The assembled `skills` tool to dispatch through.
     ///   - query: The search query.
-    /// - Returns: The operation's JSON answer.
+    /// - Returns: The plain text answer of the operation.
     /// - Throws: Whatever `OperationTool.call(arguments:)` throws.
-    private static func searchJSON(
+    private static func searchText(
         through tool: SkillsCatalogTool, query: String
     ) async throws -> String {
         try await tool.call(arguments: GeneratedContent(properties: ["op": "search skill", "query": query]))
@@ -208,21 +208,24 @@ struct SkillsReloadFollowerTests {
         through tool: SkillsCatalogTool, query: String, until isSatisfied: (String) -> Bool
     ) async throws -> String {
         _ = await ReloadTestSupport.poll(
-            { (try? await Self.searchJSON(through: tool, query: query)) ?? "" },
+            { (try? await Self.searchText(through: tool, query: query)) ?? "" },
             until: isSatisfied,
             timeout: Self.reloadTimeout)
-        return try await Self.searchJSON(through: tool, query: query)
+        return try await Self.searchText(through: tool, query: query)
     }
 
-    /// The `id` field a `search skill` answer carries for `id`.
+    /// Tells whether a plain `search skill` answer lists the skill `id`.
     ///
-    /// `AnyOperation` encodes with sorted keys and no whitespace, thus this
-    /// is the exact text a match for `id` writes.
+    /// The check reads the skill lines of the answer. Thus text elsewhere in
+    /// the answer, for example the query in the heading, never counts as a
+    /// match.
     ///
-    /// - Parameter id: The skill id to look for.
-    /// - Returns: The encoded field text.
-    private static func idField(_ id: String) -> String {
-        "\"id\":\"\(id)\""
+    /// - Parameters:
+    ///   - id: The skill id to look for.
+    ///   - answer: The plain text of one `search skill` answer.
+    /// - Returns: `true` when a skill line of `answer` has the id `id`.
+    private static func lists(_ id: String, in answer: String) -> Bool {
+        SkillLineReader.ids(in: answer).contains(id)
     }
 
     // MARK: - Counted fixture stream

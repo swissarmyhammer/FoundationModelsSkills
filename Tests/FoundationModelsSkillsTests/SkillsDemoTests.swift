@@ -77,18 +77,36 @@ import Testing
 
     // MARK: - Default CLI mode
 
+    /// The fixture skill that the list and search cases look for.
+    private static let commitSkillID = "commit"
+
     @Test func cliListPrintsEveryFixtureSkill() throws {
         let result = try Self.run(arguments: ["skill", "list"])
 
         #expect(result.exitCode == 0)
-        #expect(result.output.contains("\"id\":\"commit\""))
+        let answer = try Self.decodedAnswer(result.output)
+        #expect(SkillLineReader.ids(in: answer).contains(Self.commitSkillID))
     }
 
     @Test func cliSearchFindsTheCommitSkillByIntent() throws {
         let result = try Self.run(arguments: ["skill", "search", "--query", "commit my changes"])
 
         #expect(result.exitCode == 0)
-        #expect(result.output.contains("\"id\":\"commit\""))
+        let answer = try Self.decodedAnswer(result.output)
+        #expect(SkillLineReader.ids(in: answer).first == Self.commitSkillID)
+    }
+
+    /// Decodes the plain answer that the CLI prints as one JSON string.
+    ///
+    /// The CLI writes each answer as one JSON string and then a line break.
+    /// This helper removes that line break and decodes the string.
+    ///
+    /// - Parameter output: The output of the CLI run.
+    /// - Returns: The plain text of the answer.
+    /// - Throws: A decode error when the output is not one JSON string.
+    private static func decodedAnswer(_ output: String) throws -> String {
+        let trimmed = output.hasSuffix("\n") ? String(output.dropLast()) : output
+        return try JSONDecoder().decode(String.self, from: Data(trimmed.utf8))
     }
 
     @Test func cliUseRendersTheCommitSkillBodyWithArguments() throws {

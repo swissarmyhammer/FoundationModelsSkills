@@ -50,6 +50,15 @@ struct SkillOperationsTests {
         return body
     }
 
+    /// The plain text of a successful `search skill` outcome.
+    ///
+    /// - Parameter output: The outcome of `SearchSkill.execute(in:)`.
+    /// - Returns: The text of the answer.
+    /// - Throws: A `#require` failure for a corrective outcome.
+    private static func successText(of output: SearchSkillOutput) throws -> String {
+        try #require(renderedBody(of: output), "expected a success outcome, got \(output)")
+    }
+
     // MARK: - Known deviation: op-level correctives never hit upstream's retry cap
 
     /// Pins the README's documented deviation (`## Known deviations`):
@@ -81,28 +90,26 @@ struct SkillOperationsTests {
 
     // MARK: - Dispatch table: typed outputs (§7)
 
-    @Test func searchSkillDispatchReturnsRankedRowsWithTotal() async throws {
+    @Test func searchSkillDispatchReturnsTheQueryLineAndTheLineOfEachMatch() async throws {
         let tool = try Self.makeFixtureTool()
         let arguments = GeneratedContent(properties: ["op": "search skill", "query": "commit"])
 
-        let json = try await tool.call(arguments: arguments)
+        let answer = try await tool.call(arguments: arguments)
 
-        #expect(json.contains("\"matches\""))
-        #expect(json.contains("\"id\":\"commit\""))
-        #expect(json.contains("\"total\":1"))
+        #expect(answer.hasPrefix("Skills that match \"commit\":\n\n"))
+        #expect(SkillLineReader.ids(in: answer).first == "commit")
     }
 
-    @Test func listSkillDispatchReturnsCatalogRowsWithTotal() async throws {
+    @Test func listSkillDispatchReturnsTheLineOfEachVisibleSkill() async throws {
         let tool = try Self.makeFixtureTool()
         let arguments = GeneratedContent(properties: ["op": "list skill"])
 
-        let json = try await tool.call(arguments: arguments)
+        let ids = SkillLineReader.ids(in: try await tool.call(arguments: arguments))
 
-        #expect(json.contains("\"skills\""))
-        #expect(json.contains("\"id\":\"commit\""))
+        #expect(ids.contains("commit"))
         // `deploy` is model-hidden (`disable-model-invocation: true`) and
         // must never appear on the model-facing `list skill` surface.
-        #expect(!json.contains("\"id\":\"deploy\""))
+        #expect(!ids.contains("deploy"))
     }
 
     @Test func useSkillDispatchReturnsTheRenderedBody() async throws {
@@ -139,15 +146,12 @@ struct SkillOperationsTests {
 
         let output = try await SearchSkill(query: "diagnostic tool", limit: nil).execute(in: context)
 
-        guard case .success(let result) = output else {
-            Issue.record("expected a result outcome, got \(output)")
-            return
-        }
-        #expect(!result.matches.contains { $0.id == "hidden-tool" })
-        #expect(result.matches.contains { $0.id == "visible-tool" })
+        let ids = SkillLineReader.ids(in: try Self.successText(of: output))
+        #expect(!ids.contains("hidden-tool"))
+        #expect(ids.contains("visible-tool"))
     }
 
-    @Test func searchSkillReportsTheRealTotalBeforeTheLimitCap() async throws {
+    @Test func searchSkillGivesNoMoreLinesThanTheLimit() async throws {
         let items = (1...5).map { index in
             SkillMetadata(id: "widget-\(index)", description: "Handles widget tasks.", isModelVisible: true)
         }
@@ -157,26 +161,19 @@ struct SkillOperationsTests {
 
         let output = try await SearchSkill(query: "widget", limit: 2).execute(in: context)
 
-        guard case .success(let result) = output else {
-            Issue.record("expected a result outcome, got \(output)")
-            return
-        }
-        #expect(result.matches.count == 2)
-        #expect(result.total == 5)
+        #expect(SkillLineReader.ids(in: try Self.successText(of: output)).count == 2)
     }
 
-    @Test func listSkillWithANoMatchFilterReturnsAnEmptyListNotACorrective() async throws {
+    @Test func listSkillWithANoMatchFilterReturnsOneLineNotACorrective() async throws {
         let output = try await ListSkill(filter: "no-such-skill-exists").execute(in: Self.makeFixtureContext())
 
-        #expect(output.skills.isEmpty)
-        #expect(output.total == 0)
+        #expect(output == "No skill matches this filter.")
     }
 
     @Test func listSkillFilterMatchesCaseInsensitively() async throws {
         let output = try await ListSkill(filter: "COMMIT").execute(in: Self.makeFixtureContext())
 
-        #expect(output.skills.map(\.id) == ["commit"])
-        #expect(output.total == 1)
+        #expect(SkillLineReader.ids(in: output) == ["commit"])
     }
 
     @Test func useSkillWithAnUnknownIDReturnsACorrectiveCarryingTheCurrentIDs() async throws {
@@ -540,7 +537,7 @@ struct SkillOperationsTests {
 
         let json = try await tool.call(arguments: arguments)
 
-        #expect(json.contains("\"matches\""))
+        #expect(SkillLineReader.ids(in: json).first == "commit")
     }
 
     @Test func resolverAcceptsTheUnderscoreSpellingUseSkill() async throws {
@@ -563,7 +560,7 @@ struct SkillOperationsTests {
 
         let json = try await tool.call(arguments: arguments)
 
-        #expect(json.contains("\"skills\""))
+        #expect(SkillLineReader.ids(in: json).contains("commit"))
     }
 
     @Test func resolverDoesNotAcceptThePluralReversedSpellingSkillsList() async throws {
@@ -592,7 +589,7 @@ struct SkillOperationsTests {
 
         let json = try await tool.call(arguments: arguments)
 
-        #expect(json.contains("\"matches\""))
+        #expect(SkillLineReader.ids(in: json).first == "commit")
     }
 
     @Test func findSkillAliasResolvesCaseInsensitively() async throws {
@@ -604,7 +601,7 @@ struct SkillOperationsTests {
 
         let json = try await tool.call(arguments: arguments)
 
-        #expect(json.contains("\"matches\""))
+        #expect(SkillLineReader.ids(in: json).first == "commit")
     }
 
     @Test func discoverSkillAliasesToSearchSkill() async throws {
@@ -613,7 +610,7 @@ struct SkillOperationsTests {
 
         let json = try await tool.call(arguments: arguments)
 
-        #expect(json.contains("\"matches\""))
+        #expect(SkillLineReader.ids(in: json).first == "commit")
     }
 
     @Test func resolverDoesNotAcceptRunSkillNowThatRunIsClaimedByRunScript() async throws {

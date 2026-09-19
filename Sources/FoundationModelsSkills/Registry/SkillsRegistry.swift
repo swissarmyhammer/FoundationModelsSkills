@@ -33,7 +33,7 @@ public struct SkillMetadata: Sendable, Equatable {
     public var metadata: [String: FrontmatterValue]
 
     /// Placeholder summaries of this skill's parameters, e.g. `"<message>"`,
-    /// `"[env]"` (plan.md §7's `SkillRow.parameters` shape).
+    /// `"[env]"` (the placeholder shape of plan.md §6.1).
     public var parameters: [String]
 
     /// The same parameters `parameters` summarizes, in their original
@@ -53,7 +53,8 @@ public struct SkillMetadata: Sendable, Equatable {
     /// `swissarmyhammer-skills@1.2.0`, or `nil` for a local skill
     /// (marketplace.md §9.1).
     ///
-    /// Display only: `SkillRow` carries it into a `list skill` row. It
+    /// Display only, for a host that reads `SkillsRegistry.metadata()`. The
+    /// model-facing `list skill` and `search skill` lines do not show it. It
     /// stays out of `renderBlock()`, thus a marketplace name can never
     /// change how a search ranks a skill.
     public var source: String?
