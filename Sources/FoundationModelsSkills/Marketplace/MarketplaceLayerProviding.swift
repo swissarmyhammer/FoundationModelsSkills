@@ -76,14 +76,6 @@ public struct MarketplaceLayer: Sendable {
     /// Where the skills under ``layer`` came from.
     public var provenance: MarketplaceProvenance
 
-    /// What the host lets the skills under ``layer`` run
-    /// (marketplace.md §6.6).
-    ///
-    /// A grant removes only the marketplace block. The host `RenderPolicy`
-    /// always wins: a grant can never turn on what the host policy turned
-    /// off.
-    public var grants: MarketplaceGrants
-
     /// Whether a file watcher watches ``layer`` as it watches a local layer
     /// (marketplace.md §7.4).
     ///
@@ -102,18 +94,13 @@ public struct MarketplaceLayer: Sendable {
     /// - Parameters:
     ///   - layer: The layer itself.
     ///   - provenance: Where the skills under that layer came from.
-    ///   - grants: What the host lets the skills under that layer run. The
-    ///     default is ``MarketplaceGrants/none``: no shell injection and no
-    ///     scripts.
     ///   - isWatchable: Whether a file watcher watches the root of the layer.
     ///     The default is `false`, which is the cache-backed root.
     public init(
-        layer: DotfolderStack.Layer, provenance: MarketplaceProvenance,
-        grants: MarketplaceGrants = .none, isWatchable: Bool = false
+        layer: DotfolderStack.Layer, provenance: MarketplaceProvenance, isWatchable: Bool = false
     ) {
         self.layer = layer
         self.provenance = provenance
-        self.grants = grants
         self.isWatchable = isWatchable
     }
 }
@@ -144,31 +131,24 @@ public protocol MarketplaceLayerProviding: Sendable {
     var layerUpdates: AsyncStream<Void> { get }
 }
 
-/// Which marketplace each layer of one catalog generation came from, and
-/// what its skills may run, by layer index.
+/// Which marketplace each layer of one catalog generation came from, by
+/// layer index.
 ///
 /// `DiscoveredSkill.rootIndex` and `ContributingDirectory.rootIndex` are both
 /// indices into the same ordered layer list, thus one lookup by index
-/// serves the winner's provenance, the shadow message, and the grants that
-/// gate the winner's shell injection and scripts (marketplace.md §6.6).
+/// serves the winner's provenance and the shadow message
+/// (marketplace.md §9.1).
 internal struct MarketplaceProvenanceIndex: Sendable {
-    /// What one marketplace layer carries: where its skills came from, and
-    /// what the host lets them run.
+    /// What one marketplace layer carries: where its skills came from.
     internal struct Entry: Sendable {
         /// Where the skills of the layer came from.
         let provenance: MarketplaceProvenance
 
-        /// What the host lets those skills run.
-        let grants: MarketplaceGrants
-
         /// Creates an entry.
         ///
-        /// - Parameters:
-        ///   - provenance: Where the skills of the layer came from.
-        ///   - grants: What the host lets those skills run.
-        init(provenance: MarketplaceProvenance, grants: MarketplaceGrants) {
+        /// - Parameter provenance: Where the skills of the layer came from.
+        init(provenance: MarketplaceProvenance) {
             self.provenance = provenance
-            self.grants = grants
         }
     }
 
@@ -191,15 +171,6 @@ internal struct MarketplaceProvenanceIndex: Sendable {
     ///   that names no layer.
     func provenance(atLayerIndex index: Int) -> MarketplaceProvenance? {
         entry(atLayerIndex: index)?.provenance
-    }
-
-    /// Gives the grants of one layer.
-    ///
-    /// - Parameter index: The index of the layer.
-    /// - Returns: The grants, or `nil` for a local layer or an index that
-    ///   names no layer.
-    func grants(atLayerIndex index: Int) -> MarketplaceGrants? {
-        entry(atLayerIndex: index)?.grants
     }
 
     /// Gives the entry of one layer.

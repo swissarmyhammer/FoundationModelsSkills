@@ -93,8 +93,9 @@ enum ResourceTestSupport {
     /// Writes an executable, shebang-carrying script named `name` under
     /// `id`'s `scripts/` directory.
     ///
-    /// `RunScriptTests` and `MarketplaceGrantsTests` both need a script that
-    /// passes the direct-exec eligibility check, thus the helper is here.
+    /// `RunScriptTests` needs a script that passes the direct-exec
+    /// eligibility check, and the helper stands beside the other
+    /// skill-fixture writers of this file.
     ///
     /// - Parameters:
     ///   - name: The script's file name -- a plain name with no path

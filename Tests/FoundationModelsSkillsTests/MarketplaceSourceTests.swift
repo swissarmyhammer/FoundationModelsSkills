@@ -209,17 +209,11 @@ struct MarketplaceSourceTests {
 
     // MARK: - Defaults
 
-    @Test func aNewSourceHasTheDefaultSelectionAutoUpdateAndGrants() {
+    @Test func aNewSourceHasTheDefaultSelectionAndAutoUpdate() {
         let source = MarketplaceSource(Self.httpsURL)
 
         #expect(source.select == .all)
         #expect(source.autoUpdate)
-        #expect(source.grants == .none)
-    }
-
-    @Test func theNoneGrantsAllowNoShellInjectionAndNoScripts() {
-        #expect(!MarketplaceGrants.none.shellInjection)
-        #expect(!MarketplaceGrants.none.scripts)
     }
 
     // MARK: - Codable
@@ -232,8 +226,7 @@ struct MarketplaceSourceTests {
             path: "catalog",
             alias: "sah",
             select: .skills(["plan", "review"]),
-            autoUpdate: false,
-            grants: MarketplaceGrants(shellInjection: true, scripts: true))
+            autoUpdate: false)
 
         #expect(try roundTrip(source) == source)
     }
@@ -247,12 +240,6 @@ struct MarketplaceSourceTests {
         let decoded = try decode(MarketplaceSource.self, from: #"{"url": "github:acme/skills"}"#)
 
         #expect(decoded == MarketplaceSource("github:acme/skills"))
-    }
-
-    @Test func grantsWithOneFieldDecodeTheOtherFieldAsFalse() throws {
-        let decoded = try decode(MarketplaceGrants.self, from: #"{"scripts": true}"#)
-
-        #expect(decoded == MarketplaceGrants(scripts: true))
     }
 
     @Test(arguments: [

@@ -49,7 +49,6 @@ await store.start()
 | `alias` | A local name. When you set it, it is the pre-fetch key. |
 | `select` | The skills to take: `.all`, `.plugins([…])`, or `.skills([…])`. |
 | `autoUpdate` | Whether the store installs a new commit when it finds one. The default is `true`. |
-| `grants` | What the skills of the marketplace can run. The default is `.none`. |
 
 ## Add a marketplace in `marketplaces.yaml`
 
@@ -267,20 +266,16 @@ that the registry reads:
   it started with. The pending record lives in `state.json`, thus it is a flag
   on the disk and no timer, and it holds after a restart.
 
-## Trust and grants
+## Trust
 
-A marketplace layer always renders untrusted. Its skills have no shell
-injection and no scripts, unless you set a grant for that marketplace:
+A marketplace layer always renders untrusted, as a `user` layer and a
+`project` layer do. It gets no permission switch of its own.
 
-```swift
-MarketplaceSource(
-    "github:acme/team-skills",
-    grants: MarketplaceGrants(shellInjection: true, scripts: true))
-```
-
-The host `RenderPolicy` always wins. A grant can only keep a capability that
-the host left on. It can never turn on a capability that the host turned off.
-The `allowed-tools: Script(<glob>)` grant of the skill is still necessary too.
+The host `RenderPolicy` is the one gate of the shell injection and of
+`run script`, for every layer. A skill of a marketplace runs a shell
+injection when the host policy permits the shell, and runs a script when the
+host policy permits scripts. The `allowed-tools: Script(<glob>)` grant of the
+skill is still necessary for `run script`.
 
 ## Partial scope
 

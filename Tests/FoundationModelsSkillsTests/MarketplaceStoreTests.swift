@@ -114,16 +114,14 @@ struct MarketplaceStoreTests {
 
     // MARK: - Layers
 
-    @Test func eachLayerCarriesTheGrantsOfItsSource() async throws {
+    @Test func eachLayerCarriesTheURLOfItsSource() async throws {
         let fixture = try GitFixtureRepository()
         try fixture.commit(files: Self.skillTree(body: "alpha body"))
-        let source = MarketplaceSource(fixture.url, grants: MarketplaceGrants(shellInjection: true, scripts: true))
-        let cache = try MarketplaceStoreFixture(sources: [source])
+        let cache = try MarketplaceStoreFixture(sources: [MarketplaceSource(fixture.url)])
 
         await cache.store.start()
 
         let layer = try #require(cache.store.marketplaceLayers().first)
-        #expect(layer.grants == MarketplaceGrants(shellInjection: true, scripts: true))
         #expect(layer.provenance.url == fixture.url)
     }
 

@@ -151,6 +151,24 @@ struct MarketplaceConfigTests {
         #expect(config.marketplaces.count == 2)
     }
 
+    @Test func anEntryThatStillCarriesAGrantsKeyLoadsWithTheSameURL() throws {
+        let fixture = try ConfigFixture()
+        defer { fixture.remove() }
+        try MarketplaceTestSupport.writeFile(
+            text: """
+            marketplaces:
+              - url: github:acme/skills
+                grants:
+                  shellInjection: true
+                  scripts: true
+            """,
+            to: fixture.userFile)
+
+        let config = try MarketplaceConfig.load(from: fixture.stack, includeProject: true)
+
+        #expect(config.marketplaces == [MarketplaceSource("github:acme/skills")])
+    }
+
     @Test func aProjectFileHasNoEffectWhenTheProjectIsNotIncluded() throws {
         let fixture = try ConfigFixture()
         defer { fixture.remove() }
@@ -189,8 +207,7 @@ struct MarketplaceConfigTests {
                 path: "catalog",
                 alias: "team",
                 select: .plugins(["sah"]),
-                autoUpdate: false,
-                grants: MarketplaceGrants(shellInjection: true, scripts: true)),
+                autoUpdate: false),
             MarketplaceSource("file:///Users/me/skills", select: .skills(["plan", "review"])),
         ])
 

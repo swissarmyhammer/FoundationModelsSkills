@@ -1,6 +1,7 @@
 import Darwin
 import Foundation
 import FoundationModels
+import FoundationModelsExtras
 import FoundationModelsMetadataRegistry
 import Operations
 import Testing
@@ -122,6 +123,77 @@ struct RunScriptTests {
             return
         }
         #expect(message.contains("not pre-approved"))
+    }
+
+    // MARK: - A marketplace layer runs under the host policy (marketplace.md §6.6)
+
+    /// The id of the skill that a marketplace layer gives the registry.
+    private static let marketplaceSkillID = "marketplace-script"
+
+    /// The display id of the marketplace of that layer.
+    private static let marketplaceID = "a-marketplace"
+
+    /// The commit of the snapshot of that marketplace.
+    private static let marketplaceSHA = "sha-1"
+
+    /// The `allowed-tools:` value that pre-approves every script of a skill.
+    private static let everyScriptGrant = "Script(scripts/*)"
+
+    /// A marketplace layer is an untrusted layer like `user` and `project`.
+    /// The host `RenderPolicy` and the `allowed-tools` grant of the skill
+    /// are the only gates, thus a script of a marketplace skill runs
+    /// exactly as a script of a local skill runs.
+    @Test func aScriptOfAMarketplaceLayerRunsUnderAPermissiveHostPolicy() async throws {
+        let marketplaceRoot = try HotReloadTestSupport.makeTempDirectory()
+        let localRoot = try HotReloadTestSupport.makeTempDirectory()
+        defer {
+            try? FileManager.default.removeItem(at: marketplaceRoot)
+            try? FileManager.default.removeItem(at: localRoot)
+        }
+        try ResourceTestSupport.writeMinimalSkillFile(
+            id: Self.marketplaceSkillID, in: marketplaceRoot, allowedTools: Self.everyScriptGrant)
+        try ResourceTestSupport.writeExecutableShebangScript(
+            named: "run.sh", inSkillID: Self.marketplaceSkillID, under: marketplaceRoot)
+
+        let output = try await RunScript(id: Self.marketplaceSkillID, path: "scripts/run.sh")
+            .execute(in: Self.makeMarketplaceContext(marketplaceRoot: marketplaceRoot, localRoot: localRoot))
+
+        let result = try #require(Self.successResult(of: output))
+        #expect(result.status == "completed")
+        #expect(result.exitCode == 0)
+    }
+
+    /// Builds a `SkillsToolContext` over a registry whose one marketplace
+    /// layer is `marketplaceRoot`, with `localRoot` as the local project
+    /// layer above it.
+    ///
+    /// - Parameters:
+    ///   - marketplaceRoot: The layer root of the marketplace.
+    ///   - localRoot: The root of the local project layer.
+    /// - Returns: The assembled context, under the permissive
+    ///   `RenderPolicy()`.
+    private static func makeMarketplaceContext(marketplaceRoot: URL, localRoot: URL) -> SkillsToolContext {
+        var stack = DotfolderStack(name: "skills", workingDirectory: localRoot, environment: [:])
+        stack.layers = [DotfolderStack.Layer(source: .project, root: localRoot)]
+        let provider = FakeMarketplaceProvider(layers: [
+            MarketplaceTestSupport.makeMarketplaceLayer(
+                root: marketplaceRoot, id: Self.marketplaceID, sha: Self.marketplaceSHA)
+        ])
+        return ResourceTestSupport.makeContext(registry: SkillsRegistry(marketplaces: provider, stack: stack))
+    }
+
+    /// The result of a success outcome, or `nil` for a corrective outcome.
+    ///
+    /// A test unwraps the value with `#require`, thus a corrective outcome
+    /// fails the test instead of ending it before its assertions.
+    ///
+    /// - Parameter output: The outcome of one `run script` call.
+    /// - Returns: The result, or `nil`.
+    private static func successResult(of output: RunScriptOutput) -> RunScriptResult? {
+        if case .success(let result) = output {
+            return result
+        }
+        return nil
     }
 
     // MARK: - Unknown / model-hidden id (decision #22)

@@ -1,7 +1,7 @@
 # Plan: skill marketplaces
 
 **Status: Part B is implemented.** The package holds the store, the cache, the layers, the
-checks and the updates, the pins, the grants, and the `skills marketplace` commands. Read
+checks and the updates, the pins, and the `skills marketplace` commands. Read
 [`docs/marketplaces.md`](docs/marketplaces.md) for the host guide of the behavior that
 shipped, and [`docs/security.md`](docs/security.md) for the security posture. This page stays
 the design record. Part A, the `../skills` repository, is not made yet.
@@ -399,7 +399,6 @@ public struct MarketplaceSource: Sendable, Hashable, Codable {
     public var alias: String?              // a local name; it is the pre-fetch key (§5.3)
     public var select: SkillSelection      // .all (default) | .plugins([String]) | .skills([String])
     public var autoUpdate: Bool            // default true
-    public var grants: MarketplaceGrants   // default .none: no shell injection, no scripts
 }
 
 public actor MarketplaceStore {
@@ -482,17 +481,15 @@ url[k]._partials < defaults < user < project
 
 ### 6.6 Trust and execution
 
-| Capability | Local layers (today) | Marketplace layers |
+| Capability | Local layers | Marketplace layers |
 |---|---|---|
 | Stencil render | trusted for `.defaults`, else untrusted | **always untrusted** |
-| `` !`shell` `` injection | host `RenderPolicy` | **off**, unless `grants.shellInjection` is set for that marketplace |
-| `run script` | host policy + `allowed-tools` grants | **off**, unless `grants.scripts` is set for that marketplace; the `allowed-tools` grant is still necessary |
+| `` !`shell` `` injection | host `RenderPolicy` | host `RenderPolicy` |
+| `run script` | host policy + `allowed-tools` grants | host policy + `allowed-tools` grants |
 
-- Today `RenderPolicy` applies to the full registry. The registry must apply the more
-  restrictive of the registry policy and the grant of the winning marketplace. This is a
-  change in `RenderPipeline` and `ScriptGate`.
-- The copied sah skills use no shell injection and no scripts. Thus the default grants have
-  no effect on them.
+- A marketplace layer is an untrusted layer like `user` and `project`. It gets no permission
+  switch of its own: the host `RenderPolicy` is the one gate, for every layer.
+- The copied sah skills use no shell injection and no scripts.
 
 ### 6.7 Allowlist and blocklist
 
@@ -691,8 +688,9 @@ skills marketplace remove <id>
 
 ## 10. Security summary (additions to `docs/security.md`)
 
-1. A marketplace is untrusted content. It always renders untrusted. It has no shell
-   injection and no scripts unless the host grants them for that marketplace.
+1. A marketplace is untrusted content. It always renders untrusted, as a `user` layer and a
+   `project` layer do. The host `RenderPolicy` is the one gate of the shell injection and of
+   `run script`, for every layer.
 2. The allowlist and the blocklist run before any I/O.
 3. A project `marketplaces.yaml` can add a remote source. Load it only for a trusted folder.
 4. The package does not start the `git` binary. libgit2 runs no hooks, does not fetch
@@ -745,8 +743,7 @@ Each phase ends with green tests. The phase ids continue after plan.md M7.
 - **MK2 — Catalog and local source.** `MarketplaceSource`, catalog parsing (§5.2), selection,
   renames, identity rules, and the `file://` source as a direct layer.
   `SkillsRegistry(marketplaces:stack:watch:)`. Precedence tests.
-- **MK3 — Partial scope and grants.** The §6.5 scoped partials stack. The §6.6 per-marketplace
-  grants in `RenderPipeline` and `ScriptGate`.
+- **MK3 — Partial scope.** The §6.5 scoped partials stack.
 - **MK4 — Git fetch and cache.** Add the exact `swift-libgit2` dependency. The internal
   `GitTransport` protocol and its libgit2 type (remote head, shallow fetch, tree read,
   cancellation, the HTTPS credential callback). The §7.1 location, the §7.2 layout,
@@ -774,8 +771,9 @@ The unit tier stays hermetic. It uses no network (CI requires this).
   A skill from A renders A's header. A local `_partials/header.md` overrides both.
 - **Untrusted render.** A marketplace skill with a filter or a `{% now %}` tag gets the
   untrusted-rejection diagnostic, even with the `.defaults` layer present.
-- **Grants.** A marketplace skill with `` !`echo hi` `` does not run it with default grants. It
-  runs when the host grants `shellInjection` for that marketplace.
+- **One host policy.** A marketplace skill with `` !`echo hi` `` runs it when the host
+  `RenderPolicy` permits the shell, and gives the disabled marker when the policy disables
+  the shell. A local skill answers the same way.
 - **Update cycle.** Commit a change to the fixture repository. `check` reports
   `.updateAvailable`. `update` swaps `current`. The registry reloads once. The searcher gets
   exactly one `update(items:)`. The new body shows. This is the same shape as the hot-reload

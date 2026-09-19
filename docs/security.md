@@ -46,11 +46,11 @@ A marketplace is a git repository, or a folder on this computer, that gives a
 skill layer below the full local stack. [`marketplaces.md`](marketplaces.md) is
 the host guide. These are the rules that hold for every marketplace:
 
-1. **A marketplace is untrusted content.** It always renders untrusted. Its
-   skills have no `` !`shell` `` injection and no scripts, unless the host sets
-   a grant for that one marketplace. The host `RenderPolicy` always wins: a
-   grant can only keep a capability that the host left on, and the
-   `allowed-tools` grant of the skill is still necessary.
+1. **A marketplace is untrusted content.** It always renders untrusted, as a
+   `user` layer and a `project` layer do, and it gets no permission switch of
+   its own. The host `RenderPolicy` is the one gate of the `` !`shell` ``
+   injection and of `run script`, for every layer, and the `allowed-tools`
+   grant of the skill is still necessary for a script.
 2. **The allow-list and the block-list run before any I/O.**
    `MarketplacePolicy.allowedSources` and `MarketplacePolicy.blockedSources`
    are pure functions of the URL. A refused source gets a diagnostic, and the

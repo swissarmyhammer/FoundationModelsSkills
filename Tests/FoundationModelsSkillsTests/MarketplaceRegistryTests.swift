@@ -23,6 +23,13 @@ struct MarketplaceRegistryTests {
     /// The id of the skill every precedence test writes into each layer.
     private static let sharedSkillID = "commit"
 
+    /// A body that holds one shell injection.
+    private static let shellBody = "Greeting: !`echo hi`"
+
+    /// The text that the shell injection of ``shellBody`` writes when it
+    /// runs.
+    private static let shellOutput = "hi"
+
     // MARK: - Precedence (§4.1)
 
     @Test func aLocalSkillWinsOverEveryMarketplaceCopyOfTheSameID() throws {
@@ -47,6 +54,28 @@ struct MarketplaceRegistryTests {
 
         let body = try registry.call(id: Self.sharedSkillID)
         #expect(body.contains("first marketplace body"))
+    }
+
+    // MARK: - Shell injection under the host policy (§6.6)
+
+    @Test func aMarketplaceSkillRunsItsShellInjectionUnderAPermissiveHostPolicy() throws {
+        let fixture = try Fixture(localBody: nil, winningMarketplaceBody: Self.shellBody)
+        let registry = fixture.makeRegistry()
+
+        let body = try registry.call(id: Self.sharedSkillID)
+
+        #expect(body.contains(Self.shellOutput))
+        #expect(!body.contains(ShellInjection.disabledMarker))
+    }
+
+    @Test func aHostPolicyThatDisablesTheShellStopsAMarketplaceSkillInjection() throws {
+        let fixture = try Fixture(localBody: nil, winningMarketplaceBody: Self.shellBody)
+        let registry = fixture.makeRegistry(policy: RenderPolicy(isShellExecutionDisabled: true))
+
+        let body = try registry.call(id: Self.sharedSkillID)
+
+        #expect(body.contains(ShellInjection.disabledMarker))
+        #expect(!body.contains(Self.shellOutput))
     }
 
     // MARK: - Shadow message (§9.1)
@@ -133,14 +162,20 @@ struct MarketplaceRegistryTests {
         ///     `nil` to leave the local root without that skill.
         ///   - reversedMarketplaceOrder: Whether the provider lists the
         ///     second root first. The default is `false`.
+        ///   - winningMarketplaceBody: The body of the copy in the second
+        ///     marketplace root, which wins when the local root holds no
+        ///     copy. The default names that root.
         /// - Throws: The error of a folder or file write.
-        init(localBody: String?, reversedMarketplaceOrder: Bool = false) throws {
+        init(
+            localBody: String?, reversedMarketplaceOrder: Bool = false,
+            winningMarketplaceBody: String = "second marketplace body"
+        ) throws {
             firstRoot = try MarketplaceTestSupport.makeTempDirectory()
             secondRoot = try MarketplaceTestSupport.makeTempDirectory()
             localRoot = try MarketplaceTestSupport.makeTempDirectory()
 
             try Fixture.writeSharedSkill(in: firstRoot, body: "first marketplace body")
-            try Fixture.writeSharedSkill(in: secondRoot, body: "second marketplace body")
+            try Fixture.writeSharedSkill(in: secondRoot, body: winningMarketplaceBody)
             if let localBody {
                 try ReloadTestSupport.writeSkillFile(
                     id: MarketplaceRegistryTests.sharedSkillID, in: localRoot, body: localBody)
@@ -157,11 +192,13 @@ struct MarketplaceRegistryTests {
         /// Builds a registry over the provider and a stack whose only layer
         /// is the local project root.
         ///
+        /// - Parameter policy: The host render policy. The default is the
+        ///   permissive `RenderPolicy()`.
         /// - Returns: The registry, with watching off.
-        func makeRegistry() -> SkillsRegistry {
+        func makeRegistry(policy: RenderPolicy = RenderPolicy()) -> SkillsRegistry {
             var stack = DotfolderStack(name: "skills", workingDirectory: localRoot, environment: [:])
             stack.layers = [DotfolderStack.Layer(source: .project, root: localRoot)]
-            return SkillsRegistry(marketplaces: provider, stack: stack)
+            return SkillsRegistry(marketplaces: provider, stack: stack, policy: policy)
         }
 
         /// Rewrites the shared skill in the second marketplace root and

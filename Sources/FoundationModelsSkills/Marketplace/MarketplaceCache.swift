@@ -127,8 +127,8 @@ internal struct MarketplaceCache: Sendable {
     /// `flock(2)` belongs to the open file description, thus a copy of the
     /// descriptor in a child process keeps the lock alive after this process
     /// closes its own descriptor. A marketplace skill can run a script or a
-    /// shell command (marketplace.md §6.7, the `shellInjection` and `scripts`
-    /// grants), and the host can start a process at any moment.
+    /// shell command under the host `RenderPolicy`, and the host can start a
+    /// process at any moment.
     ///
     /// - `O_CLOEXEC` closes the descriptor at the exec step of a child. This
     ///   alone is not sufficient: `posix_spawn` copies the descriptor table at

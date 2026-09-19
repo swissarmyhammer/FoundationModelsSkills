@@ -1262,7 +1262,7 @@ public actor MarketplaceStore: MarketplaceLayerProviding {
                     layer: MarketplaceLayer(
                         layer: DotfolderStack.Layer(source: .marketplace, root: root),
                         provenance: MarketplaceProvenance(id: entry.key, url: entry.source.url),
-                        grants: entry.source.grants, isWatchable: true),
+                        isWatchable: true),
                     lease: nil)
             }
         }
@@ -1286,8 +1286,7 @@ public actor MarketplaceStore: MarketplaceLayerProviding {
             layer: DotfolderStack.Layer(source: .marketplace, root: cache.currentLink),
             provenance: MarketplaceProvenance(
                 id: stored?.displayID ?? entry.key, url: entry.source.url, sha: sha,
-                catalogVersion: sha == nil ? nil : stored?.catalogVersion),
-            grants: entry.source.grants)
+                catalogVersion: sha == nil ? nil : stored?.catalogVersion))
         return ServedMarketplace(layer: layer, lease: leased ? try? cache.leaseCurrentSnapshot() : nil)
     }
 

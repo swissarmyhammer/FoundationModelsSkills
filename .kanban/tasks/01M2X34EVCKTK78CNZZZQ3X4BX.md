@@ -28,7 +28,8 @@ There is no marketplace grant. The user removed that concept on 2026-09-19. The 
 3. **Render.** Delete `Render/QuarantinedText.swift`, `Render/ArgumentSubstitution.swift`, `Render/ShellInjection.swift`, `Render/StencilPass.swift` and `Render/RenderPipeline.swift` from this package. Each render goes to the Extras facade with a context and a policy.
 4. **The policy comes from this package**: the `RenderPolicy` flags make the policy of the call. The trust does not come from this package; the facade takes it from the layer.
 5. `RenderPolicy` stays public here, because a host sets it on `SkillsRegistry`.
-6. The `marketplaces.yaml` write of the CLI `add` and `remove` commands goes through `MarketplaceConfig.save(to:)` in Extras, which is not this package. That is the reason the rule has no exception.
+6. `CLI/MarketplaceCLIContext.swift` reads `FileManager.default.currentDirectoryPath` for its working directory. Replace it: the context takes `workingDirectory: URL` from its caller, `SkillsCLI` and the demo pass `URL.currentDirectory()`, and the tests pass their temporary directory. No `FileManager` stays in the CLI.
+7. The `marketplaces.yaml` write of the CLI `add` and `remove` commands goes through `MarketplaceConfig.save(to:)` in Extras, which is not this package. That is the reason the rule has no exception.
 
 ## Acceptance Criteria
 
@@ -38,6 +39,7 @@ There is no marketplace grant. The user removed that concept on 2026-09-19. The 
 - [ ] The rendered text of a skill does not change: the tests of the render that are there now pass, with the calls changed only.
 - [ ] A skill from a `.defaults` layer still renders trusted; each other layer renders untrusted.
 - [ ] The shell stays off when `RenderPolicy.isShellExecutionDisabled` is true, for every layer alike.
+- [ ] `MarketplaceCLIContext` takes its working directory from its caller.
 - [ ] `swift build --build-tests` gives 0 warnings, and `swift test` is green.
 
 ## Tests
@@ -45,6 +47,7 @@ There is no marketplace grant. The user removed that concept on 2026-09-19. The 
 - [ ] A new test walks `Sources/` and fails when any file names `FileManager`, `String(contentsOf:)` or `Data(contentsOf:)`, and when any file names Stencil or `TemplateEngine`.
 - [ ] `Tests/FoundationModelsSkillsTests/HotReloadTests.swift` and the render tests that are there now give the same text as before.
 - [ ] `Tests/FoundationModelsSkillsTests/ShellInjectionTests.swift` (or the test that replaces it): the policy of this package turns the shell off through the facade, for a local layer and for a marketplace layer.
+- [ ] `Tests/FoundationModelsSkillsTests/MarketplaceCLITests.swift`: the `add` command writes into the working directory that the test passes to the context.
 - [ ] `swift test` — all tests pass, 0 failures.
 
 ## Workflow

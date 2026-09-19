@@ -36,6 +36,19 @@ struct MarketplaceDocsTests {
     /// The README of the package, relative to the package root.
     private static let readmePath = "README.md"
 
+    /// The design record of the marketplaces, relative to the package root.
+    private static let designRecordPath = "marketplace.md"
+
+    /// The name of the type that carried the per-marketplace grants. The
+    /// host `RenderPolicy` gates every layer now, thus no document may name
+    /// that type any more.
+    private static let removedGrantsTypeName = "MarketplaceGrants"
+
+    /// Every document that describes the marketplaces to a reader.
+    private static let marketplaceDocuments = [
+        hostGuidePath, securityPath, readmePath, designRecordPath,
+    ]
+
     /// The heading of the marketplace section of the security document.
     private static let securityHeading = "## Marketplaces"
 
@@ -89,6 +102,15 @@ struct MarketplaceDocsTests {
         #expect(
             text.contains(claim.text),
             "\(claim.document) must name \"\(claim.text)\"")
+    }
+
+    @Test(arguments: marketplaceDocuments)
+    func noDocumentNamesTheRemovedGrantsType(document: String) throws {
+        let text = try FixtureLibrary.readText(relativePath: document)
+
+        #expect(
+            !text.contains(Self.removedGrantsTypeName),
+            "\(document) must not name \"\(Self.removedGrantsTypeName)\"")
     }
 
     @Test func theHostGuideGivesNoSSHURLAsAnExample() throws {

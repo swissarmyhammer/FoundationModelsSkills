@@ -130,11 +130,10 @@ public struct RunScript: OperationDefinition {
     /// for any `path` -- valid, unknown-id, or confinement-escaping alike --
     /// never a path-shaped corrective ahead of the policy check.
     ///
-    /// The value gate 1 reads is the *effective* policy of `id`
-    /// (`SkillsRegistry.effectivePolicy(id:)`), thus a skill of a
-    /// marketplace that holds no `scripts` grant is refused exactly as a
-    /// host-disabled registry is (marketplace.md §6.6). The host policy
-    /// always wins: a grant never turns on what the host turned off.
+    /// The value gate 1 reads is the host `RenderPolicy` of the registry,
+    /// which gates every layer: a skill of a marketplace layer is refused,
+    /// and permitted, exactly as a skill of a `user` or a `project` layer
+    /// is (marketplace.md §6.6).
     ///
     /// - Parameter context: The shared context supplying the model-visible
     ///   registry.
@@ -146,7 +145,7 @@ public struct RunScript: OperationDefinition {
     ///   `OperationDefinition` protocol requirement.
     public func execute(in context: SkillsToolContext) async throws -> RunScriptOutput {
         let hostPolicyResult = ScriptGate.evaluateHostPolicy(
-            isScriptExecutionDisabled: context.registry.effectivePolicy(id: id).isScriptExecutionDisabled)
+            isScriptExecutionDisabled: context.registry.policy.isScriptExecutionDisabled)
         if case .corrective(let message) = hostPolicyResult {
             return .corrective(message)
         }
