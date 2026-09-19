@@ -32,6 +32,62 @@ comments:
     - No test is skipped or ignored. No warning is present in the build log.
     - next: send the task to review.
   timestamp: 2026-09-19T20:26:05.255393+00:00
+- actor: claude-code
+  id: 01m2xnvp6yj5gmt73xnt98dd9e
+  text: |
+    ### review — findings
+    - evidence: 1 finding (1 confirmed, 0 refuted) — Tests/FoundationModelsSkillsTests/NoStandardOutWriteTests.swift:87; scope `review sha HEAD~1..HEAD`
+    - next: remove the duplicated line-filter helper, then review again
+  timestamp: 2026-09-19T20:31:24.894871+00:00
+- actor: wballard
+  id: 01m2xnwgckef03dx1sdk7prv1w
+  text: |-
+    ### finish iteration 1 — findings
+    - implement: changed — 2 files, 1 new
+    - test: green — swift test, 767 passed, 0 warnings
+    - commit: 8a7a5c0
+    - review: findings — Tests/FoundationModelsSkillsTests/NoStandardOutWriteTests.swift:87
+  timestamp: 2026-09-19T20:31:51.699528+00:00
+- actor: claude-code
+  id: 01m2xp6zp5afty51am19x8gk86
+  text: |
+    Research for the review finding.
+
+    `NoStandardOutWriteTests.disallowedCallLines(in:)` and `NoGitProcessTests.processLinesNamingGit(in:)` hold the same three steps: split the text into lines, keep the lines a test accepts, and give the number of each kept line. The two directory walks under them hold the same steps as well -- read each Swift file of a directory, and write `<directory>/<path>:<line>` for each reported line. Thus the cause is one copied reader, not one copied filter, and the fix removes both copies.
+
+    The test target has no general support file. `FixtureLibrary` resolves paths, `SkillLineReader` reads the answer of a skill operation. The convention is one named `enum` in its own file, so the new reader is `SwiftSourceScan`. `SkillLineReader` has no suite of its own, but `FixtureLibrary` has `FixtureLibraryTests`, thus a suite for the new reader follows the convention.
+
+    Rules read before the edit (`dump validators` over the test file): `reuse` asks for one shared function with the difference as a parameter; `duplication` calls a confirmed copy a blocker; Swift `immutability` says a function belongs to a type, thus the helper is a `static func` on an `enum` and not a top-level `func`; `magic-numbers-swift` allows 0, 1, -1 and 100 inline; `optionals` forbids `guard` in a test body.
+  timestamp: 2026-09-19T20:37:35.045194+00:00
+- actor: claude-code
+  id: 01m2xpdx2dgn2g5g29b877gpe6
+  text: |
+    Work on the review finding.
+
+    The new file `Tests/FoundationModelsSkillsTests/SwiftSourceScan.swift` holds the reader the two guards share. It gives two operations: `lineNumbers(in:matching:)`, which is the function the finding asks for, and `reportedLines(inDirectory:matching:)`, which walks the Swift files of a directory and writes `<directory>/<path>:<line>` for each reported line. The walk went in as well because the two guards held a copy of it too, and the finding says to remove the cause and not only the line it names. A walk that finds no Swift file now throws `ScanError.noSwiftFile`, which replaces the `#expect(!files.isEmpty, ...)` line each guard kept.
+
+    Each guard now holds only what is its own: the text it looks for, and one function that tells whether a line breaks its rule. `NoStandardOutWriteTests` gives `writesToAStandardStream(_:)`, and `NoGitProcessTests` gives `startsAGitProcess(_:)`. `NoGitProcessTests` no longer imports Foundation, because it opens no file now.
+
+    The case `theReportedLineNumberCountsFromOne` stood in both guards. It now stands one time, in the new suite `SwiftSourceScanTests`, beside three more cases: a text with no reported line, the form of a reported line, and the walk that finds no Swift file. Thus the count of tests goes from 767 to 769: four new cases, two removed copies.
+
+    TDD: `SwiftSourceScanTests` came first and the build failed with `cannot find 'SwiftSourceScan' in scope`. `SwiftSourceScan` then made the four cases pass. The two guards moved onto it after that, and the whole suite stayed green.
+  timestamp: 2026-09-19T20:41:21.741529+00:00
+- actor: claude-code
+  id: 01m2xpe24akm113fgpdb5dawxp
+  text: |
+    ### implement — changed
+    - evidence: 4 files -- Tests/FoundationModelsSkillsTests/SwiftSourceScan.swift (new), Tests/FoundationModelsSkillsTests/SwiftSourceScanTests.swift (new), Tests/FoundationModelsSkillsTests/NoStandardOutWriteTests.swift, Tests/FoundationModelsSkillsTests/NoGitProcessTests.swift. `swift build --build-tests`: build complete, 0 warnings, 0 errors. `swift test`: 769 tests in 61 suites, 0 failed, 0 skipped.
+    - next: /review
+  timestamp: 2026-09-19T20:41:26.922426+00:00
+- actor: claude-code
+  id: 01m2xpjhc4v5tpw3pcbzszrr2p
+  text: |-
+    ### test — green
+    - evidence: `swift build --build-tests` gives 0 warnings and exit code 0. `swift test` gives 769 tests in 61 suites, all pass, 0 fail, 0 skip.
+    - The suite `NoStandardOutWriteTests` and the suite `NoGitProcessTests` pass. Each one now calls the shared reader `SwiftSourceScan`. This reader has its own test suite, `SwiftSourceScanTests`, and it also passes.
+    - The build has no `print`, `debugPrint`, `dump`, or `_printChanges` call in `Sources/` or in `Examples/skills-demo`.
+    - next: send to review.
+  timestamp: 2026-09-19T20:43:53.604363+00:00
 position_column: doing
 position_ordinal: '80'
 title: The demo chat mode writes to standard out with print
@@ -55,3 +111,12 @@ The rule `code-hygiene/disallowed-constructs-swift` -- `no_direct_standard_out_l
 - [x] `swift build --build-tests` gives 0 warnings, and `swift test` is green.
 
 #skills #code-hygiene
+
+## Review Findings (2026-09-19 15:27)
+
+> Scope: `review sha HEAD~1..HEAD` — reviewed the diffs only — lines this change added or modified. 2 file(s) reviewed, 4 not reviewed.
+
+> 4 file(s) not reviewed — excluded by an ignore rule:
+> - `.kanban/ (from .reviewignore)` — 4 file(s)
+
+- [x] `Tests/FoundationModelsSkillsTests/NoStandardOutWriteTests.swift:87` `reuse/reuse` — The `disallowedCallLines` function reimplements the line-filtering pattern that already exists as `processLinesNamingGit` in NoGitProcessTests.swift. Both take text, split into lines, filter based on conditions, and return line numbers. A shared parameterized function should be extracted instead of duplicating the logic. Extract a shared helper function like `func lineNumbers(in text: String, matching predicate: (String) -> Bool) -> [Int]` in a common test utilities module, or generalize one of the existing functions to accept a predicate parameter.
