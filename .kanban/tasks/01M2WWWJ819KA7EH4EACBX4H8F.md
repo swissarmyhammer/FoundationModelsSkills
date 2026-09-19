@@ -87,10 +87,26 @@ comments:
     - evidence: `swift build --build-tests -Xswiftc -warnings-as-errors` — build complete, 0 warnings; `swift test` — 742 passed, 0 failed, 0 skipped, 58 suites
     - next: ready for review
   timestamp: 2026-09-19T14:32:52.826772+00:00
+- actor: claude-code
+  id: 01m2x1h49zmr1759t8yjs821sc
+  text: |
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (760b86c) — 0 findings, 0 confirmed, 0 refuted, 7 validator runs attempted, 0 failed. 2 files reviewed; 2 `.kanban/` files not reviewed by the ignore rule. The two findings of 2026-09-19 09:14 are marked done.
+    - next: none. The task moves to `done`.
+  timestamp: 2026-09-19T14:36:07.359591+00:00
+- actor: claude-code
+  id: 01m2x1j2xze77bxvgnmt3xx4vs
+  text: |-
+    ### finish iteration 2 — clean
+    - implement: changed — 2 files, 2 of 2 findings checked
+    - test: green — swift test, 742 passed, 0 warnings
+    - commit: 760b86c
+    - review: clean — 0 findings; task moved to done
+  timestamp: 2026-09-19T14:36:38.719752+00:00
 depends_on:
 - 01M2WWWJ05944J8A9G1VA3JM8Z
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: f780
 title: The skills search result must be plain text that names the load command
 ---
 ## What
