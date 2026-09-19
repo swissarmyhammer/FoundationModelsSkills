@@ -88,8 +88,24 @@ comments:
     - The build has no `print`, `debugPrint`, `dump`, or `_printChanges` call in `Sources/` or in `Examples/skills-demo`.
     - next: send to review.
   timestamp: 2026-09-19T20:43:53.604363+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01m2xprare2wh263sjnxaxzry4
+  text: |-
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (commit 46233e6) — 0 findings, 0 confirmed, 0 refuted, 7 attempted. 4 files reviewed, 2 not reviewed (.kanban, from .reviewignore). The one earlier finding of 2026-09-19 15:27 is marked done.
+    - next: none. The card moves to done.
+  timestamp: 2026-09-19T20:47:03.438982+00:00
+- actor: wballard
+  id: 01m2xpsahg6h82hqe38erp53e7
+  text: |-
+    ### finish iteration 2 — clean
+    - implement: changed — 4 files, 2 new; 1 of 1 findings checked
+    - test: green — swift test, 769 passed, 0 warnings
+    - commit: 46233e6
+    - review: clean — 0 findings; task moved to done
+  timestamp: 2026-09-19T20:47:35.984557+00:00
+position_column: done
+position_ordinal: fc80
 title: The demo chat mode writes to standard out with print
 ---
 ## What

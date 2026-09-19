@@ -2,11 +2,16 @@ import Foundation
 
 /// The path-confinement invariant every resource operation enforces
 /// (plan.md §7.3): a skill-relative path, symlinks resolved, must land
-/// inside the skill directory.
+/// inside a layer directory of the skill.
 ///
 /// Shared by `ListResource` (per enumerated entry) and `ReadResource` (its
 /// `path` parameter) so the two operations can never drift on what counts
 /// as an escape.
+///
+/// The unit of override is the file, thus a skill has more than one layer
+/// directory and a legal file can be in a lower one. The list form reads each
+/// of them; the one-directory form is that same form over a list of one, thus
+/// the two can never differ.
 internal enum PathConfinement {
     /// Resolves `relativePath` against `skillDirectory`, enforcing
     /// confinement.
@@ -19,11 +24,65 @@ internal enum PathConfinement {
     ///   `relativePath` is empty, absolute, `..`-traversing, or resolves --
     ///   directly or through a symlink -- outside `skillDirectory`.
     internal static func resolvedURL(relativePath: String, in skillDirectory: URL) -> URL? {
-        guard Self.isWellFormedRelativePath(relativePath) else { return nil }
+        Self.resolvedURL(relativePath: relativePath, in: [skillDirectory])
+    }
 
-        let resolvedDirectory = skillDirectory.resolvingSymlinksInPath().standardizedFileURL
+    /// Resolves `relativePath` against the layer directories of one skill,
+    /// enforcing confinement in each of them.
+    ///
+    /// - Parameters:
+    ///   - relativePath: A path relative to a layer directory, e.g.
+    ///     `"references/notes.md"`.
+    ///   - directories: The layer directories of the skill, **highest
+    ///     precedence first**. `SkillOverlay` gives them in that order.
+    /// - Returns: The resolved, symlink-free URL of the winning copy, or
+    ///   `nil` when `relativePath` is empty, absolute, `..`-traversing, or
+    ///   resolves -- directly or through a symlink -- outside each of
+    ///   `directories`.
+    internal static func resolvedURL(relativePath: String, in directories: [URL]) -> URL? {
+        Self.winningCopy(relativePath: relativePath, in: directories)?.url
+    }
+
+    /// The winning copy of `relativePath`, and which directory gave it.
+    ///
+    /// Reads `directories` in order and gives the first copy that exists and
+    /// that is inside its own directory. When no directory holds the path,
+    /// gives the resolved location in the first directory that confines it: a
+    /// caller then reports that the file could not be read, and not that the
+    /// path is denied.
+    ///
+    /// - Parameters:
+    ///   - relativePath: A path relative to a layer directory.
+    ///   - directories: The layer directories of the skill, highest
+    ///     precedence first.
+    /// - Returns: The URL of the winning copy and the position of its
+    ///   directory in `directories`, or `nil` when no directory confines the
+    ///   path.
+    internal static func winningCopy(
+        relativePath: String, in directories: [URL]
+    ) -> (url: URL, directoryIndex: Int)? {
+        guard Self.isWellFormedRelativePath(relativePath) else { return nil }
+        let confinedCopies = directories.enumerated().compactMap { index, directory in
+            Self.confinedURL(relativePath: relativePath, in: directory)
+                .map { (url: $0, directoryIndex: index) }
+        }
+        let existing = confinedCopies.first { FileManager.default.fileExists(atPath: $0.url.path) }
+        return existing ?? confinedCopies.first
+    }
+
+    /// The resolved location of `relativePath` in one directory, whether or
+    /// not a file is there.
+    ///
+    /// - Parameters:
+    ///   - relativePath: A path relative to `directory`, already checked by
+    ///     `isWellFormedRelativePath(_:)`.
+    ///   - directory: The layer directory to resolve against.
+    /// - Returns: The resolved, symlink-free URL, or `nil` when it leaves
+    ///   `directory`.
+    private static func confinedURL(relativePath: String, in directory: URL) -> URL? {
+        let resolvedDirectory = directory.resolvingSymlinksInPath().standardizedFileURL
         let resolvedCandidate = Self.resolvingSymlinksOfExistingPrefix(
-            skillDirectory.appendingPathComponent(relativePath))
+            directory.appendingPathComponent(relativePath))
 
         guard Self.isContained(resolvedCandidate, in: resolvedDirectory) else { return nil }
         return resolvedCandidate
