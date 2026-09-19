@@ -11,6 +11,10 @@ import Operations
 /// `SkillsDemoTests` instead exercises the deterministic
 /// `SKILLS_DEMO_FORCE_UNAVAILABLE` seam, which short-circuits before ever
 /// touching `SystemLanguageModel`.
+///
+/// Each line of the mode goes to standard output through `StandardStream`,
+/// the one line writer of the package, the way `WatchMode` and
+/// `SkillsDemoMain` write. Thus this mode holds no writing of its own.
 enum ChatMode {
     /// The environment variable key that forces the unavailable-degradation
     /// branch.
@@ -27,6 +31,10 @@ enum ChatMode {
     /// `availability` switch's `@unknown default` in `run(environment:)`, so
     /// the two can never drift on its wording.
     private static let unknownReasonText = "unknown reason"
+
+    /// The text that stands for the op string of a turn in which the model
+    /// called the skills tool no time.
+    private static let noCallText = "none"
 
     /// One scripted prompt and the op the skills tool is expected to
     /// dispatch in response.
@@ -52,7 +60,7 @@ enum ChatMode {
     private static let sessionInstructions =
         "You use the skills tool to search and run skills from the local library."
 
-    /// Runs the scripted validation, or prints a clean, deterministic
+    /// Runs the scripted validation, or writes a clean, deterministic
     /// unavailable message and returns without touching
     /// `SystemLanguageModel` at all.
     ///
@@ -60,16 +68,16 @@ enum ChatMode {
     ///   Defaults to the real process environment.
     static func run(environment: [String: String] = ProcessInfo.processInfo.environment) async {
         guard environment[forceUnavailableEnvKey] == nil else {
-            Self.printUnavailable(reasonText: "forced unavailable for testing")
+            Self.writeUnavailable(reasonText: "forced unavailable for testing")
             return
         }
         switch SystemLanguageModel.default.availability {
         case .available:
             await runValidation()
         case .unavailable(let reason):
-            Self.printUnavailable(reasonText: Self.reasonText(for: reason))
+            Self.writeUnavailable(reasonText: Self.reasonText(for: reason))
         @unknown default:
-            Self.printUnavailable(reasonText: Self.unknownReasonText)
+            Self.writeUnavailable(reasonText: Self.unknownReasonText)
         }
     }
 
@@ -94,13 +102,14 @@ enum ChatMode {
         reasonTexts[reason] ?? Self.unknownReasonText
     }
 
-    /// Prints the clean, deterministic degradation message every unavailable
+    /// Writes the clean, deterministic degradation message every unavailable
     /// path (real or forced) shares.
     ///
     /// - Parameter reasonText: The human-readable reason the model is
     ///   unavailable.
-    private static func printUnavailable(reasonText: String) {
-        print("Foundation Models unavailable on this device (\(reasonText)); skipping live validation.")
+    private static func writeUnavailable(reasonText: String) {
+        StandardStream.output.write(
+            line: "Foundation Models unavailable on this device (\(reasonText)); skipping live validation.")
     }
 
     /// Builds the fused tool and root session over `SkillsDemoAssembly`, then
@@ -120,11 +129,11 @@ enum ChatMode {
                 await Self.evaluate(scripted, session: session, toolName: tool.name)
             }
         } catch {
-            print("Live validation failed: \(error)")
+            StandardStream.output.write(line: "Live validation failed: \(error)")
         }
     }
 
-    /// Sends one scripted prompt to `session` and prints whether the
+    /// Sends one scripted prompt to `session` and writes whether the
     /// resulting tool call matched its expected op.
     ///
     /// - Parameters:
@@ -137,9 +146,11 @@ enum ChatMode {
             _ = try await session.respond(to: scripted.prompt)
             let actual = Self.lastToolCallOpString(in: session.transcript, toolName: toolName)
             let status = actual == scripted.expectedOpString ? "OK" : "MISS"
-            print("[\(status)] \"\(scripted.prompt)\" -> expected '\(scripted.expectedOpString)', got '\(actual ?? "none")'")
+            let dispatched = actual ?? Self.noCallText
+            StandardStream.output.write(
+                line: "[\(status)] \"\(scripted.prompt)\" -> expected '\(scripted.expectedOpString)', got '\(dispatched)'")
         } catch {
-            print("[ERROR] \"\(scripted.prompt)\" -> \(error)")
+            StandardStream.output.write(line: "[ERROR] \"\(scripted.prompt)\" -> \(error)")
         }
     }
 
