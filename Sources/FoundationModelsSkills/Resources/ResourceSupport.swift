@@ -88,6 +88,42 @@ internal enum ResourceIDLookup {
         }
     }
 
+    /// Resolves `id`, then runs `whenGranted` with the combined view of the
+    /// layer directories of the skill.
+    ///
+    /// The unit of override is the file, thus an operation that reads a file
+    /// of a skill reads it through this overlay: a file that only a lower
+    /// layer holds stays visible, and the copy of the highest layer wins.
+    ///
+    /// - Parameters:
+    ///   - id: The skill id to resolve.
+    ///   - context: The shared context supplying the registry.
+    ///   - whenGranted: Runs with the overlay of the skill once `id`
+    ///     resolves; never runs at all when it does not.
+    /// - Returns: `whenGranted`'s result, or the corrective message for an
+    ///   id that did not resolve.
+    internal static func withResolvedOverlay<Success: Encodable & Sendable & Equatable>(
+        id: String, context: SkillsToolContext, whenGranted: (SkillOverlay) async -> CorrectiveOutcome<Success>
+    ) async -> CorrectiveOutcome<Success> {
+        await Self.withResolvedDirectory(id: id, context: context) { _ in
+            await whenGranted(Self.overlay(id: id, context: context))
+        }
+    }
+
+    /// The combined view of the layer directories of `id`.
+    ///
+    /// Every catalog entry carries a minimum of one contributing directory --
+    /// the directory that gives its `SKILL.md` -- thus the overlay of an id
+    /// that resolved holds a minimum of one directory.
+    ///
+    /// - Parameters:
+    ///   - id: The skill id, already resolved.
+    ///   - context: The shared context supplying the registry.
+    /// - Returns: The overlay over the layer directories of the skill.
+    private static func overlay(id: String, context: SkillsToolContext) -> SkillOverlay {
+        SkillOverlay(directories: context.registry.contributingDirectories(id: id).map(\.directory))
+    }
+
     /// The corrective message for an id that is unknown, stale, or not
     /// visible on this surface, carrying the current usable id list
     /// (decision #22).

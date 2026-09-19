@@ -2,12 +2,16 @@ import Foundation
 import FoundationModelsMetadataRegistry
 import FoundationModelsSkills
 
-/// Shared skill-fixture helpers for `ResourceOpsTests` and `RunScriptTests`
-/// -- both write a minimal, always-valid `SKILL.md` under a temp root and
-/// both build a `SkillsToolContext` the identical way; `RunScriptTests`'
-/// `allowed-tools:`/`policy` variants fold in as optional parameters, since
-/// the two were otherwise byte-identical (review findings, 2026-07-29
-/// 22:27 and 22:36).
+/// Shared skill-fixture helpers for `ResourceOpsTests`, `RunScriptTests` and
+/// `ScriptGateTests` -- each writes a minimal, always-valid `SKILL.md` under
+/// a temp root and each builds a `SkillsToolContext` the identical way;
+/// `RunScriptTests`' `allowed-tools:`/`policy` variants fold in as optional
+/// parameters, since the two were otherwise byte-identical (review findings,
+/// 2026-07-29 22:27 and 22:36).
+///
+/// The readers of one `run script` outcome are here for the same reason: two
+/// test files unwrap a `RunScriptOutput`, thus neither keeps a copy of that
+/// reader.
 enum ResourceTestSupport {
     /// Builds a `SkillsToolContext` over `roots`, under `policy`.
     ///
@@ -34,6 +38,39 @@ enum ResourceTestSupport {
     static func makeContext(registry: SkillsRegistry) -> SkillsToolContext {
         let searcher = MetadataSearcher(items: registry.metadata().filter(\.isModelVisible))
         return SkillsToolContext(registry: registry, searchAgent: SkillSearchAgent(searcher: searcher))
+    }
+
+    /// The `allowed-tools:` value that pre-approves every script of a skill.
+    static let everyScriptGrant = "Script(scripts/*)"
+
+    /// The result of a success outcome of `run script`, or `nil` for a
+    /// corrective outcome.
+    ///
+    /// A test unwraps the value with `#require`, thus a corrective outcome
+    /// fails the test instead of ending it before its assertions.
+    ///
+    /// - Parameter output: The outcome of one `run script` call.
+    /// - Returns: The result, or `nil`.
+    static func successResult(of output: RunScriptOutput) -> RunScriptResult? {
+        if case .success(let result) = output {
+            return result
+        }
+        return nil
+    }
+
+    /// The message of a corrective outcome of `run script`, or `nil` for a
+    /// success outcome.
+    ///
+    /// The counterpart of `successResult(of:)`, for a test that holds the
+    /// operation to a corrective message.
+    ///
+    /// - Parameter output: The outcome of one `run script` call.
+    /// - Returns: The corrective message, or `nil`.
+    static func correctiveMessage(of output: RunScriptOutput) -> String? {
+        if case .corrective(let message) = output {
+            return message
+        }
+        return nil
     }
 
     /// Thrown by `writeMinimalSkillFile(id:in:allowedTools:)` when `id` is

@@ -68,8 +68,24 @@ comments:
     - evidence: 0 source files changed. The finding asked to move `PathConfinementTests` and `SkillOverlayTests` onto `LayerFixtureSupport`; both suites call it already, since commit e8b6c29, and no copy of a helper is left in `Tests/`. `swift build --build-tests` exit 0, 0 warnings. `swift test` exit 0, 783 tests in 63 suites, 0 failures, 0 skipped. The card item is checked, with the check evidence in the comment above.
     - next: review
   timestamp: 2026-09-19T21:26:04.509931+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01m2xs5rytwq679swyq5fngfd5
+  text: |-
+    ### review — clean
+    - evidence: `review sha d6e1c96~1..d6e1c96` — 0 findings, 0 confirmed, 0 refuted; 2 files reviewed, 6 files not reviewed (.kanban ignore rule). The one earlier finding of 2026-09-19 16:19 is checked.
+    - next: none. The card moves to done.
+  timestamp: 2026-09-19T21:29:21.114014+00:00
+- actor: wballard
+  id: 01m2xs6m926pvaj0vhj9vxdmwx
+  text: |-
+    ### finish iteration 2 — clean
+    - implement: no-change — the finding was not true; the item is checked with evidence
+    - test: green — swift test, 783 passed, 0 warnings
+    - commit: 60d078f (card only)
+    - review: clean — 0 findings; task moved to done
+  timestamp: 2026-09-19T21:29:49.090638+00:00
+position_column: done
+position_ordinal: fe80
 title: SkillDiscoveryTests keeps private copies of the layer-fixture helpers
 ---
 ## What

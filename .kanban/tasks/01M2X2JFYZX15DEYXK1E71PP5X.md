@@ -1,4 +1,12 @@
 ---
+comments:
+- actor: claude-code
+  id: 01m2xst3vmh2s5qdg0da2mj8tk
+  text: |
+    One more document line for this card, found while card ^2hmmnga ran.
+
+    plan.md §7.3 (the `run script` row) and the M6 line of the milestones both state "cwd = the skill directory". One skill now has more than one layer directory. `RunScript` runs the winning copy of the script with the layer directory that gave that copy as the working directory. The words of plan.md need that correction.
+  timestamp: 2026-09-19T21:40:27.636986+00:00
 depends_on:
 - 01M2X2J679TGA1ENB64G9JT4SQ
 - 01M2X2JAVD898YDFT802HMMNGA

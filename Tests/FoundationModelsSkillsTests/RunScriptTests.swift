@@ -1,7 +1,6 @@
 import Darwin
 import Foundation
 import FoundationModels
-import FoundationModelsExtras
 import FoundationModelsMetadataRegistry
 import Operations
 import Testing
@@ -126,75 +125,86 @@ struct RunScriptTests {
         #expect(message.contains("not pre-approved"))
     }
 
-    // MARK: - A marketplace layer runs under the host policy (marketplace.md §6.6)
+    // MARK: - The combined view of the layer directories
 
-    /// The id of the skill that a marketplace layer gives the registry.
-    private static let marketplaceSkillID = "marketplace-script"
+    /// The id of the skill that the two layer directories of the combined-view
+    /// tests give.
+    private static let overlaySkillID = "overlay-script"
 
-    /// The display id of the marketplace of that layer.
-    private static let marketplaceID = "a-marketplace"
+    /// The file name of the script of the combined-view tests.
+    private static let overlayScriptName = "report.sh"
 
-    /// The commit of the snapshot of that marketplace.
-    private static let marketplaceSHA = "sha-1"
+    /// The skill-relative path of that script.
+    private static let overlayScriptPath = "scripts/\(overlayScriptName)"
 
-    /// The `allowed-tools:` value that pre-approves every script of a skill.
-    private static let everyScriptGrant = "Script(scripts/*)"
+    /// The word the copy of the lower layer writes.
+    private static let lowerLayerWord = "lower-layer"
 
-    /// A marketplace layer is an untrusted layer like `user` and `project`.
-    /// The host `RenderPolicy` and the `allowed-tools` grant of the skill
-    /// are the only gates, thus a script of a marketplace skill runs
-    /// exactly as a script of a local skill runs.
-    @Test func aScriptOfAMarketplaceLayerRunsUnderAPermissiveHostPolicy() async throws {
-        let marketplaceRoot = try HotReloadTestSupport.makeTempDirectory()
-        let localRoot = try HotReloadTestSupport.makeTempDirectory()
-        defer {
-            try? FileManager.default.removeItem(at: marketplaceRoot)
-            try? FileManager.default.removeItem(at: localRoot)
-        }
-        try ResourceTestSupport.writeMinimalSkillFile(
-            id: Self.marketplaceSkillID, in: marketplaceRoot, allowedTools: Self.everyScriptGrant)
+    /// The word the copy of the higher layer writes.
+    private static let higherLayerWord = "higher-layer"
+
+    /// A script that writes `word` and stops.
+    ///
+    /// The two copies of one path write different words, thus the output of a
+    /// run names the layer that gave the copy that ran.
+    ///
+    /// - Parameter word: The word the script writes.
+    /// - Returns: The whole text of the script, the shebang line included.
+    private static func script(writing word: String) -> String {
+        "#!/bin/sh\necho \(word)\n"
+    }
+
+    /// The one output line a script of `script(writing:)` gives.
+    ///
+    /// - Parameter word: The word the script wrote.
+    /// - Returns: The line as `RunScriptResult.output` numbers it.
+    private static func onlyOutputLine(of word: String) -> String {
+        "1: \(word)"
+    }
+
+    /// The unit of override is the file, thus a script that only a lower layer
+    /// holds runs, although a higher layer gives the `SKILL.md` of the skill.
+    @Test func aScriptThatOnlyALowerLayerHoldsRuns() async throws {
+        let directories = try LayerFixtureSupport.makeLayerDirectories(count: 2)
+        defer { LayerFixtureSupport.removeDirectories(directories) }
+        let (lower, higher) = (directories[0], directories[1])
         try ResourceTestSupport.writeExecutableShebangScript(
-            named: "run.sh", inSkillID: Self.marketplaceSkillID, under: marketplaceRoot)
+            named: Self.overlayScriptName, inSkillID: Self.overlaySkillID, under: lower,
+            contents: Self.script(writing: Self.lowerLayerWord))
+        try ResourceTestSupport.writeMinimalSkillFile(
+            id: Self.overlaySkillID, in: higher, allowedTools: ResourceTestSupport.everyScriptGrant)
 
-        let output = try await RunScript(id: Self.marketplaceSkillID, path: "scripts/run.sh")
-            .execute(in: Self.makeMarketplaceContext(marketplaceRoot: marketplaceRoot, localRoot: localRoot))
+        let output = try await RunScript(id: Self.overlaySkillID, path: Self.overlayScriptPath)
+            .execute(in: Self.makeContext(roots: [lower, higher]))
 
-        let result = try #require(Self.successResult(of: output))
+        let result = try #require(
+            ResourceTestSupport.successResult(of: output), "expected a success outcome, got \(output)")
         #expect(result.status == "completed")
-        #expect(result.exitCode == 0)
+        #expect(result.output == [Self.onlyOutputLine(of: Self.lowerLayerWord)])
     }
 
-    /// Builds a `SkillsToolContext` over a registry whose one marketplace
-    /// layer is `marketplaceRoot`, with `localRoot` as the local project
-    /// layer above it.
-    ///
-    /// - Parameters:
-    ///   - marketplaceRoot: The layer root of the marketplace.
-    ///   - localRoot: The root of the local project layer.
-    /// - Returns: The assembled context, under the permissive
-    ///   `RenderPolicy()`.
-    private static func makeMarketplaceContext(marketplaceRoot: URL, localRoot: URL) -> SkillsToolContext {
-        var stack = DotfolderStack(name: "skills", workingDirectory: localRoot, environment: [:])
-        stack.layers = [DotfolderStack.Layer(source: .project, root: localRoot)]
-        let provider = FakeMarketplaceProvider(layers: [
-            MarketplaceTestSupport.makeMarketplaceLayer(
-                root: marketplaceRoot, id: Self.marketplaceID, sha: Self.marketplaceSHA)
-        ])
-        return ResourceTestSupport.makeContext(registry: SkillsRegistry(marketplaces: provider, stack: stack))
-    }
+    /// Two layers hold one script path, thus the copy of the higher layer
+    /// runs, although the lower layer gives the `SKILL.md` of the skill.
+    @Test func aScriptThatTwoLayersHoldRunsTheCopyOfTheHigherLayer() async throws {
+        let directories = try LayerFixtureSupport.makeLayerDirectories(count: 2)
+        defer { LayerFixtureSupport.removeDirectories(directories) }
+        let (lower, higher) = (directories[0], directories[1])
+        try ResourceTestSupport.writeMinimalSkillFile(
+            id: Self.overlaySkillID, in: lower, allowedTools: ResourceTestSupport.everyScriptGrant)
+        try ResourceTestSupport.writeExecutableShebangScript(
+            named: Self.overlayScriptName, inSkillID: Self.overlaySkillID, under: lower,
+            contents: Self.script(writing: Self.lowerLayerWord))
+        try ResourceTestSupport.writeExecutableShebangScript(
+            named: Self.overlayScriptName, inSkillID: Self.overlaySkillID, under: higher,
+            contents: Self.script(writing: Self.higherLayerWord))
 
-    /// The result of a success outcome, or `nil` for a corrective outcome.
-    ///
-    /// A test unwraps the value with `#require`, thus a corrective outcome
-    /// fails the test instead of ending it before its assertions.
-    ///
-    /// - Parameter output: The outcome of one `run script` call.
-    /// - Returns: The result, or `nil`.
-    private static func successResult(of output: RunScriptOutput) -> RunScriptResult? {
-        if case .success(let result) = output {
-            return result
-        }
-        return nil
+        let output = try await RunScript(id: Self.overlaySkillID, path: Self.overlayScriptPath)
+            .execute(in: Self.makeContext(roots: [lower, higher]))
+
+        let result = try #require(
+            ResourceTestSupport.successResult(of: output), "expected a success outcome, got \(output)")
+        #expect(result.status == "completed")
+        #expect(result.output == [Self.onlyOutputLine(of: Self.higherLayerWord)])
     }
 
     // MARK: - Unknown / model-hidden id (decision #22)
@@ -357,7 +367,8 @@ struct RunScriptTests {
             timeout: Self.failedToSpawnTimeoutSeconds
         ).execute(in: Self.makeContext(roots: [root]))
 
-        let result = try #require(Self.successResult(of: output), "expected a success outcome, got \(output)")
+        let result = try #require(
+            ResourceTestSupport.successResult(of: output), "expected a success outcome, got \(output)")
         #expect(result.status == "failed")
         #expect(result.exitCode == nil)
         #expect(result.durationMs == 0)

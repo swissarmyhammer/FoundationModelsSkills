@@ -123,7 +123,15 @@ public struct RunScript: OperationDefinition {
     /// The `timeout` used when the caller omits one.
     public static let defaultTimeoutSeconds = 60
 
-    /// Runs `path` under `id`'s directory, or returns a corrective message.
+    /// Runs `path` of the combined view of `id`, or returns a corrective
+    /// message.
+    ///
+    /// The unit of override is the file, thus the script comes from the
+    /// overlay of the layer directories of the skill (plan.md §3): a script
+    /// that only a lower layer holds runs, and the copy of the highest layer
+    /// that holds the path wins. The working directory of the run is the
+    /// layer directory that gave the winning copy, thus a script reaches the
+    /// files beside it with a relative path.
     ///
     /// Evaluates gate 1 (host policy) first, before any id lookup or path
     /// resolution (plan.md §7.3.1: "triple-gated, every check at dispatch"):
@@ -151,11 +159,11 @@ public struct RunScript: OperationDefinition {
             return .corrective(message)
         }
 
-        return await ResourceIDLookup.withResolvedDirectory(id: id, context: context) { skillDirectory in
+        return await ResourceIDLookup.withResolvedOverlay(id: id, context: context) { overlay in
             guard path.hasPrefix(scriptsDirectoryPrefix) else {
                 return .corrective(Self.notUnderScriptsMessage(path: path))
             }
-            guard let resolved = PathConfinement.resolvedURL(relativePath: path, in: skillDirectory) else {
+            guard let winning = overlay.resolve(path) else {
                 return .corrective(PathConfinement.deniedMessage(path: path))
             }
 
@@ -164,11 +172,13 @@ public struct RunScript: OperationDefinition {
                 return .corrective(message)
             }
 
-            if let issue = Self.executabilityIssue(path: path, at: resolved) {
+            if let issue = Self.executabilityIssue(path: path, at: winning.url) {
                 return .corrective(issue)
             }
 
-            return .success(await result(ofRunning: resolved, in: skillDirectory))
+            return .success(
+                await result(
+                    ofRunning: winning.url, in: overlay.directories[winning.directoryIndex]))
         }
     }
 
@@ -215,8 +225,8 @@ public struct RunScript: OperationDefinition {
     /// - Parameters:
     ///   - executableURL: The script file to exec, already resolved and
     ///     confined.
-    ///   - workingDirectory: The child's working directory -- the skill's own
-    ///     directory.
+    ///   - workingDirectory: The child's working directory -- the layer
+    ///     directory that gave the winning copy of the script.
     /// - Returns: The result of the run.
     private func result(ofRunning executableURL: URL, in workingDirectory: URL) async -> RunScriptResult {
         do {
