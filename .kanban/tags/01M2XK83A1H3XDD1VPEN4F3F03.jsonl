@@ -1,0 +1,1 @@
+{"id":"01M2XK83A1VM43FMP1PV8Z86P6","timestamp":"2026-09-19T19:45:45.793909Z","op":"create","item_id":"01M2XK83A1H3XDD1VPEN4F3F03","forward_patch":"--- original\n+++ modified\n@@ -0,0 +1,2 @@\n+color: '5319e7'\n+tag_name: code-hygiene\n","reverse_patch":"--- original\n+++ modified\n@@ -1,2 +0,0 @@\n-color: '5319e7'\n-tag_name: code-hygiene\n","transaction_id":null}

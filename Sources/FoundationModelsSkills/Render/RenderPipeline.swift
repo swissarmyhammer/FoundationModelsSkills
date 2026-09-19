@@ -40,12 +40,19 @@ public struct RenderPolicy: Sendable, Equatable {
     /// flags.
     public let shellOutputByteLimit: Int
 
+    /// The seconds that `defaultShellCommandTimeout` is made of.
+    ///
+    /// The `Duration` below carries the value; this constant names the number
+    /// that builds it, thus the file holds no unnamed literal.
+    private static let defaultShellCommandTimeoutSeconds = 30
+
     /// The `shellCommandTimeout` a host that states none gets.
     ///
     /// Long enough for the `git`, `date` and `ls` calls a skill body usually
     /// makes, and short enough that a command which hangs does not hold the
     /// render of a turn.
-    public static let defaultShellCommandTimeout: Duration = .seconds(30)
+    public static let defaultShellCommandTimeout: Duration =
+        .seconds(defaultShellCommandTimeoutSeconds)
 
     /// The `shellOutputByteLimit` a host that states none gets.
     ///
