@@ -147,7 +147,7 @@ public protocol MarketplaceLayerProviding: Sendable {
 /// Which marketplace each layer of one catalog generation came from, and
 /// what its skills may run, by layer index.
 ///
-/// `DiscoveredSkill.rootIndex` and `ShadowedCandidate.rootIndex` are both
+/// `DiscoveredSkill.rootIndex` and `ContributingDirectory.rootIndex` are both
 /// indices into the same ordered layer list, thus one lookup by index
 /// serves the winner's provenance, the shadow message, and the grants that
 /// gate the winner's shell injection and scripts (marketplace.md §6.6).

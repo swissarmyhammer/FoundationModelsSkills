@@ -610,7 +610,7 @@ public struct SkillsRegistry: Sendable {
         var catalog: [String: CatalogEntry] = [:]
         var diagnostics: [SkillDiagnostic] = []
 
-        for discovered in SkillDiscovery(roots: plan.layers.map(\.root)).discover() {
+        for discovered in SkillDiscovery(layers: plan.layers).discover() {
             let validation = Self.validate(
                 discovered: discovered, marketplaces: plan.marketplaces, diagnostics: &diagnostics)
             guard let validated = validation, !validated.isHidden else {

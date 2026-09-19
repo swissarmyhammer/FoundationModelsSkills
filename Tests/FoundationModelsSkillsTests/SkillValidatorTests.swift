@@ -10,11 +10,11 @@ import Testing
 /// irregularities (load anyway), missing/empty `description` (excluded from
 /// the model surface, kept user-invocable), `description`/`compatibility`
 /// over-limit (kept as data), unparseable YAML (skip), the retired `partial:
-/// true` (hidden from every surface), a shadowed id and an oversized body
-/// (both advisory), unknown top-level keys (advisory), and decoder notes
-/// (advisory, one per note) -- plus a diagnostics snapshot over the real
-/// `broken/` and `spec-clean` fixtures, asserting layer provenance on every
-/// diagnostic.
+/// true` (hidden from every surface), more than one layer directory and an
+/// oversized body (both advisory), unknown top-level keys (advisory), and
+/// decoder notes (advisory, one per note) -- plus a diagnostics snapshot over
+/// the real `broken/` and `spec-clean` fixtures, asserting layer provenance on
+/// every diagnostic.
 struct SkillValidatorTests {
     // MARK: - Test helpers
 
@@ -28,7 +28,8 @@ struct SkillValidatorTests {
     ///   - frontmatter: The decoded frontmatter to validate.
     ///   - body: The render-pipeline body to validate.
     ///   - rootIndex: The synthetic winning root's position.
-    ///   - shadowedCandidates: Lower-precedence candidates this id shadowed.
+    ///   - contributingDirectories: The layer directories of this id, lowest
+    ///     precedence first.
     ///   - notes: The decoder notes to carry on the `DecodedSkill`.
     /// - Returns: `SkillValidator`'s result.
     private func validate(
@@ -36,7 +37,7 @@ struct SkillValidatorTests {
         frontmatter: SkillFrontmatter,
         body: String = "Body text.\n",
         rootIndex: Int = 0,
-        shadowedCandidates: [DiscoveredSkill.ShadowedCandidate] = [],
+        contributingDirectories: [DiscoveredSkill.ContributingDirectory] = [],
         notes: [String] = []
     ) -> SkillValidator.Result {
         let root = URL(fileURLWithPath: "/fixture-root")
@@ -44,7 +45,7 @@ struct SkillValidatorTests {
         let discovered = DiscoveredSkill(
             id: id, skillDirectory: skillDirectory,
             skillFileURL: skillDirectory.appendingPathComponent("SKILL.md"),
-            rootIndex: rootIndex, root: root, shadowedCandidates: shadowedCandidates)
+            rootIndex: rootIndex, root: root, contributingDirectories: contributingDirectories)
         let decodedSkill = DecodedSkill(frontmatter: frontmatter, body: body, notes: notes)
         return SkillValidator.validate(discovered: discovered, outcome: .decoded(decodedSkill))
     }
@@ -270,22 +271,30 @@ struct SkillValidatorTests {
         }
     }
 
-    // MARK: - Shadowed id: advisory only
+    // MARK: - More than one layer directory: advisory only
 
-    @Test func shadowedIDDrawsAnAdvisoryDiagnostic() {
-        let shadowed = DiscoveredSkill.ShadowedCandidate(
+    @Test func aLowerPrecedenceLayerDirectoryDrawsAnAdvisoryDiagnostic() {
+        let lower = DiscoveredSkill.ContributingDirectory(
             rootIndex: 0, root: URL(fileURLWithPath: "/lower-root"),
             skillDirectory: URL(fileURLWithPath: "/lower-root/my-skill"))
+        let winner = DiscoveredSkill.ContributingDirectory(
+            rootIndex: 1, root: URL(fileURLWithPath: "/fixture-root"),
+            skillDirectory: URL(fileURLWithPath: "/fixture-root/my-skill"))
         let result = validate(
             frontmatter: SkillFrontmatter(name: "my-skill", description: "A description."),
-            shadowedCandidates: [shadowed])
+            rootIndex: 1, contributingDirectories: [lower, winner])
         #expect(result.diagnostics.contains { $0.severity == .advisory })
         #expect(result.skill != nil)
         #expect(result.skill?.isModelVisibleEligible == true)
     }
 
-    @Test func noShadowedCandidatesProducesNoShadowDiagnostic() {
-        let result = validate(frontmatter: SkillFrontmatter(name: "my-skill", description: "A description."))
+    @Test func oneLayerDirectoryOnlyProducesNoLayerDirectoryDiagnostic() {
+        let only = DiscoveredSkill.ContributingDirectory(
+            rootIndex: 0, root: URL(fileURLWithPath: "/fixture-root"),
+            skillDirectory: URL(fileURLWithPath: "/fixture-root/my-skill"))
+        let result = validate(
+            frontmatter: SkillFrontmatter(name: "my-skill", description: "A description."),
+            contributingDirectories: [only])
         #expect(result.diagnostics.isEmpty)
     }
 

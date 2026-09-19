@@ -320,10 +320,8 @@ public struct StencilPass: RenderPass {
     /// a remote source: an include of a name that only a marketplace ships
     /// is a render error, not that marketplace's text.
     ///
-    /// `DotfolderStack` exposes no initializer that takes `layers` directly,
-    /// so this builds a throwaway stack (name and working directory are
-    /// irrelevant -- construction performs no I/O) and immediately replaces
-    /// its derived layers with the scoped ones.
+    /// `DotfolderStack.init(layers:)` of this package wraps the scoped
+    /// layers; construction performs no I/O of its own.
     ///
     /// - Parameter winningLayer: The layer the rendered skill was discovered
     ///   in.
@@ -334,10 +332,7 @@ public struct StencilPass: RenderPass {
         let scopedLayers =
             winningLayer.source == .marketplace ? [winningLayer] + localLayers : localLayers
         guard !scopedLayers.isEmpty else { return nil }
-        var stack = DotfolderStack(
-            name: "stencil-pass-partials", workingDirectory: URL(fileURLWithPath: "/", isDirectory: true))
-        stack.layers = scopedLayers
-        return stack
+        return DotfolderStack(layers: scopedLayers)
     }
 }
 

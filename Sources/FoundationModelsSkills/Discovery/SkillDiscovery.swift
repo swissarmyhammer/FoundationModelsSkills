@@ -1,155 +1,145 @@
 import Foundation
 import FoundationModelsExtras
 
-/// Directory-shaped skill discovery over an ordered list of host-supplied
-/// layer roots (plan.md §3, §4; decisions #3/#19/#29).
+/// Directory-shaped skill discovery over the ordered layers of a
+/// `DotfolderStack` (plan.md §3, §4).
 ///
-/// Walks each root's immediate subdirectories for a `SKILL.md` -- `name/SKILL.md`,
-/// one level below the root, never recursed further -- and folds the results
-/// by directory name, last root wins (decision #3's full-replace rule). This
-/// type names no directory convention of its own: `roots` is entirely the
-/// host's choice, lowest precedence first (decision #29, amended
-/// 2026-07-28). `DotfolderStack` is one convenience for computing such a
-/// list, not the interface -- `init(stack:)` adapts it in one step. No YAML
-/// parsing happens here; discovery is purely structural, and construction
-/// does no I/O of its own -- only `discover()` touches disk.
+/// An id is the name of a child directory of the union of the layer roots,
+/// and it is a skill when a minimum of one layer gives that directory a
+/// `SKILL.md`. The unit of override is the file: the highest layer that holds
+/// a file gives that file, and each layer directory of the id contributes the
+/// files that no higher layer holds. `discover()` reports every one of them
+/// on `DiscoveredSkill.contributingDirectories`.
+///
+/// `DotfolderStack` gives the combined view and does each walk of the disk
+/// (`childDirectories(of:)`, `locate(_:)`), thus this type opens no directory
+/// of its own. No YAML parsing happens here; discovery is purely structural,
+/// and construction does no I/O -- only `discover()` touches disk.
 public struct SkillDiscovery: Sendable {
-    /// The filename every skill directory must contain to be discovered.
+    /// The filename a layer directory must hold for its id to be a skill.
     /// `CatalogResolver` finds marketplace skills by the same file.
     internal static let skillFileName = "SKILL.md"
 
     /// Directory names never treated as skill candidates, checked against
-    /// each root's immediate subdirectories. The `CatalogResolver` scan of a
-    /// marketplace repository skips the same names.
+    /// the child directories of the layer roots. The `CatalogResolver` scan
+    /// of a marketplace repository skips the same names.
     internal static let excludedDirectoryNames: Set<String> = [".git", "node_modules"]
 
-    /// The layer roots to discover over, lowest precedence first.
-    public var roots: [URL]
+    /// The layers to discover over, lowest precedence first.
+    public var layers: [DotfolderStack.Layer]
 
-    /// Creates a `SkillDiscovery` over an explicit, ordered list of layer
-    /// roots.
+    /// Creates a `SkillDiscovery` over an explicit, ordered list of layers.
     ///
-    /// Performs no I/O; a root that does not exist on disk is simply skipped
-    /// once `discover()` runs.
+    /// Performs no I/O; a layer whose root does not exist on disk simply
+    /// gives nothing once `discover()` runs.
+    ///
+    /// - Parameter layers: The layers to discover over, lowest precedence
+    ///   first.
+    public init(layers: [DotfolderStack.Layer]) {
+        self.layers = layers
+    }
+
+    /// Creates a `SkillDiscovery` over bare layer roots, for a host that has
+    /// roots and no layers.
+    ///
+    /// Each root becomes a `.project` layer, the source `SkillsRegistry`
+    /// gives a bare root as well: a bare `[URL]` carries no trust signal of
+    /// its own, and `.project` is the local source that the render policy of
+    /// the host then gates.
     ///
     /// - Parameter roots: The layer roots to discover over, lowest precedence
     ///   first.
     public init(roots: [URL]) {
-        self.roots = roots
+        self.init(layers: roots.map { DotfolderStack.Layer(source: .project, root: $0) })
     }
 
-    /// Creates a `SkillDiscovery` over the roots a `DotfolderStack` derives.
-    ///
-    /// A one-line convenience over `init(roots:)` for hosts that already use
-    /// `DotfolderStack` to compute their layer roots -- equivalent to
-    /// `init(roots: Self.roots(from: stack))`.
-    ///
-    /// - Parameter stack: The dotfolder stack to derive layer roots from.
-    public init(stack: DotfolderStack) {
-        self.init(roots: Self.roots(from: stack))
-    }
-
-    /// Maps a `DotfolderStack`'s layers to an ordered list of layer roots.
+    /// Creates a `SkillDiscovery` over the layers of a `DotfolderStack`.
     ///
     /// `DotfolderStack.layers` is already ordered lowest precedence first
-    /// (`defaults < user < project`), matching what `discover()` expects, so
-    /// this is a direct projection with no reordering.
+    /// (`defaults < user < project`), which is the order `discover()` expects,
+    /// thus this is a direct projection with no reordering.
     ///
-    /// - Parameter stack: The dotfolder stack to derive layer roots from.
-    /// - Returns: `stack`'s layer roots, lowest precedence first.
-    public static func roots(from stack: DotfolderStack) -> [URL] {
-        stack.layers.map(\.root)
+    /// - Parameter stack: The dotfolder stack to take the layers from.
+    public init(stack: DotfolderStack) {
+        self.init(layers: stack.layers)
     }
 
-    /// Discovers every skill directory across `roots`.
+    /// Discovers every skill of the combined view of `layers`.
     ///
-    /// For each root, in order, enumerates its immediate subdirectories and
-    /// keeps the ones containing a `SKILL.md` (skipping `.git` and
-    /// `node_modules` by name, and any root that does not exist or cannot be
-    /// read). A later root's copy of an id fully replaces an earlier root's
-    /// copy of the same id (decision #3); the replaced copy is recorded on
-    /// the surviving record's `shadowedCandidates` rather than discarded.
+    /// Takes each child directory name of the union of the layer roots
+    /// (skipping `.git` and `node_modules`), and keeps the names that a
+    /// minimum of one layer gives a `SKILL.md`. The highest such layer gives
+    /// the `SKILL.md` of the skill; each layer directory of the name, that
+    /// layer included, is a contributing directory.
     ///
     /// - Returns: One `DiscoveredSkill` per distinct id found, sorted by id.
     public func discover() -> [DiscoveredSkill] {
-        var discoveredByID: [String: DiscoveredSkill] = [:]
-
-        for (rootIndex, root) in roots.enumerated() {
-            for skillDirectory in Self.candidateSkillDirectories(under: root) {
-                let skillFileURL = skillDirectory.appendingPathComponent(Self.skillFileName)
-                guard FileManager.default.fileExists(atPath: skillFileURL.path) else { continue }
-
-                let id = skillDirectory.lastPathComponent
-                discoveredByID[id] = Self.fold(
-                    previous: discoveredByID[id],
-                    id: id, skillDirectory: skillDirectory, skillFileURL: skillFileURL,
-                    rootIndex: rootIndex, root: root)
+        let stack = DotfolderStack(layers: layers)
+        return stack.childDirectories()
+            .filter { name, _ in !Self.excludedDirectoryNames.contains(name) }
+            .compactMap { name, holdingLayers in
+                discoveredSkill(id: name, holdingLayers: holdingLayers, in: stack)
             }
-        }
-
-        return discoveredByID.values.sorted { $0.id < $1.id }
+            .sorted { $0.id < $1.id }
     }
 
-    /// Builds the `DiscoveredSkill` a newly found candidate replaces
-    /// `previous` with, carrying `previous` forward onto
-    /// `shadowedCandidates` when there was one.
+    /// Builds the record of one id, or gives `nil` when no layer of the id
+    /// holds a `SKILL.md`.
     ///
     /// - Parameters:
-    ///   - previous: The current record for this id, if a lower-precedence
-    ///     root already contributed one; `nil` on a first sighting.
-    ///   - id: The candidate's id.
-    ///   - skillDirectory: The candidate's own skill directory.
-    ///   - skillFileURL: The candidate's `SKILL.md` file.
-    ///   - rootIndex: The candidate's root's position in `roots`.
-    ///   - root: The candidate's root.
-    /// - Returns: The new winning record for `id`.
-    private static func fold(
-        previous: DiscoveredSkill?,
-        id: String, skillDirectory: URL, skillFileURL: URL, rootIndex: Int, root: URL
-    ) -> DiscoveredSkill {
-        var shadowedCandidates = previous?.shadowedCandidates ?? []
-        if let previous {
-            shadowedCandidates.append(
-                DiscoveredSkill.ShadowedCandidate(
-                    rootIndex: previous.rootIndex, root: previous.root, skillDirectory: previous.skillDirectory))
+    ///   - id: The child directory name of the union of the layer roots.
+    ///   - holdingLayers: The layers that hold a directory of that name,
+    ///     lowest precedence first.
+    ///   - stack: The stack of `layers`, which locates the `SKILL.md` copies.
+    /// - Returns: The record of the id, or `nil` when the id is no skill.
+    private func discoveredSkill(
+        id: String, holdingLayers: [DotfolderStack.Layer], in stack: DotfolderStack
+    ) -> DiscoveredSkill? {
+        let skillFilePaths = Set(stack.locate("\(id)/\(Self.skillFileName)").map(\.path))
+        let contributingDirectories = Self.contributingDirectories(
+            id: id, holdingLayers: holdingLayers, layers: layers)
+        let winner = contributingDirectories.last {
+            skillFilePaths.contains(Self.skillFileURL(in: $0.skillDirectory).path)
         }
+        guard let winner else { return nil }
         return DiscoveredSkill(
-            id: id, skillDirectory: skillDirectory, skillFileURL: skillFileURL,
-            rootIndex: rootIndex, root: root, shadowedCandidates: shadowedCandidates)
+            id: id, skillDirectory: winner.skillDirectory,
+            skillFileURL: Self.skillFileURL(in: winner.skillDirectory),
+            rootIndex: winner.rootIndex, root: winner.root,
+            contributingDirectories: contributingDirectories)
     }
 
-    /// Lists `root`'s immediate subdirectories eligible to be skill
-    /// candidates: real directories, excluding `.git` and `node_modules` by
-    /// name.
+    /// The layer directories of `id`, lowest precedence first.
     ///
-    /// Never recurses past this one level, and never fails: a `root` that
-    /// does not exist, or cannot be read, contributes no candidates.
+    /// `holdingLayers` names which layers hold the directory; `layers` gives
+    /// each of them the position that `DiscoveredSkill.rootIndex` and the
+    /// marketplace provenance of `SkillsRegistry` are keyed by.
     ///
-    /// The listing goes through the path of the root, not its URL: a
-    /// marketplace layer root is the `current` symlink of the cache
-    /// (marketplace.md §7.2), and the URL form of the call opens the link
-    /// itself, which is not a directory.
-    ///
-    /// - Parameter root: The layer root to scan.
-    /// - Returns: `root`'s eligible immediate subdirectories, in whatever
-    ///   order `FileManager` returns them.
-    private static func candidateSkillDirectories(under root: URL) -> [URL] {
-        guard let names = try? FileManager.default.contentsOfDirectory(atPath: root.path) else {
-            return []
-        }
-        return names.map { root.appendingPathComponent($0, isDirectory: true) }
-            .filter(Self.isEligibleSkillDirectoryCandidate)
+    /// - Parameters:
+    ///   - id: The child directory name of the union of the layer roots.
+    ///   - holdingLayers: The layers that hold a directory of that name.
+    ///   - layers: Every layer, lowest precedence first.
+    /// - Returns: One contributing directory per holding layer, lowest
+    ///   precedence first.
+    private static func contributingDirectories(
+        id: String, holdingLayers: [DotfolderStack.Layer], layers: [DotfolderStack.Layer]
+    ) -> [DiscoveredSkill.ContributingDirectory] {
+        let holdingRootPaths = Set(holdingLayers.map(\.root.path))
+        return layers.enumerated()
+            .filter { holdingRootPaths.contains($0.element.root.path) }
+            .map { rootIndex, layer in
+                DiscoveredSkill.ContributingDirectory(
+                    rootIndex: rootIndex, root: layer.root,
+                    skillDirectory: layer.root.appendingPathComponent(id, isDirectory: true))
+            }
     }
 
-    /// Reports whether `entry` is an immediate root subdirectory eligible to
-    /// be a skill candidate.
+    /// The `SKILL.md` of one skill directory.
     ///
-    /// - Parameter entry: One entry `FileManager.contentsOfDirectory` returned
-    ///   for a layer root.
-    /// - Returns: `true` if `entry` is a real directory whose name is not in
-    ///   `excludedDirectoryNames`.
-    private static func isEligibleSkillDirectoryCandidate(_ entry: URL) -> Bool {
-        guard !Self.excludedDirectoryNames.contains(entry.lastPathComponent) else { return false }
-        return (try? entry.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
+    /// - Parameter skillDirectory: A layer directory of a skill.
+    /// - Returns: The `SKILL.md` file of that directory, whether or not it
+    ///   exists on disk.
+    private static func skillFileURL(in skillDirectory: URL) -> URL {
+        skillDirectory.appendingPathComponent(Self.skillFileName)
     }
 }

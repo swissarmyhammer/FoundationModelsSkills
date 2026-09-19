@@ -75,7 +75,7 @@ public struct ValidatedSkill: Sendable, Equatable {
 /// | `compatibility` present but empty | advisory | kept as data |
 /// | unparseable YAML (decoder `.skipped`) | skip | not loaded at all |
 /// | `partial: true` | warning | hidden from every surface |
-/// | shadowed id | advisory | none |
+/// | more than one layer directory of the id | advisory | none |
 /// | `SKILL.md` body over 500 lines | advisory | none |
 /// | unknown top-level keys | advisory | none |
 /// | decoder notes (mistyped `metadata.*` value, both-spellings conflict, quoting-fallback retry) | advisory, one per note | none |
@@ -170,9 +170,12 @@ public enum SkillValidator {
         let id: String
         let frontmatter: SkillFrontmatter
         let body: String
-        /// The winning copy's own directory, which the shadow message names.
+        /// The directory of the winning `SKILL.md`, which the shadow message
+        /// names.
         let skillDirectory: URL
-        let shadowedCandidates: [DiscoveredSkill.ShadowedCandidate]
+        /// The layer directories of the id below the winning `SKILL.md`,
+        /// lowest precedence first.
+        let lowerPrecedenceDirectories: [DiscoveredSkill.ContributingDirectory]
         let provenance: SkillDiagnostic.Provenance
         /// Which marketplace each layer came from, for the shadow message.
         let marketplaces: MarketplaceProvenanceIndex
@@ -214,7 +217,7 @@ public enum SkillValidator {
         Rule(evaluate: compatibilityOverLimitDiagnostic, consequence: .none),
         Rule(evaluate: emptyCompatibilityDiagnostic, consequence: .none),
         Rule(evaluate: partialFlagDiagnostic, consequence: .hide),
-        Rule(evaluate: shadowedIDDiagnostic, consequence: .none),
+        Rule(evaluate: lowerPrecedenceDirectoryDiagnostic, consequence: .none),
         Rule(evaluate: bodyLineCountDiagnostic, consequence: .none),
         Rule(evaluate: unknownTopLevelKeysDiagnostic, consequence: .none),
     ]
@@ -228,7 +231,7 @@ public enum SkillValidator {
     ///
     /// - Parameters:
     ///   - discovered: The skill's discovery record -- its canonical id, its
-    ///     own directory, and its shadowed candidates.
+    ///     own directory, and its contributing layer directories.
     ///   - decodedSkill: The successfully decoded frontmatter + body.
     ///   - provenance: The winning-layer provenance every diagnostic carries.
     ///   - marketplaces: Which marketplace each layer came from.
@@ -240,7 +243,10 @@ public enum SkillValidator {
         let id = discovered.id
         let context = RuleContext(
             id: id, frontmatter: decodedSkill.frontmatter, body: decodedSkill.body,
-            skillDirectory: discovered.skillDirectory, shadowedCandidates: discovered.shadowedCandidates,
+            skillDirectory: discovered.skillDirectory,
+            lowerPrecedenceDirectories: discovered.contributingDirectories.filter {
+                $0.rootIndex < discovered.rootIndex
+            },
             provenance: provenance, marketplaces: marketplaces, notes: decodedSkill.notes)
 
         var diagnostics: [SkillDiagnostic] = []
@@ -442,27 +448,32 @@ public enum SkillValidator {
             message: "'partial: true' is retired (decision #29); hidden from every surface.")
     }
 
-    // MARK: - Shadowed id
+    // MARK: - More than one layer directory of the id
 
-    /// Rule: an id that shadowed one or more lower-precedence copies draws
+    /// Rule: an id that a lower-precedence layer directory also holds draws
     /// an `.advisory` diagnostic naming how many (plan.md §4), and then
-    /// naming both sides of every copy that came from a marketplace
-    /// (marketplace.md §9.1) -- informational only, no effect on
+    /// naming both sides of every lower directory that came from a
+    /// marketplace (marketplace.md §9.1) -- informational only, no effect on
     /// eligibility.
     ///
+    /// The lower directories are not replaced: each of them gives the files
+    /// of the skill that no higher layer holds. The advisory tells the reader
+    /// that more than one layer makes this skill.
+    ///
     /// - Parameter context: The rule context.
-    /// - Returns: A diagnostic when there is a shadowed candidate, else
-    ///   `nil`.
-    private static func shadowedIDDiagnostic(_ context: RuleContext) -> SkillDiagnostic? {
-        let count = context.shadowedCandidates.count
+    /// - Returns: A diagnostic when a lower-precedence layer directory holds
+    ///   the id, else `nil`.
+    private static func lowerPrecedenceDirectoryDiagnostic(_ context: RuleContext) -> SkillDiagnostic? {
+        let count = context.lowerPrecedenceDirectories.count
         guard count > 0 else { return nil }
         return SkillDiagnostic(
             severity: .advisory, skillID: context.id, provenance: context.provenance,
-            message: "shadows \(count) lower-precedence copy\(count == 1 ? "" : "ies") of this id."
+            message: "\(count) lower-precedence layer director\(count == 1 ? "y" : "ies") "
+                + "also hold\(count == 1 ? "s" : "") this id; the highest layer that holds a file gives it."
                 + shadowedMarketplaceSentences(context))
     }
 
-    /// Names both sides of every shadowed copy that came from a
+    /// Names both sides of every shadowed `SKILL.md` that came from a
     /// marketplace, for example "` local `/repo/.skills/commit` shadows
     /// `commit` from marketplace `swissarmyhammer-skills`.`"
     /// (marketplace.md §9.1).
@@ -471,12 +482,13 @@ public enum SkillValidator {
     /// local stack keeps the plain count message.
     ///
     /// - Parameter context: The rule context.
-    /// - Returns: One leading-space sentence per marketplace copy, joined;
-    ///   the empty string when no shadowed copy came from a marketplace.
+    /// - Returns: One leading-space sentence per marketplace directory,
+    ///   joined; the empty string when no lower directory came from a
+    ///   marketplace.
     private static func shadowedMarketplaceSentences(_ context: RuleContext) -> String {
         let winner = context.marketplaces.provenance(atLayerIndex: context.provenance.rootIndex)
         let winnerLabel = winner.map { "marketplace `\($0.id)`" } ?? "local"
-        return context.shadowedCandidates
+        return context.lowerPrecedenceDirectories
             .compactMap { context.marketplaces.provenance(atLayerIndex: $0.rootIndex) }
             .map { loser in
                 " \(winnerLabel) `\(context.skillDirectory.path)` shadows `\(context.id)` "

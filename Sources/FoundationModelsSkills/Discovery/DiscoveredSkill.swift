@@ -1,38 +1,38 @@
 import Foundation
 
-/// One skill directory `SkillDiscovery` found while walking its host-supplied
-/// layer roots (plan.md §3, §4).
+/// One skill of the combined view `SkillDiscovery` reads over its layers
+/// (plan.md §3, §4).
 ///
 /// Purely structural: `id` is the directory name, taken verbatim with no
 /// agentskills.io/Claude validation applied -- that judgment belongs to the
-/// downstream `SkillsRegistry`. `shadowedCandidates` carries every
-/// lower-precedence directory of the same id that a later root's copy
-/// replaced (decision #3's full-replace rule), so a diagnostic surface can
-/// still report what shadowing happened even though only the winner's
-/// `SKILL.md` is ever read.
+/// downstream `SkillsRegistry`.
+///
+/// The unit of override is the file. `contributingDirectories` carries every
+/// layer directory of the id, lowest precedence first, because each of them
+/// gives the files that no higher layer holds. `skillDirectory`, `root` and
+/// `rootIndex` name the one layer that gives the winning `SKILL.md`.
 public struct DiscoveredSkill: Sendable, Equatable {
-    /// One lower-precedence root a shadowed copy of a skill's directory was
-    /// found under.
+    /// One layer directory of a skill: `root/<id>/`, in a layer that holds it.
     ///
-    /// Carries the same root-provenance shape `DiscoveredSkill` itself uses
-    /// for its winning root, so a shadowing advisory can name every losing
-    /// candidate the same way it names the winner.
-    public struct ShadowedCandidate: Sendable, Equatable {
-        /// The shadowed candidate's position in the roots list `SkillDiscovery`
+    /// A contributing directory gives each of its files that no higher layer
+    /// holds, thus a layer that holds no `SKILL.md` of its own still
+    /// contributes.
+    public struct ContributingDirectory: Sendable, Equatable {
+        /// This directory's layer position in the layer list `SkillDiscovery`
         /// was given, lowest precedence first.
         public var rootIndex: Int
-        /// The shadowed candidate's layer root.
+        /// This directory's layer root.
         public var root: URL
-        /// The shadowed candidate's own skill directory, `root/<id>/`.
+        /// This directory itself, `root/<id>/`.
         public var skillDirectory: URL
 
-        /// Creates a `ShadowedCandidate`.
+        /// Creates a `ContributingDirectory`.
         ///
         /// - Parameters:
-        ///   - rootIndex: The shadowed candidate's position in the roots list,
+        ///   - rootIndex: This directory's layer position in the layer list,
         ///     lowest precedence first.
-        ///   - root: The shadowed candidate's layer root.
-        ///   - skillDirectory: The shadowed candidate's own skill directory.
+        ///   - root: This directory's layer root.
+        ///   - skillDirectory: This directory itself.
         public init(rootIndex: Int, root: URL, skillDirectory: URL) {
             self.rootIndex = rootIndex
             self.root = root
@@ -46,54 +46,53 @@ public struct DiscoveredSkill: Sendable, Equatable {
     /// (plan.md §4).
     public var id: String
 
-    /// The winning skill's own directory, `root/<id>/`.
+    /// The directory of the winning `SKILL.md`, `root/<id>/`.
     public var skillDirectory: URL
 
-    /// The winning skill's `SKILL.md` file, `skillDirectory/SKILL.md`.
+    /// The winning `SKILL.md` file, `skillDirectory/SKILL.md`.
     public var skillFileURL: URL
 
-    /// The winning root's position in the roots list `SkillDiscovery` was
-    /// given, lowest precedence first.
+    /// The winning `SKILL.md`'s layer position in the layer list
+    /// `SkillDiscovery` was given, lowest precedence first.
     ///
     /// The provenance a diagnostic surface names when reporting where a
     /// skill was loaded from.
     public var rootIndex: Int
 
-    /// The winning root itself.
+    /// The winning `SKILL.md`'s layer root.
     public var root: URL
 
-    /// Every lower-precedence directory of this id that the winning copy
-    /// replaced, in the order they were shadowed (lowest precedence first).
+    /// Every layer directory of this id, lowest precedence first.
     ///
-    /// Empty when no lower-precedence root also carried this id. Populated
-    /// only for the shadowing advisory (plan.md §4) -- none of these
-    /// candidates' `SKILL.md` files are ever read.
-    public var shadowedCandidates: [ShadowedCandidate]
+    /// Holds a minimum of the directory of the winning `SKILL.md`, and holds
+    /// a layer directory that gives no `SKILL.md` of its own as well: the
+    /// files of that directory stay in the combined view of the skill.
+    public var contributingDirectories: [ContributingDirectory]
 
     /// Creates a `DiscoveredSkill`.
     ///
     /// - Parameters:
     ///   - id: The canonical id: the skill directory's name, verbatim.
-    ///   - skillDirectory: The winning skill's own directory.
-    ///   - skillFileURL: The winning skill's `SKILL.md` file.
-    ///   - rootIndex: The winning root's position in the roots list, lowest
-    ///     precedence first.
-    ///   - root: The winning root itself.
-    ///   - shadowedCandidates: Every lower-precedence directory of this id
-    ///     the winning copy replaced. Defaults to empty.
+    ///   - skillDirectory: The directory of the winning `SKILL.md`.
+    ///   - skillFileURL: The winning `SKILL.md` file.
+    ///   - rootIndex: The winning `SKILL.md`'s layer position in the layer
+    ///     list, lowest precedence first.
+    ///   - root: The winning `SKILL.md`'s layer root.
+    ///   - contributingDirectories: Every layer directory of this id, lowest
+    ///     precedence first. Defaults to empty.
     public init(
         id: String,
         skillDirectory: URL,
         skillFileURL: URL,
         rootIndex: Int,
         root: URL,
-        shadowedCandidates: [ShadowedCandidate] = []
+        contributingDirectories: [ContributingDirectory] = []
     ) {
         self.id = id
         self.skillDirectory = skillDirectory
         self.skillFileURL = skillFileURL
         self.rootIndex = rootIndex
         self.root = root
-        self.shadowedCandidates = shadowedCandidates
+        self.contributingDirectories = contributingDirectories
     }
 }
