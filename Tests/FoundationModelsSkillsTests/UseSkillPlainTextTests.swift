@@ -41,7 +41,7 @@ struct UseSkillPlainTextTests {
     func theAnswerIsTheRenderedBodyCharacterForCharacter(op: String) async throws {
         let registry = Self.makeFixtureRegistry()
         let tool = try Self.makeTool(registry: registry)
-        let renderedBody = try registry.call(id: Self.commitSkillID, arguments: [Self.commitMessage])
+        let renderedBody = try await registry.call(id: Self.commitSkillID, arguments: [Self.commitMessage])
 
         let answer = try await tool.call(arguments: Self.useCommitArguments(op: op))
 
@@ -66,7 +66,7 @@ struct UseSkillPlainTextTests {
     func performGivesTheRenderedBodyToo(op: String) async throws {
         let registry = Self.makeFixtureRegistry()
         let tool = try Self.makeTool(registry: registry)
-        let renderedBody = try registry.call(id: Self.commitSkillID, arguments: [Self.commitMessage])
+        let renderedBody = try await registry.call(id: Self.commitSkillID, arguments: [Self.commitMessage])
 
         let answer = try await tool.perform(Self.useCommitArguments(op: op))
 

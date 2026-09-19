@@ -22,18 +22,61 @@ public struct RenderPolicy: Sendable, Equatable {
     /// Immutable for the same reason as `isShellExecutionDisabled`.
     public let isScriptExecutionDisabled: Bool
 
+    /// How long one `` !`command` ``/fenced shell command can run before
+    /// `ShellInjection` kills its whole process group.
+    ///
+    /// A command that passes this limit writes no output into the body: the
+    /// pass writes an inert marker in its place and renders the rest of the
+    /// body. Immutable for the same reason as the two flags.
+    public let shellCommandTimeout: Duration
+
+    /// The most bytes of merged output `ShellInjection` holds for one
+    /// command.
+    ///
+    /// The read of the output stops at this limit, thus a command that
+    /// writes without end cannot grow the memory of the host. A command that
+    /// passes the limit writes no output into the body: the pass writes an
+    /// inert marker in its place. Immutable for the same reason as the two
+    /// flags.
+    public let shellOutputByteLimit: Int
+
+    /// The `shellCommandTimeout` a host that states none gets.
+    ///
+    /// Long enough for the `git`, `date` and `ls` calls a skill body usually
+    /// makes, and short enough that a command which hangs does not hold the
+    /// render of a turn.
+    public static let defaultShellCommandTimeout: Duration = .seconds(30)
+
+    /// The `shellOutputByteLimit` a host that states none gets.
+    ///
+    /// One mebibyte: far above the output of a command a skill body usually
+    /// makes, and small enough that a command which writes without end costs
+    /// a bounded amount of memory.
+    public static let defaultShellOutputByteLimit = 1_048_576
+
     /// Creates a `RenderPolicy`.
     ///
     /// Both flags default to `false`, the permissive default -- hosts opt
-    /// into restriction explicitly.
+    /// into restriction explicitly. Both limits default to the safe values
+    /// above, which a host overrides to widen or to narrow them.
     ///
     /// - Parameters:
     ///   - isShellExecutionDisabled: Disables pass 2 when `true`.
     ///   - isScriptExecutionDisabled: Disables the M6 `run script` operation
     ///     when `true`.
-    public init(isShellExecutionDisabled: Bool = false, isScriptExecutionDisabled: Bool = false) {
+    ///   - shellCommandTimeout: How long one shell command of pass 2 can run.
+    ///   - shellOutputByteLimit: The most bytes of output pass 2 holds for one
+    ///     command.
+    public init(
+        isShellExecutionDisabled: Bool = false,
+        isScriptExecutionDisabled: Bool = false,
+        shellCommandTimeout: Duration = RenderPolicy.defaultShellCommandTimeout,
+        shellOutputByteLimit: Int = RenderPolicy.defaultShellOutputByteLimit
+    ) {
         self.isShellExecutionDisabled = isShellExecutionDisabled
         self.isScriptExecutionDisabled = isScriptExecutionDisabled
+        self.shellCommandTimeout = shellCommandTimeout
+        self.shellOutputByteLimit = shellOutputByteLimit
     }
 }
 
@@ -154,13 +197,37 @@ public protocol RenderPass: Sendable {
     func render(_ text: QuarantinedText, request: RenderRequest) throws -> QuarantinedText
 }
 
+/// The one render-pipeline pass that waits for a child process.
+///
+/// Pass 2 starts a shell command for each injection site and waits for it to
+/// end, thus its transform suspends where a `RenderPass` transform returns at
+/// once. The two protocols stand apart so that `RenderPipeline.renderMetadata`
+/// -- which never runs pass 2 -- stays synchronous, and with it every catalog
+/// reader that builds a `description`/`metadata.*` value.
+///
+/// A synchronous transform satisfies this requirement as it stands, thus
+/// `IdentityRenderPass` stands in for pass 2 with no second body.
+public protocol ShellRenderPass: Sendable {
+    /// Transforms `text` for `request`, waiting for each command it starts.
+    ///
+    /// - Parameters:
+    ///   - text: The input text -- the output of pass 1.
+    ///   - request: The render request this pass runs under, including the
+    ///     `RenderPolicy` this pass must honor.
+    /// - Returns: The transformed text, passed on to pass 3.
+    /// - Throws: Any error a conforming pass raises while transforming
+    ///   `text`; see each conforming type for the specific errors it can
+    ///   throw.
+    func render(_ text: QuarantinedText, request: RenderRequest) async throws -> QuarantinedText
+}
+
 /// A pass that returns its input unchanged.
 ///
 /// A testing/scaffold stand-in for any of the three §5 passes
 /// (`ArgumentSubstitution`, `ShellInjection`, `StencilPass`) -- used by
 /// `RenderPipeline.identity` and by tests that only care about a subset of
 /// the pass-set's behavior.
-public struct IdentityRenderPass: RenderPass {
+public struct IdentityRenderPass: RenderPass, ShellRenderPass {
     /// Creates an `IdentityRenderPass`.
     ///
     /// Takes no configuration -- every instance behaves identically, so the
@@ -201,7 +268,7 @@ public struct RenderPipeline: Sendable {
     /// Pass 2: shell injection, body renders only (plan.md §5.2, decision #25).
     ///
     /// `SkillsRegistry` wires this to a real `ShellInjection` instance.
-    public var shellInjection: any RenderPass
+    public var shellInjection: any ShellRenderPass
     /// Pass 3: Stencil templating (plan.md §5.3).
     ///
     /// `SkillsRegistry` wires this to a real `StencilPass` instance.
@@ -213,7 +280,9 @@ public struct RenderPipeline: Sendable {
     ///   - argumentSubstitution: Pass 1.
     ///   - shellInjection: Pass 2, body renders only.
     ///   - stencil: Pass 3.
-    public init(argumentSubstitution: any RenderPass, shellInjection: any RenderPass, stencil: any RenderPass) {
+    public init(
+        argumentSubstitution: any RenderPass, shellInjection: any ShellRenderPass, stencil: any RenderPass
+    ) {
         self.argumentSubstitution = argumentSubstitution
         self.shellInjection = shellInjection
         self.stencil = stencil
@@ -235,13 +304,20 @@ public struct RenderPipeline: Sendable {
     ///
     /// Runs passes 1, 2, then 3, in that fixed order (plan.md §5).
     ///
+    /// Suspends while pass 2 waits for the shell command of each injection
+    /// site, thus the body pass-set runs its three passes by hand rather than
+    /// through the `run(passes:request:)` loop that `renderMetadata` shares:
+    /// pass 2 alone carries the `async` transform.
+    ///
     /// - Parameter request: The render request; `request.text` is the
     ///   body's source text.
     /// - Returns: The fully rendered body.
     /// - Throws: Any error thrown by a render pass in the pipeline (passes
     ///   1, 2, and 3).
-    public func renderBody(_ request: RenderRequest) throws -> String {
-        try run(passes: [argumentSubstitution, shellInjection, stencil], request: request)
+    public func renderBody(_ request: RenderRequest) async throws -> String {
+        let substituted = try argumentSubstitution.render(QuarantinedText(original: request.text), request: request)
+        let injected = try await shellInjection.render(substituted, request: request)
+        return try stencil.render(injected, request: request).flattened
     }
 
     /// Renders a `description`/`metadata.*` value: passes 1 and 3 only.
@@ -263,8 +339,9 @@ public struct RenderPipeline: Sendable {
     /// Runs `passes` once each, in order.
     ///
     /// Threads each pass's output through to the next as input -- the
-    /// shared, single-shot execution engine both `renderBody` and
-    /// `renderMetadata` build on. Starts from `request.text` wrapped as a
+    /// single-shot execution engine `renderMetadata` builds on.
+    /// `renderBody` runs its own three passes, because pass 2 suspends.
+    /// Starts from `request.text` wrapped as a
     /// single `.original` `QuarantinedText` span, and flattens the last
     /// pass's output back to a plain `String` only once every pass has run,
     /// so a `.quarantined` span any pass produces stays invisible to every

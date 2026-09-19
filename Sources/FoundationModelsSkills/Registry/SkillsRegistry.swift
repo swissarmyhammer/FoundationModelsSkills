@@ -743,30 +743,6 @@ public struct SkillsRegistry: Sendable {
             winningLayer: entry.winningLayer, policy: policy)
     }
 
-    /// Renders `text` under `entry` through `render`, falling back to `text`
-    /// unchanged if rendering fails.
-    ///
-    /// Shared by every render call site that is not declared `throws` --
-    /// unlike `call(id:arguments:)`, which propagates a render failure
-    /// instead of absorbing it -- so each of those call sites need only
-    /// name which `RenderPipeline` method to render through and, where
-    /// relevant, its `argumentNames`.
-    ///
-    /// - Parameters:
-    ///   - text: The text to render.
-    ///   - entry: The catalog entry `text` belongs to.
-    ///   - argumentNames: The skill's `arguments:` frontmatter names, in
-    ///     declared order. Defaults to empty.
-    ///   - render: The `RenderPipeline` method to render `text` through.
-    /// - Returns: The rendered text, or `text` unchanged on render failure.
-    private func renderedFallback(
-        text: String, entry: CatalogEntry, argumentNames: [String] = [],
-        using render: (RenderRequest) throws -> String
-    ) -> String {
-        let request = renderRequest(text: text, entry: entry, argumentNames: argumentNames)
-        return (try? render(request)) ?? text
-    }
-
     /// Renders `text` (a `description`/`metadata.*` value) through passes 1
     /// and 3, falling back to `text` unchanged if rendering fails.
     ///
@@ -783,7 +759,8 @@ public struct SkillsRegistry: Sendable {
     ///     request's directory and winning layer.
     /// - Returns: The rendered text, or `text` unchanged on render failure.
     private func renderedMetadataText(text: String, entry: CatalogEntry) -> String {
-        renderedFallback(text: text, entry: entry, using: pipeline.renderMetadata)
+        let request = renderRequest(text: text, entry: entry)
+        return (try? pipeline.renderMetadata(request)) ?? text
     }
 
     /// Renders every entry in `entry.frontmatter.metadata` via
@@ -943,10 +920,12 @@ public struct SkillsRegistry: Sendable {
     ///
     /// - Returns: Every preloaded entry's rendered body, sorted by id and
     ///   joined by a blank line; empty when no entry has `preload: true`.
-    public func preloadedBodies() -> String {
-        sortedCatalogEntries(where: \.isPreloaded)
-            .map(renderedBody(for:))
-            .joined(separator: "\n\n")
+    public func preloadedBodies() async -> String {
+        var bodies: [String] = []
+        for entry in sortedCatalogEntries(where: \.isPreloaded) {
+            bodies.append(await renderedBody(for: entry))
+        }
+        return bodies.joined(separator: "\n\n")
     }
 
     /// Renders `entry`'s body through all three §5 passes, falling back to
@@ -957,9 +936,9 @@ public struct SkillsRegistry: Sendable {
     /// - Parameter entry: The catalog entry whose body to render.
     /// - Returns: The rendered body, or the unrendered body on render
     ///   failure.
-    private func renderedBody(for entry: CatalogEntry) -> String {
-        renderedFallback(
-            text: entry.body, entry: entry, argumentNames: entry.frontmatter.arguments, using: pipeline.renderBody)
+    private func renderedBody(for entry: CatalogEntry) async -> String {
+        let request = renderRequest(text: entry.body, entry: entry, argumentNames: entry.frontmatter.arguments)
+        return (try? await pipeline.renderBody(request)) ?? entry.body
     }
 
     // MARK: - call(id:arguments:)
@@ -976,7 +955,7 @@ public struct SkillsRegistry: Sendable {
     /// - Throws: `UnknownSkillError` when `id` is not in the catalog --
     ///   unknown outright, or fully hidden from every surface. Otherwise,
     ///   any error a render pass raises (plan.md §5's three passes).
-    public func call(id: String, arguments: [String] = []) throws -> String {
+    public func call(id: String, arguments: [String] = []) async throws -> String {
         // Read `catalogBox.snapshot` exactly once and reuse it for both the
         // lookup and `validIDs`, so a reload racing between two separate
         // reads can never make them internally inconsistent (an `id`
@@ -988,7 +967,7 @@ public struct SkillsRegistry: Sendable {
         }
         let request = renderRequest(
             text: entry.body, entry: entry, arguments: arguments, argumentNames: entry.frontmatter.arguments)
-        return try pipeline.renderBody(request)
+        return try await pipeline.renderBody(request)
     }
 
     /// The unrendered body text of `id`'s current catalog entry.

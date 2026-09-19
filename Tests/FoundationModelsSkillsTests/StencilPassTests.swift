@@ -339,7 +339,7 @@ struct StencilPassTests {
             .write(to: skillDirectory.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
     }
 
-    @Test func registryConstructedFromLabeledLayersRendersTheDefaultsRootTrustedAndOthersUntrusted() throws {
+    @Test func registryConstructedFromLabeledLayersRendersTheDefaultsRootTrustedAndOthersUntrusted() async throws {
         let root = try Self.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         let defaultsRoot = root.appendingPathComponent("defaults", isDirectory: true)
@@ -355,17 +355,17 @@ struct StencilPassTests {
                 DotfolderStack.Layer(source: .project, root: projectRoot),
             ])
 
-        #expect(try registry.call(id: "trusted-tag") == "no")
+        #expect(try await registry.call(id: "trusted-tag") == "no")
 
         do {
-            _ = try registry.call(id: "untrusted-tag")
+            _ = try await registry.call(id: "untrusted-tag")
             Issue.record("expected a TemplateEngineError for the untrusted layer")
         } catch is TemplateEngineError {
             // Expected.
         }
     }
 
-    @Test func unlabeledRootsConvenienceKeepsEveryRootUntrusted() throws {
+    @Test func unlabeledRootsConvenienceKeepsEveryRootUntrusted() async throws {
         let root = try Self.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         try Self.writeMinimalSkillFile(id: "untrusted-tag", body: Self.nonWhitelistedTagBody, in: root)
@@ -376,7 +376,7 @@ struct StencilPassTests {
         let registry = SkillsRegistry(roots: [root])
 
         do {
-            _ = try registry.call(id: "untrusted-tag")
+            _ = try await registry.call(id: "untrusted-tag")
             Issue.record("expected a TemplateEngineError since init(roots:) labels no layer .defaults")
         } catch is TemplateEngineError {
             // Expected.
@@ -403,7 +403,7 @@ struct StencilPassTests {
         #expect(values.dotfolderName == "high-precedence")
     }
 
-    @Test func dotfolderNameRendersFromRealLayersEndToEndForALabeledRegistry() throws {
+    @Test func dotfolderNameRendersFromRealLayersEndToEndForALabeledRegistry() async throws {
         let root = try Self.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         let lowPrecedenceRoot = root.appendingPathComponent(".low-precedence", isDirectory: true)
@@ -416,10 +416,10 @@ struct StencilPassTests {
                 DotfolderStack.Layer(source: .project, root: highPrecedenceRoot),
             ])
 
-        #expect(try registry.call(id: "dotfolder-probe") == "high-precedence")
+        #expect(try await registry.call(id: "dotfolder-probe") == "high-precedence")
     }
 
-    @Test func dotfolderNameRendersFromTheStackConstructorEndToEnd() throws {
+    @Test func dotfolderNameRendersFromTheStackConstructorEndToEnd() async throws {
         // `SkillsRegistry.init(stack:)` takes its layers from a real
         // `DotfolderStack`, whose `.project` layer is `<workingDirectory>/.<name>`
         // -- so `{{ dotfolder_name }}` must render as that stack's own name.
@@ -438,7 +438,7 @@ struct StencilPassTests {
             name: stackName, workingDirectory: workingDirectory, userDirectory: userDirectory, environment: [:])
         let registry = SkillsRegistry(stack: stack)
 
-        #expect(try registry.call(id: "dotfolder-probe") == stackName)
+        #expect(try await registry.call(id: "dotfolder-probe") == stackName)
     }
 
     // MARK: - Partial include, over host-supplied roots, nearest wins

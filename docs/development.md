@@ -2,6 +2,25 @@
 
 ## Known deviations from plan.md
 
+- **A body render suspends, and the shell pass has a timeout and an output
+  limit.** Plan.md §5 states the three passes of the render, and decision #25
+  states that a shell command runs fresh on each render. It states no limit on
+  that command, and it shows a synchronous render. The implementation gives
+  the shell pass the same process control that §7.3.1 already gave `run
+  script`: the `ProcessRunner` of `FoundationModelsExtras` starts each command
+  in a process group of its own, the pid stands in `ProcessRegistry.global`
+  while it runs, the whole group dies with `SIGKILL` at
+  `RenderPolicy.shellCommandTimeout`, and the read of the output stops at
+  `RenderPolicy.shellOutputByteLimit`. A command that passes either limit
+  gives an inert marker in place of its output, and the render of the rest of
+  the body goes on. That runner is `async`, thus pass 2 is `async`, and with
+  it `RenderPipeline.renderBody`, `SkillsRegistry.call(id:arguments:)` and
+  `SkillsRegistry.preloadedBodies()`. A blocking bridge was refused: a render
+  runs on the cooperative pool, and a blocked cooperative thread for each
+  parallel render can starve the pool. The metadata render runs passes 1 and 3
+  only, thus it stays synchronous and every catalog reader keeps its
+  signature. The pass protocol splits in two for that reason: `RenderPass`
+  for the synchronous passes 1 and 3, and `ShellRenderPass` for pass 2.
 - **`read resource` adds a per-call content byte budget.** Plan.md §7.3
   states one cap: 500 lines maximum for each call, and `totalLines` tells
   the model to page with `start`/`end`. The implementation keeps that cap

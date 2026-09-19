@@ -132,7 +132,7 @@ struct MarketplacePolicyTests {
         await cache.store.start()
 
         #expect(cache.store.marketplaceLayers().first?.provenance.sha == head)
-        #expect(try cache.makeRegistry().call(id: Self.skillID).contains(Self.skillBody))
+        #expect(try await cache.makeRegistry().call(id: Self.skillID).contains(Self.skillBody))
     }
 
     // MARK: - Both lists

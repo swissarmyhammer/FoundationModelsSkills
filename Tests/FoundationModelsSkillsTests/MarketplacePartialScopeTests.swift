@@ -83,30 +83,30 @@ struct MarketplacePartialScopeTests {
         return (registry: registry, root: root)
     }
 
-    @Test func aMarketplaceSkillResolvesItsOwnPartialAndNotTheOneOfAnotherMarketplace() throws {
+    @Test func aMarketplaceSkillResolvesItsOwnPartialAndNotTheOneOfAnotherMarketplace() async throws {
         let fixture = try Self.makeRegistry()
         defer { try? FileManager.default.removeItem(at: fixture.root) }
 
-        let rendered = try fixture.registry.call(id: Self.marketplaceSkillID)
+        let rendered = try await fixture.registry.call(id: Self.marketplaceSkillID)
 
         #expect(rendered == Self.headerFromMarketplaceA + Self.bodyTrailingNewline)
     }
 
-    @Test func aLocalPartialOverridesTheMarketplacePartialOfTheSameName() throws {
+    @Test func aLocalPartialOverridesTheMarketplacePartialOfTheSameName() async throws {
         let fixture = try Self.makeRegistry(projectHeader: Self.headerFromProject)
         defer { try? FileManager.default.removeItem(at: fixture.root) }
 
-        let rendered = try fixture.registry.call(id: Self.marketplaceSkillID)
+        let rendered = try await fixture.registry.call(id: Self.marketplaceSkillID)
 
         #expect(rendered == Self.headerFromProject + Self.bodyTrailingNewline)
     }
 
-    @Test func aLocalSkillCannotIncludeAPartialThatOnlyAMarketplaceShips() throws {
+    @Test func aLocalSkillCannotIncludeAPartialThatOnlyAMarketplaceShips() async throws {
         let fixture = try Self.makeRegistry()
         defer { try? FileManager.default.removeItem(at: fixture.root) }
 
-        let error = try #require(throws: TemplateEngineError.self) {
-            try fixture.registry.call(id: Self.localSkillID)
+        let error = try await #require(throws: TemplateEngineError.self) {
+            try await fixture.registry.call(id: Self.localSkillID)
         }
 
         #expect(

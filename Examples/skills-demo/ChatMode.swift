@@ -109,11 +109,12 @@ enum ChatMode {
         do {
             let registry = SkillsDemoAssembly.makeRegistry(watch: false)
             let tool = try await SkillsDemoAssembly.makeTool(registry: registry)
+            let preloaded = await registry.preloadedBodies()
             let session = LanguageModelSession(
                 tools: [tool],
                 instructions: Instructions {
                     sessionInstructions
-                    registry.preloadedBodies()
+                    preloaded
                 })
             for scripted in scriptedPrompts {
                 await Self.evaluate(scripted, session: session, toolName: tool.name)

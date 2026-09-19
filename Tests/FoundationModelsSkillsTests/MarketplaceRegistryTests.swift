@@ -32,47 +32,47 @@ struct MarketplaceRegistryTests {
 
     // MARK: - Precedence (§4.1)
 
-    @Test func aLocalSkillWinsOverEveryMarketplaceCopyOfTheSameID() throws {
+    @Test func aLocalSkillWinsOverEveryMarketplaceCopyOfTheSameID() async throws {
         let fixture = try Fixture(localBody: "local body")
         let registry = fixture.makeRegistry()
 
-        let body = try registry.call(id: Self.sharedSkillID)
+        let body = try await registry.call(id: Self.sharedSkillID)
         #expect(body.contains("local body"))
     }
 
-    @Test func theLastMarketplaceWinsWhenNoLocalCopyExists() throws {
+    @Test func theLastMarketplaceWinsWhenNoLocalCopyExists() async throws {
         let fixture = try Fixture(localBody: nil)
         let registry = fixture.makeRegistry()
 
-        let body = try registry.call(id: Self.sharedSkillID)
+        let body = try await registry.call(id: Self.sharedSkillID)
         #expect(body.contains("second marketplace body"))
     }
 
-    @Test func reversingTheProviderOrderMakesTheOtherMarketplaceWin() throws {
+    @Test func reversingTheProviderOrderMakesTheOtherMarketplaceWin() async throws {
         let fixture = try Fixture(localBody: nil, reversedMarketplaceOrder: true)
         let registry = fixture.makeRegistry()
 
-        let body = try registry.call(id: Self.sharedSkillID)
+        let body = try await registry.call(id: Self.sharedSkillID)
         #expect(body.contains("first marketplace body"))
     }
 
     // MARK: - Shell injection under the host policy (§6.6)
 
-    @Test func aMarketplaceSkillRunsItsShellInjectionUnderAPermissiveHostPolicy() throws {
+    @Test func aMarketplaceSkillRunsItsShellInjectionUnderAPermissiveHostPolicy() async throws {
         let fixture = try Fixture(localBody: nil, winningMarketplaceBody: Self.shellBody)
         let registry = fixture.makeRegistry()
 
-        let body = try registry.call(id: Self.sharedSkillID)
+        let body = try await registry.call(id: Self.sharedSkillID)
 
         #expect(body.contains(Self.shellOutput))
         #expect(!body.contains(ShellInjection.disabledMarker))
     }
 
-    @Test func aHostPolicyThatDisablesTheShellStopsAMarketplaceSkillInjection() throws {
+    @Test func aHostPolicyThatDisablesTheShellStopsAMarketplaceSkillInjection() async throws {
         let fixture = try Fixture(localBody: nil, winningMarketplaceBody: Self.shellBody)
         let registry = fixture.makeRegistry(policy: RenderPolicy(isShellExecutionDisabled: true))
 
-        let body = try registry.call(id: Self.sharedSkillID)
+        let body = try await registry.call(id: Self.sharedSkillID)
 
         #expect(body.contains(ShellInjection.disabledMarker))
         #expect(!body.contains(Self.shellOutput))
@@ -116,7 +116,7 @@ struct MarketplaceRegistryTests {
     @Test func aProviderUpdateRebuildsOnceAndCarriesTheNewShaEvenWithoutWatching() async throws {
         let fixture = try Fixture(localBody: nil)
         let registry = fixture.makeRegistry()
-        let bodyBefore = try registry.call(id: Self.sharedSkillID)
+        let bodyBefore = try await registry.call(id: Self.sharedSkillID)
         #expect(bodyBefore.contains("second marketplace body"))
 
         let stream = try #require(
@@ -130,7 +130,7 @@ struct MarketplaceRegistryTests {
             countGetter: { await tally.count }, since: 0,
             signalTimeout: Self.expectedSignalTimeout, settleWindow: Self.noFurtherSignalWindow)
 
-        let bodyAfter = try registry.call(id: Self.sharedSkillID)
+        let bodyAfter = try await registry.call(id: Self.sharedSkillID)
         #expect(bodyAfter.contains("second marketplace body v2"))
         let diagnostic = try #require(registry.diagnostics.first { $0.skillID == Self.sharedSkillID })
         #expect(diagnostic.provenance.marketplace?.sha == "sha-second-2")

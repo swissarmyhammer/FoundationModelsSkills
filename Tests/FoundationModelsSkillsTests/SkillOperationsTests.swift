@@ -37,8 +37,8 @@ struct SkillOperationsTests {
     ///
     /// - Returns: The rendered body.
     /// - Throws: Whatever `SkillsRegistry.call(id:arguments:)` throws.
-    private static func renderedCommitBody() throws -> String {
-        try SkillsRegistry(roots: [projectSkillsRoot]).call(id: "commit", arguments: ["fix parser"])
+    private static func renderedCommitBody() async throws -> String {
+        try await SkillsRegistry(roots: [projectSkillsRoot]).call(id: "commit", arguments: ["fix parser"])
     }
 
     /// The value of a successful outcome of any operation.
@@ -132,7 +132,7 @@ struct SkillOperationsTests {
 
         let json = try await tool.call(arguments: arguments)
 
-        #expect(json == (try Self.renderedCommitBody()))
+        #expect(json == (try await Self.renderedCommitBody()))
     }
 
     // MARK: - Corrective matrix (§7)
@@ -238,7 +238,7 @@ struct SkillOperationsTests {
 
         let output = try await UseSkill(id: "lint", arguments: nil).execute(in: context)
 
-        #expect(output == .success(try context.registry.call(id: "lint")))
+        #expect(output == .success(try await context.registry.call(id: "lint")))
     }
 
     @Test func useSkillWithAMissingRequiredArgumentReturnsACorrectiveNamingIt() async throws {
@@ -560,7 +560,7 @@ struct SkillOperationsTests {
 
         let json = try await tool.call(arguments: arguments)
 
-        #expect(json == (try Self.renderedCommitBody()))
+        #expect(json == (try await Self.renderedCommitBody()))
     }
 
     @Test func resolverAcceptsTheReversedSingularSpellingSkillList() async throws {
@@ -654,7 +654,7 @@ struct SkillOperationsTests {
 
         let json = try await tool.call(arguments: arguments)
 
-        #expect(json == (try Self.renderedCommitBody()))
+        #expect(json == (try await Self.renderedCommitBody()))
     }
 
     @Test func invokeSkillAliasesToUseSkill() async throws {
@@ -664,7 +664,7 @@ struct SkillOperationsTests {
 
         let json = try await tool.call(arguments: arguments)
 
-        #expect(json == (try Self.renderedCommitBody()))
+        #expect(json == (try await Self.renderedCommitBody()))
     }
 
     @Test func getSkillAliasesToUseSkill() async throws {
@@ -674,7 +674,7 @@ struct SkillOperationsTests {
 
         let json = try await tool.call(arguments: arguments)
 
-        #expect(json == (try Self.renderedCommitBody()))
+        #expect(json == (try await Self.renderedCommitBody()))
     }
 
     // MARK: - generatedContent / init(_:) round trips

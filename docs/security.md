@@ -8,9 +8,19 @@
   network restriction beyond the script's own working-directory
   discipline. `sandbox-exec` is deprecated API over a private profile
   language. Containment here is gates (host policy plus the skill's
-  `allowed-tools` grants) and process control (own process group, timeout
-  `SIGKILL`), not an OS sandbox. Examine this again when Apple ships a
-  supported per-process confinement API.
+  `allowed-tools` grants) and process control, not an OS sandbox. Examine
+  this again when Apple ships a supported per-process confinement API.
+- **Every child process has a group, a timeout and an output limit.** Both
+  paths start their process with the `ProcessRunner` of
+  `FoundationModelsExtras`. Each command runs in a process group of its own,
+  its pid stands in `ProcessRegistry.global` while it runs, and the whole
+  group dies with `SIGKILL` at the timeout. The read of the merged output
+  stops at a byte limit, thus a command that writes without end cannot grow
+  the memory of the host. For the `` !`shell` `` injection the host sets both
+  limits with `RenderPolicy.shellCommandTimeout` and
+  `RenderPolicy.shellOutputByteLimit`, and a command that passes either limit
+  writes an inert marker into the body instead of its output. For `run
+  script` the caller sets the timeout with the `timeout` parameter.
 - **Untrusted layers render untrusted.** Only the layer a host tags
   `.defaults` (shipped, consumer-controlled content) renders
   Stencil-trusted. Each user or project layer renders through the

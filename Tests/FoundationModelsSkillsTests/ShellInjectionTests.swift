@@ -56,8 +56,8 @@ struct ShellInjectionTests {
 
     /// Runs `pass.render` over `text`, wrapping/flattening `QuarantinedText` so every call site
     /// below can pass/receive plain `String`s.
-    private func render(_ text: String, request: RenderRequest) throws -> String {
-        try pass.render(QuarantinedText(original: text), request: request).flattened
+    private func render(_ text: String, request: RenderRequest) async throws -> String {
+        try await pass.render(QuarantinedText(original: text), request: request).flattened
     }
 
     // MARK: - Recognition grammar
@@ -90,9 +90,9 @@ struct ShellInjectionTests {
                 body: "```!\nprintf fenced\n```", expected: "fenced"
             ),
         ])
-    func recognitionGrammarMatchesExpectedForm(name: String, body: String, expected: String) throws {
+    func recognitionGrammarMatchesExpectedForm(name: String, body: String, expected: String) async throws {
         let workingDirectory = try makeTempDirectory()
-        let result = try render(body, request: request(text: body, workingDirectory: workingDirectory))
+        let result = try await render(body, request: request(text: body, workingDirectory: workingDirectory))
         #expect(result == expected, "\(name)")
     }
 
@@ -146,25 +146,25 @@ struct ShellInjectionTests {
             ),
         ])
     func spanBoundaryGrammarFollowsTheFlattenedText(name: String, body: String, argument: String, expected: String)
-        throws
+        async throws
     {
         let workingDirectory = try makeTempDirectory()
         var renderRequest = request(text: body, workingDirectory: workingDirectory)
         renderRequest.arguments = [argument]
 
-        let result = try passOneAndTwoPipeline().renderBody(renderRequest)
+        let result = try await passOneAndTwoPipeline().renderBody(renderRequest)
 
         #expect(result == expected, "\(name)")
     }
 
-    @Test func midWordInjectionAfterAPositionalSpliceNeverSpawnsAProcess() throws {
+    @Test func midWordInjectionAfterAPositionalSpliceNeverSpawnsAProcess() async throws {
         let workingDirectory = try makeTempDirectory()
         let probeFile = workingDirectory.appendingPathComponent("pwned.txt")
         let body = "abc$1!`touch pwned.txt`"
         var renderRequest = request(text: body, workingDirectory: workingDirectory)
         renderRequest.arguments = ["first", "second"]
 
-        let result = try passOneAndTwoPipeline().renderBody(renderRequest)
+        let result = try await passOneAndTwoPipeline().renderBody(renderRequest)
 
         #expect(result == "abcsecond!`touch pwned.txt`\n\nARGUMENTS: first second")
         #expect(!FileManager.default.fileExists(atPath: probeFile.path))
@@ -172,46 +172,46 @@ struct ShellInjectionTests {
 
     // MARK: - Execution
 
-    @Test func executesInlineCommandAndInlinesItsOutput() throws {
+    @Test func executesInlineCommandAndInlinesItsOutput() async throws {
         let workingDirectory = try makeTempDirectory()
-        let result = try render(
+        let result = try await render(
             "!`printf hello`", request: request(text: "!`printf hello`", workingDirectory: workingDirectory))
         #expect(result == "hello")
     }
 
-    @Test func mergesStdoutAndStderrIntoOneInlinedOutput() throws {
+    @Test func mergesStdoutAndStderrIntoOneInlinedOutput() async throws {
         let workingDirectory = try makeTempDirectory()
         let body = "!`echo out; echo err 1>&2`"
-        let result = try render(body, request: request(text: body, workingDirectory: workingDirectory))
+        let result = try await render(body, request: request(text: body, workingDirectory: workingDirectory))
         #expect(result.contains("out"))
         #expect(result.contains("err"))
     }
 
-    @Test func runsWithTheSkillDirectoryAsItsWorkingDirectory() throws {
+    @Test func runsWithTheSkillDirectoryAsItsWorkingDirectory() async throws {
         let workingDirectory = try makeTempDirectory()
         let body = "!`pwd`"
-        let result = try render(body, request: request(text: body, workingDirectory: workingDirectory))
+        let result = try await render(body, request: request(text: body, workingDirectory: workingDirectory))
         #expect(result == workingDirectory.path)
     }
 
-    @Test func inheritsTheHostProcessEnvironment() throws {
+    @Test func inheritsTheHostProcessEnvironment() async throws {
         setenv("SHELL_INJECTION_TESTS_ENV_VAR", "hello-env", 1)
         defer { unsetenv("SHELL_INJECTION_TESTS_ENV_VAR") }
 
         let workingDirectory = try makeTempDirectory()
         let body = "!`echo $SHELL_INJECTION_TESTS_ENV_VAR`"
-        let result = try render(body, request: request(text: body, workingDirectory: workingDirectory))
+        let result = try await render(body, request: request(text: body, workingDirectory: workingDirectory))
         #expect(result == "hello-env")
     }
 
     // MARK: - isShellExecutionDisabled: inert marker, nothing runs
 
-    @Test func disabledPolicyRendersTheInertMarkerAndRunsNothing() throws {
+    @Test func disabledPolicyRendersTheInertMarkerAndRunsNothing() async throws {
         let workingDirectory = try makeTempDirectory()
         let probeFile = workingDirectory.appendingPathComponent("sideeffect.txt")
         let body = "!`touch sideeffect.txt`"
 
-        let result = try render(
+        let result = try await render(
             body,
             request: request(
                 text: body, workingDirectory: workingDirectory,
@@ -223,14 +223,14 @@ struct ShellInjectionTests {
 
     // MARK: - Re-execution: no caching
 
-    @Test func reRenderingTheSamePassReExecutesTheCommand() throws {
+    @Test func reRenderingTheSamePassReExecutesTheCommand() async throws {
         let workingDirectory = try makeTempDirectory()
         let counterFile = workingDirectory.appendingPathComponent("counter.txt")
         let body = "!`echo tick >> counter.txt`"
         let renderRequest = request(text: body, workingDirectory: workingDirectory)
 
-        _ = try render(body, request: renderRequest)
-        _ = try render(body, request: renderRequest)
+        _ = try await render(body, request: renderRequest)
+        _ = try await render(body, request: renderRequest)
 
         let counterContents = try String(contentsOf: counterFile, encoding: .utf8)
         let tickCount = counterContents.split(separator: "\n").count
@@ -255,7 +255,7 @@ struct ShellInjectionTests {
 
     // MARK: - Single-shot: injected output is never re-scanned, end to end
 
-    @Test func fullBodyRenderKeepsInjectedShellOutputLiteralThroughLaterPasses() throws {
+    @Test func fullBodyRenderKeepsInjectedShellOutputLiteralThroughLaterPasses() async throws {
         // The sentinel file's content is written directly to disk -- never through this pass's
         // own regex or through `ArgumentSubstitution` -- so it can carry `$0`, another
         // `` !`command` ``, and `{{ HOME }}` verbatim with no quoting gymnastics at all. If either
@@ -278,7 +278,7 @@ struct ShellInjectionTests {
         var renderRequest = request(text: body, workingDirectory: workingDirectory)
         renderRequest.arguments = ["real-value"]
 
-        let result = try pipeline.renderBody(renderRequest)
+        let result = try await pipeline.renderBody(renderRequest)
 
         // Pass 1 legitimately substituted the `$0` outside the injection...
         #expect(result.contains("Argument zero is: real-value"))
@@ -289,9 +289,129 @@ struct ShellInjectionTests {
         #expect(result.contains("Shell says: \(sentinel)"))
     }
 
+    // MARK: - The limits the policy carries (^977h3a0)
+
+    /// The timeout the limit cases give the policy. Short, so a command that
+    /// the timeout must kill gives its marker at once.
+    private static let shortTimeout: Duration = .milliseconds(500)
+
+    /// The byte limit the limit case gives the policy.
+    private static let smallByteLimit = 64
+
+    /// The count of bytes `longOutputCommand` writes: more than
+    /// `smallByteLimit`, thus the cap cuts the output.
+    private static let longOutputByteCount = 1000
+
+    /// A command that writes `longOutputByteCount` bytes on one line.
+    private static let longOutputCommand = "printf '%0\(longOutputByteCount)d' 0"
+
+    /// A command that never ends on its own, thus only the timeout ends it.
+    ///
+    /// The count of seconds is far above the time limit of each case below,
+    /// thus a render that waited for the command would fail the case.
+    private static let endlessCommand = "sleep 3600"
+
+    /// A command that passes the timeout gives the marker, and the render
+    /// gives that marker back at once.
+    ///
+    /// The time limit of the case is the second half of the proof: a render
+    /// that waited for `endlessCommand` would pass one minute.
+    @Test(.timeLimit(.minutes(1)))
+    func aCommandThatPassesTheTimeoutGivesTheMarker() async throws {
+        let workingDirectory = try makeTempDirectory()
+        let body = "!`\(Self.endlessCommand)`"
+
+        let result = try await render(
+            body,
+            request: request(
+                text: body, workingDirectory: workingDirectory,
+                policy: RenderPolicy(shellCommandTimeout: Self.shortTimeout)))
+
+        #expect(result == ShellInjection.timedOutMarker)
+    }
+
+    /// A command that writes more than the byte limit gives the marker, and
+    /// the render writes no part of the output.
+    @Test func aCommandThatWritesPastTheByteLimitGivesTheMarkerAndNoOutput() async throws {
+        let workingDirectory = try makeTempDirectory()
+        let body = "!`\(Self.longOutputCommand)`"
+
+        let result = try await render(
+            body,
+            request: request(
+                text: body, workingDirectory: workingDirectory,
+                policy: RenderPolicy(shellOutputByteLimit: Self.smallByteLimit)))
+
+        #expect(result == ShellInjection.outputOverTheLimitMarker)
+        #expect(!result.contains("0"))
+    }
+
+    /// The file the group-kill case writes the process id of the grandchild
+    /// into.
+    private static let childPIDFileName = "child-pid.txt"
+
+    /// How long the group-kill case waits after the marker came back, so the
+    /// kernel can finish the reap of the group it killed.
+    private static let reapWindow: Duration = .milliseconds(200)
+
+    /// A command that starts `endlessCommand` in the background, writes the
+    /// process id of that grandchild to `childPIDFileName`, and then waits.
+    ///
+    /// The shell and the grandchild share one process group, thus the kill at
+    /// the timeout must reach both.
+    private static let backgroundingCommand =
+        "\(endlessCommand) & echo $! > \(childPIDFileName); wait"
+
+    /// After the timeout no child of the command is alive: the runner kills
+    /// the whole process group, not the shell alone.
+    @Test(.timeLimit(.minutes(1)))
+    func aCommandThatPassesTheTimeoutLeavesNoChildAlive() async throws {
+        let workingDirectory = try makeTempDirectory()
+        let body = "!`\(Self.backgroundingCommand)`"
+
+        let result = try await render(
+            body,
+            request: request(
+                text: body, workingDirectory: workingDirectory,
+                policy: RenderPolicy(shellCommandTimeout: Self.shortTimeout)))
+
+        #expect(result == ShellInjection.timedOutMarker)
+        let pidFile = workingDirectory.appendingPathComponent(Self.childPIDFileName)
+        let pidText = try String(contentsOf: pidFile, encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let childPID = try #require(pid_t(pidText), "the command must write the process id of its grandchild")
+        try await Task.sleep(for: Self.reapWindow)
+        #expect(kill(childPID, 0) == -1, "the grandchild must die with the whole process group")
+    }
+
+    /// A slow command does not stop the render of the rest of the body: the
+    /// fast command after it gives its own output.
+    @Test(.timeLimit(.minutes(1)))
+    func aSlowCommandDoesNotStopTheRenderOfTheRestOfTheBody() async throws {
+        let workingDirectory = try makeTempDirectory()
+        let body = "slow !`\(Self.endlessCommand)` fast !`printf quick`"
+
+        let result = try await render(
+            body,
+            request: request(
+                text: body, workingDirectory: workingDirectory,
+                policy: RenderPolicy(shellCommandTimeout: Self.shortTimeout)))
+
+        #expect(result == "slow \(ShellInjection.timedOutMarker) fast quick")
+    }
+
+    /// The host gets the limits from `RenderPolicy`, and the default of each
+    /// one is the safe value this package sets.
+    @Test func theDefaultPolicyCarriesTheSafeShellLimits() {
+        let policy = RenderPolicy()
+
+        #expect(policy.shellCommandTimeout == RenderPolicy.defaultShellCommandTimeout)
+        #expect(policy.shellOutputByteLimit == RenderPolicy.defaultShellOutputByteLimit)
+    }
+
     // MARK: - git-context fixture: preload: true + a deterministic injection
 
-    @Test func gitContextFixturePreloadsAndRendersItsDeterministicInjection() throws {
+    @Test func gitContextFixturePreloadsAndRendersItsDeterministicInjection() async throws {
         let url = FixtureLibrary.url(relativePath: "project/.skills/git-context/SKILL.md")
         let text = try String(contentsOf: url, encoding: .utf8)
         guard case .decoded(let skill) = FrontmatterDecoder.decode(text: text) else {
@@ -304,7 +424,7 @@ struct ShellInjectionTests {
         let pipeline = RenderPipeline(
             argumentSubstitution: ArgumentSubstitution(), shellInjection: ShellInjection(),
             stencil: IdentityRenderPass())
-        let result = try pipeline.renderBody(
+        let result = try await pipeline.renderBody(
             request(
                 text: skill.body,
                 workingDirectory: FixtureLibrary.url(relativePath: "project/.skills/git-context")))

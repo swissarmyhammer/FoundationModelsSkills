@@ -1,5 +1,6 @@
 import Foundation
 import FoundationModels
+import FoundationModelsExtras
 import Operations
 
 /// The outcome of a `run script` operation: either the process's result or
@@ -167,15 +168,145 @@ public struct RunScript: OperationDefinition {
                 return .corrective(issue)
             }
 
-            let outcome = await ScriptProcessRunner.run(
-                executableURL: resolved, arguments: arguments ?? [], workingDirectory: skillDirectory,
-                timeout: TimeInterval(timeout ?? Self.defaultTimeoutSeconds))
-
-            return .success(
-                RunScriptResult(
-                    id: id, path: path, status: outcome.status.rawValue, exitCode: outcome.exitCode.map(Int.init),
-                    durationMs: outcome.durationMs, lines: outcome.lines, output: outcome.output))
+            return .success(await result(ofRunning: resolved, in: skillDirectory))
         }
+    }
+
+    // MARK: - Running the script
+
+    /// One run's terminal state -- mirrors `RunScriptResult.status`'s three
+    /// literal values, but as an enum internally so a typo'd status string
+    /// can never compile, matching plan.md §7.3's spelling exactly via
+    /// `rawValue`.
+    private enum Status: String {
+        /// The process exited on its own, before the timeout.
+        case completed
+
+        /// The timeout fired; the process's whole group was `SIGKILL`ed.
+        case timedOut = "timed_out"
+
+        /// The spawn itself never reached exec.
+        case failed
+    }
+
+    /// The number of trailing output lines a run's `output` tail carries
+    /// (plan.md §7.3, the Shelltool shape).
+    private static let tailLineCount = 32
+
+    /// The most bytes of merged output one run holds at a time.
+    ///
+    /// One mebibyte, which is far above the output of a script of a skill and
+    /// small enough that a script which writes without end costs a bounded
+    /// amount of memory. The runner drops the oldest bytes at this limit, thus
+    /// the tail of the output still reaches the caller.
+    private static let outputByteLimit = 1_048_576
+
+    /// Runs `executableURL` directly, in its own process group, and shapes its
+    /// outcome into a `RunScriptResult`.
+    ///
+    /// The `ProcessRunner` of `FoundationModelsExtras` starts the process, thus
+    /// the pid stands in `ProcessRegistry.global` while the script runs, the
+    /// whole group dies with `SIGKILL` at the timeout, and the read of the
+    /// output stops at `outputByteLimit`.
+    ///
+    /// A spawn that never reached exec gives `failedToSpawnResult`, which is
+    /// the one shape that carries no duration, no output and no exit code.
+    ///
+    /// - Parameters:
+    ///   - executableURL: The script file to exec, already resolved and
+    ///     confined.
+    ///   - workingDirectory: The child's working directory -- the skill's own
+    ///     directory.
+    /// - Returns: The result of the run.
+    private func result(ofRunning executableURL: URL, in workingDirectory: URL) async -> RunScriptResult {
+        do {
+            let outcome = try await ProcessRunner.run(
+                executable: executableURL,
+                arguments: arguments ?? [],
+                workingDirectory: workingDirectory,
+                timeout: .seconds(timeout ?? Self.defaultTimeoutSeconds),
+                outputCap: ProcessRunner.OutputCap(
+                    lineCount: Self.tailLineCount, byteLimit: Self.outputByteLimit))
+
+            return RunScriptResult(
+                id: id, path: path,
+                status: Self.status(of: outcome.termination).rawValue,
+                exitCode: Self.exitCode(of: outcome.termination),
+                durationMs: Self.milliseconds(of: outcome.duration),
+                lines: outcome.lineCount,
+                output: Self.numbered(tail: outcome.output, ofLineCount: outcome.lineCount))
+        } catch {
+            return failedToSpawnResult
+        }
+    }
+
+    /// The result of a run the runner could not make: the spawn never reached
+    /// exec, or the reap failed.
+    ///
+    /// There is no duration, no output and no exit code to report, thus each
+    /// of those fields carries its empty value.
+    private var failedToSpawnResult: RunScriptResult {
+        RunScriptResult(
+            id: id, path: path, status: Status.failed.rawValue, exitCode: nil, durationMs: 0, lines: 0,
+            output: [])
+    }
+
+    /// The `RunScriptResult.status` value `termination` stands for.
+    ///
+    /// A process the kernel ended with a signal of its own reads as
+    /// `completed`: it ran, and only the timeout gives `timed_out`.
+    ///
+    /// - Parameter termination: How the run ended.
+    /// - Returns: The matching status.
+    private static func status(of termination: ProcessRunner.Termination) -> Status {
+        switch termination {
+        case .exited, .signaled: return .completed
+        case .timedOut: return .timedOut
+        }
+    }
+
+    /// The exit code `termination` carries, or `nil` when the process never
+    /// exited normally.
+    ///
+    /// - Parameter termination: How the run ended.
+    /// - Returns: The exit code, or `nil`.
+    private static func exitCode(of termination: ProcessRunner.Termination) -> Int? {
+        guard case .exited(let code) = termination else { return nil }
+        return Int(code)
+    }
+
+    /// The count of milliseconds in one second.
+    private static let millisecondsPerSecond: Int64 = 1000
+
+    /// The count of attoseconds (10^-18 s) in one millisecond.
+    private static let attosecondsPerMillisecond: Int64 = 1_000_000_000_000_000
+
+    /// The wall-clock length of `duration`, in milliseconds.
+    ///
+    /// The seconds alone drop the sub-second remainder -- a run of 400 ms
+    /// would report 0 -- thus the attoseconds carry the rest of the term.
+    ///
+    /// - Parameter duration: The measured length of the run.
+    /// - Returns: The length in milliseconds.
+    private static func milliseconds(of duration: Duration) -> Int {
+        let components = duration.components
+        return Int(
+            components.seconds * millisecondsPerSecond + components.attoseconds / attosecondsPerMillisecond)
+    }
+
+    /// Formats `tail` as `"{n}: {text}"`, `n` the 1-based arrival order of
+    /// each line in the whole output.
+    ///
+    /// The runner keeps the LAST `tailLineCount` lines, thus the first kept
+    /// line stands at position `lineCount - tail.count + 1` of the output.
+    ///
+    /// - Parameters:
+    ///   - tail: The kept lines, in arrival order.
+    ///   - lineCount: The count of all the lines the process wrote.
+    /// - Returns: The formatted tail.
+    private static func numbered(tail: [String], ofLineCount lineCount: Int) -> [String] {
+        let firstNumber = lineCount - tail.count + 1
+        return tail.enumerated().map { offset, text in "\(firstNumber + offset): \(text)" }
     }
 
     // MARK: - "must be under scripts/" corrective

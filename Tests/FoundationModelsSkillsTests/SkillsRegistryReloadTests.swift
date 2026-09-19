@@ -57,7 +57,7 @@ struct SkillsRegistryReloadTests {
             id: "preload-skill", in: root, extraFrontmatter: "preload: true\n", body: "Preload body v1.")
 
         let registry = SkillsRegistry(roots: [root], watch: true)
-        #expect(registry.preloadedBodies().contains("Preload body v1."))
+        #expect(await registry.preloadedBodies().contains("Preload body v1."))
         #expect(registry.diagnostics.isEmpty)
 
         let recorder = MetadataUpdateRecorder()
@@ -68,8 +68,8 @@ struct SkillsRegistryReloadTests {
         try ReloadTestSupport.writeSkillFile(
             id: "preload-skill", in: root, extraFrontmatter: "preload: true\n", body: "Preload body v2.")
         await Self.expectExactlyOnePublication(recorder, since: 0)
-        #expect(registry.preloadedBodies().contains("Preload body v2."))
-        #expect(!registry.preloadedBodies().contains("Preload body v1."))
+        #expect(await registry.preloadedBodies().contains("Preload body v2."))
+        #expect(!(await registry.preloadedBodies().contains("Preload body v1.")))
         #expect(registry.diagnostics.isEmpty, "a well-formed preloaded skill's reload must raise no diagnostics")
 
         // Introduce a broken sibling (no `description:`) alongside the
@@ -79,13 +79,13 @@ struct SkillsRegistryReloadTests {
         await Self.expectExactlyOnePublication(recorder, since: 1)
         #expect(registry.diagnostics.contains { $0.skillID == "broken-skill" })
         #expect(
-            registry.preloadedBodies().contains("Preload body v2."),
+            await registry.preloadedBodies().contains("Preload body v2."),
             "an unrelated broken sibling must not disturb the preloaded skill's own body")
 
         // Remove: preloadedBodies() drops it entirely.
         try FileManager.default.removeItem(at: root.appendingPathComponent("preload-skill", isDirectory: true))
         await Self.expectExactlyOnePublication(recorder, since: 2)
-        #expect(!registry.preloadedBodies().contains("Preload body"))
+        #expect(!(await registry.preloadedBodies().contains("Preload body")))
     }
 
     /// Distinct from `reloadRefreshesPreloadedBodiesAndDiagnostics`'s broken
@@ -146,7 +146,7 @@ struct SkillsRegistryReloadTests {
         try ReloadTestSupport.writeSkillFile(id: "callable-skill", in: root, body: "v2")
         await Self.expectExactlyOnePublication(recorder, since: 0)
 
-        let body = try registry.call(id: "callable-skill")
+        let body = try await registry.call(id: "callable-skill")
         #expect(body.contains("v2"))
         #expect(!body.contains("v1"))
     }

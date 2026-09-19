@@ -121,7 +121,7 @@ struct SkillsRegistryTests {
     @Test(
         "visibility matrix (plan.md §6): default, disable-model-invocation, user-invocable:false, preload:true",
         arguments: visibilityCases)
-    private func visibilityMatrixMatchesPlanSectionSix(_ testCase: VisibilityCase) {
+    private func visibilityMatrixMatchesPlanSectionSix(_ testCase: VisibilityCase) async {
         let registry = SkillsRegistry(roots: Self.fixtureRoots)
 
         let metadataEntry = registry.metadata().first { $0.id == testCase.id }
@@ -130,7 +130,7 @@ struct SkillsRegistryTests {
         let isListed = registry.commandListing().contains { $0.id == testCase.id }
         #expect(isListed == testCase.isUserInvocable, "\(testCase.id): user menu listing")
 
-        let isPreloaded = registry.preloadedBodies().contains(testCase.bodyMarker)
+        let isPreloaded = await registry.preloadedBodies().contains(testCase.bodyMarker)
         #expect(isPreloaded == testCase.isPreloaded, "\(testCase.id): preload injection")
     }
 
@@ -164,22 +164,22 @@ struct SkillsRegistryTests {
 
     // MARK: - preloadedBodies() honors RenderPolicy
 
-    @Test func shellExecutionDisabledPolicyAppliesToPreloadedBodies() {
+    @Test func shellExecutionDisabledPolicyAppliesToPreloadedBodies() async {
         let registry = SkillsRegistry(
             roots: Self.fixtureRoots, policy: RenderPolicy(isShellExecutionDisabled: true))
-        let preloaded = registry.preloadedBodies()
+        let preloaded = await registry.preloadedBodies()
         #expect(preloaded.contains(ShellInjection.disabledMarker))
         #expect(!preloaded.contains("on branch main, working tree clean"))
     }
 
-    @Test func shellExecutionDisabledPolicyAppliesToCallIDArguments() throws {
+    @Test func shellExecutionDisabledPolicyAppliesToCallIDArguments() async throws {
         // §25 coverage gap (^zbv0t4j): the disable flag was previously only
         // proven on the preload path -- `call(id:arguments:)` is the exact
         // same path `use skill` and the CLI's `skill use` dispatch through.
         let registry = SkillsRegistry(
             roots: Self.fixtureRoots, policy: RenderPolicy(isShellExecutionDisabled: true))
 
-        let body = try registry.call(id: "git-context")
+        let body = try await registry.call(id: "git-context")
 
         #expect(body.contains(ShellInjection.disabledMarker))
         #expect(!body.contains("on branch main, working tree clean"))
@@ -187,22 +187,22 @@ struct SkillsRegistryTests {
 
     // MARK: - call(id:arguments:) plumbing
 
-    @Test func callCommitSubstitutesSuppliedArgumentsIntoTheRenderedBody() throws {
+    @Test func callCommitSubstitutesSuppliedArgumentsIntoTheRenderedBody() async throws {
         let registry = SkillsRegistry(roots: Self.fixtureRoots)
         // A caller building `arguments` element-by-element (rather than typing
         // one raw command line) quotes a multi-word value, the same discipline
         // $N/$ARGUMENTS[N] shell-style tokenizing already requires -- see
         // `RenderRequest.argumentNames`'s own doc comment.
-        let body = try registry.call(id: "commit", arguments: [#""fix parser bug""#])
+        let body = try await registry.call(id: "commit", arguments: [#""fix parser bug""#])
         #expect(body.contains("Commit the currently staged changes using the message: fix parser bug"))
         #expect(!body.contains("$0"))
     }
 
-    @Test func callUnknownIDThrowsCarryingTheCurrentValidIDs() throws {
+    @Test func callUnknownIDThrowsCarryingTheCurrentValidIDs() async throws {
         let registry = SkillsRegistry(roots: Self.fixtureRoots)
         var thrown: UnknownSkillError?
         do {
-            _ = try registry.call(id: "does-not-exist")
+            _ = try await registry.call(id: "does-not-exist")
         } catch let error as UnknownSkillError {
             thrown = error
         }
@@ -212,11 +212,11 @@ struct SkillsRegistryTests {
         #expect(error.validIDs == error.validIDs.sorted())
     }
 
-    @Test func callOnAValidatorHiddenIDThrowsTheSameUnknownSkillError() throws {
+    @Test func callOnAValidatorHiddenIDThrowsTheSameUnknownSkillError() async throws {
         let registry = SkillsRegistry(roots: [Self.brokenRoot])
         var thrown: UnknownSkillError?
         do {
-            _ = try registry.call(id: "partial-flag")
+            _ = try await registry.call(id: "partial-flag")
         } catch let error as UnknownSkillError {
             thrown = error
         }
@@ -387,7 +387,7 @@ struct SkillsRegistryTests {
             in: root)
     }
 
-    @Test func preloadInjectsTheBodyEvenWhenTheSameSkillIsModelHidden() throws {
+    @Test func preloadInjectsTheBodyEvenWhenTheSameSkillIsModelHidden() async throws {
         let root = try Self.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         try Self.writePreloadedModelHiddenSkill(in: root)
@@ -397,7 +397,7 @@ struct SkillsRegistryTests {
         let entry = try #require(registry.metadata().first { $0.id == "preloaded-model-hidden" })
         #expect(entry.isModelVisible == false)
         #expect(registry.commandListing().contains { $0.id == "preloaded-model-hidden" })
-        #expect(registry.preloadedBodies().contains("PRELOADED_MODEL_HIDDEN_MARKER"))
+        #expect(await registry.preloadedBodies().contains("PRELOADED_MODEL_HIDDEN_MARKER"))
     }
 
     // MARK: - Parameter-inference diagnostics fold into the registry surface
@@ -469,7 +469,7 @@ struct SkillsRegistryTests {
             in: root)
     }
 
-    @Test func aMistypedMetadataExtensionValueProducesARegistryAdvisoryNamingTheKeyAndExpectedType() throws {
+    @Test func aMistypedMetadataExtensionValueProducesARegistryAdvisoryNamingTheKeyAndExpectedType() async throws {
         let root = try Self.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         try Self.writeDecodeNoteSkill(
@@ -488,10 +488,10 @@ struct SkillsRegistryTests {
         #expect(diagnostic.provenance.rootIndex == 0)
         #expect(diagnostic.provenance.root.path == root.path)
         #expect(registry.metadata().contains { $0.id == "mistyped-metadata" })
-        #expect(registry.preloadedBodies().isEmpty)
+        #expect(await registry.preloadedBodies().isEmpty)
     }
 
-    @Test func aFieldSpelledBothTopLevelAndUnderMetadataProducesARegistryConflictAdvisory() throws {
+    @Test func aFieldSpelledBothTopLevelAndUnderMetadataProducesARegistryConflictAdvisory() async throws {
         let root = try Self.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         try Self.writeDecodeNoteSkill(
@@ -512,7 +512,7 @@ struct SkillsRegistryTests {
                 == "'preload' is set both top-level and under metadata.preload; using the top-level value.")
         #expect(diagnostic.provenance.rootIndex == 0)
         #expect(diagnostic.provenance.root.path == root.path)
-        #expect(registry.preloadedBodies().contains("Body text, unused by this fixture's own tests."))
+        #expect(await registry.preloadedBodies().contains("Body text, unused by this fixture's own tests."))
     }
 
     // MARK: - commandListing() description truncation

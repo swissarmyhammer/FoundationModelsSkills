@@ -5,6 +5,52 @@ change is at the top.
 
 ## Unreleased
 
+### Changed: a body render is `async`, and the shell pass has a timeout and an output limit
+
+This change breaks the source of a host that renders a body: the two methods
+that render a body now suspend. A host that only lists or searches skills
+compiles with no change, because the metadata render stays synchronous.
+
+**Cause.** The package started a process in two places, and the two did not
+have the same safety. `run script` had a process group, a timeout and a group
+`SIGKILL`; the `` !`shell` `` pass had none of them. Thus a `` !`sleep 1000` ``
+in a body held the render for ever, and a command that wrote without end grew
+the memory of the host. Neither path registered its pid with the
+`ProcessRegistry.global` of `FoundationModelsExtras`.
+
+**What changed.**
+
+- Both paths start their process with `FoundationModelsExtras.ProcessRunner`.
+  Each command runs in a process group of its own, its pid stands in
+  `ProcessRegistry.global` while it runs, the whole group dies with `SIGKILL`
+  at the timeout, and the read of the output stops at a byte limit. This
+  package starts no process of its own any more.
+- `RenderPolicy` carries two new fields: `shellCommandTimeout` (a `Duration`,
+  30 seconds by default) and `shellOutputByteLimit` (an `Int`, 1,048,576 by
+  default). `RenderPolicy.defaultShellCommandTimeout` and
+  `RenderPolicy.defaultShellOutputByteLimit` name the two defaults. Every
+  existing initializer argument still works.
+- A command that passes either limit writes no output into the body. The pass
+  writes an inert marker in its place -- `ShellInjection.timedOutMarker` or
+  `ShellInjection.outputOverTheLimitMarker`, which read like the
+  `disabledMarker` that was already there -- and the render of the rest of the
+  body goes on.
+- `RenderPipeline.renderBody(_:)`, `SkillsRegistry.call(id:arguments:)` and
+  `SkillsRegistry.preloadedBodies()` are `async`. A host writes `await` at each
+  call. `preloadedBodies()` must stand in a `let` before an `Instructions`
+  builder, because a result builder takes no `await`.
+- `RenderPipeline.renderMetadata(_:)` stays synchronous, thus `metadata()`,
+  `commandListing()` and every other catalog reader keep their signatures.
+- A new protocol `ShellRenderPass` carries the suspending transform of pass 2.
+  `RenderPass` keeps its synchronous transform for passes 1 and 3.
+  `RenderPipeline.shellInjection` and the `shellInjection:` argument of the
+  initializer now take `any ShellRenderPass`. `IdentityRenderPass` conforms to
+  both protocols, thus it still stands in for any of the three passes.
+- `QuarantinedText` gained `mappingOriginalSpans(awaiting:)`, the suspending
+  twin of `mappingOriginalSpans(_:)`.
+- `run script` gives the same results, with the same fields and the same
+  correctives.
+
 ### Changed: `search skill` and `list skill` give plain text that names the load command
 
 This change breaks the source of a host that reads `SearchSkillOutput`,

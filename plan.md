@@ -399,7 +399,7 @@ into its `Instructions` itself. *(decision #27)*
 
 ```swift
 // UI collected: id = "deploy", values = ["production"]
-let rendered = try registry.call(id: "deploy", arguments: ["production"])
+let rendered = try await registry.call(id: "deploy", arguments: ["production"])
 try await root.respond(to: rendered)     // rendered body enters the transcript
 ```
 
@@ -772,11 +772,12 @@ let skillsTool = try await SkillsTool.make(
 )
 
 // Lean root session: one tool + preloaded bodies, NO full catalog inline:
+let preloaded = await registry.preloadedBodies()   // preload: true skills, rendered
 let root = LanguageModelSession(
   tools: [skillsTool],
   instructions: Instructions {
     "…base instructions…"
-    registry.preloadedBodies()         // preload: true skills, rendered
+    preloaded
   }
 )
 

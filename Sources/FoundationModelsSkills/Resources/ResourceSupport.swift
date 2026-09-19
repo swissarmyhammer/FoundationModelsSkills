@@ -8,24 +8,6 @@ internal let resourceOperationNoun = "resource"
 /// confine execution to.
 internal let scriptsDirectoryPrefix = "scripts/"
 
-extension StringProtocol {
-    /// This text split into lines by `\n`, without counting a final
-    /// trailing newline as an extra, phantom empty line.
-    ///
-    /// Used by `ScriptProcessRunner` over captured process output.
-    /// `ReadResource` applies the same rule -- a line ends at `\n`, and a
-    /// trailing newline adds no empty final line -- but at the byte level
-    /// of its streaming scan, since it never holds a whole file as one
-    /// `String`.
-    internal var splitIntoLines: [SubSequence] {
-        var lines = split(separator: "\n", omittingEmptySubsequences: false)
-        if lines.last?.isEmpty == true {
-            lines.removeLast()
-        }
-        return lines
-    }
-}
-
 /// Shared "resolve `id` against the calling context's visible catalog"
 /// lookup and corrective-message logic for `ListResource`, `ReadResource`,
 /// and `RunScript` (plan.md §7.3, decision #22).

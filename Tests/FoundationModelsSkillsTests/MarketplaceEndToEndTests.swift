@@ -93,7 +93,7 @@ struct MarketplaceEndToEndTests {
         let fixture = try await Fixture()
         defer { fixture.cancelSubscriptions() }
 
-        try Self.stepOneAfterTheFirstSync(fixture)
+        try await Self.stepOneAfterTheFirstSync(fixture)
         let commits = try await Self.stepTwoCheckAndUpdate(fixture)
         try await Self.stepThreeUnreachableMarketplace(fixture, keeping: commits.second)
     }
@@ -107,29 +107,29 @@ struct MarketplaceEndToEndTests {
     ///
     /// - Parameter fixture: The started fixture.
     /// - Throws: The error of a render.
-    private static func stepOneAfterTheFirstSync(_ fixture: Fixture) throws {
+    private static func stepOneAfterTheFirstSync(_ fixture: Fixture) async throws {
         let listing = fixture.registry.commandListing()
 
         let alphaRow = try #require(listing.first { $0.id == alphaID })
         #expect(alphaRow.source?.hasPrefix("\(marketplaceAID)@") == true)
-        #expect(try fixture.registry.call(id: alphaID).contains(headerFromMarketplaceA))
-        #expect(try fixture.registry.call(id: alphaID).contains(alphaBodyBeforeTheUpdate))
+        #expect(try await fixture.registry.call(id: alphaID).contains(headerFromMarketplaceA))
+        #expect(try await fixture.registry.call(id: alphaID).contains(alphaBodyBeforeTheUpdate))
 
         let gammaRow = try #require(listing.first { $0.id == gammaID })
         #expect(gammaRow.source?.hasPrefix("\(marketplaceBID)@") == true)
-        #expect(try fixture.registry.call(id: gammaID).contains(headerFromMarketplaceB))
+        #expect(try await fixture.registry.call(id: gammaID).contains(headerFromMarketplaceB))
 
         let betaRow = try #require(listing.first { $0.id == betaID })
         #expect(betaRow.source == nil, "the local copy of beta must win over the copy of marketplace A")
-        #expect(try fixture.registry.call(id: betaID).contains(localBetaBody))
+        #expect(try await fixture.registry.call(id: betaID).contains(localBetaBody))
 
         let shadow = try #require(
             fixture.registry.diagnostics.first { $0.skillID == betaID && $0.message.contains("shadows") })
         #expect(shadow.message.contains("from marketplace `\(marketplaceAID)`"))
 
         for id in [untrustedAID, untrustedBID] {
-            let error = try #require(throws: TemplateEngineError.self) {
-                try fixture.registry.call(id: id)
+            let error = try await #require(throws: TemplateEngineError.self) {
+                try await fixture.registry.call(id: id)
             }
             #expect(
                 error.description.contains(nowTagUntrustedRejection),
@@ -204,7 +204,7 @@ struct MarketplaceEndToEndTests {
             failureDiagnostics.contains { $0.message.contains(movedDirectoryName) },
             "the diagnostic says the libgit2 message, not only `unreachable`; got: \(failureDiagnostics)")
         #expect(fixture.store.marketplaceLayers().first?.provenance.sha == keptCommit)
-        #expect(try fixture.registry.call(id: alphaID).contains(alphaBodyAfterTheUpdate))
+        #expect(try await fixture.registry.call(id: alphaID).contains(alphaBodyAfterTheUpdate))
     }
 
     /// The text of the first ``MarketplaceEvent/failed(id:error:keptVersion:)``

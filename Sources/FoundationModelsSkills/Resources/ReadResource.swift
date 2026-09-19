@@ -27,7 +27,8 @@ public typealias ReadResourceOutput = CorrectiveOutcome<ReadResourceResult>
 /// call scans the file to its end (linear in file size, but bounded in
 /// memory by one chunk plus the returned window). A line is a run of bytes
 /// ended by `\n` (0x0A); a trailing newline does not add an empty final line,
-/// matching `StringProtocol.splitIntoLines`.
+/// the same rule that `RunScript` gets from the output tail of the Extras
+/// `ProcessRunner`.
 ///
 /// Two conditions refuse the read with a corrective instead of paging: a
 /// single line that alone exceeds the content byte budget (named by line

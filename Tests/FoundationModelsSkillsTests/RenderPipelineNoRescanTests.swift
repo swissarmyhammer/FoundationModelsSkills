@@ -51,12 +51,12 @@ struct RenderPipelineNoRescanTests {
 
     // MARK: - An argument value containing `` !`echo pwned` `` renders literal; no process spawns
 
-    @Test func argumentValueContainingShellInjectionRendersLiteralAndSpawnsNoProcess() throws {
+    @Test func argumentValueContainingShellInjectionRendersLiteralAndSpawnsNoProcess() async throws {
         let skillDirectory = try makeTempDirectory()
         let probeFile = skillDirectory.appendingPathComponent("pwned.txt")
         let maliciousArgument = "!`touch pwned.txt`"
 
-        let result = try realPipeline().renderBody(
+        let result = try await realPipeline().renderBody(
             request(text: "Argument: $ARGUMENTS", arguments: [maliciousArgument], skillDirectory: skillDirectory))
 
         #expect(result == "Argument: \(maliciousArgument)")
@@ -65,13 +65,13 @@ struct RenderPipelineNoRescanTests {
 
     // MARK: - An argument value containing `{{ HOME }}`/`{% include %}` stays literal after a full body render
 
-    @Test func argumentValueContainingStencilSyntaxStaysLiteralAfterFullBodyRender() throws {
+    @Test func argumentValueContainingStencilSyntaxStaysLiteralAfterFullBodyRender() async throws {
         let skillDirectory = try makeTempDirectory()
         setenv("RENDER_PIPELINE_NO_RESCAN_TESTS_HOME", "/should-never-appear", 1)
         defer { unsetenv("RENDER_PIPELINE_NO_RESCAN_TESTS_HOME") }
         let maliciousArgument = "{{ RENDER_PIPELINE_NO_RESCAN_TESTS_HOME }} {% include \"header\" %}"
 
-        let result = try realPipeline().renderBody(
+        let result = try await realPipeline().renderBody(
             request(text: "Argument: $ARGUMENTS", arguments: [maliciousArgument], skillDirectory: skillDirectory))
 
         #expect(result == "Argument: \(maliciousArgument)")
@@ -80,7 +80,7 @@ struct RenderPipelineNoRescanTests {
 
     // MARK: - Shell output containing `{{ HOME }}`, `$0`, and `` !`cmd` `` stays literal end-to-end
 
-    @Test func shellCommandOutputContainingDollarStencilAndInjectionSyntaxStaysLiteralEndToEnd() throws {
+    @Test func shellCommandOutputContainingDollarStencilAndInjectionSyntaxStaysLiteralEndToEnd() async throws {
         let skillDirectory = try makeTempDirectory()
         setenv("RENDER_PIPELINE_NO_RESCAN_TESTS_HOME", "/should-never-appear", 1)
         defer { unsetenv("RENDER_PIPELINE_NO_RESCAN_TESTS_HOME") }
@@ -89,7 +89,7 @@ struct RenderPipelineNoRescanTests {
         try sentinel.write(
             to: skillDirectory.appendingPathComponent("sentinel.txt"), atomically: true, encoding: .utf8)
 
-        let result = try realPipeline().renderBody(
+        let result = try await realPipeline().renderBody(
             request(text: "Shell says: !`cat sentinel.txt`", skillDirectory: skillDirectory))
 
         #expect(result == "Shell says: \(sentinel)")
@@ -99,7 +99,7 @@ struct RenderPipelineNoRescanTests {
 
     // MARK: - Composition: all three assertions together, over one render
 
-    @Test func realPassOneTwoThreeTogetherSatisfyAllThreeNoRescanAssertions() throws {
+    @Test func realPassOneTwoThreeTogetherSatisfyAllThreeNoRescanAssertions() async throws {
         let skillDirectory = try makeTempDirectory()
         let argumentProbe = skillDirectory.appendingPathComponent("argument-pwned.txt")
         let shellProbe = skillDirectory.appendingPathComponent("shell-pwned.txt")
@@ -116,7 +116,7 @@ struct RenderPipelineNoRescanTests {
             Shell says: !`cat sentinel.txt`
             """
 
-        let result = try realPipeline().renderBody(
+        let result = try await realPipeline().renderBody(
             request(text: body, arguments: [maliciousArgument], skillDirectory: skillDirectory))
 
         #expect(result.contains("Argument: \(maliciousArgument)"))
@@ -156,19 +156,19 @@ struct RenderPipelineNoRescanTests {
             (name: "iteration budget", fragment: RenderPipelineNoRescanTests.iterationBudgetFragment),
             (name: "output budget", fragment: RenderPipelineNoRescanTests.outputBudgetFragment),
         ])
-    func fiftySpliceUntrustedBodyCannotExceedTheSingleRenderBudgets(name: String, fragment: String) throws {
+    func fiftySpliceUntrustedBodyCannotExceedTheSingleRenderBudgets(name: String, fragment: String) async throws {
         let skillDirectory = try makeTempDirectory()
         let body = Self.repeatedSpliceBody(fragment: fragment)
 
-        #expect(throws: TemplateEngineError.self, "\(name)") {
-            try realPipeline().renderBody(request(text: body, arguments: ["x"], skillDirectory: skillDirectory))
+        await #expect(throws: TemplateEngineError.self, "\(name)") {
+            try await realPipeline().renderBody(request(text: body, arguments: ["x"], skillDirectory: skillDirectory))
         }
     }
 
-    @Test func singleSpliceBodyUnderTheBudgetsRendersSoTheBudgetFixtureIsValidTemplateText() throws {
+    @Test func singleSpliceBodyUnderTheBudgetsRendersSoTheBudgetFixtureIsValidTemplateText() async throws {
         let skillDirectory = try makeTempDirectory()
 
-        let result = try realPipeline().renderBody(
+        let result = try await realPipeline().renderBody(
             request(text: "$0\(Self.iterationBudgetFragment)", arguments: ["x"], skillDirectory: skillDirectory))
 
         #expect(result == "x\n\nARGUMENTS: x")
@@ -186,11 +186,11 @@ struct RenderPipelineNoRescanTests {
         #expect(substituted.spans == [.original("{% if flag %}{% endif %}")])
     }
 
-    @Test func emptyShellOutputNoLongerSplitsTheOriginalSpanAroundIt() throws {
+    @Test func emptyShellOutputNoLongerSplitsTheOriginalSpanAroundIt() async throws {
         let skillDirectory = try makeTempDirectory()
         let body = "before !`true`after"
 
-        let injected = try ShellInjection().render(
+        let injected = try await ShellInjection().render(
             QuarantinedText(original: body), request: request(text: body, skillDirectory: skillDirectory))
 
         #expect(injected.spans == [.original("before after")])

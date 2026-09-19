@@ -41,7 +41,7 @@ struct MarketplaceStoreTests {
 
         await cache.store.start()
 
-        #expect(try cache.makeRegistry().call(id: Self.skillID).contains("alpha body"))
+        #expect(try await cache.makeRegistry().call(id: Self.skillID).contains("alpha body"))
     }
 
     @Test func aColdStartReloadsAWaitingRegistryOneTime() async throws {
@@ -59,7 +59,7 @@ struct MarketplaceStoreTests {
         await ReloadTestSupport.expectExactlyOneEvent(
             countGetter: { await tally.count }, since: 0,
             signalTimeout: Self.expectedSignalTimeout, settleWindow: Self.noFurtherSignalWindow)
-        #expect(try registry.call(id: Self.skillID).contains("alpha body"))
+        #expect(try await registry.call(id: Self.skillID).contains("alpha body"))
     }
 
     @Test func aSecondStartWithNoRemoteChangeDoesNoFetch() async throws {
@@ -88,7 +88,7 @@ struct MarketplaceStoreTests {
 
         #expect(events == [.updated(id: "fixture", from: first, to: second)])
         #expect(cache.store.marketplaceLayers().first?.provenance.sha == second)
-        #expect(try cache.makeRegistry().call(id: Self.skillID).contains("alpha body v2"))
+        #expect(try await cache.makeRegistry().call(id: Self.skillID).contains("alpha body v2"))
     }
 
     @Test func anUnreachableURLKeepsTheLastGoodSnapshot() async throws {
@@ -155,7 +155,7 @@ struct MarketplaceStoreTests {
         await other.update()
 
         #expect(cache.store.marketplaceLayers().first?.provenance.sha == first)
-        #expect(try cache.makeRegistry().call(id: Self.skillID).contains("alpha body"))
+        #expect(try await cache.makeRegistry().call(id: Self.skillID).contains("alpha body"))
     }
 
     @Test func theStoreHoldsALeaseOnTheSnapshotItServesAndReleasesTheOneItLeaves() async throws {

@@ -36,13 +36,13 @@ struct MarketplaceLocalSourceTests {
         let layer = try #require(fixture.store.marketplaceLayers().first)
         #expect(layer.layer.root.path == folder.appendingPathComponent("skills").path)
         #expect(layer.isWatchable, "a folder on this computer is watched as a local layer")
-        #expect(try fixture.makeRegistry().call(id: Self.skillID).contains("local folder body"))
+        #expect(try await fixture.makeRegistry().call(id: Self.skillID).contains("local folder body"))
         #expect(await transport.remoteHeadCount == 0)
         #expect(await transport.fetchCount == 0)
         #expect(try Self.entryCount(ofDirectory: fixture.cacheDirectory) == 0)
     }
 
-    @Test func aPathFieldNamesTheFolderOfTheLayerUnderTheLocalRoot() throws {
+    @Test func aPathFieldNamesTheFolderOfTheLayerUnderTheLocalRoot() async throws {
         let folder = try MarketplaceTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: folder) }
         let inner = folder.appendingPathComponent("library", isDirectory: true)
@@ -52,16 +52,16 @@ struct MarketplaceLocalSourceTests {
 
         let layer = try #require(fixture.store.marketplaceLayers().first)
         #expect(layer.layer.root.path == inner.path)
-        #expect(try fixture.makeRegistry().call(id: Self.skillID).contains("library body"))
+        #expect(try await fixture.makeRegistry().call(id: Self.skillID).contains("library body"))
     }
 
-    @Test func aSelectionOtherThanAllOverALocalFolderGivesADiagnosticAndIsIgnored() throws {
+    @Test func aSelectionOtherThanAllOverALocalFolderGivesADiagnosticAndIsIgnored() async throws {
         let folder = try Self.makeLocalMarketplace(body: "local folder body")
         defer { try? FileManager.default.removeItem(at: folder) }
         let source = MarketplaceSource(Self.url(ofFolder: folder), select: .skills(["other"]))
         let fixture = try MarketplaceStoreFixture(sources: [source])
 
-        #expect(try fixture.makeRegistry().call(id: Self.skillID).contains("local folder body"))
+        #expect(try await fixture.makeRegistry().call(id: Self.skillID).contains("local folder body"))
         #expect(
             fixture.store.diagnostics.contains {
                 $0.severity == .warning && $0.message.contains("select")
@@ -88,7 +88,7 @@ struct MarketplaceLocalSourceTests {
         await ReloadTestSupport.expectExactlyOneEvent(
             countGetter: { await tally.count }, since: 0,
             signalTimeout: Self.expectedSignalTimeout, settleWindow: Self.noFurtherSignalWindow)
-        #expect(try registry.call(id: Self.skillID).contains("local folder body v2"))
+        #expect(try await registry.call(id: Self.skillID).contains("local folder body v2"))
     }
 
     @Test func aCacheBackedMarketplaceLayerIsNotWatched() throws {
@@ -133,7 +133,7 @@ struct MarketplaceLocalSourceTests {
         let layer = try #require(seed.store.marketplaceLayers().first)
         #expect(layer.provenance.sha == seed.seededSha)
         #expect(layer.layer.root.path.hasPrefix(seed.seedDirectory.path))
-        #expect(try seed.fixture.makeRegistry().call(id: Self.skillID).contains("seed body"))
+        #expect(try await seed.fixture.makeRegistry().call(id: Self.skillID).contains("seed body"))
     }
 
     @Test func anUpdateOfASeedEntryWritesNothingAndGivesADiagnostic() async throws {

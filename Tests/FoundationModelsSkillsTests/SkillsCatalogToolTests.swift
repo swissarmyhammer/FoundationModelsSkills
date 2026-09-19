@@ -102,7 +102,7 @@ struct SkillsCatalogToolTests {
 
         let answer = try await tool.call(arguments: GeneratedContent(properties: ["op": "use skill", "id": "lint"]))
 
-        #expect(answer == (try registry.call(id: "lint")))
+        #expect(answer == (try await registry.call(id: "lint")))
     }
 
     // MARK: - The operation texts

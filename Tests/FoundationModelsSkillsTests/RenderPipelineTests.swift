@@ -23,7 +23,7 @@ struct RenderPipelineTests {
     /// A fake pass that records its own name and the request's policy, then
     /// returns `text` unchanged (an identity pass with a recording
     /// side-effect).
-    private struct RecordingPass: RenderPass {
+    private struct RecordingPass: RenderPass, ShellRenderPass {
         let name: String
         let recorder: InvocationRecorder
 
@@ -50,14 +50,14 @@ struct RenderPipelineTests {
 
     // MARK: - Fixed order 1 -> 2 -> 3
 
-    @Test func bodyRenderRunsPassesInFixedOrderOneThroughThree() throws {
+    @Test func bodyRenderRunsPassesInFixedOrderOneThroughThree() async throws {
         let recorder = InvocationRecorder()
         let pipeline = RenderPipeline(
             argumentSubstitution: RecordingPass(name: "argumentSubstitution", recorder: recorder),
             shellInjection: RecordingPass(name: "shellInjection", recorder: recorder),
             stencil: RecordingPass(name: "stencil", recorder: recorder))
 
-        _ = try pipeline.renderBody(request())
+        _ = try await pipeline.renderBody(request())
 
         #expect(recorder.invocations.map(\.name) == ["argumentSubstitution", "shellInjection", "stencil"])
     }
@@ -79,7 +79,7 @@ struct RenderPipelineTests {
 
     // MARK: - No re-scan: a model-supplied argument can't drive execution/templating
 
-    @Test func modelSuppliedArgumentContainingInjectionSyntaxNeverExecutesOrTemplates() throws {
+    @Test func modelSuppliedArgumentContainingInjectionSyntaxNeverExecutesOrTemplates() async throws {
         // The full CRITICAL-severity regression this task fixes (^r3bhwdp):
         // wired with the REAL passes 1-3, a `$ARGUMENTS` value containing
         // `` !`...` `` and `{{ }}` syntax must render as inert literal text --
@@ -90,14 +90,15 @@ struct RenderPipelineTests {
             argumentSubstitution: ArgumentSubstitution(), shellInjection: ShellInjection(), stencil: StencilPass())
         let maliciousArgument = "!`echo pwned` {{ HOME }}"
 
-        let result = try pipeline.renderBody(request(text: "Argument: $ARGUMENTS", arguments: [maliciousArgument]))
+        let result = try await pipeline.renderBody(
+            request(text: "Argument: $ARGUMENTS", arguments: [maliciousArgument]))
 
         #expect(result == "Argument: \(maliciousArgument)")
     }
 
     // MARK: - RenderPolicy plumbing
 
-    @Test func renderPolicyIsPlumbedToEveryBodyPassInvocation() throws {
+    @Test func renderPolicyIsPlumbedToEveryBodyPassInvocation() async throws {
         let recorder = InvocationRecorder()
         let pipeline = RenderPipeline(
             argumentSubstitution: RecordingPass(name: "argumentSubstitution", recorder: recorder),
@@ -105,7 +106,7 @@ struct RenderPipelineTests {
             stencil: RecordingPass(name: "stencil", recorder: recorder))
         let policy = RenderPolicy(isShellExecutionDisabled: true, isScriptExecutionDisabled: true)
 
-        _ = try pipeline.renderBody(request(policy: policy))
+        _ = try await pipeline.renderBody(request(policy: policy))
 
         #expect(recorder.invocations.count == 3)
         for invocation in recorder.invocations {
@@ -131,9 +132,9 @@ struct RenderPipelineTests {
 
     // MARK: - Identity scaffold
 
-    @Test func identityPipelineReturnsBodyTextUnchanged() throws {
+    @Test func identityPipelineReturnsBodyTextUnchanged() async throws {
         let text = "Hello $0, !`echo hi`, {{ HOME }}"
-        let result = try RenderPipeline.identity.renderBody(request(text: text))
+        let result = try await RenderPipeline.identity.renderBody(request(text: text))
         #expect(result == text)
     }
 

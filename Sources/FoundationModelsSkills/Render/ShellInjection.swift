@@ -1,10 +1,11 @@
 import Foundation
+import FoundationModelsExtras
 
 /// Pass 2 of the §5 render pipeline: shell-command injection, body renders only.
 ///
 /// Recognizes two forms, both single-shot over the *original* input text (never re-scanning
-/// substituted output, satisfying `RenderPass`'s no-re-scan contract the same way
-/// `ArgumentSubstitution` does): inline `` !`command` ``, matched only when the `!` sits at the
+/// substituted output, honoring the same no-re-scan contract that `RenderPass` documents and
+/// `ArgumentSubstitution` keeps): inline `` !`command` ``, matched only when the `!` sits at the
 /// very start of the flattened text or immediately after a whitespace character (a mid-word
 /// `` foo!`cmd` `` never matches, so it is left untouched, verbatim); and fenced ` ```! ` blocks,
 /// whose entire fenced region -- opening fence line through closing fence line -- is replaced by
@@ -24,8 +25,16 @@ import Foundation
 /// injection site, with trailing newlines trimmed (matching POSIX `$(...)` command-substitution
 /// semantics, the shell convention this syntax otherwise mirrors). Commands re-execute on every
 /// `render(_:request:)` call -- this pass holds no cache, so "dynamic at render, static in
-/// transcript" (plan.md §5) falls out of `RenderPass`'s per-call contract with no extra
+/// transcript" (plan.md §5) falls out of `ShellRenderPass`'s per-call contract with no extra
 /// bookkeeping here.
+///
+/// **The limits.** `FoundationModelsExtras.ProcessRunner` starts every command, thus each one
+/// runs in a process group of its own, stands in `ProcessRegistry.global` while it runs, and
+/// dies with its whole group at `RenderPolicy.shellCommandTimeout`. The read of the output stops
+/// at `RenderPolicy.shellOutputByteLimit`, thus a command that writes without end cannot grow the
+/// memory of the host. A command that passes either limit writes no output into the body: this
+/// pass writes the inert marker of that limit in its place, and the render of the rest of the
+/// body goes on.
 ///
 /// **Body only.** `RenderPipeline.renderMetadata` never includes this pass in its pass-set
 /// (`description`/`metadata.*` values render at metadata-build/reload/list time, where shell
@@ -35,13 +44,39 @@ import Foundation
 ///
 /// **macOS only** (plan.md §8) -- this package's platform floor already excludes iOS at the
 /// manifest level, so no `#if os(macOS)` guard is needed in this file itself.
-public struct ShellInjection: RenderPass {
+public struct ShellInjection: ShellRenderPass {
+    /// The inert text an injection site is replaced with instead of the output of its command,
+    /// naming the reason.
+    ///
+    /// One shape serves every reason, thus a body reads the same whichever limit or policy
+    /// stopped the command, and a host that scans a rendered body reads one form.
+    ///
+    /// - Parameter reason: Why the site carries no output.
+    /// - Returns: The marker text.
+    private static func marker(reason: String) -> String {
+        "[shell execution \(reason)]"
+    }
+
     /// The inert text every injection site is replaced with instead of running anything.
     ///
     /// Substituted when `RenderPolicy.isShellExecutionDisabled` is `true`; shared by both
     /// recognized forms (inline and fenced) -- neither is treated differently under the
     /// disabled policy.
-    public static let disabledMarker = "[shell execution disabled]"
+    public static let disabledMarker = marker(reason: "disabled")
+
+    /// The inert text an injection site carries when its command passed
+    /// `RenderPolicy.shellCommandTimeout` and the runner killed its whole process group.
+    ///
+    /// The partial output of the command never reaches the body, and the render of the rest of
+    /// the body goes on.
+    public static let timedOutMarker = marker(reason: "timed out")
+
+    /// The inert text an injection site carries when its command wrote more than
+    /// `RenderPolicy.shellOutputByteLimit`.
+    ///
+    /// The kept part of the output never reaches the body, and the render of the rest of the
+    /// body goes on.
+    public static let outputOverTheLimitMarker = marker(reason: "output over the limit")
 
     /// Creates a `ShellInjection` pass.
     ///
@@ -65,14 +100,14 @@ public struct ShellInjection: RenderPass {
     ///     working directory every command runs in, and `policy.isShellExecutionDisabled` gates
     ///     whether anything runs at all.
     /// - Returns: `text` with every recognized injection (found within an `.original` span)
-    ///   replaced by its command's output (or, under a disabled policy, by `disabledMarker`),
-    ///   quarantined.
-    /// - Throws: Whatever `Foundation.Process.run()` throws when a command fails to launch (e.g.
-    ///   `request.skillDirectory` does not exist).
-    public func render(_ text: QuarantinedText, request: RenderRequest) throws -> QuarantinedText {
-        try text.mappingOriginalSpans { spanText, precedingCharacter in
-            try Self.injectedSpans(in: spanText, precededBy: precedingCharacter, request: request)
-        }
+    ///   replaced by its command's output (or, under a disabled policy or a limit the command
+    ///   passed, by the matching marker), quarantined.
+    /// - Throws: `ProcessRunner.Failure` when a command never reached exec -- for example when
+    ///   `request.skillDirectory` does not exist.
+    public func render(_ text: QuarantinedText, request: RenderRequest) async throws -> QuarantinedText {
+        try await text.mappingOriginalSpans(awaiting: { spanText, precedingCharacter in
+            try await Self.injectedSpans(in: spanText, precededBy: precedingCharacter, request: request)
+        })
     }
 
     /// Scans one `.original` span's `text` left to right for every recognized injection,
@@ -93,11 +128,11 @@ public struct ShellInjection: RenderPass {
     ///     or `nil` when `text` starts the flattened text.
     ///   - request: The render request this pass runs under.
     /// - Returns: The spans that replace `text`: literal runs as `.original`, every command's
-    ///   output (or `disabledMarker`) as its own `.quarantined` span.
+    ///   output (or the marker that stands in its place) as its own `.quarantined` span.
     /// - Throws: Whatever `resolvedOutput(forCommand:request:)` throws.
     private static func injectedSpans(
         in text: String, precededBy precedingCharacter: Character?, request: RenderRequest
-    ) throws -> [QuarantinedText.Span] {
+    ) async throws -> [QuarantinedText.Span] {
         let scanned = precedingCharacter.map { String($0) + text } ?? text
         let contentStart = precedingCharacter == nil ? scanned.startIndex : scanned.index(after: scanned.startIndex)
         var builder = SpanBuilder()
@@ -109,7 +144,7 @@ public struct ShellInjection: RenderPass {
             builder.appendOriginal(scanned[lastEnd..<matchRange.lowerBound])
             lastEnd = matchRange.upperBound
             let command = Self.command(from: match, in: scanned)
-            builder.appendQuarantined(try Self.resolvedOutput(forCommand: command, request: request))
+            builder.appendQuarantined(try await Self.resolvedOutput(forCommand: command, request: request))
         }
         builder.appendOriginal(scanned[lastEnd...])
         return builder.finish()
@@ -175,45 +210,65 @@ public struct ShellInjection: RenderPass {
     // MARK: - Execution
 
     /// Resolves one recognized `command`'s substitution: `disabledMarker` under a disabled
-    /// policy, or that command's actual merged, trimmed output.
+    /// policy, the marker of the limit the command passed, or that command's actual merged,
+    /// trimmed output.
     ///
     /// - Parameters:
     ///   - command: The shell command text captured from either injection form.
     ///   - request: The render request this pass runs under; `policy.isShellExecutionDisabled`
-    ///     gates execution, and `skillDirectory` supplies the working directory when it runs.
-    /// - Returns: `disabledMarker`, or `command`'s captured output.
-    /// - Throws: Whatever `run(command:workingDirectory:)` throws.
-    private static func resolvedOutput(forCommand command: String, request: RenderRequest) throws -> String {
+    ///     gates execution, the two limits of the policy bound the run, and `skillDirectory`
+    ///     supplies the working directory when it runs.
+    /// - Returns: `disabledMarker`, `timedOutMarker`, `outputOverTheLimitMarker`, or `command`'s
+    ///   captured output.
+    /// - Throws: Whatever `run(command:workingDirectory:policy:)` throws.
+    private static func resolvedOutput(forCommand command: String, request: RenderRequest) async throws -> String {
         guard !request.policy.isShellExecutionDisabled else { return disabledMarker }
-        return try run(command: command, workingDirectory: request.skillDirectory)
+        return try await run(
+            command: command, workingDirectory: request.skillDirectory, policy: request.policy)
     }
+
+    /// The shell every recognized command runs under.
+    private static let shellURL = URL(fileURLWithPath: "/bin/sh")
+
+    /// The option that tells the shell to read its command from the argument that follows.
+    private static let shellCommandOption = "-c"
+
+    /// The count of lines the pass keeps of one command's output.
+    ///
+    /// The byte limit of the policy is the true bound of the memory, and the pass inlines the
+    /// whole output rather than a tail of it, thus the count of lines holds back nothing.
+    private static let outputLineCap = Int.max
 
     /// Runs `command` via `/bin/sh -c` with `workingDirectory` as its current directory and the
     /// host process's environment fully inherited, capturing merged stdout+stderr.
+    ///
+    /// `ProcessRunner` of `FoundationModelsExtras` starts the shell directly, thus the shell and
+    /// each process it starts share one process group, the pid stands in `ProcessRegistry.global`
+    /// while the command runs, and the group dies with `SIGKILL` at the timeout. The exit code
+    /// of the command decides nothing: a command that failed inlines whatever it wrote, exactly
+    /// as `$(...)` of a shell does.
     ///
     /// - Parameters:
     ///   - command: The command string passed to `sh -c`.
     ///   - workingDirectory: The child process's working directory -- the skill's own directory,
     ///     matching plan.md decision #28's cwd discipline for the sibling §7.3.1 script path.
+    ///   - policy: The policy of the render, which carries the timeout and the byte limit.
     /// - Returns: The command's merged stdout+stderr, decoded as UTF-8 with trailing newlines
-    ///   trimmed.
-    /// - Throws: Whatever `Foundation.Process.run()` throws (e.g. `workingDirectory` does not
-    ///   exist).
-    private static func run(command: String, workingDirectory: URL) throws -> String {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/sh")
-        process.arguments = ["-c", command]
-        process.currentDirectoryURL = workingDirectory
+    ///   trimmed, or the marker of the limit the command passed.
+    /// - Throws: `ProcessRunner.Failure` when the shell never reached exec -- for example when
+    ///   `workingDirectory` does not exist.
+    private static func run(command: String, workingDirectory: URL, policy: RenderPolicy) async throws -> String {
+        let outcome = try await ProcessRunner.run(
+            executable: shellURL,
+            arguments: [shellCommandOption, command],
+            workingDirectory: workingDirectory,
+            timeout: policy.shellCommandTimeout,
+            outputCap: ProcessRunner.OutputCap(
+                lineCount: outputLineCap, byteLimit: policy.shellOutputByteLimit))
 
-        let outputPipe = Pipe()
-        process.standardOutput = outputPipe
-        process.standardError = outputPipe
-
-        try process.run()
-        let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-
-        return trimmingTrailingNewlines(String(decoding: data, as: UTF8.self))
+        guard outcome.termination != .timedOut else { return timedOutMarker }
+        guard !outcome.isTruncated else { return outputOverTheLimitMarker }
+        return trimmingTrailingNewlines(outcome.output.joined(separator: "\n"))
     }
 
     /// Strips every trailing `"\n"` from `text`, mirroring POSIX `$(...)` command-substitution

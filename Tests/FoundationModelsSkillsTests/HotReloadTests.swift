@@ -184,7 +184,7 @@ struct HotReloadTests {
         // `charlie` (`disable-model-invocation: true`) never reaches the
         // search agent at all -- only `registry.preloadedBodies()` sees it
         // -- so this read is unaffected by the still-closed gate.
-        let preloadedAfterAdd = registry.preloadedBodies()
+        let preloadedAfterAdd = await registry.preloadedBodies()
 
         await embedGate.open()
         await Self.expectExactlyOneUpdate(updates, since: 0)
@@ -235,7 +235,7 @@ struct HotReloadTests {
             countAfterRealEdit == countBeforeEdit + 1,
             "only the changed, searcher-visible item should re-embed -- charlie is model-hidden and never reaches the embedder")
 
-        let preloadedAfterEdit = registry.preloadedBodies()
+        let preloadedAfterEdit = await registry.preloadedBodies()
         #expect(preloadedAfterEdit.contains("Preload payload v2 for charlie."))
         #expect(!preloadedAfterEdit.contains("Preload payload v1 for charlie."))
 
@@ -290,7 +290,7 @@ struct HotReloadTests {
         #expect(useAnswer.contains("not currently usable"))
         #expect(useAnswer.contains("bravo"), "the corrective should carry the current (still-usable) id list")
 
-        let preloadedAfterRemove = registry.preloadedBodies()
+        let preloadedAfterRemove = await registry.preloadedBodies()
         #expect(
             !preloadedAfterRemove.contains("Preload payload"),
             "a removed preload: true skill's body must never survive in preloadedBodies()")
@@ -368,7 +368,7 @@ struct HotReloadTests {
         #expect(!preloadedAfterEdit.contains("Preload payload v1 for charlie."))
         #expect(!preloadedAfterRemove.contains("Preload payload"))
 
-        let preloaded = registry.preloadedBodies()
+        let preloaded = await registry.preloadedBodies()
         #expect(!preloaded.contains("alpha"), "a removed skill's body must never survive in preloadedBodies()")
         #expect(
             !preloaded.contains("Preload payload"),

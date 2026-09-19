@@ -154,7 +154,7 @@ struct SkillsToolAssemblyTests {
         let loaded = try await Self.use(through: tool, op: Self.useSkillOp, id: firstID)
 
         #expect(firstID == Self.noArgumentSkillID)
-        #expect(loaded == (try Self.makeFixtureRegistry().call(id: Self.noArgumentSkillID)))
+        #expect(loaded == (try await Self.makeFixtureRegistry().call(id: Self.noArgumentSkillID)))
     }
 
     /// Shows that a result with a match tells the model to load a skill

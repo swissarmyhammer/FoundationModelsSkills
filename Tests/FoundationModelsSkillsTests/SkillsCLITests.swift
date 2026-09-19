@@ -52,7 +52,7 @@ struct SkillsCLITests {
 
         #expect(result.exitCode == 0)
         #expect(
-            try Self.decodedText(result.output)
+            try await Self.decodedText(result.output)
                 == Self.makeFixtureRegistry().call(id: "commit", arguments: ["fix parser"]))
     }
 
@@ -86,7 +86,7 @@ struct SkillsCLITests {
 
         #expect(result.exitCode == 0)
         #expect(
-            try Self.decodedText(result.output)
+            try await Self.decodedText(result.output)
                 == Self.makeFixtureRegistry().call(id: "deploy", arguments: ["production"]))
     }
 
@@ -137,7 +137,7 @@ struct SkillsCLITests {
         let result = await driver.run(arguments: ["skill", "use", "--id", "deploy"])
 
         #expect(result.exitCode == 0)
-        #expect(try Self.decodedText(result.output) == Self.makeFixtureRegistry().call(id: "deploy"))
+        #expect(try await Self.decodedText(result.output) == Self.makeFixtureRegistry().call(id: "deploy"))
     }
 
     @Test func useVerbRefusesLintWhichIsModelOnly() async throws {

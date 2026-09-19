@@ -35,7 +35,7 @@ enum WatchMode {
             Self.installTerminationHandler()
 
             for await metadata in reloads {
-                Self.printReloadEvent(metadata: metadata, registry: registry)
+                await Self.printReloadEvent(metadata: metadata, registry: registry)
             }
             withExtendedLifetime(tool) {}
         } catch {
@@ -50,10 +50,11 @@ enum WatchMode {
     ///   - metadata: The refreshed metadata `registry.onReload` published.
     ///   - registry: The registry to re-read `preloadedBodies()`/
     ///     `commandListing()` from.
-    private static func printReloadEvent(metadata: [SkillMetadata], registry: SkillsRegistry) {
+    private static func printReloadEvent(metadata: [SkillMetadata], registry: SkillsRegistry) async {
         let visibleCount = metadata.filter(\.isModelVisible).count
+        let preloaded = await registry.preloadedBodies()
         print("reload: \(metadata.count) skills, \(visibleCount) model-visible")
-        print("preload: \(registry.preloadedBodies().count) rendered characters")
+        print("preload: \(preloaded.count) rendered characters")
         print("listing: \(registry.commandListing().map(\.id).joined(separator: ", "))")
     }
 

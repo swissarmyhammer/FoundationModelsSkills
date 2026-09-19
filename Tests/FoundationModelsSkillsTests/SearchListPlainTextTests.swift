@@ -80,7 +80,7 @@ struct SearchListPlainTextTests {
     @Test func theSearchResultHoldsNoBodyAndNoJSON() async throws {
         let registry = Self.makeFixtureRegistry()
         let tool = try await Self.makeSelectionTool(registry: registry)
-        let body = try registry.call(id: Self.noArgumentSkillID)
+        let body = try await registry.call(id: Self.noArgumentSkillID)
 
         let answer = try await tool.call(
             arguments: GeneratedContent(properties: ["op": "search skill", "query": Self.anyQuery]))

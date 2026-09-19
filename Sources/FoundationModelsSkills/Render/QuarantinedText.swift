@@ -129,16 +129,61 @@ public struct QuarantinedText: Sendable, Equatable {
     public func mappingOriginalSpans(
         _ transform: (_ text: String, _ precedingCharacter: Character?) throws -> [Span]
     ) rethrows -> QuarantinedText {
-        var precedingCharacter: Character?
         var mapped: [Span] = []
-        for span in spans {
+        for (span, precedingCharacter) in spansWithPrecedingCharacters {
             switch span {
             case .original(let text): mapped += try transform(text, precedingCharacter)
             case .quarantined: mapped.append(span)
             }
-            precedingCharacter = span.text.last ?? precedingCharacter
         }
         return QuarantinedText(spans: mapped)
+    }
+
+    /// The same walk as `mappingOriginalSpans(_:)`, for a `transform` that
+    /// suspends.
+    ///
+    /// `ShellInjection` waits for a child process for each injection site, so
+    /// its transform is `async`. Swift has no `reasync`, thus one method
+    /// cannot serve a synchronous and a suspending `transform` alike; the two
+    /// walks share `spansWithPrecedingCharacters`, which holds all of the
+    /// bookkeeping, and each one carries the six lines the effect forces.
+    ///
+    /// The label `awaiting:` keeps the two apart at every call site, so no
+    /// caller has to know which one the compiler picked.
+    ///
+    /// - Parameter transform: Splits one `.original` span's text, given the
+    ///   character preceding it in the flattened text, into the spans that
+    ///   replace it.
+    /// - Returns: A new `QuarantinedText` with every `.original` span
+    ///   replaced by `transform`'s output, in the same relative order.
+    /// - Throws: Whatever `transform` throws.
+    public func mappingOriginalSpans(
+        awaiting transform: (_ text: String, _ precedingCharacter: Character?) async throws -> [Span]
+    ) async rethrows -> QuarantinedText {
+        var mapped: [Span] = []
+        for (span, precedingCharacter) in spansWithPrecedingCharacters {
+            switch span {
+            case .original(let text): mapped += try await transform(text, precedingCharacter)
+            case .quarantined: mapped.append(span)
+            }
+        }
+        return QuarantinedText(spans: mapped)
+    }
+
+    /// Every span of this text, each with the character that precedes it in
+    /// the flattened text -- `nil` for the first span.
+    ///
+    /// A `.quarantined` span contributes its last character to the span that
+    /// follows it, thus a pass reads the flattened text through this list
+    /// without ever scanning the quarantined text itself.
+    private var spansWithPrecedingCharacters: [(span: Span, precedingCharacter: Character?)] {
+        var precedingCharacter: Character?
+        var pairs: [(span: Span, precedingCharacter: Character?)] = []
+        for span in spans {
+            pairs.append((span, precedingCharacter))
+            precedingCharacter = span.text.last ?? precedingCharacter
+        }
+        return pairs
     }
 }
 

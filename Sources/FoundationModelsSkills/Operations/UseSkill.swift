@@ -143,7 +143,7 @@ public struct UseSkill: OperationDefinition {
         }
 
         do {
-            return .success(try context.registry.call(id: id, arguments: supplied))
+            return .success(try await context.registry.call(id: id, arguments: supplied))
         } catch is UnknownSkillError {
             // The live catalog changed between the lookup above and this
             // call (a race with a hot reload) -- report it the same way as

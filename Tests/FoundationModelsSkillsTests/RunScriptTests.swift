@@ -12,7 +12,7 @@ import Testing
 /// unknown/model-hidden id correctives, the two path guards (`scripts/`
 /// prefix, then confinement), the direct-exec eligibility check
 /// (executable bit + shebang), process-group timeout kill, the
-/// `ScriptProcessRunner` failed-to-spawn branch, the `generatedContent`
+/// failed-to-start branch of `RunScript`, the `generatedContent`
 /// round trip, and a golden result against the static `release-notes`
 /// fixture.
 struct RunScriptTests {
@@ -25,10 +25,11 @@ struct RunScriptTests {
     /// accident.
     private static let sampleTimeoutSeconds = 5
 
-    /// The timeout for the failed-to-spawn test. A spawn that fails gives a
-    /// result at once, so a short timeout makes a hang fail the test fast
-    /// instead of waiting for `RunScript.defaultTimeoutSeconds`.
-    private static let failedToSpawnTimeoutSeconds: TimeInterval = 1
+    /// The count of seconds the failed-to-start test gives `RunScript`. A
+    /// start that fails gives a result immediately. Thus a short timeout
+    /// makes a hang fail the test quickly. The test does not wait for
+    /// `RunScript.defaultTimeoutSeconds`.
+    private static let failedToSpawnTimeoutSeconds: Int = 1
 
     /// Builds a `SkillsToolContext` over `roots` under `policy`, via the
     /// shared `ResourceTestSupport.makeContext(roots:policy:)` --
@@ -333,31 +334,35 @@ struct RunScriptTests {
         #expect(kill(childPID, 0) == -1, "the backgrounded grandchild should have died with the whole process group")
     }
 
-    // MARK: - ScriptProcessRunner: the failed-to-spawn branch
+    // MARK: - RunScript: the failed-to-start branch
 
-    /// `RunScript` gates on the executable bit and on a shebang line before
-    /// it calls the runner, so a script that passes both gates and still
-    /// fails to exec is the one shape that reaches `ScriptProcessRunner`'s
-    /// `posix_spawn` failure branch. A shebang naming an interpreter that
-    /// does not exist makes the kernel refuse the exec, so `posix_spawn`
-    /// itself fails and the runner gives back `failedToSpawn`.
+    /// `RunScript` examines the executable bit and the shebang line before
+    /// it starts the script. Thus a script that passes both of these checks
+    /// and still does not start is the only condition that reaches the
+    /// failed-to-start branch of `RunScript`. A shebang that names an
+    /// interpreter that does not exist makes the kernel refuse the start.
+    /// Thus `RunScript`, which uses the `ProcessRunner` of
+    /// `FoundationModelsExtras`, gives back a failed result.
     @Test(.timeLimit(.minutes(1)))
-    func scriptProcessRunnerReportsFailedToSpawnWhenTheInterpreterDoesNotExist() async throws {
+    func runScriptReportsAFailedResultWhenTheInterpreterDoesNotExist() async throws {
         let root = try HotReloadTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
-        let scriptURL = try ResourceTestSupport.writeExecutableShebangScript(
+        try ResourceTestSupport.writeMinimalSkillFile(id: "no-interpreter", in: root, allowedTools: "Script")
+        try ResourceTestSupport.writeExecutableShebangScript(
             named: "no-interpreter.sh", inSkillID: "no-interpreter", under: root,
             contents: "#!/nonexistent/interpreter\necho hi\n")
 
-        let outcome = await ScriptProcessRunner.run(
-            executableURL: scriptURL, arguments: [], workingDirectory: root,
-            timeout: Self.failedToSpawnTimeoutSeconds)
+        let output = try await RunScript(
+            id: "no-interpreter", path: "scripts/no-interpreter.sh",
+            timeout: Self.failedToSpawnTimeoutSeconds
+        ).execute(in: Self.makeContext(roots: [root]))
 
-        #expect(outcome.status == .failed)
-        #expect(outcome.exitCode == nil)
-        #expect(outcome.durationMs == 0)
-        #expect(outcome.lines == 0)
-        #expect(outcome.output.isEmpty)
+        let result = try #require(Self.successResult(of: output), "expected a success outcome, got \(output)")
+        #expect(result.status == "failed")
+        #expect(result.exitCode == nil)
+        #expect(result.durationMs == 0)
+        #expect(result.lines == 0)
+        #expect(result.output.isEmpty)
     }
 
     // MARK: - Golden result
@@ -388,7 +393,7 @@ struct RunScriptTests {
 
     // MARK: - durationMs sub-second precision
 
-    /// `ScriptProcessRunner.run(...)`'s duration previously converted via
+    /// `RunScript` previously converted its duration via
     /// `Int(elapsed.components.seconds * 1000)` alone, silently discarding
     /// the `.attoseconds` remainder -- a genuinely ~300ms run would report
     /// `durationMs == 0`. A `sleep 0.3` fixture pins the fix. No wall-clock

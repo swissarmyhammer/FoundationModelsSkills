@@ -67,11 +67,13 @@ struct ReadmeExampleTests {
             session: { request in LanguageModelSession(model: .default, instructions: request.instructions) })
 
         // A lean root session: one tool and the preloaded bodies. Other bodies load on use.
+        // A body renders its shell commands, thus the render is async: read it first.
+        let preloaded = await registry.preloadedBodies()
         let session = LanguageModelSession(
             tools: [skillsTool],
             instructions: Instructions {
                 "You use the skills tool to search and run skills from the local library."
-                registry.preloadedBodies()
+                preloaded
             })
         // The README usage block ends here.
 
