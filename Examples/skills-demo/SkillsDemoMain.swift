@@ -28,9 +28,6 @@ internal enum SkillsDemoMain {
     /// The exit code of a demo run that could not build its own stack.
     private static let assemblyFailureExitCode: Int32 = 1
 
-    /// The line break that goes after the text of a mode.
-    private static let lineBreak = "\n"
-
     /// Dispatches to `--chat`/`--watch`/`--marketplace` mode or the default
     /// CLI mode, based on `CommandLine.arguments`.
     internal static func main() async {
@@ -59,7 +56,7 @@ internal enum SkillsDemoMain {
             let result = await driver.run(arguments: arguments)
             report(output: result.output, exitCode: result.exitCode)
         } catch {
-            FileHandle.standardError.write(Data("skills-demo: \(error)\n".utf8))
+            StandardStream.error.write(line: "skills-demo: \(error)")
             exit(assemblyFailureExitCode)
         }
     }
@@ -82,19 +79,21 @@ internal enum SkillsDemoMain {
 
     /// Writes the output of one mode and ends the process on a failure.
     ///
-    /// The call writes to standard output through `FileHandle`, the same way
-    /// the failure path of this file writes to standard error. The text gets
-    /// one line break at the end. Thus a text that already holds a line break
-    /// for each of its lines gets no empty line after it.
+    /// The call writes through `StandardStream`, the one line writer of this
+    /// package, the same way the failure path of this file writes to standard
+    /// error. That writer ends the text with one line break. Thus a text that
+    /// already holds a line break for each of its lines gets no empty line
+    /// after it.
     ///
     /// - Parameters:
     ///   - output: The text of the run. Empty text writes no line.
     ///   - exitCode: The exit code of the run. A value other than zero ends
     ///     the process with that code.
     private static func report(output: String, exitCode: Int32) {
+        let lineBreak = StandardStream.lineBreak
         let text = output.hasSuffix(lineBreak) ? String(output.dropLast(lineBreak.count)) : output
         if !text.isEmpty {
-            FileHandle.standardOutput.write(Data((text + lineBreak).utf8))
+            StandardStream.output.write(line: text)
         }
         if exitCode != 0 {
             exit(exitCode)

@@ -15,9 +15,6 @@ import Synchronization
 /// lines live inside a `Mutex`, which gives the class a plain `Sendable`
 /// conformance that the compiler checks.
 internal final class MarketplaceCLISession: Sendable {
-    /// The line break that ends one line of the output.
-    private static let lineBreak = "\n"
-
     /// The session of the run that is in progress, or `nil` outside a run.
     @TaskLocal static var current: MarketplaceCLISession?
 
@@ -58,7 +55,7 @@ internal final class MarketplaceCLISession: Sendable {
     /// - Parameter line: The line, with no line break at its end.
     func write(_ line: String) {
         guard collectsLines else {
-            FileHandle.standardOutput.write(Data("\(line)\(Self.lineBreak)".utf8))
+            StandardStream.output.write(line: line)
             return
         }
         lines.withLock { $0.append(line) }
@@ -80,7 +77,7 @@ internal final class MarketplaceCLISession: Sendable {
     /// - Returns: The text, or the empty text when the run wrote no line or
     ///   when the session writes to standard output.
     func text() -> String {
-        lines.withLock { $0 }.lazy.map { "\($0)\(Self.lineBreak)" }.joined()
+        StandardStream.text(of: lines.withLock { $0 })
     }
 
     // MARK: - The configuration

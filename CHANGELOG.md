@@ -5,6 +5,24 @@ change is at the top.
 
 ## Unreleased
 
+### Added: `StandardStream` and `ReloadReport`
+
+Two small public types that the package, its command groups and its example
+share. No existing API changed.
+
+- `StandardStream` is the one line writer of this package. It has the cases
+  `.output` and `.error`, the constant `StandardStream.lineBreak`,
+  `StandardStream.text(of:)` for a list of lines, and `write(line:)` and
+  `write(lines:)`. Every line that the `marketplace` command group and the
+  `skills-demo` example write to a standard stream goes through it, thus the
+  line break at the end of a line is stated one time.
+- `ReloadReport` reads what one hot reload changed: how many skills the
+  registry published, how many of them the model sees, how long the refreshed
+  preload text is, and which ids the refreshed `/` listing holds.
+  `ReloadReport.make(metadata:registry:)` reads a registry after a reload, and
+  `lines` gives the report as text. The `--watch` mode of the example writes
+  those lines, and it keeps no copy of the reading.
+
 ### Changed: a body render is `async`, and the shell pass has a timeout and an output limit
 
 This change breaks the source of a host that renders a body: the two methods
