@@ -47,6 +47,53 @@ comments:
     - evidence: `swift package clean && swift build --build-tests` — 0 errors, 0 warnings; `swift test` — 803 tests in 65 suites passed, 0 failed, 0 skipped
     - next: ready for review
   timestamp: 2026-09-20T14:01:20.597720+00:00
+- actor: claude-code
+  id: 01m2zjd839mn9kbfvy4mbhx9t9
+  text: |-
+    ### review — findings
+    - scope: `review sha HEAD~1..HEAD` (commit 895c901), task mode on ^15qqk20
+    - evidence: 2 findings, 2 confirmed, 0 refuted — Tests/FoundationModelsSkillsTests/FrontmatterDecoderTests.swift:20, Tests/FoundationModelsSkillsTests/FrontmatterDecoderTests.swift:24
+    - both findings are `reuse/reuse`: the test file writes again the reason texts that `FrontmatterDecoder.unparseableReason` and `FrontmatterDecoder.unparseableAfterRetryReason` hold.
+    - the open acceptance item (`FrontmatterDocument.split` in `Marketplace/CatalogResolver.swift`) stays open on purpose; card ^4e1wajh follows it.
+    - next: use the decoder constants in the test file, then review again.
+  timestamp: 2026-09-20T14:09:34.825232+00:00
+- actor: wballard
+  id: 01m2zjdpwtvzsvzzv57r7cn6h5
+  text: |-
+    ### finish iteration 1 — findings
+    - implement: changed — 12 files, 1 new
+    - test: green — swift test, 803 passed, 0 warnings
+    - commit: 895c901
+    - review: findings — Tests/FoundationModelsSkillsTests/FrontmatterDecoderTests.swift:20 and one more in the same file
+  timestamp: 2026-09-20T14:09:49.978591+00:00
+- actor: claude-code
+  id: 01m2zjmvsw1xzsx9y16789acrn
+  text: |-
+    Both review findings are closed, and these are the decisions.
+
+    - The two reason texts stay in one place: `FrontmatterDecoder.unparseableReason` and `FrontmatterDecoder.unparseableAfterRetryReason`. They lose the `private` keyword and become module-wide. They do not become `public`: the swift access-control rule says that library code is `internal` by default, and `public` is only for a cross-module API that a host asks for. A skip reason is diagnostic text, not a contract of the package.
+    - `FrontmatterDecoderTests.swift` thus reads them through `@testable import FoundationModelsSkills`, which is what 30 other files of the test target already do. The two private copies are deleted, and each of the four assertions names the decoder constant directly.
+    - The cause is gone from the whole file: `grep` finds no copy of either reason text in `FrontmatterDecoderTests.swift` now.
+    - `SkillValidatorTests.unparseableYAMLSkipOutcomeProducesASkipDiagnosticAndNoSkill` keeps its own literal, and that is deliberate. That text is the INPUT the test gives to `SkillValidator.validate(discovered:outcome:)`, which echoes any reason into its message. The test proves the echo, not the wording of the decoder, thus it must not depend on a decoder constant. It is no copy of a source of truth.
+    - `swift-format lint --strict` with no configuration file reports the whole file, the untouched lines included, because the default two-space indentation does not match the four-space style of this package. There is no `.swift-format` file at the root, thus this lint is not the standard of the project, and its output is no finding.
+
+    The open acceptance item (`FrontmatterDocument.split` in `Marketplace/CatalogResolver.swift`) stays open on purpose. Card ^4e1wajh follows it after card ^xd7yjf8 deletes the folder.
+  timestamp: 2026-09-20T14:13:44.380525+00:00
+- actor: claude-code
+  id: 01m2zjn021jp82gawrzc21kjj9
+  text: |-
+    ### implement — changed
+    - evidence: 2 files — Sources/FoundationModelsSkills/Frontmatter/FrontmatterDecoder.swift (the two reason constants lose `private`), Tests/FoundationModelsSkillsTests/FrontmatterDecoderTests.swift (`@testable import`, the two private copies deleted, four assertions on the decoder constants). `swift build --build-tests`: 0 errors, 0 warnings. `swift test`: 803 tests in 65 suites passed, 0 failures.
+    - findings: both `reuse/reuse` items are now `- [x]`.
+    - next: review again.
+  timestamp: 2026-09-20T14:13:48.737709+00:00
+- actor: claude-code
+  id: 01m2zjqk6dd30yjy7e7qqtw7yp
+  text: |-
+    ### test — green
+    - evidence: `swift build --build-tests` — build complete, 0 warnings. `swift test` — 803 tests in 65 suites passed, 0 failures, 0 skipped.
+    - next: send the task to review.
+  timestamp: 2026-09-20T14:15:13.869499+00:00
 position_column: doing
 position_ordinal: '80'
 title: Read SKILL.md through the Extras FrontmatterDocumentStack; the registry opens no file
@@ -84,3 +131,13 @@ The boundary rule (the user, 2026-09-20): the raw work of loading lives in `Foun
 - Record each decision in a comment on this card. Do not ask the user about an implementation detail.
 
 #loading-boundary #skills
+
+## Review Findings (2026-09-20 09:02)
+
+> Scope: `review sha HEAD~1..HEAD` — reviewed the diffs only — lines this change added or modified. 16 file(s) reviewed, 10 not reviewed.
+
+> 10 file(s) not reviewed — excluded by an ignore rule:
+> - `.kanban/ (from .reviewignore)` — 10 file(s)
+
+- [x] `Tests/FoundationModelsSkillsTests/FrontmatterDecoderTests.swift:20` `reuse/reuse` — Duplicates the error reason string already defined in FrontmatterDecoder.unparseableReason; should import and reuse that constant instead to keep a single source of truth that can be updated in one place. Import `FrontmatterDecoder.unparseableReason` and assign it to a local variable with the test-side name, or use the decoder's constant directly in the test assertions.
+- [x] `Tests/FoundationModelsSkillsTests/FrontmatterDecoderTests.swift:24` `reuse/reuse` — Duplicates the error reason string already defined in FrontmatterDecoder.unparseableAfterRetryReason; should import and reuse that constant instead to keep error messages synchronized. Import `FrontmatterDecoder.unparseableAfterRetryReason` and assign it to a local variable with the test-side name, or use the decoder's constant directly in the test assertions.

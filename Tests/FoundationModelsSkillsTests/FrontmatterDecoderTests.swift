@@ -1,6 +1,7 @@
 import Foundation
-import FoundationModelsSkills
 import Testing
+
+@testable import FoundationModelsSkills
 
 /// Table-driven tests for `FrontmatterDecoder` and its `SkillFrontmatter` model
 /// (plan.md §4, decision #27/#29): every spec + extension field spelling (both
@@ -15,15 +16,6 @@ import Testing
 /// that gives that text is the work of Extras, thus the cases below state
 /// their frontmatter with no fence around it.
 struct FrontmatterDecoderTests {
-    /// The reason the decoder gives for a frontmatter block that no retry can
-    /// repair.
-    private static let skippedReason = "unparseable YAML frontmatter"
-
-    /// The reason the decoder gives for a frontmatter block that the
-    /// quoting-fallback retry fired on, and that still did not decode.
-    private static let skippedAfterRetryReason =
-        "unparseable YAML frontmatter, even after quoting-fallback retry on 'description:'"
-
     /// Decodes `frontmatterYAML` -- the text between the fences -- and
     /// unwraps the `.decoded` case.
     private func decodeFrontmatter(
@@ -352,7 +344,7 @@ struct FrontmatterDecoderTests {
         #expect(
             FrontmatterDecoder.decode(
                 frontmatter: "name: broken\ndescription: Has a colon: here\nbogus: [1, 2\n")
-                == .skipped(reason: Self.skippedAfterRetryReason))
+                == .skipped(reason: FrontmatterDecoder.unparseableAfterRetryReason))
     }
 
     // MARK: - Truly unparseable, no description: line at all -> skipped, never throws
@@ -360,7 +352,7 @@ struct FrontmatterDecoderTests {
     @Test func trulyUnparseableYAMLWithNoDescriptionLineSkipsWithoutThrowing() {
         #expect(
             FrontmatterDecoder.decode(frontmatter: "name: [unterminated\n")
-                == .skipped(reason: Self.skippedReason))
+                == .skipped(reason: FrontmatterDecoder.unparseableReason))
     }
 
     // MARK: - An empty frontmatter block: empty fields, never skipped
@@ -398,9 +390,10 @@ struct FrontmatterDecoderTests {
 
     @Test func aSkippedMetadataKeepsItsReasonWhenTheBodyJoins() {
         let outcome = FrontmatterDecoder.Outcome(
-            metadata: .skipped(reason: Self.skippedReason), body: "The body.\n")
+            metadata: .skipped(reason: FrontmatterDecoder.unparseableReason),
+            body: "The body.\n")
 
-        #expect(outcome == .skipped(reason: Self.skippedReason))
+        #expect(outcome == .skipped(reason: FrontmatterDecoder.unparseableReason))
     }
 
     // MARK: - Helpers

@@ -126,11 +126,17 @@ public enum FrontmatterDecoder {
         + "'description:' value."
 
     /// The reason a frontmatter block that no retry can repair gives.
-    private static let unparseableReason = "unparseable YAML frontmatter"
+    ///
+    /// Module-wide, so that a test asserts on this one text instead of a copy
+    /// of it.
+    static let unparseableReason = "unparseable YAML frontmatter"
 
     /// The reason a frontmatter block that the retry fired on, and that still
     /// did not decode, gives.
-    private static let unparseableAfterRetryReason =
+    ///
+    /// Module-wide, so that a test asserts on this one text instead of a copy
+    /// of it.
+    static let unparseableAfterRetryReason =
         "unparseable YAML frontmatter, even after quoting-fallback retry on 'description:'"
 
     /// Yams-decodes one frontmatter block into `SkillFrontmatter`, retrying
