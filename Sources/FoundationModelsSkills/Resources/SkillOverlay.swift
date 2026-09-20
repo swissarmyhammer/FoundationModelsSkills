@@ -54,12 +54,17 @@ internal struct SkillOverlay: Sendable {
     /// The union of the layer directories: a path that only a lower directory
     /// holds is in the result, with the copy of that directory.
     ///
+    /// The stack reads no file to make this view, thus a file whose bytes are
+    /// not UTF-8 text -- an image under `assets/`, a compiled helper under
+    /// `scripts/` -- is in the result as well. A caller that needs the bytes
+    /// of such a file reads them itself.
+    ///
     /// - Returns: A dictionary from the file path, relative to a layer
     ///   directory, to the URL of the winning copy. A directory that does not
     ///   exist adds nothing, and a file that leaves its own directory adds
     ///   nothing.
     internal func entries() -> [String: URL] {
-        DotfolderStack(layers: layers).tree().mapValues(\.url)
+        DotfolderStack(layers: layers).urls().mapValues(\.url)
     }
 
     /// The layer directories as the layers of a `DotfolderStack`, lowest

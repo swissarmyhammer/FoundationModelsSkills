@@ -41,11 +41,27 @@ comments:
     - command: diagnostics check working — 0 errors, 0 warnings
     - next: ready for review
   timestamp: 2026-09-19T21:43:44.319039+00:00
+- actor: claude-code
+  id: 01m2xt7v0zh99qpw5pt7cmmfw1
+  text: |-
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (commit 8075b80) — 0 findings, 0 confirmed, 0 refuted, 7 attempted, 0 failed. 5 files reviewed; 6 `.kanban/` files not reviewed, because a `.reviewignore` rule holds them out.
+    - next: the card moves to `done`. No open finding stays.
+  timestamp: 2026-09-19T21:47:57.343874+00:00
+- actor: wballard
+  id: 01m2xt8hq1558vv8rq433hjyj2
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 5 files, 1 new
+    - test: green — swift test, 787 passed, 0 warnings
+    - commit: 8075b80
+    - review: clean — 0 findings; task moved to done
+  timestamp: 2026-09-19T21:48:20.577173+00:00
 depends_on:
 - 01M2X2HX820957M3JE41JKNJ0E
 - 01M2X2J1KXF8CGFNFY9XHB2S4D
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: ff80
 title: run script over the combined view
 ---
 ## What

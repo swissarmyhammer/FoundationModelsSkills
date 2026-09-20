@@ -20,6 +20,10 @@ struct SkillOverlayTests {
     /// The path of a file that each directory holds.
     private static let sharedPath = "SKILL.md"
 
+    /// The path of a file of bytes that are not UTF-8 text, which the lowest
+    /// directory only holds.
+    private static let bytesOnlyPath = "assets/logo.png"
+
     // MARK: - The union of the paths
 
     @Test func entriesGiveTheUnionOfThePathsOfEveryDirectory() throws {
@@ -28,7 +32,20 @@ struct SkillOverlayTests {
 
         let entries = SkillOverlay(directories: directories).entries()
 
-        #expect(Set(entries.keys) == [Self.sharedPath, Self.lowerOnlyPath, Self.higherOnlyPath])
+        #expect(
+            Set(entries.keys)
+                == [Self.sharedPath, Self.lowerOnlyPath, Self.higherOnlyPath, Self.bytesOnlyPath])
+    }
+
+    @Test func entriesGiveAFileWhoseBytesAreNotText() throws {
+        let directories = try Self.makeTwoLayerFixture()
+        defer { LayerFixtureSupport.removeDirectories(directories) }
+
+        let entries = SkillOverlay(directories: directories).entries()
+
+        #expect(
+            entries[Self.bytesOnlyPath]?.path
+                == directories[0].appendingPathComponent(Self.bytesOnlyPath).path)
     }
 
     @Test func entriesGiveTheCopyOfTheHighestDirectoryForAPathThatTwoDirectoriesHold() throws {
@@ -85,8 +102,9 @@ struct SkillOverlayTests {
     // MARK: - Test helpers
 
     /// Makes the two-layer fixture each test of this suite reads: the lowest
-    /// directory holds `SKILL.md` and one script, and the highest directory
-    /// holds its own `SKILL.md` and one reference file.
+    /// directory holds `SKILL.md`, one script and one file of bytes that are
+    /// not UTF-8 text, and the highest directory holds its own `SKILL.md` and
+    /// one reference file.
     ///
     /// - Returns: The two layer directories, lowest precedence first.
     /// - Throws: Whatever `LayerFixtureSupport` throws.
@@ -94,6 +112,7 @@ struct SkillOverlayTests {
         let directories = try LayerFixtureSupport.makeLayerDirectories(count: 2)
         try LayerFixtureSupport.writeTextFile(at: sharedPath, in: directories[0])
         try LayerFixtureSupport.writeTextFile(at: lowerOnlyPath, in: directories[0])
+        try LayerFixtureSupport.writeBytesFile(at: bytesOnlyPath, in: directories[0])
         try LayerFixtureSupport.writeTextFile(at: sharedPath, in: directories[1])
         try LayerFixtureSupport.writeTextFile(at: higherOnlyPath, in: directories[1])
         return directories
