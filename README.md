@@ -10,10 +10,18 @@ find, search, and run `SKILL.md` files from a layered dotfolder stack.
 
 A skill is a directory that holds a `SKILL.md` file — YAML frontmatter and a
 Markdown body. `SkillsRegistry` finds skills across an ordered set of layer
-roots, where the near layer wins, and renders each body through a three-pass
+roots, and renders each body through a three-pass
 pipeline (`$`-argument substitution, `` !`shell` `` injection, Stencil
 templating). One fused tool then shows that catalog to a model, to a `/command`
 menu, and to a CLI through the same rendering path.
+
+The unit of override is the file. More than one layer can hold the same skill
+id, and the skill you get is the combined view of those layer directories: for
+each path, the copy in the highest layer that holds it wins, and a file that
+only a lower layer holds stays visible. Thus a project layer can override the
+`SKILL.md` of a skill, or add one reference file to it, and keep each other
+file of the lower layers. `DiscoveredSkill.contributingDirectories` names every
+layer directory of an id, lowest precedence first.
 
 ```swift
 import FoundationModels

@@ -14,7 +14,8 @@ This plan adds remote skill marketplaces to `FoundationModelsSkills`. It has two
 - **Part B — marketplace support in this package.** A host gives an ordered list of
   marketplace URLs. The package fetches each marketplace, keeps it in a cache, checks it for
   updates, and updates it automatically. Each marketplace becomes a skill layer **below** the
-  local skill folder stack. Thus a local skill with the same name always wins.
+  local skill folder stack. Thus a local file always wins over a marketplace file of the same
+  path.
 
 This plan does not make kanban tasks yet. The phases in §12 are the input for those tasks.
 
@@ -229,13 +230,17 @@ url[0]  <  url[1]  <  …  <  url[n]  <  defaults  <  user  <  project
 └──────── marketplaces, cached, untrusted ───────┘ └──── local stack ────┘
 ```
 
-- **Left to right, last wins.** One rule covers the full stack.
-- **Local wins.** A skill in `defaults`, `user`, or `project` shadows a marketplace skill of
-  the same name. The shadowed skill stays in `DiscoveredSkill.shadowedCandidates`, and the
-  existing advisory diagnostic names the marketplace that lost.
-- **Inside one marketplace**, skill names must be unique. If two plugins list the same skill,
-  the client records a diagnostic, and the plugin that is later in the catalog wins.
-- **Full replace.** The winner replaces the full skill folder. There is no merge (decision #3).
+ - **Left to right, last wins.** One rule covers the full stack.
+ - **Local wins.** A `SKILL.md` in `defaults`, `user`, or `project` shadows the `SKILL.md` of
+   a marketplace skill of the same name, and the existing advisory diagnostic names the
+   marketplace that lost.
+ - **Inside one marketplace**, skill names must be unique. If two plugins list the same skill,
+   the client records a diagnostic, and the plugin that is later in the catalog wins.
+ - **The unit of override is the file** (decision #32). An id that more than one layer holds
+   gives one skill, and that skill is the combined view of the layer directories: for each
+   path, the copy in the highest layer that holds it wins, and a file that only a lower layer
+   holds stays visible. `DiscoveredSkill.contributingDirectories` names each layer directory
+   of the id, lowest precedence first.
 
 ### 4.2 One marketplace = one layer root
 
@@ -699,8 +704,12 @@ skills marketplace remove <id>
    source.
 5. The materializer rejects path traversal, escaping symlinks, and oversized content.
 6. The model cannot change the source list.
-7. A remote skill can never replace a local skill. Only local layers shadow marketplace
-   layers, and a marketplace can shadow only an earlier marketplace.
+ 7. A marketplace file can never win over a local file of the same path. The unit of
+    override is the file, thus a local copy of a path wins over each marketplace copy of
+    that path, and a marketplace wins only over a marketplace before it. A file that only
+    a marketplace holds stays visible in the skill, and the local `SKILL.md` still decides
+    the frontmatter: the `allowed-tools` grant of a script comes from that one file, and
+    never from the layer that gives the script.
 
 ## 11. Feature ideas: adopt, defer, or reject
 
@@ -729,7 +738,7 @@ skills marketplace remove <id>
 | namespaced-only remote names (Claude, Codex) | **Reject** | it breaks the "local wins by name" requirement |
 | `command` source (Claude) | **Reject** | runs arbitrary shell at fetch time |
 | `npm` source | **Reject** | no need in this family |
-| show both duplicate skills (Codex) | **Reject** | our model is full replace by name |
+| show both duplicate skills (Codex) | **Reject** | one id gives one skill, the combined view of its layers |
 
 ## 12. Phases
 

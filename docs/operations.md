@@ -63,9 +63,48 @@ reload does not rebuild the tool:
 | `search skill` | `query` (req), `limit?` | Finds the skills for the kind of work that the model will do next. Search by the kind of work, not by the topic of the task. The answer is plain text: one line for each match from `SkillSearchAgent` over the model-visible catalog, in rank order, and the instruction that names the exact `use skill` call. See [The `search skill` and `list skill` answers](#the-search-skill-and-list-skill-answers). |
 | `list skill` | `filter?` | Lists each skill with its description: the model-visible catalog (with an optional filter), in catalog order, with no ranking. The answer is the same plain lines and the same instruction as `search skill`. |
 | `use skill` | `id` (req), `arguments?` | Loads the instructions of a skill for the model to follow: renders the pipeline (plan.md §5) with `arguments`. The answer is the rendered body as plain text. An unknown or hidden `id` returns a corrective sentence that contains the current id list. See [The `use skill` answer](#the-use-skill-answer). |
-| `list resource` | `id` (req) | Lists each file in the skill's directory except `SKILL.md`. The list stops at 100 rows. |
-| `read resource` | `id` (req), `path` (req), `start?`, `end?` | Returns a file verbatim, in a line window: 500 lines maximum and 1,000,000 content bytes maximum for each call. The tool never renders the file. It streams the file in 64 KiB parts and never loads the full file. `totalLines` is exact. See [development.md](development.md) for the exact byte-budget rules. |
-| `run script` | `id` (req), `path` (req, in `scripts/`), `arguments?`, `timeout?` | Runs the file directly. The file must have the executable bit and a shebang. Three gates apply: the host policy, the skill's `allowed-tools: Script(<glob>)` grant, and the host trust posture. The process runs in its own process group. A timeout sends `SIGKILL`. |
+| `list resource` | `id` (req) | Lists each file of the combined view of the skill except `SKILL.md`. The list stops at 100 rows. |
+| `read resource` | `id` (req), `path` (req), `start?`, `end?` | Returns the winning copy of a file verbatim, in a line window: 500 lines maximum and 1,000,000 content bytes maximum for each call. The tool never renders the file. It streams the file in 64 KiB parts and never loads the full file. `totalLines` is exact. See [development.md](development.md) for the exact byte-budget rules. |
+| `run script` | `id` (req), `path` (req, in `scripts/`), `arguments?`, `timeout?` | Runs the winning copy of the file directly, in the layer directory that gave the winning copy. The file must have the executable bit and a shebang. Three gates apply: the host policy, the skill's `allowed-tools: Script(<glob>)` grant, and the host trust posture. The process runs in its own process group. A timeout sends `SIGKILL`. |
+
+## The combined view of a skill
+
+The three resource operations read the combined view of the skill, and never
+one layer directory alone. **The unit of override is the file.** More than one
+layer can hold the same skill id. For each path of that skill, the copy in the
+highest layer that holds it wins, and a file that only a lower layer holds
+stays visible.
+
+For a stack `defaults < user < project`, and these files on the disk:
+
+```text
+defaults/review/SKILL.md             user/review/SKILL.md           project/review/references/house-style.md
+defaults/review/references/rules.md  user/review/scripts/lint.sh
+defaults/review/scripts/lint.sh
+defaults/review/scripts/report.sh
+```
+
+the skill `review` gives these files:
+
+| path of the skill | the layer that gives it |
+|---|---|
+| `SKILL.md` | `user/review/SKILL.md` |
+| `scripts/lint.sh` | `user/review/scripts/lint.sh` |
+| `scripts/report.sh` | `defaults/review/scripts/report.sh` |
+| `references/rules.md` | `defaults/review/references/rules.md` |
+| `references/house-style.md` | `project/review/references/house-style.md` |
+
+Thus `list resource` gives five rows, `read resource` of
+`scripts/report.sh` gives the `defaults` copy, and `run script` of
+`scripts/lint.sh` runs the `user` copy in `user/review/`.
+
+`DiscoveredSkill.contributingDirectories` names each of the three layer
+directories, lowest precedence first. A layer that holds the directory but no
+`SKILL.md` of its own still contributes, as `project/review/` does here.
+
+The layer that gives the winning `SKILL.md` gives the frontmatter, the body and
+the provenance of the skill. Thus the `allowed-tools` grant of a script comes
+from that one file, and never from the layer that gives the script.
 
 ## The `use skill` answer
 

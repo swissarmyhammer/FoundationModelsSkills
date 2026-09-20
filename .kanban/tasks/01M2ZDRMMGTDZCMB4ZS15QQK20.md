@@ -94,8 +94,24 @@ comments:
     - evidence: `swift build --build-tests` — build complete, 0 warnings. `swift test` — 803 tests in 65 suites passed, 0 failures, 0 skipped.
     - next: send the task to review.
   timestamp: 2026-09-20T14:15:13.869499+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01m2zjwppjtbxx7kpvxvd31nxw
+  text: |
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (84c6c49) — 0 findings, 0 confirmed, 0 refuted, 7 attempted, 0 failed. 2 files reviewed; 2 files not reviewed (`.kanban/`, from `.reviewignore`). Each item of the 2026-09-20 09:02 Review Findings section is checked.
+    - next: Card moved to `done`. One acceptance item stays open on purpose: the `FrontmatterDocument.split` call in `Marketplace/CatalogResolver.rootSkillName()`. Card ^xd7yjf8 deletes that folder, and card ^4e1wajh then deletes the exception of the guard suite.
+  timestamp: 2026-09-20T14:18:01.298318+00:00
+- actor: wballard
+  id: 01m2zjx7mp9rrsrpt227ztz06a
+  text: |-
+    ### finish iteration 2 — clean
+    - implement: changed — 2 files, 2 of 2 findings checked
+    - test: green — swift test, 803 passed, 0 warnings
+    - commit: 84c6c49
+    - review: clean — 0 findings; task moved to done
+  timestamp: 2026-09-20T14:18:18.646624+00:00
+position_column: done
+position_ordinal: ff8380
 title: Read SKILL.md through the Extras FrontmatterDocumentStack; the registry opens no file
 ---
 ## What

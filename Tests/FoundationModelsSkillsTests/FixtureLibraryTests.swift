@@ -106,13 +106,13 @@ func fixtureLibraryResolvesBrokenFixture(_ relativePath: String) {
     #expect(frontmatter.description?.isEmpty == false)
 }
 
-@Test func userBaseStyleFullyReplacesTheDefaultsCopy() throws {
+@Test func userBaseStyleOverridesTheDefaultsCopyOfTheSkillFile() throws {
     let frontmatter = try loadFrontmatter("user/base-style/SKILL.md")
     #expect(frontmatter.name == "base-style")
     #expect(frontmatter.description?.isEmpty == false)
 
-    // Same id (directory name), different content -- the full-replace
-    // override this fixture pair demonstrates (decision #3).
+    // Same id (directory name), different content -- the override of one file
+    // that this fixture pair demonstrates (decision #3, corrected by #32).
     let userBody = try loadBody("user/base-style/SKILL.md")
     let defaultsBody = try loadBody("defaults/base-style/SKILL.md")
     #expect(userBody != defaultsBody)

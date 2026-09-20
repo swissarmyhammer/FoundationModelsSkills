@@ -89,10 +89,20 @@ the host guide. These are the rules that hold for every marketplace:
 7. **The model cannot change the source list.** The model surface gets no
    marketplace operation. Only the host and the command line add, remove, pin,
    or update a marketplace.
-8. **A remote skill can never replace a local skill.** The order is
-   `url[0] < … < url[n] < defaults < user < project`. Only a local layer
-   shadows a marketplace, and a marketplace can shadow only a marketplace that
-   is before it in the list.
+8. **A marketplace file can never win over a local file of the same path.**
+   The order is `url[0] < … < url[n] < defaults < user < project`.
+   **The unit of override is the file**: for each path of a skill, the copy in
+   the highest layer that holds it wins. Thus a local copy of a path always
+   wins over each marketplace copy of that path, and a marketplace can win
+   only over a marketplace that is before it in the list.
+9. **A file that only a marketplace holds stays visible in the skill.** This
+   is the other half of the rule above. A marketplace that ships
+   `commit/scripts/publish.sh` adds that script to a local skill `commit`,
+   also when the local layers hold no such path. The local `SKILL.md` still
+   decides the frontmatter, thus a script runs only when that local
+   `SKILL.md` grants `allowed-tools: Script(<glob>)` for its path and the host
+   policy permits scripts. Read `list resource` of a skill to see each file
+   that the combined view gives.
 
 ## Context compaction (note for hosts)
 

@@ -3,8 +3,8 @@
 A marketplace is a git repository, or a folder on this computer, that holds
 skills. `MarketplaceStore` keeps each marketplace in a cache, and it gives one
 skill layer for each marketplace to `SkillsRegistry`. Each marketplace layer is
-below the full local stack, thus a local skill always wins over a marketplace
-skill of the same name.
+below the full local stack, thus a local file always wins over a marketplace
+file of the same path.
 
 This page is the host guide. It tells you how to add a marketplace, what the
 store does with it, and what the `skills marketplace` commands do. Read
@@ -81,9 +81,20 @@ order is:
 url[0] < … < url[n] < defaults < user < project
 ```
 
-The last layer wins. Thus a marketplace can shadow only a marketplace that is
-before it in the list, and every local layer shadows every marketplace. The
-winner replaces the full skill folder. There is no merge.
+The last layer wins. Thus a marketplace can win only over a marketplace that is
+before it in the list, and a local layer wins over every marketplace.
+
+**The unit of override is the file.** More than one layer can hold the same
+skill id, and the skill you get is the combined view of those layer
+directories: for each path, the copy in the highest layer that holds it wins,
+and a file that only a lower layer holds stays visible. Thus a local
+`commit/SKILL.md` wins over the `commit/SKILL.md` of a marketplace, and a
+`commit/references/notes.md` that only the marketplace holds stays in the
+skill. Read [operations.md](operations.md) for the full example.
+
+The layer that gives the winning `SKILL.md` gives the frontmatter, the body and
+the provenance of the skill, and the shadow diagnostic names both sides of that
+one file.
 
 The source of each marketplace layer is
 `DotfolderStack.Source.marketplace`. That tag, and not the position of the
@@ -275,7 +286,10 @@ The host `RenderPolicy` is the one gate of the shell injection and of
 `run script`, for every layer. A skill of a marketplace runs a shell
 injection when the host policy permits the shell, and runs a script when the
 host policy permits scripts. The `allowed-tools: Script(<glob>)` grant of the
-skill is still necessary for `run script`.
+skill is still necessary for `run script`. That grant comes from the winning
+`SKILL.md` of the skill, and never from the layer that gives the script. Thus a
+marketplace that adds a script to a local skill cannot grant that script to
+itself.
 
 ## Partial scope
 

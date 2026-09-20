@@ -3,10 +3,11 @@ import Testing
 
 @testable import FoundationModelsSkills
 
-/// One claim that a documentation file must make.
+/// One text, and the documentation file that a suite reads it against.
 ///
-/// The suite below walks a table of these rows, thus one read-and-assert body
-/// serves every document and every name.
+/// A suite walks a table of these rows, thus one read-and-assert body serves
+/// every document and every name. A suite decides what the row means: a claim
+/// the document must make, or a wording the document must not hold.
 struct DocumentClaim: Sendable {
     /// The path of the document, from the package root.
     let document: String

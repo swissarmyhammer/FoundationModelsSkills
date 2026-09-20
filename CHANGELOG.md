@@ -5,6 +5,47 @@ change is at the top.
 
 ## Unreleased
 
+### Changed: the unit of override is the file, and `DiscoveredSkill` carries each layer directory
+
+This change breaks the source of a host that reads the layer directories of a
+skill, and it changes what a skill holds when more than one layer gives the
+same id. A host that only lists, searches or uses skills compiles with no
+change.
+
+**Cause.** A skill id that more than one layer held gave the files of the
+highest layer alone. A `user/review/SKILL.md` hid `defaults/review/scripts/`,
+`defaults/review/references/` and each other file of the lower layers, also
+when the `user` layer held no such path. Thus a user who wanted to change one
+sentence of a skill had to copy each file of that skill. The reason for that
+rule was the `DotfolderStack` of the day, which could give the winning copy of
+one item and could not give the combined view of a directory. The stack gives
+that view now.
+
+**What changed.**
+
+- A skill is the combined view of its layer directories. For each path of the
+  skill, the copy in the highest layer that holds it wins, and a file that
+  only a lower layer holds stays visible. `list resource`, `read resource`
+  and `run script` read that same view, thus the three can never differ on
+  which copy of a file they give.
+- `DiscoveredSkill.contributingDirectories` is a new field. It carries every
+  layer directory of an id, lowest precedence first, also a layer that holds
+  the directory and no `SKILL.md` of its own. Each item is a
+  `DiscoveredSkill.ContributingDirectory`, which holds `rootIndex`, `root` and
+  `skillDirectory`.
+- `DiscoveredSkill.shadowedCandidates` is removed. It named the copies of
+  `SKILL.md` that lost, and no copy is hidden any more. A host that showed
+  those copies reads `contributingDirectories` instead.
+- `skillDirectory`, `root` and `rootIndex` keep their meaning: each one names
+  the layer of the winning `SKILL.md` alone.
+- `run script` runs the winning copy of the script in the layer directory that
+  gave that copy, and not in one skill directory, because one skill has more
+  than one. Thus a script reaches the files beside it with a relative path.
+
+**Migration.** A host that read `shadowedCandidates` reads
+`contributingDirectories` and drops the last item, which is the directory of
+the winning `SKILL.md`.
+
 ### Added: `StandardStream` and `ReloadReport`
 
 Two small public types that the package, its command groups and its example

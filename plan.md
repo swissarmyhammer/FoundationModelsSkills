@@ -66,7 +66,7 @@ leaf — not built here *(decision #29)*.
 │   commandListing() — user `/` menu view (separate from the model surface)  │
 │   OperationCLIDriver — dual-use CLI from the same op declarations          │
 ├─ Layer 3  SkillsRegistry  (discovery + domain validation + semantics) ──────┤
-│   dir-shaped discovery over the stack (name/SKILL.md, full-replace by id),  │
+│   dir-shaped discovery over the stack (name/SKILL.md, file-level override), │
 │   Yams frontmatter decode, agentskills.io + Claude validation, visibility,  │
 │   arguments, render pipeline (§5), file watcher, reload → injectable        │
 │   metadata, generic call(id:arguments:) — built ON the Extras substrate     │
@@ -90,9 +90,10 @@ leaf — not built here *(decision #29)*.
   promise in #17/#19)*.
 - **What Extras deliberately does not do, we own in Layer 3:** (a) **directory-shaped
   discovery** — Extras' `enumerate` lists flat files; skills are `name/SKILL.md`
-  directories, so the registry walks its host-supplied roots itself, later shadowing earlier
-  by directory name (full-replace, #3), provenance from the layer that won; (b) **YAML
-  decoding** (Yams) over the textual split; (c) the **file watcher** — the stack locates,
+  directories, so the registry asks `DotfolderStack` for the layer directories of each id
+  and reads the combined view over them (#32), provenance from the layer that gave the
+  winning `SKILL.md`; (b) **YAML decoding** (Yams) over the split that
+  `FrontmatterDocumentStack` does; (c) the **file watcher** — the stack locates,
   it never watches; we watch every layer root and rebuild (§7); (d) all **skill
   semantics** — validation, visibility, arguments, and the render pipeline's
   `$`-substitution and shell passes (§5).
@@ -125,8 +126,8 @@ leaf — not built here *(decision #29)*.
   common cross-client error (an unquoted colon inside `description`). Missing/empty
   `description` → diagnostic + **excluded from the model surface** (it cannot be disclosed);
   we deviate from the guide's skip-entirely rule only to keep description-less Claude
-  command files user-invocable. A shadowed id (full-replace winner up the stack) and a
-  `SKILL.md` over the spec's recommended 500 lines each draw an advisory diagnostic.
+  command files user-invocable. An id whose `SKILL.md` a higher layer shadows, and a
+  `SKILL.md` over the spec's recommended 500 lines, each draw an advisory diagnostic.
   Validation-parity target: the `skills-ref` reference validator.
 - **Extension fields ride `metadata.*` for portability.** Our non-spec fields (`preload`,
   `user-invocable`, `disable-model-invocation`, `arguments`, `argument-hint`) are
@@ -141,11 +142,15 @@ leaf — not built here *(decision #29)*.
   such list — shipped defaults (optional; `SKILLS_DEFAULTS_DIR` repoints it for dev, no
   rebuild) < user `$XDG_CONFIG_HOME/skills/` < project `<cwd>/.skills/` — and hosts that
   want the client guide's cross-client `.agents/skills` layout simply pass those roots
-  instead. Precedence is
-  last-root-wins, realizing our full-replace rule, with source tracking carrying
-  provenance into diagnostics. The spec mandates only what's *inside* a skill directory,
+  instead. **The unit of override is the file** (#32): an id that more than one layer
+  holds gives one skill, and for each path of that skill the copy in the highest layer
+  that holds it wins. A file that only a lower layer holds stays visible.
+  `DiscoveredSkill.contributingDirectories` carries every layer directory of the id,
+  lowest precedence first, and source tracking carries provenance into diagnostics. The
+  spec mandates only what's *inside* a skill directory,
   so every one of these is a conforming host convention. Discovery skips
-  `.git`/`node_modules` and bounds scan depth. The winning layer also picks the render
+  `.git`/`node_modules` and bounds scan depth. The layer that gives the winning
+  `SKILL.md` also picks the render
   trust mode (§5), and hosts should still trust-gate untrusted project layers (§8).
 
 ## 5. Templating & arguments — the render pipeline
@@ -442,11 +447,14 @@ model surface is the model-visible catalog; `SkillsCLI` supplies the user-surfac
 -- id membership in `registry.commandListing()` -- so the same ops present the user-facing
 surface to the CLI. See README "Visibility".)*
 
+All three read the **combined view** of the skill over its contributing layer directories
+(§4, #32), never one directory alone.
+
 | op | parameters | behavior |
 |---|---|---|
-| `list resource` | `id` (req) | Enumerates every regular file under the skill's directory except `SKILL.md` — relative path, kind (`script`/`reference`/`asset` from the top-level folder, else `other`), byte size, executable bit — sorted by path, **capped at 100 rows** with `total` reporting the real count (the client guide's cap rule). Hidden files and symlinks resolving outside the skill are skipped. Unknown/model-hidden `id` → corrective message carrying the current id list (#22). |
-| `read resource` | `id` (req), `path` (req, skill-relative), `start?` (line, default 1), `end?` (default `start`+499) | Returns the file **verbatim** — resources never pass through the §5 pipeline (no `$args`, no shell, no Stencil). At most **500 lines per call**; `totalLines` tells the model to page via `start`/`end`. **Path confinement:** the path, symlinks resolved, must land inside the skill directory — `..`, absolute paths, and escaping symlinks → corrective message. Non-UTF-8 content → corrective message with the byte size (binary assets are for hosts, not transcripts). |
-| `run script` | `id` (req), `path` (req, under `scripts/`), `arguments?` (positional strings), `timeout?` secs (default 60) | Triple gate (§7.3.1) → **exec the file directly** — it must carry the executable bit and a shebang; no interpreter guessing (not executable → corrective naming the fix) — in its **own process group**, cwd = the skill directory, env inherited (parity with §5 shell injection); SIGKILL the group on timeout. Reports status (`completed` / `timed_out` / `failed`), exit code, duration, total captured lines, and the **last-32-line tail** of merged stdout+stderr — the Shelltool result shape. |
+| `list resource` | `id` (req) | Enumerates every regular file of the combined view except `SKILL.md` — relative path, kind (`script`/`reference`/`asset` from the top-level folder, else `other`), byte size, executable bit — sorted by path, **capped at 100 rows** with `total` reporting the real count (the client guide's cap rule). A path that only a lower layer holds is in the list, with that layer's copy. Hidden files and symlinks resolving outside their own layer directory are skipped. Unknown/model-hidden `id` → corrective message carrying the current id list (#22). |
+| `read resource` | `id` (req), `path` (req, skill-relative), `start?` (line, default 1), `end?` (default `start`+499) | Returns the winning copy **verbatim** — resources never pass through the §5 pipeline (no `$args`, no shell, no Stencil). At most **500 lines per call**; `totalLines` tells the model to page via `start`/`end`. **Path confinement:** the path, symlinks resolved, must land inside one of the contributing layer directories — `..`, absolute paths, and escaping symlinks → corrective message. Non-UTF-8 content → corrective message with the byte size (binary assets are for hosts, not transcripts). |
+| `run script` | `id` (req), `path` (req, under `scripts/`), `arguments?` (positional strings), `timeout?` secs (default 60) | Triple gate (§7.3.1) → **exec the winning copy directly** — it must carry the executable bit and a shebang; no interpreter guessing (not executable → corrective naming the fix) — in its **own process group**, cwd = the layer directory that gave the winning copy, env inherited (parity with §5 shell injection); SIGKILL the group on timeout. Reports status (`completed` / `timed_out` / `failed`), exit code, duration, total captured lines, and the **last-32-line tail** of merged stdout+stderr — the Shelltool result shape. |
 
 **Typed outputs** (same `Output: Encodable` contract as §7):
 
@@ -475,7 +483,9 @@ struct RunScriptResult: Encodable {
    `disableShellExecution` (#25), so the model, `/command`, and CLI paths all honor it.
 2. **Per-skill grant** — the skill's `allowed-tools` must contain a **`Script(<glob>)`**
    grant matching the requested path (`Script(scripts/*)`; bare `Script` = everything
-   under `scripts/`). The spec marks `allowed-tools` experimental with client-defined
+   under `scripts/`). That grant comes from the winning `SKILL.md` of the skill, and
+   never from the layer that gives the script (#32), thus a layer cannot grant a script
+   to itself. The spec marks `allowed-tools` experimental with client-defined
    tokens, so `Script(...)` is ours to define; a skill without a grant draws a
    corrective message saying it has not pre-approved script execution.
    `list resource` / `read resource` are passive reads and **ungated**.
@@ -522,8 +532,9 @@ Revisit when Apple ships a supported per-process confinement API. *(decision #28
 2. **Env → all** of `ProcessInfo.environment` — as **flat keys through Extras'
    precedence ladder** (`{{ HOME }}`; explicit context > env > well-known values), not an
    `env.*` namespace. *(Amended by #29.)*
-3. **Override → full replace** (higher layer shadows lower entirely) — realized by the
-   stack's layer precedence: nearest wins *(#29)*.
+3. **Override → the file is the unit** — for each path of a skill, the copy in the
+   highest layer that holds it wins, and a file that only a lower layer holds stays
+   visible *(#29; corrected by #32, which records what this decision said before)*.
 4. **FM integration → a fused `OperationTool`** from `FoundationModelsOperations` on core
    `FoundationModels.Tool`; no `FoundationModelsUtilities` dependency. *(Supersedes the
    bespoke single `SkillsTool`.)*
@@ -659,7 +670,8 @@ Revisit when Apple ships a supported per-process confinement API. *(decision #28
     `disableScriptExecution` (mirrors #25); per-skill **`Script(<glob>)`** grants in
     `allowed-tools` (our token — the field is experimental and client-defined); the §8
     trusted-root guidance. Direct exec of executable+shebang files only (no interpreter
-    guessing), own process group, cwd = skill directory, env inherited (parity with §5
+     guessing), own process group, cwd = the layer directory that gave the winning copy,
+     env inherited (parity with §5
     shell — scrubbing scripts while `` !`env` `` runs unscrubbed would be theater),
     default 60 s timeout, Shelltool-shaped result with a 32-line tail. `sandbox-exec`
     is deprecated over a private profile language, so containment is gates + process
@@ -678,7 +690,9 @@ Revisit when Apple ships a supported per-process confinement API. *(decision #28
     repoints it for dev, no rebuild) < user `$XDG_CONFIG_HOME/skills/` (default
     `~/.config/skills/`) < project `<cwd>/.skills/`. But it is one way to compute roots,
     not the interface — a host with a different layout passes different roots without
-    needing this package changed.
+    needing this package changed. *(Corrected in part by #32: the stack is more than a
+    convenience. It gives the combined view over the layer directories of one id, and
+    this package reads that view rather than walking the roots itself.)*
 
     `FoundationModelsACPAgent` passes the roots from `DotfolderStack(name: "skills")`,
     i.e. `$XDG_CONFIG_HOME/skills/` (default `~/.config/skills/`) and `<cwd>/.skills/`.
@@ -689,8 +703,10 @@ Revisit when Apple ships a supported per-process confinement API. *(decision #28
     sharing, where namespacing under a per-product name would force one copy per
     product. No divergence from XDG is involved or needed.
 
-    Either way: nearest-wins realizing full-replace (#3), source tracking carrying
-    provenance, path safety built in. `FrontmatterDocument.split` does the textual frontmatter split
+    Either way: nearest-wins for each file (#3, corrected by #32), source tracking
+    carrying
+    provenance, path safety built in. `FrontmatterDocumentStack` reads and splits each
+    `SKILL.md`, thus this package opens no file of a skill
     (YAML decoding stays ours, with Yams, per Extras' no-YAML rule); `TemplateEngine` is
     the Stencil facade with the layer→trust mapping (defaults trusted; user/project
     untrusted) and `_partials/` includes. Extras ships **no watcher and no
@@ -736,6 +752,33 @@ Revisit when Apple ships a supported per-process confinement API. *(decision #28
     second searcher in `.retrieval` mode over the same index, and an answer that does not
     decode gives that searcher's rank, with the failure in the log, not a failed call.
 
+32. **Override → the file is the unit.**
+    *(Decided 2026-09-19. Corrects #3, and corrects #29 in part.)* Decision #3 said that
+    a higher layer hid every file of a lower layer of the same id. That was a mistake,
+    and the reason it was written is worth recording: the `DotfolderStack` of the day
+    could give one root for one item, and it could not give the combined view of a
+    directory. The decision took the limit of the tool for a rule of the design.
+
+    **The unit of override is the file.** An id that more than one layer holds gives one
+    skill. For each path of that skill, the copy in the highest layer that holds it wins,
+    and a file that only a lower layer holds stays visible. With
+    `defaults < user < project`, a `user/review/SKILL.md` wins over
+    `defaults/review/SKILL.md`, and `defaults/review/scripts/report.sh` stays in the
+    skill, because no higher layer holds that path.
+
+    Consequences: (a) `DotfolderStack` gives the combined view — `childDirectories(of:)`
+    finds each id of the union, and the stack resolves each path over the layer
+    directories — thus #29 is corrected in part: the stack is more than a convenience for
+    computing roots; (b) `DiscoveredSkill.contributingDirectories` carries every layer
+    directory of an id, lowest precedence first, also a layer that holds no `SKILL.md` of
+    its own. It replaces the field that named the copies that lost, which no caller can
+    use any more; (c) `list resource`, `read resource` and `run script` read that same
+    combined view (§7.3), thus the three can never differ on which copy of a file they
+    give; (d) `run script` runs the winning copy in the layer directory that gave the
+    winning copy, and not in one skill directory, because one skill has more than one;
+    (e) `skillDirectory`, `root` and `rootIndex` stay, and each names the layer of the
+    winning `SKILL.md` alone.
+
 **All open items resolved — the plan is decision-complete.**
 
 ## 10. Public API sketch (illustrative)
@@ -751,7 +794,7 @@ let stack = DotfolderStack(
 
 // Layer 3 — reloadable registry over the stack:
 let registry = SkillsRegistry(
-  stack: stack,                                   // nearest-wins = full-replace by id (#3)
+  stack: stack,                                   // nearest-wins for each file (#3, #32)
   policy: .init(isShellExecutionDisabled: false), // render policy lives with the pipeline (#25)
   watch: true                                     // watch every layer root; reload add/remove/edit
 )
@@ -808,8 +851,8 @@ tests can't drift. `skills-demo` is an **executable target in the root `Package.
 ```
 Examples/
   skill-library/                    # a three-layer .skills dotfolder stack (#29)
-    defaults/base-style/SKILL.md        # plain skill — shadowed by the user layer below
-    user/base-style/SKILL.md            # the full-replace override that wins (#3)
+    defaults/base-style/SKILL.md        # plain skill — its SKILL.md loses to the user layer
+    user/base-style/SKILL.md            # the override of that one file that wins (#3, #32)
     user/_partials/header.md            # an {% include "header" %} target — a file, not a skill (#29)
     project/.skills/commit/SKILL.md     # arguments: + argument-hint: + $0/$ARGUMENTS (§5, §6.1)
     project/.skills/deploy/SKILL.md     # disable-model-invocation: true — user-only /deploy
@@ -853,8 +896,8 @@ Examples/
   directory-shaped skill discovery over **the roots the host supplies** (#29 — an
   ordered list, lowest precedence first; `DotfolderStack.layers` is one way to produce
   them, not the interface) (`name/SKILL.md`,
-  full-replace by directory name, provenance from source tracking); Yams decode over
-  `FrontmatterDocument.split`. No templating, watch, or FM. *(`FoundationModelsAgents`
+  file-level override by directory name (#32), provenance from source tracking); Yams
+  decode over the split that `FrontmatterDocumentStack` does. No templating, watch, or FM. *(`FoundationModelsAgents`
   consumes Extras directly and is no longer blocked on us.)*
 - **M2 — Watch + render skeleton.** File watcher over every stack layer root (Extras
   ships none, #29); render pipeline scaffold (passes wired, identity transforms).
@@ -875,7 +918,8 @@ Examples/
   (recursion bounded by the untrusted include-depth budget).
 - **M6 — Resource ops.** Build §7.3 as specified: `list resource` / `read resource` /
   `run script` in the fused tool; path-confinement invariant, `Script(<glob>)` grants,
-  `disableScriptExecution`, direct-exec runner (process group, cwd = skill dir, timeout).
+  `disableScriptExecution`, direct-exec runner (process group, cwd = the layer directory
+  that gave the winning copy, timeout).
   *(Vocabulary and semantics already fixed — §7.3, decisions #23/#28.)*
 - **M7 — Diagnostics polish + docs; finish the §11 `Examples/` demo** (all three
   `skills-demo` modes against the complete `skill-library/`). *(Superseded:
