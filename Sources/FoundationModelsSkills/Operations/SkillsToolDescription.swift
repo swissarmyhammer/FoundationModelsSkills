@@ -2,12 +2,14 @@
 ///
 /// A model reads the description of a tool before it plans, thus the
 /// description is where the model learns which skills exist. The text has
-/// two fixed sentences: what a skill is, and the rule to load a skill that
-/// matches the task. A list of the visible skills follows them, one skill on
-/// each line with its description.
+/// two fixed sentences: what a skill is, and the rule to load each skill that
+/// helps with the task. A list of the visible skills follows them, one skill
+/// on each line with its description.
 ///
-/// The list has a character limit. The builder tries four steps in order
-/// and stops at the first one that fits the limit:
+/// The list has a character limit. The limit counts the list alone, thus a
+/// longer rule takes no character from the room of the skill lines. The
+/// builder tries four steps in order and stops at the first one that fits the
+/// limit:
 ///
 /// 1. Each skill with its full description.
 /// 2. Each description shortened with `SkillsRegistry.truncatedForMenu`,
@@ -25,8 +27,8 @@ internal enum SkillsToolDescription {
     /// The second fixed sentence: what a skill gives the model.
     private static let guidance = "Each one tells you how to do the work and which tools to use."
 
-    /// The rule that tells the model to load a skill that matches its task,
-    /// with the exact `use skill` call.
+    /// The rule that tells the model to load each skill that helps with its
+    /// task, with the exact `use skill` call.
     private static let useRule = SkillCatalogText.descriptionUseRule
 
     /// The line that replaces the list when no skill is visible.

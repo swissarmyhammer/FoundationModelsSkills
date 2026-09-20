@@ -17,7 +17,7 @@ The description has two fixed sentences, then one line for each skill:
 
 ```text
 Skills are procedures for kinds of work. Each one tells you how to do the work and which tools to use.
-When a task matches a skill below, load it: call this tool with {"op": "use skill", "id": "<id>"}. The answer is the text of the skill. Do the work the way it says.
+Read the skills below before you start. If a skill helps with any part of your task, load it now: call this tool with {"op": "use skill", "id": "<id>"}. Load each skill that helps. More than one can apply. The answer is the text of the skill. Do the work the way it says. Read this list again when the work changes.
 
 - explore: Understand how unfamiliar code works before planning or changing it.
 - code-context: Find symbols, callers, and the blast radius of a change.
@@ -144,10 +144,11 @@ The resource operations keep their JSON answers. The command line
 
 A list of matches alone is a menu. A model can read it as information and
 continue with no skill. Thus the answer names the exact call that loads a
-skill, and tells the model to load a skill that fits its task. The answer is
-plain text: no JSON object, no `use` field, no `next` field, and no body of a
-skill. `use skill` is the one way to get a skill. The tool adds no tag, marker,
-or wrapper.
+skill, and tells the model to load each skill that helps with any part of its
+task, and to search again when the work changes. The answer is plain text: no
+JSON object, no `use` field, no `next` field, and no body of a skill.
+`use skill` is the one way to get a skill. The tool adds no tag, marker, or
+wrapper.
 
 For the call `{"op": "search skill", "query": "explore codebase and find symbol"}`,
 the answer is:
@@ -162,7 +163,7 @@ Skills that match "explore codebase and find symbol":
 To load a skill, call the `skills` tool with {"op": "use skill", "id": "<id>"}.
 For example: {"op": "use skill", "id": "explore"}
 The answer is the text of the skill: the steps of the work and the tools to use.
-If a skill in this list fits your task, load it now, and do the work the way it says.
+If a skill in this list helps with any part of your task, load it now, and do the work the way it says. Load each skill that helps. More than one can apply. Search again when the work changes.
 ```
 
 - The first line names the query of the call.
@@ -188,7 +189,7 @@ answer is:
 To load a skill, call the `skills` tool with {"op": "use skill", "id": "<id>"}.
 For example: {"op": "use skill", "id": "code-context"}
 The answer is the text of the skill: the steps of the work and the tools to use.
-If a skill in this list fits your task, load it now, and do the work the way it says.
+If a skill in this list helps with any part of your task, load it now, and do the work the way it says. Load each skill that helps. More than one can apply. Search again when the work changes.
 ```
 
 A `filter` that matches no skill gives the one line

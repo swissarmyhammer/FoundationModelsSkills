@@ -71,11 +71,27 @@ comments:
     - evidence: `swift build --build-tests` — 0 warnings, 0 errors; `swift test` — 808 tests, 66 suites, all pass, 0 fail, 0 skip
     - next: none
   timestamp: 2026-09-20T14:37:14.355122+00:00
+- actor: claude-code
+  id: 01m2zm5tc9fkfcw6p7vq6e6nhm
+  text: |
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (84689cf) — 0 findings, 0 confirmed, 0 refuted, 7 validator runs attempted, 0 failed. 3 files reviewed; 9 files had no validator that matches them, and 4 `.kanban/` files an ignore rule excludes.
+    - next: none. The task moves to Done.
+  timestamp: 2026-09-20T14:40:28.553288+00:00
+- actor: wballard
+  id: 01m2zm6sgg0ecs9cqz3gn7zmhc
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 15 files, 1 new test suite
+    - test: green — swift test, 808 passed, 0 warnings
+    - commit: 84689cf
+    - review: clean — 0 findings; task moved to done
+  timestamp: 2026-09-20T14:41:00.432757+00:00
 depends_on:
 - 01M2X2J679TGA1ENB64G9JT4SQ
 - 01M2X2JAVD898YDFT802HMMNGA
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: ff8480
 title: Correct every document that states the full-replacement rule
 ---
 ## What

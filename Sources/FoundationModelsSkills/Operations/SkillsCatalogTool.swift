@@ -10,7 +10,8 @@ import Operations
 /// it plans. This tool puts the catalog in two of them:
 ///
 /// - `description` holds each visible skill with its description, and the
-///   rule to load a skill that matches the task (`SkillsToolDescription`).
+///   rule to load each skill that helps with the task
+///   (`SkillsToolDescription`).
 /// - `parameters` is the fused schema of the operations, with the `id`
 ///   field made an enum of the visible skill ids (`SkillsToolSchema`). Thus
 ///   the model cannot invent an id.

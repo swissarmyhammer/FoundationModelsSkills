@@ -616,12 +616,17 @@ Revisit when Apple ships a supported per-process confinement API. *(decision #28
     does not. In a SWE-bench run the model did not know which skills exist. Now
     `SkillsTool.make` returns `SkillsCatalogTool`, whose schema makes `id` an enum of the
     visible ids and whose description lists each visible skill with its description and
-    the rule to load a skill that matches the task. Both are fixed when the tool is made,
-    thus a hot reload does not change the schema: a skill that a reload adds is found by
-    `search skill`, and the next session gets its id in the enum. With no visible skill,
+    the rule to load each skill that helps with the task. Both are fixed when the tool is
+    made, thus a hot reload does not change the schema: a skill that a reload adds is found
+    by `search skill`, and the next session gets its id in the enum. With no visible skill,
     `id` stays a plain string. The `Operations` fusion cannot make a per-catalog enum, thus
     `SkillsToolSchema` builds the same flat union with the `id` enum. See
-    `docs/operations.md`.
+    `docs/operations.md`. **Amended 2026-09-20 by ^4apmcft:** the use rule read "When a
+    task matches a skill below, load it". That sentence is vague, it permits one skill
+    only, and it speaks about the start of the task only. The rule now tells the model to
+    read the skills before it starts, to load each skill that helps with any part of the
+    task, and to read the list again when the work changes. The last line of each
+    `search skill` and `list skill` answer says the same three things.
 23. **Resource nouns specified in §7.3, built at M6.** `list resource` / `read resource` /
     `run script` join the fused tool — six ops, within upstream's 5–15 guidance;
     partition into a second `OperationTool` only if the vocabulary grows further.

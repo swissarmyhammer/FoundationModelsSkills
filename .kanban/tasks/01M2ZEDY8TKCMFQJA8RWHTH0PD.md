@@ -1,6 +1,142 @@
 ---
+comments:
+- actor: claude-code
+  id: 01m2zm9jbep2e9nd6ht0bs91mv
+  text: |-
+    ### Research — the upstream initializer is written but not published
+
+    Step 1 of the card says to check the upstream first. I did this.
+
+    `swift package update FoundationModelsExtras` gives "Everything is already up-to-date". `Package.resolved` did not change. `git status` shows no change to `Package.resolved`.
+
+    The resolved revision is `1c150fb`. The file
+    `.build/checkouts/FoundationModelsExtras/Sources/FoundationModelsExtras/DotfolderStack.swift`
+    at that revision has two public initializers only:
+    `Layer.init(source:root:)` and `DotfolderStack.init(name:workingDirectory:defaultsDirectory:userDirectory:environment:)`.
+    A search for `init(layers` in the full checkout of Extras gives no result.
+    Thus the public `DotfolderStack.init(layers:)` is not there.
+
+    The cause is exact. The Extras card `^00nmjzg` is done in the local clone at
+    `/Users/wballard/github/swissarmyhammer/FoundationModelsExtras`. Commit `62bf1aa`
+    ("feat(dotfolder-stack): add init(layers:) and isExecutable(_:)") adds
+    `public init(layers: [Layer])` at line 180 of `DotfolderStack.swift`.
+    But `git status -sb` in that clone gives `## main...origin/main [ahead 1]`, and
+    `origin/main` is still `1c150fb`. The commit is local only.
+
+    This package names Extras as `.package(url: ..., branch: "main")` of the remote.
+    Thus SwiftPM resolves `origin/main`, and the new initializer is out of reach until
+    a person pushes the commit.
+
+    The last comment of the Extras card states this: "the push criterion stays with the
+    user after the loop". Criterion 6 of that card, "The work is committed and pushed to
+    `main` of this repository", is thus not complete.
+
+    ### One more call site than the card names
+
+    The card names three callers. There are four now:
+
+    - `Sources/FoundationModelsSkills/Discovery/SkillDiscovery.swift`
+    - `Sources/FoundationModelsSkills/Render/StencilPass.swift`
+    - `Sources/FoundationModelsSkills/Resources/SkillOverlay.swift`
+    - `Sources/FoundationModelsSkills/Registry/SkillsRegistry.swift` — `DotfolderStack(layers: layers)` as the `base` of a `FrontmatterDocumentStack`. The card `^dzcmb4z` added this one after this card was written.
+
+    All four use the same one-label form `DotfolderStack(layers:)`, thus all four bind to
+    the public initializer with no change of text, as the card states.
+
+    ### No code changed
+
+    I made no change to `Sources/`, to the tests or to `Package.resolved`. The shim
+    `Sources/FoundationModelsSkills/Discovery/DotfolderStack+Layers.swift` is still there.
+    To delete it now would stop the build, because the resolved Extras revision gives no
+    other initializer that takes the layers.
+  timestamp: 2026-09-20T14:42:31.406386+00:00
+- actor: claude-code
+  id: 01m2zmag7rq6t6407tr6pvbpcn
+  text: |-
+    ### What Extras must give, and the card for the Extras board
+
+    Extras must give one thing, and one thing only: the commit `62bf1aa` of
+    `/Users/wballard/github/swissarmyhammer/FoundationModelsExtras` must be on
+    `origin/main`. The code is written and the tests are green in that clone. It is not
+    published.
+
+    I did not write this card on the Extras board. Two reasons:
+
+    1. The instruction for this step says not to edit the Extras repository, and a card
+       of that board is a file in `.kanban/` of that repository.
+    2. The kanban tool cannot reach that board from this session. I called
+       `get board` with `path` set to the Extras clone, and the tool gave the
+       `FoundationModelsSkills` board. The `cross-repo` tag of this board states the same
+       rule: "Work in a sibling repository; run from a session opened in that repository".
+
+    Here is the text of the card. A person opens a session in
+    `/Users/wballard/github/swissarmyhammer/FoundationModelsExtras` and adds it there.
+
+    ---
+
+    **Title:** Push `main` so the consumers can resolve `DotfolderStack.init(layers:)`
+
+    **Description:**
+
+    ## What
+
+    Commit `62bf1aa` ("feat(dotfolder-stack): add init(layers:) and isExecutable(_:)")
+    is on local `main` only. `git status -sb` gives `## main...origin/main [ahead 1]`,
+    and `origin/main` is `1c150fb`.
+
+    The card `^00nmjzg` is in `done`, but its criterion "The work is committed and pushed
+    to `main` of this repository" is not met. Its last comment says "the push criterion
+    stays with the user after the loop".
+
+    `FoundationModelsSkills` names this package as `.package(url: ..., branch: "main")`
+    of the remote. Thus `swift package update FoundationModelsExtras` there gives
+    "Everything is already up-to-date" and resolves `1c150fb`, which has no
+    `public init(layers:)` and no `isExecutable(_:)`.
+
+    Four cards of the `FoundationModelsSkills` board wait for this push:
+    `^whth0pd` (delete the `DotfolderStack(layers:)` shim), `^214wnyr` (take the execute
+    bit from the stack), `^69fpbra` (the render move) and `^9v5b1w4` (the watcher move).
+
+    ## Acceptance Criteria
+
+    - [ ] `git push origin main` completes, and `origin/main` names `62bf1aa`.
+    - [ ] The two uncommitted kanban files of `^00nmjzg` are committed with it or before it.
+    - [ ] `swift package update FoundationModelsExtras` in `FoundationModelsSkills`
+          moves `Package.resolved` to the new revision.
+    - [ ] `grep "public init(layers"` in the new checkout of Extras gives a result.
+
+    #cross-repo #loading-boundary
+
+    ---
+
+    ### The order of the work after the push
+
+    A person pushes. Then `^whth0pd` starts again and finishes in one pass: it runs
+    `swift package update FoundationModelsExtras`, deletes
+    `Sources/FoundationModelsSkills/Discovery/DotfolderStack+Layers.swift`, and leaves
+    the four call sites as they are. The card `^214wnyr` then takes the execute bit.
+  timestamp: 2026-09-20T14:43:02.008363+00:00
+- actor: claude-code
+  id: 01m2zmbdc7yy0pkcj31rc5pa3v
+  text: |-
+    ### implement — stuck
+    - evidence: 0 source files changed. `swift package update FoundationModelsExtras` gives "Everything is already up-to-date"; the resolved revision stays `1c150fb`, which has no `public DotfolderStack.init(layers:)` (a search for `init(layers` in the Extras checkout gives 0 results). `swift build --build-tests` gives "Build complete!" with 0 warnings. `git status` shows 4 changed files, all of them kanban records.
+    - blocker: the Extras commit `62bf1aa` that adds the public initializer is on the local `main` of `/Users/wballard/github/swissarmyhammer/FoundationModelsExtras` only. `main` is 1 commit ahead of `origin/main`. This package resolves the remote branch `main`, thus the initializer is out of reach.
+    - next: a person pushes `origin/main` in the Extras repository. Then this card starts again, runs the update, and deletes `Sources/FoundationModelsSkills/Discovery/DotfolderStack+Layers.swift`. The four call sites need no change of text.
+    - note: the card says to leave the task in To Do when the upstream check fails. The instruction of this step says to leave it in `doing`. The task is in `doing`.
+  timestamp: 2026-09-20T14:43:31.847260+00:00
+- actor: wballard
+  id: 01m2zmcygzk6zg61yt6wpqk26e
+  text: |-
+    ### finish iteration 1 — stuck
+    - implement: stuck — the Extras commit 62bf1aa (init(layers:)) is on local main only; origin/main is 1c150fb, and this package resolves the remote branch
+    - test: not run
+    - commit: none
+    - review: not run
+    - next: push main of FoundationModelsExtras, then swift package update here and do this card. I did not push that repository, because a card is in doing there now.
+  timestamp: 2026-09-20T14:44:22.175659+00:00
 position_column: todo
-position_ordinal: '9780'
+position_ordinal: 9c80
 title: Delete the DotfolderStack(layers:) shim when Extras gives the public initializer
 ---
 ## What

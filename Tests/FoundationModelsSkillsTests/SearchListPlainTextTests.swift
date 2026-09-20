@@ -44,8 +44,28 @@ struct SearchListPlainTextTests {
 
     /// The use rule of the tool description, word for word from the card.
     private static let descriptionUseRule =
-        #"When a task matches a skill below, load it: call this tool with {"op": "use skill", "id": "<id>"}. "#
-        + "The answer is the text of the skill. Do the work the way it says."
+        "Read the skills below before you start. If a skill helps with any part of your task, "
+        + #"load it now: call this tool with {"op": "use skill", "id": "<id>"}. "#
+        + "Load each skill that helps. More than one can apply. "
+        + "The answer is the text of the skill. Do the work the way it says. "
+        + "Read this list again when the work changes."
+
+    /// The last line of the load instruction, word for word from the card.
+    private static let loadInstructionLastLine =
+        "If a skill in this list helps with any part of your task, load it now, and do the work "
+        + "the way it says. Load each skill that helps. More than one can apply. Search again "
+        + "when the work changes."
+
+    /// The host guide of the operations, relative to the package root.
+    private static let operationsPath = "docs/operations.md"
+
+    /// How many times the host guide shows the use rule: the one example of
+    /// the tool description.
+    private static let ruleCountInOperations = 1
+
+    /// How many times the host guide shows the last line of the load
+    /// instruction: the `search skill` example and the `list skill` example.
+    private static let lastLineCountInOperations = 2
 
     /// The first sentence of the tool description, which does not change.
     private static let descriptionPurpose =
@@ -138,6 +158,16 @@ struct SearchListPlainTextTests {
         #expect(tool.description.hasPrefix(Self.descriptionPurpose + "\n" + Self.descriptionUseRule + "\n\n"))
     }
 
+    // MARK: - The host guide
+
+    @Test func theHostGuideShowsTheUseRuleAndTheLoadInstructionOfToday() throws {
+        let guide = try FixtureLibrary.readText(relativePath: Self.operationsPath)
+
+        #expect(Self.count(of: Self.descriptionUseRule, in: guide) == Self.ruleCountInOperations)
+        #expect(
+            Self.count(of: Self.loadInstructionLastLine, in: guide) == Self.lastLineCountInOperations)
+    }
+
     // MARK: - Fixtures
 
     /// Builds a registry over the `Examples/skill-library` fixture stack.
@@ -183,7 +213,17 @@ struct SearchListPlainTextTests {
         #"To load a skill, call the `skills` tool with {"op": "use skill", "id": "<id>"}."# + "\n"
             + #"For example: {"op": "use skill", "id": "\#(exampleID)"}"# + "\n"
             + "The answer is the text of the skill: the steps of the work and the tools to use.\n"
-            + "If a skill in this list fits your task, load it now, and do the work the way it says."
+            + loadInstructionLastLine
+    }
+
+    /// How many times `text` holds `part`.
+    ///
+    /// - Parameters:
+    ///   - part: The text to count. It is not empty.
+    ///   - text: The text to read.
+    /// - Returns: The number of times `part` stands in `text`.
+    private static func count(of part: String, in text: String) -> Int {
+        text.components(separatedBy: part).count - 1
     }
 
     /// An `AgentSession` double that gives one fixed answer for each prompt.

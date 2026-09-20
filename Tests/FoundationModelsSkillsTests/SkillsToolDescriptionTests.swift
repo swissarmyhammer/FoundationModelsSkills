@@ -49,8 +49,11 @@ struct SkillsToolDescriptionTests {
     /// from the card.
     private static let header =
         "Skills are procedures for kinds of work. Each one tells you how to do the work and which tools to use.\n"
-        + #"When a task matches a skill below, load it: call this tool with {"op": "use skill", "id": "<id>"}. "#
-        + "The answer is the text of the skill. Do the work the way it says.\n\n"
+        + "Read the skills below before you start. If a skill helps with any part of your task, "
+        + #"load it now: call this tool with {"op": "use skill", "id": "<id>"}. "#
+        + "Load each skill that helps. More than one can apply. "
+        + "The answer is the text of the skill. Do the work the way it says. "
+        + "Read this list again when the work changes.\n\n"
 
     /// The words of the step (d) note, after the count.
     private static let notListedNote = "more skills are not listed. Find them with `search skill`."

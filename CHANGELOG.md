@@ -5,6 +5,35 @@ change is at the top.
 
 ## Unreleased
 
+### Changed: the use rule of the `skills` tool asks for each skill that helps
+
+This change breaks no source. It changes two texts that the model reads: the
+use rule of the tool description, and the last line of each `search skill` and
+`list skill` answer. A host that compares either text word for word must take
+the new words.
+
+**Cause.** The rule said "When a task matches a skill below, load it", and the
+last line said "If a skill in this list fits your task". Three faults: a task
+does not match a skill, a skill helps with a task; the words permitted one
+skill only, although more than one skill can help with one task; and the rule
+spoke about the start of the task only.
+
+**What changed.**
+
+- The use rule of the description is now: `Read the skills below before you
+  start. If a skill helps with any part of your task, load it now: call this
+  tool with {"op": "use skill", "id": "<id>"}. Load each skill that helps. More
+  than one can apply. The answer is the text of the skill. Do the work the way
+  it says. Read this list again when the work changes.`
+- The last line of the load instruction is now: `If a skill in this list helps
+  with any part of your task, load it now, and do the work the way it says.
+  Load each skill that helps. More than one can apply. Search again when the
+  work changes.`
+- The load call is the same call as before, and `SkillCatalogText` still writes
+  it for all three texts.
+- The character limit of the description counts the skill lines alone, thus the
+  longer rule takes no room from them.
+
 ### Changed: the unit of override is the file, and `DiscoveredSkill` carries each layer directory
 
 This change breaks the source of a host that reads the layer directories of a

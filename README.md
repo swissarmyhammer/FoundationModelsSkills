@@ -59,12 +59,13 @@ no session of its own. Omit the `session:` argument and each search uses
 keyword retrieval, with no model at all.
 
 The tool shows the catalog to the model before it plans. Its description lists
-each visible skill with its description, and tells the model to load a skill
-that matches the task with `use skill`. The `id` field of its schema is an enum
-of the visible skill ids. Both are fixed when the tool is made: a skill that a
-hot reload adds is found by `search skill`, and the next session gets it in the
-description and in the enum. `catalogCharacterLimit` (8,000 characters by
-default) limits the list. See [`docs/operations.md`](docs/operations.md).
+each visible skill with its description, and tells the model to load each skill
+that helps with any part of the task with `use skill`. The `id` field of its
+schema is an enum of the visible skill ids. Both are fixed when the tool is
+made: a skill that a hot reload adds is found by `search skill`, and the next
+session gets it in the description and in the enum. `catalogCharacterLimit`
+(8,000 characters by default) limits the list. See
+[`docs/operations.md`](docs/operations.md).
 
 The `session:` closure gets a `SelectionSessionRequest`. The request holds the
 instructions, the candidate skill ids, and `jsonSchema`: a JSON Schema that

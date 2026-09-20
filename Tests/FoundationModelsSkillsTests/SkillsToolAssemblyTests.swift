@@ -157,8 +157,8 @@ struct SkillsToolAssemblyTests {
         #expect(loaded == (try await Self.makeFixtureRegistry().call(id: Self.noArgumentSkillID)))
     }
 
-    /// Shows that a result with a match tells the model to load a skill
-    /// that fits its task.
+    /// Shows that a result with a match tells the model to load each skill
+    /// that helps with its task.
     @Test func aRetrievalResultWithAMatchCarriesTheLoadInstruction() async throws {
         let tool = try await SkillsTool.make(registry: Self.makeFixtureRegistry())
 
@@ -314,7 +314,9 @@ struct SkillsToolAssemblyTests {
 
     /// The last line of the load instruction of an answer with a match.
     private static let loadInstructionLastLine =
-        "If a skill in this list fits your task, load it now, and do the work the way it says."
+        "If a skill in this list helps with any part of your task, load it now, and do the work "
+        + "the way it says. Load each skill that helps. More than one can apply. Search again "
+        + "when the work changes."
 
     /// A prose answer that is not JSON: the shape the real model gave when
     /// the selection prompt held no candidate.

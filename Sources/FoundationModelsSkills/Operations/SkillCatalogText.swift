@@ -74,15 +74,30 @@ internal enum SkillCatalogText {
             "To load a skill, call the `\(SkillsTool.toolName)` tool with \(useCall(id: idPlaceholder)).",
             "For example: \(useCall(id: exampleID))",
             "The answer is the text of the skill: the steps of the work and the tools to use.",
-            "If a skill in this list fits your task, load it now, and do the work the way it says.",
+            loadInstructionLastLine,
         ].joined(separator: lineBreak)
     }
 
-    /// The rule of the tool description, on one line: load a skill that
-    /// matches the task, with the exact call.
+    /// The last line of the load instruction: load each skill that helps with
+    /// the task, and search again when the work changes.
+    ///
+    /// A skill does not match a task; a skill helps with a task. More than one
+    /// skill can help with one task, thus the line asks for each of them. The
+    /// work of a task changes, thus the line asks the model to search again.
+    private static let loadInstructionLastLine =
+        "If a skill in this list helps with any part of your task, load it now, and do the work "
+        + "the way it says. Load each skill that helps. More than one can apply. Search again "
+        + "when the work changes."
+
+    /// The rule of the tool description, on one line: read the skills, load
+    /// each skill that helps with the task, with the exact call, and read the
+    /// list again when the work changes.
     internal static let descriptionUseRule =
-        "When a task matches a skill below, load it: call this tool with \(useCall(id: idPlaceholder)). "
-        + "The answer is the text of the skill. Do the work the way it says."
+        "Read the skills below before you start. If a skill helps with any part of your task, "
+        + "load it now: call this tool with \(useCall(id: idPlaceholder)). "
+        + "Load each skill that helps. More than one can apply. "
+        + "The answer is the text of the skill. Do the work the way it says. "
+        + "Read this list again when the work changes."
 
     /// Gives the arguments of the `skills` call that loads `id`, as the model
     /// writes them.
