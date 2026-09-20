@@ -30,9 +30,22 @@ internal enum ResourceIDLookup {
     /// shape, so none of the three repeats the visibility check, the
     /// directory lookup and the message construction as its own inline guard.
     ///
+    /// Each of the three calls this one time, in its own `execute(in:)`:
+    /// `ListResource.execute(in:)` takes the paths of its rows from
+    /// `SkillOverlay.entries()`, and `ReadResource.execute(in:)` and
+    /// `RunScript.execute(in:)` each find one file with
+    /// `SkillOverlay.resolve(_:)`. No operation makes a URL of its own.
+    ///
     /// The unit of override is the file, thus an operation that reads a file
     /// of a skill reads it through this overlay: a file that only a lower
     /// layer holds stays visible, and the copy of the highest layer wins.
+    ///
+    /// Two values stay outside the overlay, because the stack of
+    /// `FoundationModelsExtras` gives neither one yet: the execute bit of a
+    /// row of `ListResource`, and the execute bit with the shebang bytes of
+    /// `RunScript`. Card `^00nmjzg` of the `FoundationModelsExtras` board adds
+    /// both to the stack, and card `^yraq5xe` of this board then takes them up
+    /// here.
     ///
     /// - Parameters:
     ///   - id: The skill id to resolve.

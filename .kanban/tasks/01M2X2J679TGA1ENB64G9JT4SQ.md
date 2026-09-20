@@ -46,6 +46,49 @@ comments:
     - evidence: `swift build --build-tests` (clean, after `rm -rf .build`) — build complete, 0 warnings; `swift test` — 794 tests in 64 suites passed, 0 failed, 0 skipped
     - next: ready for review
   timestamp: 2026-09-20T13:15:54.454249+00:00
+- actor: claude-code
+  id: 01m2zfrdmb8nkcfjjhrapkfjek
+  text: |
+    ### review — findings
+    - evidence: 1 finding (1 confirmed, 0 refuted) — Sources/FoundationModelsSkills/Resources/ResourceSupport.swift:28; scope `review sha HEAD~1..HEAD` (6061950)
+    - next: make the docstring of `withResolvedOverlay()` agree with the code. Look at `RunScript.execute()`: if it does not read through the overlay stack, change it; if it does, or if it must not, correct the text of the docstring.
+  timestamp: 2026-09-20T13:23:15.211609+00:00
+- actor: wballard
+  id: 01m2zfs854d2311mm9tbfczwpq
+  text: |-
+    ### finish iteration 1 — findings
+    - implement: changed — 6 files
+    - test: green — swift test, 794 passed, 0 warnings
+    - commit: 6061950
+    - review: findings — Sources/FoundationModelsSkills/Resources/ResourceSupport.swift:28
+  timestamp: 2026-09-20T13:23:42.372109+00:00
+- actor: claude-code
+  id: 01m2zfxwps4b4e0qhatv7nq6w7
+  text: |-
+    Finding of the review, checked against the code.
+
+    The claim of the docstring is true. All three operations call `ResourceIDLookup.withResolvedOverlay(id:context:)` in their own `execute(in:)`:
+    - `ListResource.execute(in:)`, which then takes the paths of its rows from `SkillOverlay.entries()`.
+    - `ReadResource.execute(in:)`, which then finds its file with `SkillOverlay.resolve(_:)`.
+    - `RunScript.execute(in:)`, which does the same. Commit 8075b80 ("run a script through the layer overlay") put it there, one commit before the change under review. The clone-siblings evidence of the finding saw an unchanged `RunScript.swift` and read that as "not on the pattern"; the file was unchanged because it went on the pattern first.
+
+    Thus no code changed. The docstring now states the fact in a way the code shows: it names the three call sites and the reader each one uses, and it names the two values that stay outside the overlay -- the execute bit of a `ListResource` row, and the execute bit with the shebang bytes of `RunScript`. Both wait on card `^00nmjzg` of the `FoundationModelsExtras` board, and card `^yraq5xe` of this board then takes them up. `RunScript.executabilityIssue(path:at:)` got the same note, which `ListResource.isExecutable(at:)` already carried, so the two files agree.
+  timestamp: 2026-09-20T13:26:14.489789+00:00
+- actor: claude-code
+  id: 01m2zfy3s9fpnvfvqbesmxn909
+  text: |-
+    ### implement — changed
+    - evidence: 2 files — Sources/FoundationModelsSkills/Resources/ResourceSupport.swift, Sources/FoundationModelsSkills/Resources/RunScript.swift. Docstrings only; no behavior changed. `swift build --build-tests`: build complete, 0 warnings. `swift test`: 794 tests in 64 suites passed, 0 failed. The one finding of the review is checked, with the evidence on the card.
+    - next: review
+  timestamp: 2026-09-20T13:26:21.737529+00:00
+- actor: claude-code
+  id: 01m2zg3t7qdg6xaee4jkhesh87
+  text: |-
+    ### test — green
+    - evidence: `swift build --build-tests` — build complete, 0 warnings. `swift test` — 794 tests in 64 suites, 0 failures, 0 skips.
+    - checks: `ListResource.swift` has no `contentsOfDirectory` call. `ReadResource.swift` has no `FileHandle` or `resourceValues` call.
+    - next: ready for review.
+  timestamp: 2026-09-20T13:29:28.567806+00:00
 depends_on:
 - 01M2X2HX820957M3JE41JKNJ0E
 - 01M2X2J1KXF8CGFNFY9XHB2S4D
@@ -88,3 +131,14 @@ The boundary rule (the user, 2026-09-20): the raw work of loading lives in `Foun
 - Use `/tdd` — write failing tests first, then implement to make them pass.
 
 #dotfolder-overlay #skills #loading-boundary
+
+## Review Findings (2026-09-20 08:17)
+
+> Scope: `review sha HEAD~1..HEAD` — reviewed the diffs only — lines this change added or modified. 6 file(s) reviewed, 22 not reviewed.
+
+> 22 file(s) not reviewed — excluded by an ignore rule:
+> - `.kanban/ (from .reviewignore)` — 22 file(s)
+
+- [x] `Sources/FoundationModelsSkills/Resources/ResourceSupport.swift:28` `completeness/invariant-propagation` — The docstring claims all three resource operations (`ListResource`, `ReadResource`, and `RunScript`) share the `withResolvedOverlay()` pattern, but per clone-siblings evidence, `RunScript.swift` is unchanged (0.96 similar to the edited `ReadResource.swift`) and may not have been updated to use the refactored overlay stack pattern. If `RunScript` must follow the same invariant as the other two, it needs the same update; if not, the docstring should exclude it. Verify that `RunScript.execute()` has been refactored to call `ResourceIDLookup.withResolvedOverlay()` and read from the overlay, matching the pattern now used by `ListResource` and `ReadResource`. If `RunScript` was updated separately or already followed the pattern, update the docstring to clarify. If it was not updated, refactor it or remove it from the claim.
+  - Checked the code: all three operations share the pattern. `RunScript.execute(in:)` calls `ResourceIDLookup.withResolvedOverlay(id:context:)` and finds its script with `overlay.resolve(path)`; commit 8075b80 put it there, one commit before this change. `ListResource.execute(in:)` and `ReadResource.execute(in:)` make the same call. Thus the claim of the docstring is true, and no code changed.
+  - The docstring now states the fact in a way the code shows: it names the three call sites and which reader each one uses (`SkillOverlay.entries()` for `ListResource`, `SkillOverlay.resolve(_:)` for the other two), and it names the two values that stay outside the overlay — the execute bit of a `ListResource` row, and the execute bit with the shebang bytes of `RunScript` — with cards `^00nmjzg` and `^yraq5xe`. `RunScript.executabilityIssue(path:at:)` carries the same note, as `ListResource.isExecutable(at:)` already did.

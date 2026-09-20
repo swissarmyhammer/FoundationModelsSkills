@@ -345,6 +345,13 @@ public struct RunScript: OperationDefinition {
     /// Whichever direct-exec requirement(s) `resolved` fails, or `nil` when
     /// all are satisfied.
     ///
+    /// These are the two reads of the file system that this operation keeps:
+    /// the overlay gives the winning copy of the script, but the stack of
+    /// `FoundationModelsExtras` gives neither the execute bit nor the first
+    /// bytes of a file yet. Card `^00nmjzg` of the `FoundationModelsExtras`
+    /// board adds both to the stack, and card `^yraq5xe` of this board then
+    /// takes them up here.
+    ///
     /// - Parameters:
     ///   - path: The script's path, relative to the skill directory,
     ///     carried into the corrective message.
