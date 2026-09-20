@@ -1,4 +1,6 @@
 ---
+depends_on:
+- 01M2ZEDY8TKCMFQJA8RWHTH0PD
 position_column: todo
 position_ordinal: '9680'
 title: Watch the layer roots with the Extras DotfolderWatcher; delete SkillWatcher
@@ -9,10 +11,10 @@ title: Watch the layer roots with the Extras DotfolderWatcher; delete SkillWatch
 
 This card needs the Extras card `^f2vtvn9` on the `FoundationModelsExtras` board ("Add DotfolderWatcher ..."), which moves the type and its tests.
 
-1. **Check the upstream first.** Run `swift package update FoundationModelsExtras`. If the resolved revision has no `DotfolderWatcher`, stop, write a comment on this card, and leave it in To Do.
+1. **Check the upstream first.** Run `swift package update FoundationModelsExtras`. If the resolved revision has no `DotfolderWatcher`, stop, write a comment on this card, and leave it in To Do. This card depends on the shim card of this board, because the same update can pull the public `DotfolderStack.init(layers:)`.
 2. **Delete `Registry/SkillWatcher.swift`.** `SkillsRegistry.ReloadCoordinator` makes a `DotfolderWatcher(roots: watchedRoots, onChange: rebuild)` in its place. The schema half stays here and does not change: `LayerPlan.watchedRoots` (the local roots always; a marketplace root only when `isWatchable`), the rebuild of the catalog, the swap of `CatalogBox`, the `layerUpdates` signal of the marketplace provider, and the events of `EventBroadcaster`.
 3. `SkillWatcher` is public today. Remove it from the public surface; it has no host use that `SkillsRegistry(watch: true)` does not cover. If `docs/` or `README.md` names it, change the text to name `DotfolderWatcher` of Extras.
-4. **Tests.** Delete `Tests/FoundationModelsSkillsTests/SkillWatcherTests.swift`; its cases live in Extras now. Keep `WatcherTestSupport.swift` only while another suite uses its temporary directory helper. The reload suites stay and must pass with the calls changed only: `SkillsRegistryReloadTests`, `HotReloadTests`, `SkillsReloadFollowerTests`, `MarketplaceRegistryTests`. Where one of them drove the injected debounce timer of `SkillWatcher`, give `ReloadCoordinator` the same injection point over `DotfolderWatcher`, if Extras gives one in its public surface; if it does not, make a card on the Extras board and do not copy the watcher back.
+4. **Tests.** Delete `Tests/FoundationModelsSkillsTests/SkillWatcherTests.swift`; its cases live in Extras now. Keep `WatcherTestSupport.swift` only while another suite uses its temporary directory helper. The reload suites stay and must pass with the calls changed only: `SkillsRegistryReloadTests`, `HotReloadTests`, `SkillsReloadFollowerTests`, `MarketplaceRegistryTests`. These suites wait on the real 200 ms debounce and use no injected timer (`SkillOperationsTests.swift` and `SkillsReloadFollowerTests.swift` say so), thus the public surface of `DotfolderWatcher` is sufficient. Rewrite each doc comment that names `SkillWatcher` (`Registry/SkillsRegistry.swift` has five): the last card of this group walks comments too.
 
 ## Acceptance Criteria
 

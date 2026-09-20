@@ -15,6 +15,10 @@ Work in this package. This card starts only after `main` of `../FoundationModels
 
 This package stops holding a copy of the marketplace implementation. It keeps only what is skill knowledge: the registry hookup, the provenance in the skill diagnostics, the provenance index by discovery layer, and the `skills marketplace` CLI command group.
 
+**Sizing note.** This card is far over the normal size: it deletes 27 source files and about 15 test suites, and it adapts about 12 files. It cannot be split, because the package does not compile between the delete and the adaptation. Plan it as one long card.
+
+**The shim fallback.** If the package update of step 1 pulls an Extras revision with a public `DotfolderStack.init(layers:)`, delete `Discovery/DotfolderStack+Layers.swift` in this card, because two initializers with one signature can stop the build. The shim card of this board then has only its check to do.
+
 1. Run `swift package update FoundationModelsExtras` first. The resolved pin must name a commit of `main` that holds the `Marketplace` product. If it does not, stop: the Extras cards are not pushed yet.
 2. `Package.swift`: remove the `swift-libgit2` package dependency and the `libgit2` product from `commonDependencies`. Add `.product(name: "Marketplace", package: "FoundationModelsExtras")` to `commonDependencies`, and `.product(name: "MarketplaceFixtures", package: "FoundationModelsExtras")` to the test target only. The test bundle links libgit2 through that product; the library does not. Update the comment block. The sibling stays a remote `main` dependency.
 3. `Sources/FoundationModelsSkills/SeamReexports.swift`: add `@_exported import Marketplace`, so a host that writes `import FoundationModelsSkills` still sees `MarketplaceStore`, `MarketplaceSource`, `MarketplacePolicy` and `MarketplaceConfig`, as `docs/marketplaces.md` shows.

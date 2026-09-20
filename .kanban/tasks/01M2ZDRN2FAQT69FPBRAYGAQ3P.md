@@ -1,4 +1,6 @@
 ---
+depends_on:
+- 01M2ZEDY8TKCMFQJA8RWHTH0PD
 position_column: todo
 position_ordinal: '9580'
 title: 'Render: give Stencil and the quarantine to Extras; keep the two grammar passes of the skill format'
@@ -9,19 +11,20 @@ The render pipeline of a skill has three passes: argument substitution, shell in
 
 This card needs the Extras card `^ay84ekh` on the `FoundationModelsExtras` board ("Render text that a consumer holds ..."): a public `QuarantinedText`, and `StenciledDotfolderStack.render(_:in:)` for a `QuarantinedText` and a layer.
 
-1. **Check the upstream first.** Run `swift package update FoundationModelsExtras`. If the resolved revision has no `StenciledDotfolderStack.render(_:in:)`, stop, write a comment on this card, and leave it in To Do.
+1. **Check the upstream first.** Run `swift package update FoundationModelsExtras`. If the resolved revision has no `StenciledDotfolderStack.render(_:in:)` or no public `WellKnownValues`, stop, write a comment on this card, and leave it in To Do. This card depends on the shim card of this board, because the same update can pull the public `DotfolderStack.init(layers:)`.
 2. **Delete `Render/QuarantinedText.swift`.** `ArgumentSubstitution` and `ShellInjection` use the `QuarantinedText` of Extras through the same seams (`mappingOriginalSpans`, the async form, the preceding character).
 3. **Make `StencilPass` thin.** For each render it makes a `StenciledDotfolderStack(base: DotfolderStack(layers: layers), variables:)` and calls `render(text, in: request.winningLayer)`. The `variables` are schema work and stay here: the named arguments of the `arguments:` frontmatter list, first occurrence wins, in agreement with `$name` of pass 1. Delete from this package: `WellKnownValues` and `current(layers:)`, the ladder merge, `partialsStack(for:)`, `resolvedTrust(for:)`, `template(for:injectingQuarantinedSpansInto:)`, `endsInsideOpenDelimiter`, `movingTrailingBraces`, and each direct use of `TemplateEngine`, `TemplateContext` and `TemplateValue`.
 4. **The environment rung.** The ladder of this package today is: well-known values, then the process environment, then the named arguments. The stack of Extras keeps the environment out. Keep the behavior: put the process environment into `variables` below the named arguments. Take the environment one time from `ProcessInfo` in the registry and pass it down, so a test can give its own.
 5. Map `TemplateEngineError` to the render error that this package gives today, with the same corrective text.
 6. `RenderPipeline`, `RenderPass`, `ShellRenderPass`, `RenderRequest`, `RenderPolicy`, `ArgumentSubstitution`, `ShellInjection` and `NamedCaptureGroup` stay. `renderMetadata` still runs passes 1 and 3 only.
-7. Tests: delete the cases of `StencilPassTests.swift` and `RenderPipelineNoRescanTests.swift` that moved to Extras with that card (trust by layer, partial scope, the bridge, the open delimiter, the trailing brace, the one budget). Keep the cases that prove the wiring of this package: the named arguments reach Stencil, the environment rung, the marketplace layer renders untrusted, a substituted `{{ x }}` comes out verbatim end to end.
+7. Tests: delete the cases of `StencilPassTests.swift` and `RenderPipelineNoRescanTests.swift` that moved to Extras with that card (trust by layer, partial scope, the bridge, the open delimiter, the trailing brace, the one budget). The kept cases that fix `hostname`, `date` and `working_directory` use the public `WellKnownValues` seam of Extras (`StenciledDotfolderStack.init(... wellKnownValues:)`) in place of `StencilPass.WellKnownValues`; give `StencilPass` an internal init that passes such a value through. Keep the cases that prove the wiring of this package: the named arguments reach Stencil, the environment rung, the marketplace layer renders untrusted, a substituted `{{ x }}` comes out verbatim end to end.
 
 ## Acceptance Criteria
 
 - [ ] `Render/QuarantinedText.swift` does not exist, and no file of `Sources/FoundationModelsSkills/` names `TemplateEngine`, `TemplateContext`, `TemplateValue` or `WellKnownValues`.
 - [ ] No file under `Sources/FoundationModelsSkills/Render/` names `FileManager`.
 - [ ] The rendered text of each skill of `Examples/skill-library` is the same as before, for the body and for the metadata fields.
+- [ ] `{{ dotfolder_name }}` gives the name of the highest-precedence root for a `SkillsRegistry(roots:)` with more than one root.
 - [ ] A skill from a `.defaults` layer renders trusted; each other layer, a marketplace layer included, renders untrusted.
 - [ ] A marketplace skill reads a partial from its own marketplace and from the local layers only.
 - [ ] A substituted argument value and a shell output that hold template syntax come out verbatim.

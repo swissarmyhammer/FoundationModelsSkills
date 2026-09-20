@@ -32,9 +32,9 @@ public typealias ReadResourceOutput = CorrectiveOutcome<ReadResourceResult>
 ///
 /// Two conditions refuse the read with a corrective instead of paging: a
 /// single line that alone exceeds the content byte budget (named by line
-/// number), and content that is not valid UTF-8 (reported with the file's
-/// stat'd byte size; the scan stops at the first invalid byte, so a binary
-/// asset is never materialized).
+/// number), and content that is not valid UTF-8 (reported with the byte size
+/// the combined view gives; the scan stops at the first invalid byte, so a
+/// binary asset is never materialized).
 public struct ReadResource: OperationDefinition {
     /// The shared context this operation dispatches against.
     public typealias Context = SkillsToolContext
@@ -148,7 +148,13 @@ public struct ReadResource: OperationDefinition {
     /// time -- the other half of the per-call memory bound.
     private static let readChunkByteSize = 65_536
 
-    /// Reads `path` under `id`'s directory, or returns a corrective message.
+    /// Reads `path` of the combined view of `id`, or returns a corrective
+    /// message.
+    ///
+    /// The unit of override is the file, thus the bytes come from the overlay
+    /// of the layer directories of the skill (plan.md §3): a file that only a
+    /// lower layer holds is read, and the copy of the highest layer that holds
+    /// the path wins.
     ///
     /// - Parameter context: The shared context supplying the model-visible
     ///   registry.
@@ -159,18 +165,18 @@ public struct ReadResource: OperationDefinition {
     /// - Throws: Nothing; the signature carries `throws` to satisfy the
     ///   `OperationDefinition` protocol requirement.
     public func execute(in context: SkillsToolContext) async throws -> ReadResourceOutput {
-        await ResourceIDLookup.withResolvedDirectory(id: id, context: context) { skillDirectory in
-            guard let resolved = PathConfinement.resolvedURL(relativePath: path, in: skillDirectory) else {
+        await ResourceIDLookup.withResolvedOverlay(id: id, context: context) { overlay in
+            guard overlay.resolve(path) != nil else {
                 return .corrective(PathConfinement.deniedMessage(path: path))
             }
-            guard let statedSize = Self.fileSize(at: resolved) else {
+            guard let statedSize = overlay.size(of: path) else {
                 return .corrective(Self.unreadableMessage(path: path))
             }
             let window = LineWindow(start: start, end: end, maxLines: Self.maxLinesPerCall)
             var scanner = LineWindowScanner(
                 window: window, contentByteBudget: Self.maxContentBytesPerCall,
                 chunkByteSize: Self.readChunkByteSize)
-            switch scanner.scan(fileAt: resolved) {
+            switch scanner.scan(path, in: overlay) {
             case .unreadable:
                 return .corrective(Self.unreadableMessage(path: path))
             case .nonUTF8:
@@ -181,16 +187,6 @@ public struct ReadResource: OperationDefinition {
                 return .success(result(window: window, lines: lines, totalLines: totalLines))
             }
         }
-    }
-
-    /// `url`'s file size, read from filesystem metadata alone -- never opens
-    /// or reads the file's content.
-    ///
-    /// - Parameter url: The file to stat.
-    /// - Returns: The file's size in bytes, or `nil` if it could not be
-    ///   stat'd.
-    private static func fileSize(at url: URL) -> Int? {
-        (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize
     }
 
     /// Assembles the successful result for the lines the scan retained.
@@ -235,7 +231,7 @@ public struct ReadResource: OperationDefinition {
     ///
     /// - Parameters:
     ///   - path: The non-UTF-8 resource's path.
-    ///   - byteSize: The resource's stat'd size in bytes.
+    ///   - byteSize: The size of the resource in bytes.
     /// - Returns: The corrective message.
     private static func nonUTF8Message(path: String, byteSize: Int) -> String {
         "The resource `\(path)` is not valid UTF-8 text (\(byteSize) bytes) and cannot be returned as transcript content."
@@ -388,18 +384,18 @@ private struct LineWindowScanner {
         self.chunkByteSize = chunkByteSize
     }
 
-    /// Scans the file at `url` to its end, or to the first byte that stops
-    /// the scan.
+    /// Scans the winning copy of `relativePath` to its end, or to the first
+    /// byte that stops the scan.
     ///
-    /// - Parameter url: The file to scan.
+    /// - Parameters:
+    ///   - relativePath: The path of the resource, relative to a layer
+    ///     directory of the skill.
+    ///   - overlay: The combined view that gives the bytes of the winning
+    ///     copy, one chunk at a time.
     /// - Returns: The scan's outcome.
-    mutating func scan(fileAt url: URL) -> Outcome {
-        guard let handle = try? FileHandle(forReadingFrom: url) else { return .unreadable }
-        defer { try? handle.close() }
+    mutating func scan(_ relativePath: String, in overlay: SkillOverlay) -> Outcome {
         do {
-            while let chunk = try handle.read(upToCount: chunkByteSize), !chunk.isEmpty {
-                try consume(chunk: chunk)
-            }
+            guard try consumeChunks(of: relativePath, in: overlay) else { return .unreadable }
             try finish()
         } catch Interruption.nonUTF8 {
             return .nonUTF8
@@ -409,6 +405,27 @@ private struct LineWindowScanner {
             return .unreadable
         }
         return .window(lines: retainedLines, totalLines: currentLineNumber - 1)
+    }
+
+    /// Reads the winning copy of `relativePath` one chunk at a time, and feeds
+    /// each chunk to the line splitter.
+    ///
+    /// - Parameters:
+    ///   - relativePath: The path of the resource, relative to a layer
+    ///     directory of the skill.
+    ///   - overlay: The combined view that gives the bytes.
+    /// - Returns: `true` when the read reached the end of the file; `false`
+    ///   when a read gave no bytes at all, which says the file cannot be read.
+    /// - Throws: `Interruption.nonUTF8` for invalid bytes;
+    ///   `Interruption.oversizedLine` from the line splitter.
+    private mutating func consumeChunks(of relativePath: String, in overlay: SkillOverlay) throws -> Bool {
+        var offset = 0
+        while let chunk = overlay.data(relativePath, in: offset..<(offset + chunkByteSize)) {
+            guard !chunk.isEmpty else { return true }
+            try consume(chunk: chunk)
+            offset += chunk.count
+        }
+        return false
     }
 
     /// Validates one chunk (with the previous carry in front) as UTF-8 and

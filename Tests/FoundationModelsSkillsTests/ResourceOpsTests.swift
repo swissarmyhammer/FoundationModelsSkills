@@ -198,9 +198,17 @@ struct ResourceOpsTests {
         return root
     }
 
-    /// Dispatches one `read resource` call over `root`, from line `start`.
-    private static func readResource(root: URL, id: String, path: String, start: Int) async throws -> String {
-        let tool = try Self.makeTool(roots: [root])
+    /// Dispatches one `read resource` call over `roots`, from line `start`.
+    ///
+    /// - Parameters:
+    ///   - roots: The registry roots to build over, lowest precedence first.
+    ///   - id: The skill id to read from.
+    ///   - path: The resource path to read, relative to the skill directory.
+    ///   - start: The first line to return. Defaults to the first line of the
+    ///     file, which is the default of the operation as well.
+    /// - Returns: The raw JSON text of the dispatch.
+    private static func readResource(roots: [URL], id: String, path: String, start: Int = 1) async throws -> String {
+        let tool = try Self.makeTool(roots: roots)
         let arguments = GeneratedContent(
             properties: ["op": "read resource", "id": id, "path": path, "start": start])
         return try await tool.call(arguments: arguments)
@@ -212,7 +220,7 @@ struct ResourceOpsTests {
         let root = try Self.writeSkillWithResource(id: "large", fileName: "large.txt", bytes: bytes)
         defer { try? FileManager.default.removeItem(at: root) }
 
-        let json = try await Self.readResource(root: root, id: "large", path: "large.txt", start: 1)
+        let json = try await Self.readResource(roots: [root], id: "large", path: "large.txt", start: 1)
 
         #expect(!Self.isCorrective(json))
         #expect(json.contains("\"start\":1"))
@@ -228,7 +236,7 @@ struct ResourceOpsTests {
             id: "large", fileName: "large.txt", bytes: Self.makeLargeFixtureBytes())
         defer { try? FileManager.default.removeItem(at: root) }
 
-        let json = try await Self.readResource(root: root, id: "large", path: "large.txt", start: 50_001)
+        let json = try await Self.readResource(roots: [root], id: "large", path: "large.txt", start: 50_001)
 
         #expect(json.contains("\"start\":50001"))
         #expect(json.contains("\"end\":50500"))
@@ -244,7 +252,7 @@ struct ResourceOpsTests {
             id: "large", fileName: "large.txt", bytes: Self.makeLargeFixtureBytes())
         defer { try? FileManager.default.removeItem(at: root) }
 
-        let json = try await Self.readResource(root: root, id: "large", path: "large.txt", start: 99_501)
+        let json = try await Self.readResource(roots: [root], id: "large", path: "large.txt", start: 99_501)
 
         #expect(json.contains("\"start\":99501"))
         #expect(json.contains("\"end\":\(Self.largeFixtureLineCount)"))
@@ -260,7 +268,7 @@ struct ResourceOpsTests {
         defer { try? FileManager.default.removeItem(at: root) }
         let start = Self.largeFixtureLineCount + 1
 
-        let json = try await Self.readResource(root: root, id: "large", path: "large.txt", start: start)
+        let json = try await Self.readResource(roots: [root], id: "large", path: "large.txt", start: start)
 
         #expect(!Self.isCorrective(json))
         #expect(json.contains("\"content\":\"\""))
@@ -278,7 +286,7 @@ struct ResourceOpsTests {
         let root = try Self.writeSkillWithResource(id: "wide", fileName: "wide.txt", bytes: bytes)
         defer { try? FileManager.default.removeItem(at: root) }
 
-        let json = try await Self.readResource(root: root, id: "wide", path: "wide.txt", start: 1)
+        let json = try await Self.readResource(roots: [root], id: "wide", path: "wide.txt", start: 1)
 
         #expect(!Self.isCorrective(json))
         #expect(json.contains("\"start\":1"))
@@ -291,7 +299,7 @@ struct ResourceOpsTests {
         let root = try Self.writeSkillWithResource(id: "oversized", fileName: "huge.txt", bytes: bytes)
         defer { try? FileManager.default.removeItem(at: root) }
 
-        let json = try await Self.readResource(root: root, id: "oversized", path: "huge.txt", start: 1)
+        let json = try await Self.readResource(roots: [root], id: "oversized", path: "huge.txt", start: 1)
 
         #expect(Self.isCorrective(json))
         #expect(json.contains("exceeding"))
@@ -310,7 +318,7 @@ struct ResourceOpsTests {
         let root = try Self.writeSkillWithResource(id: "late-binary", fileName: "mixed.bin", bytes: bytes)
         defer { try? FileManager.default.removeItem(at: root) }
 
-        let json = try await Self.readResource(root: root, id: "late-binary", path: "mixed.bin", start: 1)
+        let json = try await Self.readResource(roots: [root], id: "late-binary", path: "mixed.bin", start: 1)
 
         #expect(Self.isCorrective(json))
         #expect(json.contains("not valid UTF-8"))
@@ -324,7 +332,7 @@ struct ResourceOpsTests {
         let root = try Self.writeSkillWithResource(id: "wide-chars", fileName: "chars.txt", bytes: Data(text.utf8))
         defer { try? FileManager.default.removeItem(at: root) }
 
-        let json = try await Self.readResource(root: root, id: "wide-chars", path: "chars.txt", start: 1)
+        let json = try await Self.readResource(roots: [root], id: "wide-chars", path: "chars.txt", start: 1)
 
         #expect(!Self.isCorrective(json))
         #expect(json.contains(line))
@@ -531,4 +539,221 @@ struct ResourceOpsTests {
         #expect(!usableIDsList.contains("lint"))
     }
 
+
+    // MARK: - The combined view of the layer directories (plan.md §3, §7.3)
+
+    /// The id of the skill that the layer directories of the combined-view
+    /// tests give.
+    private static let overlaySkillID = "overlay-resources"
+
+    /// The path of the script that the lowest layer directory holds.
+    private static let reportScriptPath = "scripts/report.sh"
+
+    /// The path of the reference that the lowest layer directory holds. The
+    /// shared-path fixture gives a copy of this same path to each of its two
+    /// directories.
+    private static let rulesReferencePath = "references/rules.md"
+
+    /// The path of the script that the middle layer directory holds.
+    private static let lintScriptPath = "scripts/lint.sh"
+
+    /// The path of the reference that the highest layer directory holds.
+    private static let houseStyleReferencePath = "references/house-style.md"
+
+    /// The path of a file whose bytes are not UTF-8 text.
+    private static let logoAssetPath = "assets/logo.png"
+
+    /// Each resource path of the three-layer fixture. The `SKILL.md` of the
+    /// skill is no resource, thus it is not here.
+    private static let overlayResourcePaths = [
+        Self.reportScriptPath, Self.rulesReferencePath, Self.lintScriptPath, Self.houseStyleReferencePath,
+    ]
+
+    /// The one line of the copy of a resource in the lower directory.
+    ///
+    /// It is shorter than the line of the higher copy, thus the byte count of
+    /// a row says which copy the listing took.
+    private static let lowerCopyLine = "The lower copy."
+
+    /// The one line of the copy of a resource in the higher directory.
+    private static let higherCopyLine = "The higher copy, and it is longer."
+
+    /// The whole text of a file that holds `line`: the line and the newline
+    /// that ends it.
+    ///
+    /// - Parameter line: The one line of the file.
+    /// - Returns: The text to write.
+    private static func fileText(of line: String) -> String {
+        "\(line)\n"
+    }
+
+    /// Makes the three layer directories of the example: the lowest holds the
+    /// `SKILL.md` of the skill, one script and one reference; the middle holds
+    /// one script of its own; the highest holds one reference of its own.
+    ///
+    /// - Returns: The three layer directories, lowest precedence first.
+    /// - Throws: Whatever `ResourceTestSupport` or `LayerFixtureSupport`
+    ///   throws.
+    private static func makeThreeLayerFixture() throws -> [URL] {
+        let directories = try LayerFixtureSupport.makeLayerDirectories(count: 3)
+        try ResourceTestSupport.writeMinimalSkillFile(id: Self.overlaySkillID, in: directories[0])
+        try Self.writeResource(at: Self.reportScriptPath, in: directories[0])
+        try Self.writeResource(at: Self.rulesReferencePath, in: directories[0])
+        try Self.writeResource(at: Self.lintScriptPath, in: directories[1])
+        try Self.writeResource(at: Self.houseStyleReferencePath, in: directories[2])
+        return directories
+    }
+
+    /// Makes two layer directories that each hold a copy of one reference
+    /// path, and gives the `SKILL.md` of the skill to the lower one.
+    ///
+    /// The two copies differ in length and in text, thus a row and a read each
+    /// say which copy they took.
+    ///
+    /// - Returns: The two layer directories, lowest precedence first.
+    /// - Throws: Whatever `ResourceTestSupport` or `LayerFixtureSupport`
+    ///   throws.
+    private static func makeSharedPathFixture() throws -> [URL] {
+        let directories = try LayerFixtureSupport.makeLayerDirectories(count: 2)
+        try ResourceTestSupport.writeMinimalSkillFile(id: Self.overlaySkillID, in: directories[0])
+        try LayerFixtureSupport.writeTextFile(
+            Self.fileText(of: Self.lowerCopyLine), at: Self.layerPath(of: Self.rulesReferencePath),
+            in: directories[0])
+        try LayerFixtureSupport.writeTextFile(
+            Self.fileText(of: Self.higherCopyLine), at: Self.layerPath(of: Self.rulesReferencePath),
+            in: directories[1])
+        return directories
+    }
+
+    /// Writes one resource file of the skill in one layer directory.
+    ///
+    /// The text of the file names the layer directory, thus a read of the file
+    /// says which copy it took.
+    ///
+    /// - Parameters:
+    ///   - relativePath: The path of the file, relative to the skill
+    ///     directory.
+    ///   - directory: The layer directory to write in.
+    /// - Throws: Whatever `LayerFixtureSupport.writeTextFile(at:in:)` throws.
+    private static func writeResource(at relativePath: String, in directory: URL) throws {
+        try LayerFixtureSupport.writeTextFile(at: Self.layerPath(of: relativePath), in: directory)
+    }
+
+    /// The path of one resource of the skill, relative to a layer directory.
+    ///
+    /// - Parameter relativePath: The path of the file, relative to the skill
+    ///   directory.
+    /// - Returns: The path with the skill directory in front of it.
+    private static func layerPath(of relativePath: String) -> String {
+        "\(Self.overlaySkillID)/\(relativePath)"
+    }
+
+    /// The `path` field of a row, as the JSON of a result spells it: the
+    /// encoder writes `\/` for each `/`.
+    ///
+    /// - Parameter relativePath: The path of the row.
+    /// - Returns: The text to look for in the JSON.
+    private static func jsonPathField(of relativePath: String) -> String {
+        "\"path\":\"\(relativePath.replacingOccurrences(of: "/", with: "\\/"))\""
+    }
+
+    /// The part of the text of a fixture file that names the layer directory
+    /// that holds the copy.
+    ///
+    /// `LayerFixtureSupport.writeTextFile(at:in:)` ends the text with the name
+    /// of the directory, thus this mark says which copy a read took.
+    ///
+    /// - Parameter directory: A layer directory of the fixture.
+    /// - Returns: The text to look for in the JSON.
+    private static func layerMark(of directory: URL) -> String {
+        "in \(directory.lastPathComponent)."
+    }
+
+    /// Dispatches one `list resource` call of the skill of the combined-view
+    /// tests over `roots`.
+    ///
+    /// - Parameter roots: The registry roots to build over, lowest precedence
+    ///   first.
+    /// - Returns: The raw JSON text of the dispatch.
+    private static func listOverlayResources(roots: [URL]) async throws -> String {
+        let tool = try Self.makeTool(roots: roots)
+        return try await tool.call(
+            arguments: GeneratedContent(properties: ["op": "list resource", "id": Self.overlaySkillID]))
+    }
+
+    @Test func listResourceGivesEachPathOfEveryLayerDirectoryOneTime() async throws {
+        let directories = try Self.makeThreeLayerFixture()
+        defer { LayerFixtureSupport.removeDirectories(directories) }
+
+        let json = try await Self.listOverlayResources(roots: directories)
+
+        #expect(json.contains("\"total\":\(Self.overlayResourcePaths.count)"))
+        #expect(json.components(separatedBy: "\"path\":").count - 1 == Self.overlayResourcePaths.count)
+        for path in Self.overlayResourcePaths {
+            #expect(json.contains(Self.jsonPathField(of: path)))
+        }
+    }
+
+    @Test func listResourceGivesAFileOfBytesWithTheAssetKindAndItsSize() async throws {
+        let directories = try Self.makeThreeLayerFixture()
+        defer { LayerFixtureSupport.removeDirectories(directories) }
+        let assetURL = try LayerFixtureSupport.writeBytesFile(
+            at: Self.layerPath(of: Self.logoAssetPath), in: directories[2])
+        let byteSize = try #require(
+            FileManager.default.attributesOfItem(atPath: assetURL.path)[.size] as? Int)
+
+        let json = try await Self.listOverlayResources(roots: directories)
+
+        #expect(
+            json.contains(
+                "\"bytes\":\(byteSize),\"executable\":false,\"kind\":\"asset\","
+                    + Self.jsonPathField(of: Self.logoAssetPath)))
+    }
+
+    @Test func listResourceGivesOneRowOfTheHigherCopyForAPathThatTwoDirectoriesHold() async throws {
+        let directories = try Self.makeSharedPathFixture()
+        defer { LayerFixtureSupport.removeDirectories(directories) }
+        let higherByteSize = Self.fileText(of: Self.higherCopyLine).utf8.count
+
+        let json = try await Self.listOverlayResources(roots: directories)
+
+        #expect(json.contains("\"total\":1"))
+        #expect(
+            json.contains(
+                "\"bytes\":\(higherByteSize),\"executable\":false,\"kind\":\"reference\","
+                    + Self.jsonPathField(of: Self.rulesReferencePath)))
+    }
+
+    @Test func readResourceGivesTheCopyOfTheMiddleDirectoryForAScriptOnlyItHolds() async throws {
+        let directories = try Self.makeThreeLayerFixture()
+        defer { LayerFixtureSupport.removeDirectories(directories) }
+
+        let json = try await Self.readResource(
+            roots: directories, id: Self.overlaySkillID, path: Self.lintScriptPath)
+
+        #expect(!Self.isCorrective(json))
+        #expect(json.contains(Self.layerMark(of: directories[1])))
+    }
+
+    @Test func readResourceGivesTheCopyOfTheLowestDirectoryForAScriptOnlyItHolds() async throws {
+        let directories = try Self.makeThreeLayerFixture()
+        defer { LayerFixtureSupport.removeDirectories(directories) }
+
+        let json = try await Self.readResource(
+            roots: directories, id: Self.overlaySkillID, path: Self.reportScriptPath)
+
+        #expect(!Self.isCorrective(json))
+        #expect(json.contains(Self.layerMark(of: directories[0])))
+    }
+
+    @Test func readResourceGivesTheCopyOfTheHigherDirectoryForAPathThatTwoDirectoriesHold() async throws {
+        let directories = try Self.makeSharedPathFixture()
+        defer { LayerFixtureSupport.removeDirectories(directories) }
+
+        let json = try await Self.readResource(
+            roots: directories, id: Self.overlaySkillID, path: Self.rulesReferencePath)
+
+        #expect(json.contains("\"content\":\"\(Self.higherCopyLine)\""))
+        #expect(!json.contains(Self.lowerCopyLine))
+    }
 }

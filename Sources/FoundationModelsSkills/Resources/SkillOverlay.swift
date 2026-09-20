@@ -10,9 +10,9 @@ import FoundationModelsExtras
 /// skill through this type, thus `list resource`, `read resource` and
 /// `run script` can never differ on which copy of a file they give.
 ///
-/// `DotfolderStack` walks the disk for `entries()`, and `PathConfinement`
-/// resolves one path for `resolve(_:)`, thus this type opens no directory of
-/// its own.
+/// `DotfolderStack` walks the disk for `entries()` and reads a file for
+/// `size(of:)` and `data(_:in:)`, and `PathConfinement` resolves one path for
+/// `resolve(_:)`, thus this type opens no directory and no file of its own.
 internal struct SkillOverlay: Sendable {
     /// The layer directories of the skill, lowest precedence first.
     ///
@@ -24,7 +24,8 @@ internal struct SkillOverlay: Sendable {
 
     /// Creates an overlay over the layer directories of one skill.
     ///
-    /// Does no I/O; only `resolve(_:)` and `entries()` touch disk.
+    /// Does no I/O; only `resolve(_:)`, `entries()`, `size(of:)` and
+    /// `data(_:in:)` touch disk.
     ///
     /// - Parameter directories: The layer directories of the skill, lowest
     ///   precedence first.
@@ -64,7 +65,39 @@ internal struct SkillOverlay: Sendable {
     ///   exist adds nothing, and a file that leaves its own directory adds
     ///   nothing.
     internal func entries() -> [String: URL] {
-        DotfolderStack(layers: layers).urls().mapValues(\.url)
+        stack.urls().mapValues(\.url)
+    }
+
+    /// The size in bytes of the winning copy of `relativePath`.
+    ///
+    /// The stack reads the size, thus a caller that lists or reads a file of
+    /// the skill opens no file of its own.
+    ///
+    /// - Parameter relativePath: A path relative to a layer directory.
+    /// - Returns: The size of the winning copy, or `nil` when no directory
+    ///   holds the path or the copy cannot be read.
+    internal func size(of relativePath: String) -> Int? {
+        stack.size(of: relativePath)
+    }
+
+    /// A part of the winning copy of `relativePath`, for a caller that pages a
+    /// large file.
+    ///
+    /// - Parameters:
+    ///   - relativePath: A path relative to a layer directory.
+    ///   - range: The byte offsets to read. The result is shorter than `range`
+    ///     when the file ends inside it, and empty when `range` starts at or
+    ///     after the end of the file.
+    /// - Returns: The bytes of the winning copy in `range`, or `nil` when no
+    ///   directory holds the path or the copy cannot be read.
+    internal func data(_ relativePath: String, in range: Range<Int>) -> Data? {
+        stack.data(relativePath, in: range)
+    }
+
+    /// The layer directories as one `DotfolderStack`, which gives the union of
+    /// the paths, the size of a file and the bytes of a file.
+    private var stack: DotfolderStack {
+        DotfolderStack(layers: layers)
     }
 
     /// The layer directories as the layers of a `DotfolderStack`, lowest

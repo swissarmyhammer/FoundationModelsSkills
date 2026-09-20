@@ -9,15 +9,16 @@ import Operations
 /// `ListResource.execute(in:)` fails correctively on.
 public typealias ListResourceOutput = CorrectiveOutcome<ListResourceResult>
 
-/// Enumerates every regular file under a skill's directory except
-/// `SKILL.md` (plan.md §7.3).
+/// Lists every file of the combined view of a skill except `SKILL.md`
+/// (plan.md §7.3).
 ///
-/// A passive, ungated read: every regular file, sorted by path, capped at
-/// `rowCap` rows with `total` reporting the real count. Hidden files (any
-/// path component starting with `.`) and symlinks resolving outside the
-/// skill directory are silently skipped, never surfaced as rows or errors --
-/// `ReadResource`'s `path` parameter is where an escaping symlink draws a
-/// corrective, since only there does a caller name one explicitly.
+/// A passive, ungated read: every file of the layer directories of the skill,
+/// sorted by path, capped at `rowCap` rows with `total` reporting the real
+/// count. Hidden files (any path component starting with `.`) are silently
+/// skipped, and the combined view itself leaves out a file that resolves
+/// outside its own layer directory -- `ReadResource`'s `path` parameter is
+/// where an escaping symlink draws a corrective, since only there does a
+/// caller name one explicitly.
 public struct ListResource: OperationDefinition {
     /// The shared context this operation dispatches against.
     public typealias Context = SkillsToolContext
@@ -82,14 +83,16 @@ public struct ListResource: OperationDefinition {
     /// The skill definition file every listing excludes.
     private static let skillFileName = "SKILL.md"
 
-    /// The file-system properties every directory-entry lookup below needs:
-    /// whether an entry is a directory or a regular file, its size, and its
-    /// executable bit.
-    private static let requiredResourceKeys: [URLResourceKey] = [
-        .isDirectoryKey, .isRegularFileKey, .fileSizeKey, .isExecutableKey,
-    ]
+    /// The byte count a row carries for a file whose size the combined view
+    /// could not read.
+    private static let unknownByteCount = 0
 
     /// Lists `id`'s resource files, or returns a corrective message.
+    ///
+    /// The unit of override is the file, thus the rows come from the combined
+    /// view of the layer directories of the skill (plan.md §3): a file that
+    /// only a lower layer holds is a row of its own, and a path that two
+    /// layers hold is one row that carries the copy of the higher layer.
     ///
     /// - Parameter context: The shared context supplying the model-visible
     ///   registry.
@@ -98,82 +101,59 @@ public struct ListResource: OperationDefinition {
     /// - Throws: Nothing; the signature carries `throws` to satisfy the
     ///   `OperationDefinition` protocol requirement.
     public func execute(in context: SkillsToolContext) async throws -> ListResourceOutput {
-        await ResourceIDLookup.withResolvedDirectory(id: id, context: context) { skillDirectory in
-            let rows = Self.resourceRows(in: skillDirectory).sorted { $0.path < $1.path }
+        await ResourceIDLookup.withResolvedOverlay(id: id, context: context) { overlay in
+            let rows = Self.resourceRows(in: overlay).sorted { $0.path < $1.path }
             return .success(ListResourceResult(id: id, resources: Array(rows.prefix(Self.rowCap)), total: rows.count))
         }
     }
 
-    /// Recursively enumerates every regular file under `skillDirectory`,
-    /// except `SKILL.md`.
+    /// One row for each file of the combined view that a listing shows.
     ///
-    /// - Parameter skillDirectory: The skill's root directory.
-    /// - Returns: One row per regular file, unsorted.
-    private static func resourceRows(in skillDirectory: URL) -> [ResourceRow] {
-        Self.rows(inDirectory: skillDirectory, relativePrefix: "", skillDirectory: skillDirectory)
+    /// - Parameter overlay: The combined view of the layer directories of the
+    ///   skill.
+    /// - Returns: One row per listed file, unsorted.
+    private static func resourceRows(in overlay: SkillOverlay) -> [ResourceRow] {
+        overlay.entries()
+            .filter { path, _ in Self.isListed(path) }
+            .map { path, url in
+                ResourceRow(
+                    path: path, kind: Self.kind(forRelativePath: path),
+                    bytes: overlay.size(of: path) ?? Self.unknownByteCount,
+                    executable: Self.isExecutable(at: url))
+            }
     }
 
-    /// Enumerates one directory's entries, recursing into subdirectories and
-    /// accumulating each regular file as a row.
+    /// Whether a listing shows the file at `relativePath`.
     ///
-    /// Builds every relative path purely from entry names accumulated
-    /// through `relativePrefix`, never by diffing absolute URLs -- so a
-    /// symlinked subdirectory's own descendants still report paths relative
-    /// to `skillDirectory`, regardless of where the symlink's target
-    /// actually resolves on disk.
+    /// The `SKILL.md` of a skill is the definition of the skill and no
+    /// resource of it, and a hidden file belongs to the tools of the author.
     ///
-    /// - Parameters:
-    ///   - directory: The directory to enumerate.
-    ///   - relativePrefix: `directory`'s own path relative to
-    ///     `skillDirectory`, or `""` at the root.
-    ///   - skillDirectory: The skill's root directory, for confinement.
-    /// - Returns: One row per regular file found, unsorted.
-    private static func rows(inDirectory directory: URL, relativePrefix: String, skillDirectory: URL) -> [ResourceRow]
-    {
-        let entries =
-            (try? FileManager.default.contentsOfDirectory(
-                at: directory,
-                includingPropertiesForKeys: Self.requiredResourceKeys,
-                options: [.skipsHiddenFiles])) ?? []
-
-        return entries.flatMap { entry in
-            Self.rows(
-                forEntryNamed: entry.lastPathComponent, relativePrefix: relativePrefix, skillDirectory: skillDirectory
-            )
-        }
+    /// - Parameter relativePath: The path of one file of the combined view.
+    /// - Returns: Whether the listing shows the file.
+    private static func isListed(_ relativePath: String) -> Bool {
+        relativePath != Self.skillFileName && !Self.isHidden(relativePath)
     }
 
-    /// Resolves one directory entry (by name, not by its own possibly
-    /// symlink-target URL) against `skillDirectory`'s confinement, then
-    /// either recurses (a directory) or yields its row (a regular file).
+    /// Whether a component of `relativePath` starts with a full stop, which
+    /// makes the file itself, or a directory above it, hidden.
     ///
-    /// - Parameters:
-    ///   - name: The entry's file name within its parent directory.
-    ///   - relativePrefix: The parent directory's own path relative to
-    ///     `skillDirectory`, or `""` at the root.
-    ///   - skillDirectory: The skill's root directory, for confinement.
-    /// - Returns: Zero rows (excluded, escaping, or unreadable), one row (a
-    ///   regular file), or every row recursion into a subdirectory finds.
-    private static func rows(forEntryNamed name: String, relativePrefix: String, skillDirectory: URL) -> [ResourceRow]
-    {
-        let relativePath = relativePrefix.isEmpty ? name : "\(relativePrefix)/\(name)"
-        guard relativePath != Self.skillFileName,
-            let resolved = PathConfinement.resolvedURL(relativePath: relativePath, in: skillDirectory),
-            let values = try? resolved.resourceValues(forKeys: Set(Self.requiredResourceKeys))
-        else {
-            return []
-        }
+    /// - Parameter relativePath: The path of one file of the combined view.
+    /// - Returns: Whether the path is hidden.
+    private static func isHidden(_ relativePath: String) -> Bool {
+        relativePath.split(separator: "/").contains { $0.hasPrefix(".") }
+    }
 
-        if values.isDirectory == true {
-            return Self.rows(inDirectory: resolved, relativePrefix: relativePath, skillDirectory: skillDirectory)
-        }
-        guard values.isRegularFile == true else { return [] }
-
-        return [
-            ResourceRow(
-                path: relativePath, kind: Self.kind(forRelativePath: relativePath),
-                bytes: values.fileSize ?? 0, executable: values.isExecutable ?? false)
-        ]
+    /// Whether the executable bit of the file at `url` is set.
+    ///
+    /// This is the one call of this operation that reads the file system. The
+    /// stack of `FoundationModelsExtras` gives no execute bit yet: card
+    /// `^00nmjzg` of the `FoundationModelsExtras` board adds it to the stack,
+    /// and card `^yraq5xe` of this board then takes it up here.
+    ///
+    /// - Parameter url: The URL of the winning copy of one file.
+    /// - Returns: Whether the file carries the executable bit.
+    private static func isExecutable(at url: URL) -> Bool {
+        (try? url.resourceValues(forKeys: [.isExecutableKey]))?.isExecutable ?? false
     }
 
     /// Maps a top-level resource folder name to its kind string.

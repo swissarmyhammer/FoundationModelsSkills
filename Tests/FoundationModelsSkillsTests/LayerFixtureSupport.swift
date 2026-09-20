@@ -1,9 +1,9 @@
 import Foundation
 
 /// Shared fixture helpers for the tests that make layer directories on real
-/// disk and put files in them -- `PathConfinementTests`, `SkillOverlayTests`
-/// and `SkillDiscoveryTests`. The three need the same helpers, thus the
-/// helpers are in this one file.
+/// disk and put files in them -- `PathConfinementTests`, `SkillOverlayTests`,
+/// `SkillDiscoveryTests` and `ResourceOpsTests`. Each needs the same helpers,
+/// thus the helpers are in this one file.
 ///
 /// `WatcherTestSupport` gives the temporary directory, thus this file makes
 /// none of its own.
@@ -41,9 +41,28 @@ enum LayerFixtureSupport {
     ///   throws.
     @discardableResult
     static func writeTextFile(at relativePath: String, in directory: URL) throws -> URL {
+        try writeTextFile(
+            "Text of \(relativePath) in \(directory.lastPathComponent).\n", at: relativePath, in: directory)
+    }
+
+    /// Writes `text` at `relativePath` in `directory`, and makes the
+    /// directories above the file first.
+    ///
+    /// A test that needs two copies of one path to differ in length gives the
+    /// text of each copy itself; `writeTextFile(at:in:)` gives text that names
+    /// the directory instead.
+    ///
+    /// - Parameters:
+    ///   - text: The whole text of the file.
+    ///   - relativePath: The path of the file, relative to `directory`.
+    ///   - directory: The layer directory to write in.
+    /// - Returns: The URL of the file.
+    /// - Throws: Whatever `FileManager.createDirectory` or `String.write`
+    ///   throws.
+    @discardableResult
+    static func writeTextFile(_ text: String, at relativePath: String, in directory: URL) throws -> URL {
         let url = try preparedFileURL(at: relativePath, in: directory)
-        try "Text of \(relativePath) in \(directory.lastPathComponent).\n"
-            .write(to: url, atomically: true, encoding: .utf8)
+        try text.write(to: url, atomically: true, encoding: .utf8)
         return url
     }
 

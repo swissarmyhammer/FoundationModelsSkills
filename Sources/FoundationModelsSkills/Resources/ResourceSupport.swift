@@ -24,72 +24,11 @@ internal let scriptsDirectoryPrefix = "scripts/"
 /// ops honor it too, instead of the CLI inverting visibility relative to
 /// `commandListing()`.
 internal enum ResourceIDLookup {
-    /// The outcome of resolving an id: its directory on disk, or the
-    /// corrective message to return in its place.
-    ///
-    /// Named to match `CorrectiveOutcome`'s own `.success`/`.corrective`
-    /// vocabulary, even though this type isn't itself `Encodable` -- callers
-    /// switch on it once and build their own typed `CorrectiveOutcome` from
-    /// whichever case they land in.
-    internal enum Resolution {
-        /// The id resolved to this directory.
-        case success(URL)
-
-        /// The id did not resolve; this is the corrective message to
-        /// return.
-        case corrective(String)
-    }
-
-    /// Resolves `id` against `context`'s visible catalog
-    /// (`context.visibilityPredicate`'s subset) to its directory on disk, or
-    /// the corrective message for an unusable id (decision #22) -- the
-    /// single place `ListResource` and `ReadResource` share this
-    /// id-resolution step, so neither repeats the visibility check, the
-    /// directory lookup, and the message construction as its own inline
-    /// guard.
-    ///
-    /// - Parameters:
-    ///   - id: The skill id to resolve.
-    ///   - context: The shared context supplying the registry and which
-    ///     entries `context.visibilityPredicate` accepts.
-    /// - Returns: `.success(_:)` carrying the matching entry's directory, or
-    ///   `.corrective(_:)` when `id` is unknown, stale, or not visible on
-    ///   this surface.
-    internal static func resolve(id: String, context: SkillsToolContext) -> Resolution {
-        guard
-            context.registry.metadata().contains(where: { $0.id == id && context.visibilityPredicate($0) }),
-            let skillDirectory = context.registry.skillDirectory(id: id)
-        else {
-            return .corrective(Self.unusableIDMessage(id: id, context: context))
-        }
-        return .success(skillDirectory)
-    }
-
-    /// Resolves `id`, then runs `whenGranted` with the resolved directory --
-    /// the single place `ListResource`, `ReadResource`, and `RunScript`
-    /// share this "resolve, then continue" shape, so none of the three
-    /// repeats `resolve(id:context:)`'s switch as its own inline guard.
-    ///
-    /// - Parameters:
-    ///   - id: The skill id to resolve.
-    ///   - context: The shared context supplying the registry.
-    ///   - whenGranted: Runs with the resolved directory once `id` resolves;
-    ///     never runs at all when it doesn't.
-    /// - Returns: `whenGranted`'s result, or the corrective message for an
-    ///   id that didn't resolve.
-    internal static func withResolvedDirectory<Success: Encodable & Sendable & Equatable>(
-        id: String, context: SkillsToolContext, whenGranted: (URL) async -> CorrectiveOutcome<Success>
-    ) async -> CorrectiveOutcome<Success> {
-        switch Self.resolve(id: id, context: context) {
-        case .corrective(let message):
-            return .corrective(message)
-        case .success(let skillDirectory):
-            return await whenGranted(skillDirectory)
-        }
-    }
-
     /// Resolves `id`, then runs `whenGranted` with the combined view of the
-    /// layer directories of the skill.
+    /// layer directories of the skill -- the single place `ListResource`,
+    /// `ReadResource` and `RunScript` share this "resolve, then continue"
+    /// shape, so none of the three repeats the visibility check, the
+    /// directory lookup and the message construction as its own inline guard.
     ///
     /// The unit of override is the file, thus an operation that reads a file
     /// of a skill reads it through this overlay: a file that only a lower
@@ -105,9 +44,24 @@ internal enum ResourceIDLookup {
     internal static func withResolvedOverlay<Success: Encodable & Sendable & Equatable>(
         id: String, context: SkillsToolContext, whenGranted: (SkillOverlay) async -> CorrectiveOutcome<Success>
     ) async -> CorrectiveOutcome<Success> {
-        await Self.withResolvedDirectory(id: id, context: context) { _ in
-            await whenGranted(Self.overlay(id: id, context: context))
+        guard Self.isUsable(id: id, context: context) else {
+            return .corrective(Self.unusableIDMessage(id: id, context: context))
         }
+        return await whenGranted(Self.overlay(id: id, context: context))
+    }
+
+    /// Whether `id` names a skill of the catalog that
+    /// `context.visibilityPredicate` accepts, and that the registry still
+    /// holds a directory for.
+    ///
+    /// - Parameters:
+    ///   - id: The skill id to check.
+    ///   - context: The shared context supplying the registry and which
+    ///     entries `context.visibilityPredicate` accepts.
+    /// - Returns: Whether an operation of this surface may use `id`.
+    private static func isUsable(id: String, context: SkillsToolContext) -> Bool {
+        context.registry.metadata().contains { $0.id == id && context.visibilityPredicate($0) }
+            && context.registry.skillDirectory(id: id) != nil
     }
 
     /// The combined view of the layer directories of `id`.

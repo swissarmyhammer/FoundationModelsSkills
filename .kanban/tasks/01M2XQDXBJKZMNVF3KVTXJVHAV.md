@@ -120,8 +120,24 @@ comments:
     - evidence: `swift package clean && swift build --build-tests` — build complete, 0 warnings; `swift test` — 788 tests in 64 suites, all passed, 0 failed, 0 skipped
     - diagnostics check working: 0 errors, 0 warnings
   timestamp: 2026-09-20T12:51:25.923916+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01m2ze1qs9zs4sewqpqeajfqt5
+  text: |-
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (b6b1d9b) — 0 findings, 0 confirmed, 0 refuted; 7 validator runs; 1 file reviewed, 18 files excluded by the `.reviewignore` rule for `.kanban/`. Every prior finding is checked.
+    - next: none. The card moves to done.
+  timestamp: 2026-09-20T12:53:23.369662+00:00
+- actor: wballard
+  id: 01m2ze2kdxwbf2bn7hf5et1dfs
+  text: |-
+    ### finish iteration 3 — clean
+    - implement: changed — 1 file, 1 of 1 findings checked
+    - test: green — swift test, 788 passed, 0 warnings
+    - commit: b6b1d9b
+    - review: clean — 0 findings; task moved to done
+  timestamp: 2026-09-20T12:53:51.677232+00:00
+position_column: done
+position_ordinal: ff8180
 title: SkillOverlay.entries leaves out a file that is not UTF-8 text
 ---
 ## What

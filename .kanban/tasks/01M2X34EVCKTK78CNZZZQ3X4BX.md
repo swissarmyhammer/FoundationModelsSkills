@@ -2,6 +2,8 @@
 depends_on:
 - 01M2ZDRMMGTDZCMB4ZS15QQK20
 - 01M2ZDRMVEV4ZYV446AWJJ4PFD
+- 01M2ZEDYF3RJEA214WNYRAQ5XE
+- 01M2ZEDY8TKCMFQJA8RWHTH0PD
 - 01M2ZDRN2FAQT69FPBRAYGAQ3P
 - 01M2ZDRN9J0YB9V5B1W46MJF9K
 - 01M2XD7YJF87V9PF0EPSG5CF2N
@@ -22,10 +24,10 @@ This is the last card of the loading boundary. The rule (the user, 2026-09-20): 
 6  here    the skill schema       everything above
 ```
 
-The cards before this one do the moves: ^sg5cf2n (the marketplace), ^g9jt4sq and the resources card (the file reads of the operations), the `SKILL.md` read card, the render card, the watcher card. This card closes what is left and puts a guard on the rule, so it cannot come back.
+The cards before this one do the moves: ^sg5cf2n (the marketplace), ^g9jt4sq, the execute bit card and the confinement card (the file reads of the operations), the shim card, the `SKILL.md` read card, the render card, the watcher card. This card closes what is left and puts a guard on the rule, so it cannot come back.
 
 1. **The last call.** `CLI/MarketplaceCLIContext.swift` reads `FileManager.default.currentDirectoryPath` for the default of its working directory. Replace it: the context takes `workingDirectory: URL` from its caller; `SkillsCLI` and `Examples/skills-demo` pass `URL.currentDirectory()`; the tests pass their temporary directory. The `marketplaces.yaml` write of the `add` and `remove` commands already goes through `MarketplaceConfig.save(to:)` of Extras.
-2. **The guard test.** One test walks `Sources/FoundationModelsSkills/` and fails when a file names one of: `FileManager`, `FileHandle`, `String(contentsOf`, `Data(contentsOf`, `resourceValues`, `contentsOfDirectory`, `DispatchSource`, `O_EVTONLY`, `resolvingSymlinksInPath`, `FrontmatterDocument.split`, `TemplateEngine`, `TemplateContext`, `import Stencil`, `import libgit2`. The list has one entry that is permitted, by file name: `CLI/StandardStream.swift` may name `FileHandle`, because it writes the console and loads nothing. Put the list and the exemption in one table in the test, with the reason of each.
+2. **The guard test.** One test walks `Sources/FoundationModelsSkills/` and fails when a file names one of: `FileManager`, `FileHandle`, `String(contentsOf`, `Data(contentsOf`, `resourceValues`, `contentsOfDirectory`, `DispatchSource`, `O_EVTONLY`, `resolvingSymlinksInPath`, `FrontmatterDocument.split`, `TemplateEngine`, `TemplateContext`, `import Stencil`, `import libgit2`. The walk reads the full text of each file, comments included, so a stale doc comment fails it; the cards before this one rewrite their comments. Two exemptions, by file name: `CLI/StandardStream.swift` may name `FileHandle`, because it writes the console and loads nothing; `SeamReexports.swift` may name `TemplateEngine`, because its comment tells a host what the re-export of Extras gives, and that stays true. Put the list and the exemptions in one table in the test, with the reason of each.
 3. **The documents.** `plan.md` §3 (the layer architecture) and `docs/development.md` state the table above and the rule, with the date. `ARCHITECTURE.md` does not exist; do not make one.
 4. Check `ScriptGate` (`Resources/ScriptGate.swift`): its `fnmatch` call matches a path pattern of `allowed-tools`, and opens no file. It stays. State that in one line of its doc comment, because the guard test does not name it.
 
@@ -34,7 +36,7 @@ The cards before this one do the moves: ^sg5cf2n (the marketplace), ^g9jt4sq and
 - [ ] The guard test passes, and it fails when any forbidden name is put back in any file under `Sources/FoundationModelsSkills/` (prove it one time with a temporary edit, then revert).
 - [ ] `MarketplaceCLIContext` takes its working directory from its caller.
 - [ ] `plan.md` and `docs/development.md` state the boundary rule and the table.
-- [ ] The rendered text of each skill, the catalog, each diagnostic, and the output of each `skills` command are the same as before this group of cards.
+- [ ] These suites pin the outputs of this group, and each one passes with no change of an expected value in this card: `UseSkillPlainTextTests` and `HotReloadTests` (the rendered text), `SkillsRegistryTests` and `SkillValidatorTests` (the catalog), `DiagnosticsRenderingTests` (each diagnostic), `SearchListPlainTextTests`, `MarketplaceCLITests` and `SkillsDemoTests` (the command output).
 - [ ] `swift build --build-tests` gives 0 warnings, and `swift test` is green.
 
 ## Tests
