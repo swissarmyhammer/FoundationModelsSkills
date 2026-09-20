@@ -1,11 +1,10 @@
 import Foundation
-import FoundationModelsExtras
 import Yams
 
 /// The result of successfully decoding one skill's raw text: the decoded
 /// frontmatter, its render-pipeline body (the text after the frontmatter
-/// fence, byte-for-byte from `FrontmatterDocument.split` -- plan.md §5), and
-/// any diagnostic-worthy notes accumulated along the way. Notes combine
+/// fence, byte-for-byte as the Extras document stack gives it -- plan.md §5),
+/// and any diagnostic-worthy notes accumulated along the way. Notes combine
 /// `SkillFrontmatter.notes` (mistyped `metadata.*` values and
 /// top-level/`metadata.*` conflicts) with `FrontmatterDecoder`'s own
 /// quoting-fallback-retry note, when one fired.
@@ -44,10 +43,13 @@ public struct DecodedSkill: Sendable, Equatable {
     }
 }
 
-/// Decodes a skill's raw `SKILL.md`-style text into `SkillFrontmatter` --
-/// `FrontmatterDocument.split` does the textual frontmatter/body split
-/// (`FoundationModelsExtras`); the Yams decode on top is this package's own
-/// (plan.md §4, decision #27/#29).
+/// Decodes the frontmatter text of one skill into `SkillFrontmatter`.
+///
+/// The split of a document into its frontmatter and its body is the work of
+/// `FoundationModelsExtras`, which `SkillsRegistry` gets from the layer
+/// stack. This decoder gets the raw text between the fences only, and the
+/// Yams decode on top of it is the schema work of this package (plan.md §4,
+/// decision #27/#29).
 ///
 /// **Never throws.** A Yams parse failure runs the quoting-fallback retry for
 /// the common cross-client authoring mistake -- an unquoted colon inside
@@ -69,6 +71,46 @@ public enum FrontmatterDecoder {
         /// YAML, even after the quoting-fallback retry. `reason` is
         /// diagnostic text, not a thrown error.
         case skipped(reason: String)
+
+        /// Joins the two halves of one document again: the outcome of the
+        /// frontmatter decode, and the body the split gave beside it.
+        ///
+        /// - Parameters:
+        ///   - metadata: What `decode(frontmatter:)` gave for the frontmatter
+        ///     of this document, or `nil` when the document holds no
+        ///     frontmatter block at all.
+        ///   - body: The render-pipeline body: the text after the closing
+        ///     fence, or the whole text when there is no frontmatter block.
+        public init(metadata: MetadataOutcome?, body: String) {
+            guard let metadata else {
+                self = .decoded(DecodedSkill(frontmatter: SkillFrontmatter(), body: body, notes: []))
+                return
+            }
+            switch metadata {
+            case .decoded(let frontmatter, let notes):
+                self = .decoded(DecodedSkill(frontmatter: frontmatter, body: body, notes: notes))
+            case .skipped(let reason):
+                self = .skipped(reason: reason)
+            }
+        }
+    }
+
+    /// The half of the outcome that has no body: what one decode of a
+    /// frontmatter block gives.
+    ///
+    /// The decode seam of `FrontmatterDocumentStack` is
+    /// `(String) -> Metadata?`, and it gets the frontmatter text only. Thus
+    /// this type is the `Metadata` of that stack, and `Outcome` joins it with
+    /// the body again. A failure is a value here, never `nil`, so that its
+    /// message survives the trip through the stack.
+    public enum MetadataOutcome: Sendable, Equatable {
+        /// The frontmatter decoded -- on the first attempt, or after a
+        /// quoting-fallback retry, which `notes` then records.
+        case decoded(frontmatter: SkillFrontmatter, notes: [String])
+        /// The frontmatter block was present but could not be parsed as
+        /// YAML, even after the quoting-fallback retry. `reason` is
+        /// diagnostic text, not a thrown error.
+        case skipped(reason: String)
     }
 
     /// The literal top-level key line prefix the quoting-fallback retry
@@ -77,45 +119,48 @@ public enum FrontmatterDecoder {
     /// top level.
     private static let descriptionLinePrefix = "description:"
 
-    /// Splits `text` via `FrontmatterDocument.split` and Yams-decodes the
-    /// frontmatter block into `SkillFrontmatter`, retrying once with the
-    /// quoting fallback on a parse failure.
+    /// The note the decoder records when the quoting-fallback retry fired
+    /// and then decoded.
+    private static let quotingFallbackNote =
+        "frontmatter YAML required a quoting-fallback retry: quoted the unquoted-colon "
+        + "'description:' value."
+
+    /// The reason a frontmatter block that no retry can repair gives.
+    private static let unparseableReason = "unparseable YAML frontmatter"
+
+    /// The reason a frontmatter block that the retry fired on, and that still
+    /// did not decode, gives.
+    private static let unparseableAfterRetryReason =
+        "unparseable YAML frontmatter, even after quoting-fallback retry on 'description:'"
+
+    /// Yams-decodes one frontmatter block into `SkillFrontmatter`, retrying
+    /// once with the quoting fallback on a parse failure.
     ///
-    /// - Parameter text: The raw `SKILL.md`-style document text (frontmatter
-    ///   fence + body).
-    /// - Returns: `.decoded` with the frontmatter, body, and notes, or
-    ///   `.skipped` with a diagnostic reason. Text with no frontmatter block
-    ///   at all (per `FrontmatterDocument.split`) decodes to
-    ///   `SkillFrontmatter`'s all-nil/empty defaults, never `.skipped` --
-    ///   required-field enforcement (e.g. a missing `description`) is the
-    ///   validator's job, not this decoder's.
-    public static func decode(text: String) -> Outcome {
-        let (frontmatterText, body) = FrontmatterDocument.split(text: text)
-        guard let frontmatterText,
-            !frontmatterText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        else {
-            return .decoded(DecodedSkill(frontmatter: SkillFrontmatter(), body: body, notes: []))
+    /// - Parameter frontmatterText: The raw text between the `---` fences, as
+    ///   the Extras split gives it.
+    /// - Returns: `.decoded` with the frontmatter and its notes, or
+    ///   `.skipped` with a diagnostic reason. An empty block, or one of
+    ///   whitespace only, decodes to `SkillFrontmatter`'s all-nil/empty
+    ///   defaults, never `.skipped` -- required-field enforcement (e.g. a
+    ///   missing `description`) is the validator's job, not this decoder's.
+    public static func decode(frontmatter frontmatterText: String) -> MetadataOutcome {
+        guard !frontmatterText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return .decoded(frontmatter: SkillFrontmatter(), notes: [])
         }
 
         if let frontmatter = Self.tryDecode(frontmatterText) {
-            return .decoded(DecodedSkill(frontmatter: frontmatter, body: body, notes: frontmatter.notes))
+            return .decoded(frontmatter: frontmatter, notes: frontmatter.notes)
         }
 
         guard let retriedText = Self.quotingFallback(frontmatterText) else {
-            return .skipped(reason: "unparseable YAML frontmatter")
+            return .skipped(reason: Self.unparseableReason)
         }
 
         guard let frontmatter = Self.tryDecode(retriedText) else {
-            return .skipped(
-                reason: "unparseable YAML frontmatter, even after quoting-fallback retry on 'description:'"
-            )
+            return .skipped(reason: Self.unparseableAfterRetryReason)
         }
 
-        var notes = frontmatter.notes
-        notes.append(
-            "frontmatter YAML required a quoting-fallback retry: quoted the unquoted-colon "
-                + "'description:' value.")
-        return .decoded(DecodedSkill(frontmatter: frontmatter, body: body, notes: notes))
+        return .decoded(frontmatter: frontmatter, notes: frontmatter.notes + [Self.quotingFallbackNote])
     }
 
     /// Attempts a single Yams decode of `frontmatterText`, swallowing any

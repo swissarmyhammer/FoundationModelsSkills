@@ -11,15 +11,8 @@ import Testing
 /// happy-path fixtures carry the fields their names promise.)
 private func loadDecodedSkill(_ relativePath: String) throws -> DecodedSkill {
     let text = try String(contentsOf: FixtureLibrary.url(relativePath: relativePath), encoding: .utf8)
-    guard case .decoded(let skill) = FrontmatterDecoder.decode(text: text) else {
-        Issue.record("expected \(relativePath) to decode cleanly")
-        throw LoadFixtureFailure.notDecoded
-    }
-    return skill
-}
-
-private enum LoadFixtureFailure: Error {
-    case notDecoded
+    return try #require(
+        FixtureLibrary.decodedSkill(text: text), "\(relativePath) must decode cleanly")
 }
 
 /// Reads and decodes the frontmatter block of the fixture at `relativePath`.

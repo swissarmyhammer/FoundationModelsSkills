@@ -89,11 +89,27 @@ comments:
     - checks: `ListResource.swift` has no `contentsOfDirectory` call. `ReadResource.swift` has no `FileHandle` or `resourceValues` call.
     - next: ready for review.
   timestamp: 2026-09-20T13:29:28.567806+00:00
+- actor: claude-code
+  id: 01m2zg8xn84jn7nqmnd038t3fp
+  text: |-
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (a743b85) — 0 findings, 0 confirmed, 0 refuted, 7 attempted, 0 failed; 2 files reviewed, 2 files not reviewed (`.kanban/` ignore rule). Every prior finding of the section 2026-09-20 08:17 is checked.
+    - next: none — the task moves to `done`.
+  timestamp: 2026-09-20T13:32:15.912227+00:00
+- actor: wballard
+  id: 01m2zg9dgj4gjjwwtgvt7ffp0p
+  text: |-
+    ### finish iteration 2 — clean
+    - implement: changed — 2 files, 1 of 1 findings checked
+    - test: green — swift test, 794 passed, 0 warnings
+    - commit: a743b85
+    - review: clean — 0 findings; task moved to done
+  timestamp: 2026-09-20T13:32:32.146273+00:00
 depends_on:
 - 01M2X2HX820957M3JE41JKNJ0E
 - 01M2X2J1KXF8CGFNFY9XHB2S4D
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: ff8280
 title: list resource and read resource over the combined view
 ---
 ## What

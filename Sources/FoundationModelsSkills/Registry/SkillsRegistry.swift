@@ -636,10 +636,12 @@ public struct SkillsRegistry: Sendable {
     ) -> (catalog: [String: CatalogEntry], diagnostics: [SkillDiagnostic]) {
         var catalog: [String: CatalogEntry] = [:]
         var diagnostics: [SkillDiagnostic] = []
+        let documents = Self.skillDocuments(layers: plan.layers)
 
         for discovered in SkillDiscovery(layers: plan.layers).discover() {
             let validation = Self.validate(
-                discovered: discovered, marketplaces: plan.marketplaces, diagnostics: &diagnostics)
+                discovered: discovered, document: documents[discovered.id]?.value,
+                marketplaces: plan.marketplaces, diagnostics: &diagnostics)
             guard let validated = validation, !validated.isHidden else {
                 continue
             }
@@ -681,12 +683,45 @@ public struct SkillsRegistry: Sendable {
             }
     }
 
-    /// Reads `discovered`'s `SKILL.md` and runs it through `SkillValidator`,
-    /// appending every diagnostic raised (including its own read-failure
-    /// diagnostic, when reading fails) to `diagnostics`.
+    /// The text of every skill that this package reads: one document per
+    /// skill id, already split into its frontmatter and its body.
+    ///
+    /// `DotfolderStack` does each read, `FrontmatterDocumentStack` does each
+    /// split, and `FrontmatterDecoder` does the decode of the frontmatter,
+    /// which is the schema work of this package. Thus this registry opens no
+    /// file of its own.
+    ///
+    /// The document stack sits over the plain stack, not over a stenciled
+    /// one: the split runs on the raw text, because this registry renders the
+    /// body and each `metadata.*` value later, with the arguments of the
+    /// call.
+    ///
+    /// - Parameter layers: The layers of one catalog generation, lowest
+    ///   precedence first.
+    /// - Returns: The winning `SKILL.md` of each child directory of the
+    ///   union of the layer roots. An id whose winning `SKILL.md` no layer
+    ///   can read, or that is not UTF-8 text, has no entry.
+    private static func skillDocuments(
+        layers: [DotfolderStack.Layer]
+    ) -> [String: Located<FrontmatterDocument<FrontmatterDecoder.MetadataOutcome>>] {
+        FrontmatterDocumentStack(
+            base: DotfolderStack(layers: layers),
+            decode: { FrontmatterDecoder.decode(frontmatter: $0) }
+        ).items(in: nil, named: SkillDiscovery.skillFileName)
+    }
+
+    /// Runs `discovered`'s already-split `SKILL.md` through `SkillValidator`,
+    /// appending every diagnostic raised to `diagnostics`.
+    ///
+    /// Discovery lists a skill from the locations of its `SKILL.md`, and it
+    /// reads no file. The document stack gives no entry for a copy it cannot
+    /// read as UTF-8 text, thus `document` is `nil` exactly for such a skill,
+    /// and that skill gets the `.skip` diagnostic below.
     ///
     /// - Parameters:
     ///   - discovered: The skill's discovery record.
+    ///   - document: The winning `SKILL.md` of this id, or `nil` when the
+    ///     stack could not read it.
     ///   - marketplaces: Which marketplace each layer came from, so every
     ///     diagnostic names it (marketplace.md §9.1).
     ///   - diagnostics: Accumulates every diagnostic raised.
@@ -694,27 +729,31 @@ public struct SkillsRegistry: Sendable {
     ///   (`SkillValidator`'s own `.skipped` outcome) or an unreadable
     ///   `SKILL.md`.
     private static func validate(
-        discovered: DiscoveredSkill, marketplaces: MarketplaceProvenanceIndex,
-        diagnostics: inout [SkillDiagnostic]
+        discovered: DiscoveredSkill,
+        document: FrontmatterDocument<FrontmatterDecoder.MetadataOutcome>?,
+        marketplaces: MarketplaceProvenanceIndex, diagnostics: inout [SkillDiagnostic]
     ) -> ValidatedSkill? {
-        do {
-            let text = try String(contentsOf: discovered.skillFileURL, encoding: .utf8)
-            let result = SkillValidator.validate(
-                discovered: discovered, outcome: FrontmatterDecoder.decode(text: text),
-                marketplaces: marketplaces)
-            diagnostics.append(contentsOf: result.diagnostics)
-            return result.skill
-        } catch {
+        guard let document else {
             diagnostics.append(
                 SkillDiagnostic(
                     severity: .skip, skillID: discovered.id,
                     provenance: SkillDiagnostic.Provenance(
                         discovered: discovered,
                         marketplace: marketplaces.provenance(atLayerIndex: discovered.rootIndex)),
-                    message: "SKILL.md could not be read: \(error.localizedDescription)"))
+                    message: Self.unreadableSkillFileMessage))
             return nil
         }
+        let result = SkillValidator.validate(
+            discovered: discovered,
+            outcome: FrontmatterDecoder.Outcome(metadata: document.metadata, body: document.content),
+            marketplaces: marketplaces)
+        diagnostics.append(contentsOf: result.diagnostics)
+        return result.skill
     }
+
+    /// The text of the `.skip` diagnostic for a discovered skill whose
+    /// winning `SKILL.md` the stack cannot read.
+    private static let unreadableSkillFileMessage = "SKILL.md could not be read"
 
     // MARK: - Rendering helpers
 

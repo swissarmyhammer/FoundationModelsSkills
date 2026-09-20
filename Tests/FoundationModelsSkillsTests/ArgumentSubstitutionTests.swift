@@ -243,10 +243,8 @@ struct ArgumentSubstitutionTests {
     @Test func commitFixtureRendersDollarZeroAndArgumentsForQuotedMultiWordArgs() throws {
         let url = FixtureLibrary.url(relativePath: "project/.skills/commit/SKILL.md")
         let text = try String(contentsOf: url, encoding: .utf8)
-        guard case .decoded(let skill) = FrontmatterDecoder.decode(text: text) else {
-            Issue.record("expected the commit fixture to decode")
-            return
-        }
+        let skill = try #require(
+            FixtureLibrary.decodedSkill(text: text), "the commit fixture must decode")
 
         let rawArgument = "\"fix the off-by-one bug\""
         let result = try pass.render(

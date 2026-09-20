@@ -122,8 +122,8 @@ public struct SkillListing: Sendable, Equatable {
     ///
     /// - Parameters:
     ///   - id: The directory name -- the canonical id (plan.md §4).
-    ///   - decodedSkill: The `FrontmatterDecoder.decode(text:)` result's
-    ///     decoded payload.
+    ///   - decodedSkill: The decoded frontmatter of one `SKILL.md`, with its
+    ///     body and its notes.
     public init(id: String, decodedSkill: DecodedSkill) {
         self.init(id: id, frontmatter: decodedSkill.frontmatter, body: decodedSkill.body)
     }

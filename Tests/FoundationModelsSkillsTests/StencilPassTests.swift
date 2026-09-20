@@ -503,10 +503,8 @@ struct StencilPassTests {
 
         let skillURL = FixtureLibrary.url(relativePath: "project/.skills/env-report/SKILL.md")
         let text = try String(contentsOf: skillURL, encoding: .utf8)
-        guard case .decoded(let skill) = FrontmatterDecoder.decode(text: text) else {
-            Issue.record("expected the env-report fixture to decode cleanly")
-            return
-        }
+        let skill = try #require(
+            FixtureLibrary.decodedSkill(text: text), "the env-report fixture must decode cleanly")
 
         let rendered = try render(
             skill.body, using: pass,

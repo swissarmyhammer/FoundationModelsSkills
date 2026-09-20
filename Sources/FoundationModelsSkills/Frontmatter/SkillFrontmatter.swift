@@ -2,7 +2,7 @@
 /// arbitrary-typed values and for `arguments:`'s dual spelling (a
 /// space-separated string or a YAML list) -- this package's own YAML-value
 /// tree (plan.md decision #27/#29: YAML decoding is ours, with Yams; Extras'
-/// `FrontmatterDocument` only does the textual frontmatter/body split).
+/// `FrontmatterDocumentStack` only does the textual frontmatter/body split).
 ///
 /// `indirect` because `.array`/`.dictionary` recursively contain
 /// `FrontmatterValue` -- an ordinary (non-indirect) enum cannot store itself.

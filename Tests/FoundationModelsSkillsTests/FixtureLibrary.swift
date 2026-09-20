@@ -132,6 +132,39 @@ enum FixtureLibrary {
         return try String(contentsOf: file, encoding: .utf8)
     }
 
+    /// Decodes one whole `SKILL.md` text the way `SkillsRegistry` decodes it
+    /// over the layer stack: the Extras split gives the frontmatter and the
+    /// body, `FrontmatterDecoder` decodes the frontmatter, and the two halves
+    /// join again.
+    ///
+    /// The package itself splits no text. `FrontmatterDocumentStack` does the
+    /// split for the registry, thus the package keeps the schema work only. A
+    /// suite that holds one text of a fixture, and no stack, does the same two
+    /// steps here, thus no suite keeps its own copy of them.
+    ///
+    /// - Parameter text: The whole text of a `SKILL.md`.
+    /// - Returns: The outcome of the decode, with the body.
+    static func decodeOutcome(text: String) -> FrontmatterDecoder.Outcome {
+        let document = FrontmatterDocument.split(text: text)
+        return FrontmatterDecoder.Outcome(
+            metadata: document.frontmatter.map { FrontmatterDecoder.decode(frontmatter: $0) },
+            body: document.body)
+    }
+
+    /// The decoded skill of one whole `SKILL.md` text.
+    ///
+    /// A suite that expects a text to decode unwraps this with `#require`,
+    /// thus the case fails when the text does not decode. It never leaves the
+    /// case silently true.
+    ///
+    /// - Parameter text: The whole text of a `SKILL.md`.
+    /// - Returns: The decoded skill, or `nil` when the frontmatter did not
+    ///   decode.
+    static func decodedSkill(text: String) -> DecodedSkill? {
+        guard case .decoded(let skill) = decodeOutcome(text: text) else { return nil }
+        return skill
+    }
+
     /// Appends `relativePath` to `base`, and refuses a path that could leave
     /// `base`.
     ///

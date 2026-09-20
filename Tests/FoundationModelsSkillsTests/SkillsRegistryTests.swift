@@ -590,8 +590,8 @@ struct SkillsRegistryTests {
     /// Writes a discoverable `SKILL.md` under `root` for `id`, then makes
     /// it unreadable -- mode `0o000` normally, or a directory of the same
     /// name when the process is root and a file mode cannot refuse a read.
-    /// Either form is a `SKILL.md` that discovery accepts and that
-    /// `String(contentsOf:encoding:)` fails on.
+    /// Either form is a `SKILL.md` that discovery accepts and that the layer
+    /// stack cannot read, thus the stack gives no document for it.
     ///
     /// - Parameters:
     ///   - id: The skill id -- the subdirectory name.
@@ -634,8 +634,84 @@ struct SkillsRegistryTests {
         #expect(unreadableDiagnostics.count == 1)
         let diagnostic = try #require(unreadableDiagnostics.first)
         #expect(diagnostic.severity == .skip)
-        #expect(diagnostic.message.hasPrefix("SKILL.md could not be read:"))
+        #expect(diagnostic.message == "SKILL.md could not be read")
         #expect(diagnostic.provenance.root.path == root.path)
+    }
+
+    /// The bytes of a `SKILL.md` that is no UTF-8 text: one byte that no
+    /// UTF-8 sequence may hold.
+    private static let nonTextSkillFileBytes = Data([0xFF])
+
+    /// Writes a `SKILL.md` for `id` under `root` whose bytes are no UTF-8
+    /// text, thus discovery lists the id and the layer stack gives no
+    /// document for it.
+    ///
+    /// - Parameters:
+    ///   - id: The skill id -- the subdirectory name.
+    ///   - root: The directory to write the skill's own subdirectory under.
+    /// - Throws: Whatever `FileManager.createDirectory` or `Data.write`
+    ///   throws.
+    private static func writeNonTextSkill(id: String, in root: URL) throws {
+        let skillDirectory = root.appendingPathComponent(id, isDirectory: true)
+        try FileManager.default.createDirectory(at: skillDirectory, withIntermediateDirectories: true)
+        try nonTextSkillFileBytes.write(to: skillDirectory.appendingPathComponent("SKILL.md"))
+    }
+
+    @Test func aSkillFileThatIsNoTextDropsThatSkillWithOneSkipDiagnostic() throws {
+        let root = try Self.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try Self.writeNonTextSkill(id: "not-text", in: root)
+
+        let registry = SkillsRegistry(roots: [root])
+
+        #expect(!registry.metadata().contains { $0.id == "not-text" })
+        let diagnostics = registry.diagnostics.filter { $0.skillID == "not-text" }
+        #expect(diagnostics.count == 1)
+        let diagnostic = try #require(diagnostics.first)
+        #expect(diagnostic.severity == .skip)
+        #expect(diagnostic.message == "SKILL.md could not be read")
+    }
+
+    // MARK: - The higher layer gives both halves of the winning SKILL.md
+
+    /// Writes a `SKILL.md` for `id` under `root` whose `description:` and
+    /// whose body both name `marker`, thus a test can tell which layer gave
+    /// each half.
+    ///
+    /// - Parameters:
+    ///   - id: The skill id -- both the subdirectory name and `name:`.
+    ///   - marker: The text that names the layer of this copy.
+    ///   - root: The layer root to write the skill's own subdirectory under.
+    /// - Throws: Whatever `writeSkillFixture(id:skillMarkdown:in:)` throws.
+    private static func writeMarkedSkill(id: String, marker: String, in root: URL) throws {
+        try writeSkillFixture(
+            id: id,
+            skillMarkdown: """
+                ---
+                name: \(id)
+                description: Description from \(marker).
+                ---
+                Body from \(marker).
+                """,
+            in: root)
+    }
+
+    @Test func aSkillThatTwoLayersGiveTakesItsMetadataAndItsBodyFromTheHigherLayer() async throws {
+        let lowerRoot = try Self.makeTempDirectory()
+        let higherRoot = try Self.makeTempDirectory()
+        defer {
+            try? FileManager.default.removeItem(at: lowerRoot)
+            try? FileManager.default.removeItem(at: higherRoot)
+        }
+        try Self.writeMarkedSkill(id: "layered", marker: "the lower layer", in: lowerRoot)
+        try Self.writeMarkedSkill(id: "layered", marker: "the higher layer", in: higherRoot)
+
+        let registry = SkillsRegistry(roots: [lowerRoot, higherRoot])
+
+        let entry = try #require(registry.metadata().first { $0.id == "layered" })
+        #expect(entry.description == "Description from the higher layer.")
+        let body = try await registry.call(id: "layered")
+        #expect(body == "Body from the higher layer.")
     }
 
     // MARK: - The catalog entry carries every contributing layer directory

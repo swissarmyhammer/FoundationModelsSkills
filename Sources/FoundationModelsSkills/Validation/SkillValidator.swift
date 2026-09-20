@@ -107,8 +107,8 @@ public enum SkillValidator {
     ///   - discovered: The skill's discovery record -- supplies the
     ///     canonical id and the winning-layer provenance every diagnostic
     ///     carries.
-    ///   - outcome: `FrontmatterDecoder.decode(text:)`'s result for this
-    ///     skill's `SKILL.md`.
+    ///   - outcome: The decode of this skill's `SKILL.md`: the outcome of
+    ///     `FrontmatterDecoder.decode(frontmatter:)` joined with the body.
     /// - Returns: The validated skill (`nil` for `.skipped`) plus every
     ///   diagnostic raised.
     public static func validate(
@@ -123,8 +123,8 @@ public enum SkillValidator {
     ///
     /// - Parameters:
     ///   - discovered: The skill's discovery record.
-    ///   - outcome: `FrontmatterDecoder.decode(text:)`'s result for this
-    ///     skill's `SKILL.md`.
+    ///   - outcome: The decode of this skill's `SKILL.md`: the outcome of
+    ///     `FrontmatterDecoder.decode(frontmatter:)` joined with the body.
     ///   - marketplaces: Which marketplace each layer came from.
     /// - Returns: The validated skill (`nil` for `.skipped`) plus every
     ///   diagnostic raised.
@@ -145,19 +145,6 @@ public enum SkillValidator {
                 discovered: discovered, decodedSkill: decodedSkill, provenance: provenance,
                 marketplaces: marketplaces)
         }
-    }
-
-    /// Convenience over `validate(discovered:outcome:)` for a caller that
-    /// still has a skill's raw `SKILL.md` text rather than an already-decoded
-    /// outcome -- decodes via `FrontmatterDecoder.decode(text:)` first.
-    ///
-    /// - Parameters:
-    ///   - discovered: The skill's discovery record.
-    ///   - text: The raw `SKILL.md`-style document text.
-    /// - Returns: The validated skill (`nil` for unparseable YAML) plus every
-    ///   diagnostic raised.
-    public static func validate(discovered: DiscoveredSkill, text: String) -> Result {
-        validate(discovered: discovered, outcome: FrontmatterDecoder.decode(text: text))
     }
 
     // MARK: - Rule table

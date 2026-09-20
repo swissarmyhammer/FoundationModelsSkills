@@ -414,10 +414,8 @@ struct ShellInjectionTests {
     @Test func gitContextFixturePreloadsAndRendersItsDeterministicInjection() async throws {
         let url = FixtureLibrary.url(relativePath: "project/.skills/git-context/SKILL.md")
         let text = try String(contentsOf: url, encoding: .utf8)
-        guard case .decoded(let skill) = FrontmatterDecoder.decode(text: text) else {
-            Issue.record("expected the git-context fixture to decode")
-            return
-        }
+        let skill = try #require(
+            FixtureLibrary.decodedSkill(text: text), "the git-context fixture must decode")
 
         #expect(skill.frontmatter.preload == true)
 

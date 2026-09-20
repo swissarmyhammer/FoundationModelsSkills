@@ -1,10 +1,76 @@
 ---
 assignees:
 - claude-code
+comments:
+- actor: claude-code
+  id: 01m2zgp2045qj7njmsc9m584f1
+  text: |-
+    ## Research: the Extras Marketplace product at 1c150fb
+
+    I ran `swift package update FoundationModelsExtras`. The pin stays at `1c150fb67b8cbc254a90fe133804797f84fa6894` on `main`. Step 1 of this card is satisfied. Extras gives the products `Marketplace` and `MarketplaceFixtures`, as the card states.
+
+    ### What maps cleanly
+
+    These types are `public` in the Extras `Marketplace` target. The registry side, the validation side and the demo side map onto them with no gap:
+
+    - `MarketplaceLayerProviding`, `MarketplaceLayer`, `MarketplaceProvenance` — same shape as the local copies.
+    - `MarketplaceStore` — `init(sources:layout:cacheDirectory:policy:)`, `init(sources:layout:cacheDirectory:policy:transport:clock:environment:)`, `static cacheDirectory(environment:)`, `marketplaceLayers()`, `layerUpdates`, `events`, `diagnostics`, `pin(_:sha:)`, `unpin(_:)`, `start()`, `stop()`, `check()`, `update(_:force:)`.
+    - `MarketplaceLayout` — `init(documentName:excludedDirectoryNames:partialsDirectoryName:)`.
+    - `MarketplaceSource`, `SkillSelection`, `SourcePattern`, `MarketplacePolicy`, `SnapshotLimits`, `MarketplaceConfig`, `MarketplaceConfigError`, `MarketplaceCredential`, `MarketplaceDiagnostic`, `MarketplaceEvent`, `MarketplaceStatus`, `MarketplacePinError`, `GitTransport`, `GitTransportError`, `LibGit2Transport`.
+    - `MarketplaceFixtures` gives `GitFixtureRepository`, `RecordingGitTransport`, `GatedGitTransport`, `ManualClock`, `MarketplaceEventLog`, `TestSignal` and `MarketplaceStoreFixture`. `MarketplaceStoreFixture` carries `static let skillsLayout = MarketplaceLayout(documentName: "SKILL.md")` and a `layout:` parameter. It does not carry `makeRegistry(watch:)`, thus the wrapper of step 6 is necessary.
+
+    ### What does not map: the CLI command group
+
+    `Sources/FoundationModelsSkills/CLI/` cannot move onto the Extras API. Every type that `MarketplaceRow` and `MarketplaceCLIContext` use to read the cache is `internal` in the Extras `Marketplace` target:
+
+    - `MarketplaceCache` — `cacheVariable`, `seedVariable`, `stateFile(inCacheDirectory:)`, `cacheDirectory(environment:)`
+    - `MarketplaceState`, `MarketplaceStateRecord` — `displayID`, `currentSha`, `catalogVersion`, `lastChecked`, `lastError`, `pinnedSha`, `unpinned`
+    - `MarketplaceIdentity` — `preFetchKey(for:)`, `cacheFolderName(key:normalizedURL:)`
+    - `MarketplaceLocation` — `normalizedURL`, and the test that tells a git remote from a folder on this computer
+
+    A consumer of the product cannot reach one of them. Thus:
+
+    - `marketplace list` cannot make its six columns: ID, URL, CURRENT, CATALOG, CHECKED, STATUS.
+    - `check`, `update`, `pin`, `unpin` and `remove` cannot find the marketplace that an id names, because `MarketplaceRow.names(_:)` matches the display id **or** the pre-fetch key.
+    - `add` cannot make the pre-fetch key of a new source, thus it cannot refuse a duplicate.
+    - The kept test `MarketplaceCLITests.pinHoldsTheCommitAndListSaysSo` asserts that `list` shows `pinned` after `store.pin(...)`. The pin lives in `state.json` only, thus no public call answers it.
+    - `MarketplaceDocsTests` and `SkillsDemoTests` name `MarketplaceCache.cacheVariable` and `MarketplaceCache.seedVariable`. Those two constants are internal too.
+
+    ### Why no part of the card fits alone
+
+    The delete and the adaptation are one step, as the card states. `SeamReexports.swift` must add `@_exported import Marketplace`. That import makes `MarketplaceProvenance`, `MarketplaceLayer`, `MarketplaceSource`, `MarketplaceStore` and the rest visible with the same names as the local copies. Two types of one name in one file is an ambiguity error. Thus the local `Marketplace/` folder must go whole, or it must stay whole. A slice that deletes only some files does not build.
+
+    ### Dead ends that I did not take
+
+    - Make the row from `store.marketplaceLayers()` alone. The provenance carries the id, the URL, the commit and the catalog version, but it carries no last-check time, no pin and no error message. The output of `marketplace list` would change, and one kept test would fail.
+    - Write the pin into the user `marketplaces.yaml` instead of the cache. That changes what `marketplace pin` does, and the card says the CLI must behave as before.
+    - Keep a local copy of `MarketplaceIdentity` and `MarketplaceLocation`. That keeps about 500 lines of the code that this card deletes, and it duplicates the URL rules that Extras owns now.
+
+    ### The way out
+
+    `^z8qke1j` records the public read API that Extras must add: one `MarketplaceListing` value, one `listings(of:cacheDirectory:)` call that reads only the disk, and public names for the two environment variables. That work is in `../FoundationModelsExtras`. This card now depends on it.
+  timestamp: 2026-09-20T13:39:26.340185+00:00
+- actor: claude-code
+  id: 01m2zgparjr030nc7v0v3dk64y
+  text: |-
+    ### implement — stuck
+    - evidence: `swift package update FoundationModelsExtras` keeps the pin at `1c150fb` on `main`. No source file changed. The blocker is the Extras API: `MarketplaceCache`, `MarketplaceState`, `MarketplaceStateRecord`, `MarketplaceIdentity` and `MarketplaceLocation` are `internal` in the `Marketplace` target, thus `CLI/MarketplaceRow.swift`, `CLI/MarketplaceCLIContext.swift` and `CLI/MarketplaceCLI.swift` have no public call to move onto. The card cannot be cut smaller, because `@_exported import Marketplace` makes every local duplicate ambiguous at the same time.
+    - next: do `^z8qke1j` in `../FoundationModelsExtras`, push it to `main`, then start this card again from step 1.
+  timestamp: 2026-09-20T13:39:35.314214+00:00
+- actor: wballard
+  id: 01m2zgr28bmy9315zzhb54a9p6
+  text: |-
+    ### finish iteration 1 — stuck
+    - implement: stuck — five types of the Extras Marketplace product are internal, thus the CLI of this package has no public call
+    - test: not run
+    - commit: none
+    - review: not run
+    - next: the Extras card ^rx3ke7b on the FoundationModelsExtras board gives the public read API. After it lands and is pushed, bump the dependency and do this card.
+  timestamp: 2026-09-20T13:40:32.139819+00:00
 depends_on:
 - 01M2XCY70WHM6NWN6XR8MXHN6A
 position_column: todo
-position_ordinal: 8f80
+position_ordinal: 9a80
 title: Consume the Extras Marketplace product and delete the marketplace code from this package
 ---
 ## What

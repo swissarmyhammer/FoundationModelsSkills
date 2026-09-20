@@ -1,4 +1,5 @@
 import Foundation
+import FoundationModelsExtras
 
 /// The skills of one marketplace after ``CatalogResolver`` applies the
 /// catalog and the host selection (marketplace.md §5.2 and §6.4).
@@ -368,13 +369,21 @@ private struct CatalogReader {
 
     /// Reads the frontmatter `name` of the root `SKILL.md`.
     ///
+    /// A `CatalogFileSource` is a marketplace repository, which can be a git
+    /// tree, thus it is no dotfolder stack and the Extras document stack
+    /// cannot give the split. This one call of the split is the last one of
+    /// this package; the card that gives the marketplace to Extras takes it
+    /// away with the rest of this folder.
+    ///
     /// - Returns: The name, or `nil` when the file has no name that is one
     ///   folder name.
     /// - Throws: The error of the file read.
     func rootSkillName() throws -> String? {
         guard let data = try source.contents(atPath: SkillDiscovery.skillFileName),
-            case .decoded(let skill) = FrontmatterDecoder.decode(text: String(decoding: data, as: UTF8.self)),
-            let name = skill.frontmatter.name, CatalogPath.isSingleComponent(name: name)
+            let frontmatterText = FrontmatterDocument.split(text: String(decoding: data, as: UTF8.self))
+                .frontmatter,
+            case .decoded(let frontmatter, _) = FrontmatterDecoder.decode(frontmatter: frontmatterText),
+            let name = frontmatter.name, CatalogPath.isSingleComponent(name: name)
         else {
             return nil
         }

@@ -7,31 +7,42 @@ import Testing
 /// top-level and `metadata.*`), both `arguments:` spellings, the
 /// quoting-fallback retry (success and failure), and unknown-key collection.
 ///
-/// `FrontmatterDecoder.decode(text:)` never throws (plan.md §4's lenient
-/// posture) -- every case here asserts on its `Outcome`, not on a caught
-/// error.
+/// `FrontmatterDecoder.decode(frontmatter:)` never throws (plan.md §4's
+/// lenient posture) -- every case here asserts on its `MetadataOutcome`, not
+/// on a caught error.
+///
+/// The entry point takes the text between the `---` fences only. The split
+/// that gives that text is the work of Extras, thus the cases below state
+/// their frontmatter with no fence around it.
 struct FrontmatterDecoderTests {
-    /// Wraps `frontmatterYAML` between `---` fences with a trivial body and
-    /// decodes it, unwrapping the `.decoded` case.
-    ///
-    /// Built by explicit `\n`-joined concatenation, never a triple-quoted
-    /// literal, so the leading `---` fence line is guaranteed to carry no
-    /// stray indentation (`FrontmatterDocument.split` requires the opening
-    /// fence to be *exactly* `---` on the first line).
+    /// The reason the decoder gives for a frontmatter block that no retry can
+    /// repair.
+    private static let skippedReason = "unparseable YAML frontmatter"
+
+    /// The reason the decoder gives for a frontmatter block that the
+    /// quoting-fallback retry fired on, and that still did not decode.
+    private static let skippedAfterRetryReason =
+        "unparseable YAML frontmatter, even after quoting-fallback retry on 'description:'"
+
+    /// Decodes `frontmatterYAML` -- the text between the fences -- and
+    /// unwraps the `.decoded` case.
     private func decodeFrontmatter(
         _ frontmatterYAML: String, sourceLocation: SourceLocation = #_sourceLocation
     ) throws -> SkillFrontmatter {
-        let text = "---\n" + frontmatterYAML + "\n---\nBody text.\n"
-        let outcome = FrontmatterDecoder.decode(text: text)
-        guard case .decoded(let skill) = outcome else {
-            Issue.record("expected .decoded, got \(outcome)", sourceLocation: sourceLocation)
-            throw DecodeExpectationFailure.notDecoded
-        }
-        return skill.frontmatter
+        try #require(
+            Self.frontmatter(of: FrontmatterDecoder.decode(frontmatter: frontmatterYAML)),
+            "the frontmatter must decode", sourceLocation: sourceLocation)
     }
 
-    private enum DecodeExpectationFailure: Error {
-        case notDecoded
+    /// The frontmatter of a `.decoded` outcome.
+    ///
+    /// - Parameter outcome: What the decoder gave.
+    /// - Returns: The decoded frontmatter, or `nil` for a `.skipped` outcome.
+    private static func frontmatter(
+        of outcome: FrontmatterDecoder.MetadataOutcome
+    ) -> SkillFrontmatter? {
+        guard case .decoded(let frontmatter, _) = outcome else { return nil }
+        return frontmatter
     }
 
     // MARK: - Spec string fields (top-level)
@@ -320,11 +331,9 @@ struct FrontmatterDecoderTests {
         let text = try String(
             contentsOf: FixtureLibrary.url(relativePath: "broken/bad-colon-description/SKILL.md"),
             encoding: .utf8)
-        let outcome = FrontmatterDecoder.decode(text: text)
-        guard case .decoded(let skill) = outcome else {
-            Issue.record("expected .decoded via quoting-fallback retry, got \(outcome)")
-            return
-        }
+        let skill = try #require(
+            FixtureLibrary.decodedSkill(text: text),
+            "the fixture must decode through the quoting-fallback retry")
         #expect(skill.frontmatter.name == "bad-colon-description")
         #expect(
             skill.frontmatter.description
@@ -335,44 +344,63 @@ struct FrontmatterDecoderTests {
     // MARK: - Retry: attempted but still fails -> skipped, never throws
 
     @Test func retryIsAttemptedButStillFailsYieldsSkippedWithDiagnostic() {
-        let text =
-            "---\nname: broken\ndescription: Has a colon: here\nbogus: [1, 2\n---\nBody.\n"
-        let outcome = FrontmatterDecoder.decode(text: text)
-        guard case .skipped(let reason) = outcome else {
-            Issue.record("expected .skipped, got \(outcome)")
-            return
-        }
         // Distinguishes this from the immediate-skip path (no `description:`
         // line at all, covered separately below): this input DOES have an
         // unquoted-colon `description:` line, so the retry must actually
         // fire (and still fail, thanks to the unrelated unclosed `bogus:`
         // sequence) -- the reason text says so.
-        #expect(reason.localizedCaseInsensitiveContains("retry"))
+        #expect(
+            FrontmatterDecoder.decode(
+                frontmatter: "name: broken\ndescription: Has a colon: here\nbogus: [1, 2\n")
+                == .skipped(reason: Self.skippedAfterRetryReason))
     }
 
     // MARK: - Truly unparseable, no description: line at all -> skipped, never throws
 
     @Test func trulyUnparseableYAMLWithNoDescriptionLineSkipsWithoutThrowing() {
-        let text = "---\nname: [unterminated\n---\nBody.\n"
-        let outcome = FrontmatterDecoder.decode(text: text)
-        guard case .skipped(let reason) = outcome else {
-            Issue.record("expected .skipped, got \(outcome)")
-            return
-        }
-        #expect(!reason.isEmpty)
+        #expect(
+            FrontmatterDecoder.decode(frontmatter: "name: [unterminated\n")
+                == .skipped(reason: Self.skippedReason))
+    }
+
+    // MARK: - An empty frontmatter block: empty fields, never skipped
+
+    @Test func anEmptyFrontmatterBlockDecodesToEmptyFieldsNeverSkipped() {
+        #expect(
+            FrontmatterDecoder.decode(frontmatter: "  \n")
+                == .decoded(frontmatter: SkillFrontmatter(), notes: []))
     }
 
     // MARK: - No frontmatter block at all: decodes to empty fields, never skipped
 
     @Test func noFrontmatterBlockDecodesToEmptyFieldsNeverSkipped() {
-        let outcome = FrontmatterDecoder.decode(text: "Just a body, no frontmatter fence.\n")
-        guard case .decoded(let skill) = outcome else {
-            Issue.record("expected .decoded, got \(outcome)")
-            return
-        }
-        #expect(skill.frontmatter.name == nil)
-        #expect(skill.frontmatter.description == nil)
-        #expect(skill.body == "Just a body, no frontmatter fence.\n")
+        let body = "Just a body, no frontmatter fence.\n"
+
+        #expect(
+            FrontmatterDecoder.Outcome(metadata: nil, body: body)
+                == .decoded(DecodedSkill(frontmatter: SkillFrontmatter(), body: body, notes: [])))
+    }
+
+    // MARK: - The two halves join again
+
+    @Test func theDecodedMetadataAndTheBodyJoinIntoOneDecodedSkill() {
+        let outcome = FrontmatterDecoder.Outcome(
+            metadata: .decoded(frontmatter: SkillFrontmatter(name: "joined"), notes: ["a note"]),
+            body: "The body.\n")
+
+        #expect(
+            outcome
+                == .decoded(
+                    DecodedSkill(
+                        frontmatter: SkillFrontmatter(name: "joined"), body: "The body.\n",
+                        notes: ["a note"])))
+    }
+
+    @Test func aSkippedMetadataKeepsItsReasonWhenTheBodyJoins() {
+        let outcome = FrontmatterDecoder.Outcome(
+            metadata: .skipped(reason: Self.skippedReason), body: "The body.\n")
+
+        #expect(outcome == .skipped(reason: Self.skippedReason))
     }
 
     // MARK: - Helpers

@@ -50,8 +50,8 @@ struct SkillValidatorTests {
         return SkillValidator.validate(discovered: discovered, outcome: .decoded(decodedSkill))
     }
 
-    /// Discovers and validates one real fixture id under `root`, via the
-    /// `validate(discovered:text:)` convenience -- the workhorse for the
+    /// Discovers one real fixture id under `root`, decodes its whole
+    /// `SKILL.md` text, and validates the outcome -- the workhorse for the
     /// fixture-stack diagnostics-snapshot tests below.
     ///
     /// - Parameters:
@@ -66,7 +66,8 @@ struct SkillValidatorTests {
     ) throws -> (result: SkillValidator.Result, discovered: DiscoveredSkill) {
         let discovered = try #require(SkillDiscovery(roots: [root]).discover().first { $0.id == id })
         let text = try String(contentsOf: discovered.skillFileURL, encoding: .utf8)
-        return (SkillValidator.validate(discovered: discovered, text: text), discovered)
+        let outcome = FixtureLibrary.decodeOutcome(text: text)
+        return (SkillValidator.validate(discovered: discovered, outcome: outcome), discovered)
     }
 
     // MARK: - Rule matrix: load-anyway vs hide (proves the acceptance criterion's table)

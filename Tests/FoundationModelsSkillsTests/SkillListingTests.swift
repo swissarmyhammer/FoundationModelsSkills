@@ -15,16 +15,10 @@ struct SkillListingTests {
         id: String, relativePath: String, sourceLocation: SourceLocation = #_sourceLocation
     ) throws -> SkillListing {
         let text = try String(contentsOf: FixtureLibrary.url(relativePath: relativePath), encoding: .utf8)
-        let outcome = FrontmatterDecoder.decode(text: text)
-        guard case .decoded(let skill) = outcome else {
-            Issue.record("expected .decoded, got \(outcome)", sourceLocation: sourceLocation)
-            throw ListingExpectationFailure.notDecoded
-        }
+        let skill = try #require(
+            FixtureLibrary.decodedSkill(text: text), "\(relativePath) must decode",
+            sourceLocation: sourceLocation)
         return SkillListing(id: id, decodedSkill: skill)
-    }
-
-    private enum ListingExpectationFailure: Error {
-        case notDecoded
     }
 
     // MARK: - commit: arguments: + argument-hint: + $0/$ARGUMENTS body
