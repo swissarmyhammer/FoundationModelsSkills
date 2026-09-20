@@ -55,8 +55,31 @@ comments:
     - evidence: `swift build --build-tests` — build complete, 0 warnings. `swift test` — 809 tests passed in 66 suites, 0 failed, 0 skipped.
     - next: ready for review.
   timestamp: 2026-09-20T17:37:59.822544+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01m2zyc2nt0pnje12d7dynxtt7
+  text: |-
+    ### commit — changed
+    - evidence: 49fd2c2 docs(skills-tool): tell the model to load each skill that helps
+    - next: none
+  timestamp: 2026-09-20T17:38:39.418882+00:00
+- actor: claude-code
+  id: 01m2zygqp89q8r3dv5er1mz2fv
+  text: |
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (commit 49fd2c2) — 0 findings, 0 confirmed, 0 refuted, 7 files attempted, 0 failed. No prior Review Findings section, and every checklist item in the description is checked.
+    - next: none. The card moves to done.
+  timestamp: 2026-09-20T17:41:12.008609+00:00
+- actor: wballard
+  id: 01m2zyh8jt9xjdekph3ac1czbj
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 11 files (one earlier agent stopped at a usage limit; this pass finished it)
+    - test: green — swift test, 809 passed, 0 warnings
+    - commit: 49fd2c2
+    - review: clean — 0 findings; task moved to done
+  timestamp: 2026-09-20T17:41:29.306058+00:00
+position_column: done
+position_ordinal: ff8580
 title: 'Rewrite the use rule of the skills tool: a skill helps with a task, more than one can apply, read again when the work changes'
 ---
 ## What

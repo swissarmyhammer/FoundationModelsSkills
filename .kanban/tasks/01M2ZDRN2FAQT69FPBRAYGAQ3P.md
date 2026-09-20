@@ -1,17 +1,19 @@
 ---
 depends_on:
-- 01M2ZEDY8TKCMFQJA8RWHTH0PD
+- 01M2ZDRMMGTDZCMB4ZS15QQK20
 position_column: todo
 position_ordinal: '9580'
 title: 'Render: give Stencil and the quarantine to Extras; keep the two grammar passes of the skill format'
 ---
 ## What
 
+**Status on 2026-09-20: not blocked.** The Extras card `^ay84ekh` is done and pushed (commit `966c1d7`): `QuarantinedText` is public, `StenciledDotfolderStack.render(_:in:)` exists for a `QuarantinedText` and for a `String`, `WellKnownValues` is a public struct, `StenciledDotfolderStack.init` has the parameter `wellKnownValues: WellKnownValues? = nil`, and `dotfolder_name` takes the last `.project` layer. The build of this package is green with the shim in place and the public `DotfolderStack.init(layers:)` of Extras resolved at the same time: the compiler prefers the initializer of this module, and reports no ambiguity. Thus the shim card is a plain cleanup, and this card does not wait for it. `Package.resolved` of this package pins the Extras revision `cf4be5c`, which is `origin/main` of `FoundationModelsExtras` (checked on 2026-09-20; `swift build` of this package is green against it). The check of step 1 passes now; run it only to confirm the pin.
+
 The render pipeline of a skill has three passes: argument substitution, shell injection, Stencil. The first two are the schema of the skill format (`$ARGUMENTS`, `$ARGUMENTS[N]`, `$N`, `$name`, `${SKILL_DIR}`, `` !`command` `` and the fenced form, "body only, never metadata"). They stay in this package. The third is Stencil work, and this package rebuilt all of it because Extras gave no entry point: `Render/StencilPass.swift` holds a mirror of the internal `WellKnownValues` of Extras (with a `FileManager.default.currentDirectoryPath` call), a copy of the precedence ladder, a copy of the partial scope rule, a copy of the trust mapping, and the bridge from quarantined spans to one template. `Render/QuarantinedText.swift` is generic too.
 
 This card needs the Extras card `^ay84ekh` on the `FoundationModelsExtras` board ("Render text that a consumer holds ..."): a public `QuarantinedText`, and `StenciledDotfolderStack.render(_:in:)` for a `QuarantinedText` and a layer.
 
-1. **Check the upstream first.** Run `swift package update FoundationModelsExtras`. If the resolved revision has no `StenciledDotfolderStack.render(_:in:)` or no public `WellKnownValues`, stop, write a comment on this card, and leave it in To Do. This card depends on the shim card of this board, because the same update can pull the public `DotfolderStack.init(layers:)`.
+1. **Check the upstream first.** Run `swift package update FoundationModelsExtras`. If the resolved revision has no `StenciledDotfolderStack.render(_:in:)` or no public `WellKnownValues`, stop, write a comment on this card, and leave it in To Do.
 2. **Delete `Render/QuarantinedText.swift`.** `ArgumentSubstitution` and `ShellInjection` use the `QuarantinedText` of Extras through the same seams (`mappingOriginalSpans`, the async form, the preceding character).
 3. **Make `StencilPass` thin.** For each render it makes a `StenciledDotfolderStack(base: DotfolderStack(layers: layers), variables:)` and calls `render(text, in: request.winningLayer)`. The `variables` are schema work and stay here: the named arguments of the `arguments:` frontmatter list, first occurrence wins, in agreement with `$name` of pass 1. Delete from this package: `WellKnownValues` and `current(layers:)`, the ladder merge, `partialsStack(for:)`, `resolvedTrust(for:)`, `template(for:injectingQuarantinedSpansInto:)`, `endsInsideOpenDelimiter`, `movingTrailingBraces`, and each direct use of `TemplateEngine`, `TemplateContext` and `TemplateValue`.
 4. **The environment rung.** The ladder of this package today is: well-known values, then the process environment, then the named arguments. The stack of Extras keeps the environment out. Keep the behavior: put the process environment into `variables` below the named arguments. Take the environment one time from `ProcessInfo` in the registry and pass it down, so a test can give its own.
@@ -43,4 +45,4 @@ This card needs the Extras card `^ay84ekh` on the `FoundationModelsExtras` board
 - Use `/tdd` — write failing tests first, then implement to make them pass.
 - Record each decision in a comment on this card. Do not ask the user about an implementation detail.
 
-#loading-boundary #skills #blocked-upstream
+#loading-boundary #skills

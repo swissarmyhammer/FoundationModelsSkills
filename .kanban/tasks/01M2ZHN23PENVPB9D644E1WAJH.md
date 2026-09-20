@@ -13,7 +13,7 @@ title: Delete the Marketplace exception of the frontmatter-split guard
 
 The guard has one exception today. `Marketplace/CatalogResolver.rootSkillName()` reads the root `SKILL.md` of a marketplace repository through a `CatalogFileSource`. That source can be a git tree (`GitTreeFileSource`), thus it is no dotfolder stack and the document stack cannot serve it. The case keeps one call of `FrontmatterDocument.split`, and the test filters the `Marketplace/` folder out of the walk.
 
-Card ^xd7yjf8 gives the marketplace to Extras and deletes that folder. After it lands, the exception has nothing to protect.
+Card ^sg5cf2n gives the marketplace to Extras and deletes that folder. After it lands, the exception has nothing to protect.
 
 ## Acceptance Criteria
 

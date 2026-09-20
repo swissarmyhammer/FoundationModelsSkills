@@ -1,12 +1,13 @@
 ---
 depends_on:
 - 01M2X2J679TGA1ENB64G9JT4SQ
-- 01M2ZEDY8TKCMFQJA8RWHTH0PD
 position_column: todo
 position_ordinal: '9880'
 title: 'Resources: take the execute bit and the shebang bytes from the Extras stack'
 ---
 ## What
+
+**Status on 2026-09-20: not blocked.** The Extras card `^00nmjzg` is done and pushed (commit `62bf1aa`): `isExecutable(_:)` is a requirement of `DotfolderStacking`, and all three stacks answer it. The build of this package is green with the shim in place and the public `DotfolderStack.init(layers:)` of Extras resolved at the same time: the compiler prefers the initializer of this module, and reports no ambiguity. Thus the shim card is a plain cleanup, and this card does not wait for it. `Package.resolved` of this package pins the Extras revision `cf4be5c`, which is `origin/main` of `FoundationModelsExtras` (checked on 2026-09-20; `swift build` of this package is green against it). The check of step 1 passes now; run it only to confirm the pin.
 
 After the card ^g9jt4sq, the resource operations still make three raw file calls: the execute bit of a `list resource` row, the `chmod +x` gate of `run script`, and the two-byte shebang read of `run script`. This card needs the Extras card `^00nmjzg` on the `FoundationModelsExtras` board, which adds `isExecutable(_:)` to the stack.
 
@@ -33,4 +34,4 @@ After the card ^g9jt4sq, the resource operations still make three raw file calls
 - Use `/tdd` — write failing tests first, then implement to make them pass.
 - Record each decision in a comment on this card. Do not ask the user about an implementation detail.
 
-#loading-boundary #skills #blocked-upstream
+#loading-boundary #skills
