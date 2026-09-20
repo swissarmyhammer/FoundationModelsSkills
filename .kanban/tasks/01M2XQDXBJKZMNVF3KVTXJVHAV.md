@@ -85,6 +85,41 @@ comments:
     - evidence: LSP diagnostics check on working changes — 0 errors, 0 warnings.
     - No config file for swiftformat, swift-format, or swiftlint is in the repo. No skipped or ignored tests are in the suite.
   timestamp: 2026-09-20T12:41:52.340922+00:00
+- actor: claude-code
+  id: 01m2zdk4wwqk439vy5r4zefgcs
+  text: |
+    ### review — findings
+    - evidence: 1 finding — Tests/FoundationModelsSkillsTests/LayerFixtureSupport.swift:81 (code-hygiene/magic-numbers-swift). Scope: review sha HEAD~1..HEAD.
+    - next: Replace the magic numbers in LayerFixtureSupport.swift with named constants, through the whole file. Then run the review again.
+  timestamp: 2026-09-20T12:45:25.276440+00:00
+- actor: wballard
+  id: 01m2zdkmmpt6wda2ksa3xwnpjt
+  text: |-
+    ### finish iteration 2 — findings
+    - implement: changed — 3 files
+    - test: green — swift test, 788 passed, 0 warnings
+    - commit: 0e88d42
+    - review: findings — Tests/FoundationModelsSkillsTests/LayerFixtureSupport.swift:81
+  timestamp: 2026-09-20T12:45:41.398160+00:00
+- actor: claude-code
+  id: 01m2zdrjtmf9ns1x0s9wn7jhez
+  text: |
+    ### implement — changed
+
+    - finding: `Tests/FoundationModelsSkillsTests/LayerFixtureSupport.swift:81` `code-hygiene/magic-numbers-swift` — Magic numbers should be replaced by named constants. The item is now `- [x]`.
+    - reproduced first: `swiftlint lint --no-cache --force-exclude --config <only_rules: [no_magic_numbers]>` on the file gave 8 violations, one for each byte literal of the array at line 81. swiftlint 0.65.1. A `static let` names its value, but each element of an array literal is a separate unnamed literal, thus one `static let` of eight bytes gives eight findings.
+    - fix: each byte of the PNG signature now has a name — `pngLeadByte` (0x89), `pngNameBytes` (`Array("PNG".utf8)`), `carriageReturnByte` (0x0D), `lineFeedByte` (0x0A) and `endOfFileByte` (0x1A). `pngSignature` is the sum of those names, thus the file holds no unnamed numeric literal. The bytes that the helper writes do not change.
+    - whole file: the only other numeric literal in the file is the `0` of `(0..<count)`, which the allow-list of the rule holds.
+    - green: `swiftlint` on the file after the change — 0 violations. `swift build --build-tests` — build complete, 0 warnings, 0 errors. `swift test` — 788 tests in 64 suites passed. `check working` diagnostics — 0 errors, 0 warnings.
+    - next: `/review`.
+  timestamp: 2026-09-20T12:48:23.380200+00:00
+- actor: claude-code
+  id: 01m2zdy533tb4hszqv83vms2gp
+  text: |-
+    ### test — green
+    - evidence: `swift package clean && swift build --build-tests` — build complete, 0 warnings; `swift test` — 788 tests in 64 suites, all passed, 0 failed, 0 skipped
+    - diagnostics check working: 0 errors, 0 warnings
+  timestamp: 2026-09-20T12:51:25.923916+00:00
 position_column: doing
 position_ordinal: '80'
 title: SkillOverlay.entries leaves out a file that is not UTF-8 text
@@ -117,3 +152,12 @@ Thus step 3 is done: `entries()` is `DotfolderStack(layers: layers).urls().mapVa
 - [x] `swift build --build-tests` gives 0 warnings, and `swift test` is green.
 
 #dotfolder-overlay #skills #cross-repo
+
+## Review Findings (2026-09-20 07:43)
+
+> Scope: `review sha HEAD~1..HEAD` — reviewed the diffs only — lines this change added or modified. 3 file(s) reviewed, 4 not reviewed.
+
+> 4 file(s) not reviewed — excluded by an ignore rule:
+> - `.kanban/ (from .reviewignore)` — 4 file(s)
+
+- [x] `Tests/FoundationModelsSkillsTests/LayerFixtureSupport.swift:81` `code-hygiene/magic-numbers-swift` — Magic numbers should be replaced by named constants.

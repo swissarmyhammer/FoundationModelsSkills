@@ -1,0 +1,35 @@
+---
+position_column: todo
+position_ordinal: '9680'
+title: Watch the layer roots with the Extras DotfolderWatcher; delete SkillWatcher
+---
+## What
+
+`Sources/FoundationModelsSkills/Registry/SkillWatcher.swift` (491 lines) is a recursive directory watcher with no skill content: it takes `roots: [URL]`, opens file descriptors with `open(path, O_EVTONLY)`, makes `DispatchSource` file system sources, lists directories with `FileManager`, and calls `onChange` after a quiet period. That is raw file system work, thus it belongs in `FoundationModelsExtras`.
+
+This card needs the Extras card `^f2vtvn9` on the `FoundationModelsExtras` board ("Add DotfolderWatcher ..."), which moves the type and its tests.
+
+1. **Check the upstream first.** Run `swift package update FoundationModelsExtras`. If the resolved revision has no `DotfolderWatcher`, stop, write a comment on this card, and leave it in To Do.
+2. **Delete `Registry/SkillWatcher.swift`.** `SkillsRegistry.ReloadCoordinator` makes a `DotfolderWatcher(roots: watchedRoots, onChange: rebuild)` in its place. The schema half stays here and does not change: `LayerPlan.watchedRoots` (the local roots always; a marketplace root only when `isWatchable`), the rebuild of the catalog, the swap of `CatalogBox`, the `layerUpdates` signal of the marketplace provider, and the events of `EventBroadcaster`.
+3. `SkillWatcher` is public today. Remove it from the public surface; it has no host use that `SkillsRegistry(watch: true)` does not cover. If `docs/` or `README.md` names it, change the text to name `DotfolderWatcher` of Extras.
+4. **Tests.** Delete `Tests/FoundationModelsSkillsTests/SkillWatcherTests.swift`; its cases live in Extras now. Keep `WatcherTestSupport.swift` only while another suite uses its temporary directory helper. The reload suites stay and must pass with the calls changed only: `SkillsRegistryReloadTests`, `HotReloadTests`, `SkillsReloadFollowerTests`, `MarketplaceRegistryTests`. Where one of them drove the injected debounce timer of `SkillWatcher`, give `ReloadCoordinator` the same injection point over `DotfolderWatcher`, if Extras gives one in its public surface; if it does not, make a card on the Extras board and do not copy the watcher back.
+
+## Acceptance Criteria
+
+- [ ] `Registry/SkillWatcher.swift` does not exist, and no file of `Sources/FoundationModelsSkills/` names `DispatchSource`, `O_EVTONLY` or `SkillWatcher`.
+- [ ] `SkillsRegistry(watch: true)` rebuilds its catalog one time for a burst of changes, for a new skill folder, for a change of a file deep in a skill, and for a layer root that appears after the start.
+- [ ] A marketplace layer that is not watchable still reloads on the `layerUpdates` signal only.
+- [ ] `swift build --build-tests` gives 0 warnings, and `swift test` is green, 5 runs in sequence with no failure.
+
+## Tests
+
+- [ ] `Tests/FoundationModelsSkillsTests/SkillsRegistryReloadTests.swift`: each case passes with no change of its expected values, the five-reload burst case included.
+- [ ] `Tests/FoundationModelsSkillsTests/HotReloadTests.swift`: the named end-to-end hot-reload case passes.
+- [ ] A source scan test: no file under `Sources/` names `DispatchSource` or `O_EVTONLY`.
+- [ ] `swift test` — all tests pass, 0 failures.
+
+## Workflow
+- Use `/tdd` — write failing tests first, then implement to make them pass.
+- Record each decision in a comment on this card. Do not ask the user about an implementation detail.
+
+#loading-boundary #skills #blocked-upstream

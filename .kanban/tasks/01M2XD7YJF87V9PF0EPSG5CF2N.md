@@ -9,6 +9,8 @@ title: Consume the Extras Marketplace product and delete the marketplace code fr
 ---
 ## What
 
+**Status on 2026-09-20: not blocked.** The five Extras cards are done and pushed, and `Package.resolved` of this package pins `1c150fb`, which holds `Sources/Marketplace` and `Tests/MarketplaceFixtures`. Step 1 below is satisfied now; run it again only to confirm the pin. Checked facts of that revision: the products `Marketplace` and `MarketplaceFixtures` exist; `MarketplaceStore.init(sources:layout:cacheDirectory:policy:transport:clock:environment:)` is public; `GitTransport` and `GitTransportError` are public; `MarketplaceFixtures` holds `GitFixtureRepository`, `RecordingGitTransport`, `GatedGitTransport`, `ManualClock`, `MarketplaceEventLog`, `MarketplaceStoreFixture` and `TestSignal`; `EventBroadcaster` of that target is internal, thus `Registry/EventBroadcaster.swift` of this package stays.
+
 Work in this package. This card starts only after `main` of `../FoundationModelsExtras` holds the `Marketplace` and `MarketplaceFixtures` products. Those come from five cards on the `FoundationModelsExtras` board: the target and transport card (`^jhj8kd2`), the source model card (`^vms0qv0`), the catalog card (`^7z1w5f8`), the cache card (`^nqdcd57`) and the store card (`^qtwjzx9`). This board cannot depend on a card of another board, so check that board before you pick this card up.
 
 This package stops holding a copy of the marketplace implementation. It keeps only what is skill knowledge: the registry hookup, the provenance in the skill diagnostics, the provenance index by discovery layer, and the `skills marketplace` CLI command group.
@@ -44,4 +46,4 @@ This package stops holding a copy of the marketplace implementation. It keeps on
 - Use `/tdd` — write failing tests first, then implement to make them pass.
 - Record each decision in a comment on this card. Do not ask the user about an implementation detail.
 
-#marketplace #skills #blocked-upstream
+#marketplace #skills #loading-boundary

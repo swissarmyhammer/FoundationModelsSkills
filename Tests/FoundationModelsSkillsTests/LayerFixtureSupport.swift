@@ -76,9 +76,27 @@ enum LayerFixtureSupport {
         url.resolvingSymlinksInPath().standardizedFileURL.path
     }
 
-    /// The first eight bytes of a PNG file, which are not UTF-8 text: the
-    /// byte `0x89` can start no UTF-8 sequence.
-    private static let pngSignature: [UInt8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+    /// The byte that starts a PNG file. Its high bit is set, thus it can start
+    /// no UTF-8 sequence, and it makes the file bytes and not text.
+    private static let pngLeadByte: UInt8 = 0x89
+
+    /// The bytes of the letters `PNG`, which come after the lead byte.
+    private static let pngNameBytes: [UInt8] = Array("PNG".utf8)
+
+    /// The carriage return byte of the PNG signature.
+    private static let carriageReturnByte: UInt8 = 0x0D
+
+    /// The line feed byte of the PNG signature.
+    private static let lineFeedByte: UInt8 = 0x0A
+
+    /// The end-of-file byte of the PNG signature. It stops the listing of the
+    /// file on a DOS terminal.
+    private static let endOfFileByte: UInt8 = 0x1A
+
+    /// The first eight bytes of a PNG file, which are not UTF-8 text.
+    private static let pngSignature: [UInt8] =
+        [pngLeadByte] + pngNameBytes
+        + [carriageReturnByte, lineFeedByte, endOfFileByte, lineFeedByte]
 
     /// The URL of `relativePath` in `directory`, with the directories above
     /// the file made, for a helper that then writes the file.
