@@ -61,6 +61,22 @@ comments:
     - Live proof that a rule failure still fails the suite: I added a temporary comment line `// TEMP-PROBE: FileManager` to `Sources/FoundationModelsSkills/SeamReexports.swift`, ran `swift test --filter 'FoundationModelsSkillsTests.LoadingBoundaryTests'`, and saw it fail (1 issue, exit non-zero). I then reverted the line and reran the full suite — green again, 567 tests passed.
     - `MarketplaceCLIContext.currentProcess` reads `URL.currentDirectory()`, not `FileManager`. `SkillsCLI.run` and `MarketplaceCLI.run` default to `.currentProcess`; `Examples/skills-demo` uses that default.
   timestamp: 2026-09-21T15:21:24.454831+00:00
+- actor: claude-code
+  id: 01m3293tjb7t3kfvk4bs2m6zhk
+  text: |-
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (commit 5cf4fe2). Counts: 0 findings, 0 confirmed, 0 refuted; 7 validators attempted, 0 failed. 13 files reviewed. 6 files not reviewed: 4 `.kanban/` files (ignore rule) and `docs/development.md`, `plan.md` (no validator matches). The code-hygiene tool rules declined 4 files that this commit deleted (`NoFileSystemWatchTests.swift`, `NoFrontmatterSplitTests.swift`, `NoResourceFileReadTests.swift`, `StencilLivesInExtrasTests.swift`). The task has no earlier review findings.
+    - next: The task moved to done.
+  timestamp: 2026-09-21T15:24:52.171123+00:00
+- actor: wballard
+  id: 01m3294cq23xtbnvxjxp2m99h3
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 17 files; one LoadingBoundaryTests suite with 17 rules replaces four guard suites
+    - test: green — swift test, 567 passed, 0 warnings
+    - commit: 5cf4fe2
+    - review: clean — 0 findings; task moved to done
+  timestamp: 2026-09-21T15:25:10.754618+00:00
 depends_on:
 - 01M2ZDRMVEV4ZYV446AWJJ4PFD
 - 01M2ZEDYF3RJEA214WNYRAQ5XE
@@ -69,8 +85,8 @@ depends_on:
 - 01M2ZDRN9J0YB9V5B1W46MJF9K
 - 01M2XD7YJF87V9PF0EPSG5CF2N
 - 01M2ZHN23PENVPB9D644E1WAJH
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: ff8f80
 title: 'Guard the loading boundary: no file access, no Stencil and no frontmatter split in this package'
 ---
 ## What
