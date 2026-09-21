@@ -108,6 +108,23 @@ enum LayerFixtureSupport {
         [pngLeadByte] + pngNameBytes
         + [carriageReturnByte, lineFeedByte, endOfFileByte, lineFeedByte]
 
+    /// The permission bits of a file that its owner may read, write and run,
+    /// and that every other user may read and run.
+    private static let executablePermissions = 0o755
+
+    /// Gives the executable bit to the file at `url`.
+    ///
+    /// A test of the `executable` column of a resource row, or of the
+    /// direct-exec gate of `run script`, needs a file the current user may
+    /// run, and each writer of this file writes a file that no user may run.
+    ///
+    /// - Parameter url: The file to mark.
+    /// - Throws: Whatever `FileManager.setAttributes` throws.
+    static func makeExecutable(_ url: URL) throws {
+        try FileManager.default.setAttributes(
+            [.posixPermissions: executablePermissions], ofItemAtPath: url.path)
+    }
+
     /// The URL of `relativePath` in `directory`, with the directories above
     /// the file made, for a helper that then writes the file.
     ///

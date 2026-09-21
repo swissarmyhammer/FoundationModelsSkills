@@ -145,6 +145,28 @@ struct SkillOverlayTests {
         #expect(!overlay.confines(Self.escapingPath))
     }
 
+    // MARK: - The execute bit of the winning copy
+
+    @Test func isExecutableGivesTheModeOfTheCopyOfTheLowestDirectory() throws {
+        let directories = try Self.makeTwoLayerFixture()
+        defer { LayerFixtureSupport.removeDirectories(directories) }
+        try LayerFixtureSupport.makeExecutable(
+            directories[0].appendingPathComponent(Self.lowerOnlyPath))
+
+        #expect(SkillOverlay(directories: directories).isExecutable(Self.lowerOnlyPath))
+    }
+
+    /// The copy of the highest directory wins, thus its mode is the answer and
+    /// the mode of the lower copy is hidden, the same way its text is.
+    @Test func isExecutableGivesTheModeOfTheHigherCopyForAPathThatTwoDirectoriesHold() throws {
+        let directories = try Self.makeTwoLayerFixture()
+        defer { LayerFixtureSupport.removeDirectories(directories) }
+        try LayerFixtureSupport.makeExecutable(
+            directories[0].appendingPathComponent(Self.sharedPath))
+
+        #expect(!SkillOverlay(directories: directories).isExecutable(Self.sharedPath))
+    }
+
     // MARK: - Test helpers
 
     /// Makes the two-layer fixture each test of this suite reads: the lowest

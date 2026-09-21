@@ -109,17 +109,22 @@ public struct ListResource: OperationDefinition {
 
     /// One row for each file of the combined view that a listing shows.
     ///
+    /// The overlay gives each column that reads the disk -- the size of the
+    /// file and its execute bit -- thus this operation opens no file, and each
+    /// column speaks of the copy of the highest layer directory that holds the
+    /// path.
+    ///
     /// - Parameter overlay: The combined view of the layer directories of the
     ///   skill.
     /// - Returns: One row per listed file, unsorted.
     private static func resourceRows(in overlay: SkillOverlay) -> [ResourceRow] {
-        overlay.entries()
-            .filter { path, _ in Self.isListed(path) }
-            .map { path, url in
+        overlay.entries().keys
+            .filter { Self.isListed($0) }
+            .map { path in
                 ResourceRow(
                     path: path, kind: Self.kind(forRelativePath: path),
                     bytes: overlay.size(of: path) ?? Self.unknownByteCount,
-                    executable: Self.isExecutable(at: url))
+                    executable: overlay.isExecutable(path))
             }
     }
 
@@ -141,19 +146,6 @@ public struct ListResource: OperationDefinition {
     /// - Returns: Whether the path is hidden.
     private static func isHidden(_ relativePath: String) -> Bool {
         relativePath.split(separator: "/").contains { $0.hasPrefix(".") }
-    }
-
-    /// Whether the executable bit of the file at `url` is set.
-    ///
-    /// This is the one call of this operation that reads the file system. The
-    /// stack of `FoundationModelsExtras` gives no execute bit yet: card
-    /// `^00nmjzg` of the `FoundationModelsExtras` board adds it to the stack,
-    /// and card `^yraq5xe` of this board then takes it up here.
-    ///
-    /// - Parameter url: The URL of the winning copy of one file.
-    /// - Returns: Whether the file carries the executable bit.
-    private static func isExecutable(at url: URL) -> Bool {
-        (try? url.resourceValues(forKeys: [.isExecutableKey]))?.isExecutable ?? false
     }
 
     /// Maps a top-level resource folder name to its kind string.

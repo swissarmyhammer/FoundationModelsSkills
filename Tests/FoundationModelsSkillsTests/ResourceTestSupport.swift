@@ -145,7 +145,7 @@ enum ResourceTestSupport {
     ///   directly rather than through `RunScript`.
     /// - Throws: `UnsafeFixtureInput` if `name` is not a plain file name;
     ///   otherwise whatever `FileManager.createDirectory`, `String.write`,
-    ///   or `FileManager.setAttributes` throws.
+    ///   or `LayerFixtureSupport.makeExecutable(_:)` throws.
     @discardableResult
     static func writeExecutableShebangScript(
         named name: String, inSkillID id: String, under directory: URL, contents: String = "#!/bin/sh\necho hi\n"
@@ -153,7 +153,7 @@ enum ResourceTestSupport {
         guard !name.contains("/"), !name.contains("..") else { throw UnsafeFixtureInput() }
         let scriptURL = try Self.scriptsDirectory(inSkillID: id, under: directory).appendingPathComponent(name)
         try contents.write(to: scriptURL, atomically: true, encoding: .utf8)
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
+        try LayerFixtureSupport.makeExecutable(scriptURL)
         return scriptURL
     }
 }

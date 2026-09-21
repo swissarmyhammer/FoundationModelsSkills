@@ -175,7 +175,7 @@ public struct RunScript: OperationDefinition {
             guard let winning = overlay.resolve(path) else {
                 return .corrective(Self.missingScriptMessage(path: path))
             }
-            if let issue = Self.executabilityIssue(path: path, at: winning.url) {
+            if let issue = Self.executabilityIssue(path: path, in: overlay) {
                 return .corrective(issue)
             }
 
@@ -345,30 +345,26 @@ public struct RunScript: OperationDefinition {
     /// {requirement}.".
     private static let shebangRequirement = "start with a shebang line (e.g. `#!/bin/sh`)"
 
-    /// Whichever direct-exec requirement(s) `resolved` fails, or `nil` when
-    /// all are satisfied.
+    /// Whichever direct-exec requirement(s) the winning copy of `path` fails,
+    /// or `nil` when all are satisfied.
     ///
-    /// These are the two reads of the file system that this operation keeps:
-    /// the overlay gives the winning copy of the script, but the stack of
-    /// `FoundationModelsExtras` gives neither the execute bit nor the first
-    /// bytes of a file yet. Card `^00nmjzg` of the `FoundationModelsExtras`
-    /// board adds both to the stack, and card `^yraq5xe` of this board then
-    /// takes them up here.
+    /// The overlay answers each of the two checks: it gives the execute bit of
+    /// the winning copy, and it gives the first bytes of that same copy. Thus
+    /// this operation opens no file, and the copy it examines is the copy it
+    /// runs.
     ///
     /// - Parameters:
-    ///   - path: The script's path, relative to the skill directory,
-    ///     carried into the corrective message.
-    ///   - resolved: The script's resolved, confined URL.
+    ///   - path: The script's path, relative to the skill directory. The
+    ///     corrective message carries it as well.
+    ///   - overlay: The combined view of the layer directories of the skill.
     /// - Returns: A corrective message naming the missing requirement(s),
     ///   or `nil` when the file has both the executable bit and a shebang.
-    private static func executabilityIssue(path: String, at resolved: URL) -> String? {
-        var unmet: [String] = []
-        if !FileManager.default.isExecutableFile(atPath: resolved.path) {
-            unmet.append(Self.executableBitRequirement)
-        }
-        if !Self.hasShebang(at: resolved) {
-            unmet.append(Self.shebangRequirement)
-        }
+    private static func executabilityIssue(path: String, in overlay: SkillOverlay) -> String? {
+        let requirements = [
+            (isMet: overlay.isExecutable(path), text: Self.executableBitRequirement),
+            (isMet: Self.hasShebang(of: path, in: overlay), text: Self.shebangRequirement),
+        ]
+        let unmet = requirements.filter { !$0.isMet }.map(\.text)
         guard !unmet.isEmpty else { return nil }
         return Self.requirementMessage(path: path, unmet: unmet)
     }
@@ -399,13 +395,21 @@ public struct RunScript: OperationDefinition {
         "The script `\(path)` must \(unmet.joined(separator: " and "))."
     }
 
-    /// Whether the file at `url` starts with `shebangPrefix`.
+    /// The byte offset the first byte of a file stands at.
+    private static let firstByteOffset = 0
+
+    /// Whether the winning copy of `relativePath` starts with `shebangPrefix`.
     ///
-    /// - Parameter url: The file to check.
-    /// - Returns: `true` when the file's first two bytes are `"#!"`.
-    private static func hasShebang(at url: URL) -> Bool {
-        guard let handle = try? FileHandle(forReadingFrom: url) else { return false }
-        defer { try? handle.close() }
-        return handle.readData(ofLength: Self.shebangPrefix.count) == Self.shebangPrefix
+    /// The overlay reads the first bytes, thus this operation opens no file. A
+    /// copy that is shorter than the prefix gives fewer bytes, and a copy that
+    /// cannot be read gives nothing; neither one matches the prefix.
+    ///
+    /// - Parameters:
+    ///   - relativePath: The script's path, relative to the skill directory.
+    ///   - overlay: The combined view of the layer directories of the skill.
+    /// - Returns: `true` when the first two bytes of the copy are `"#!"`.
+    private static func hasShebang(of relativePath: String, in overlay: SkillOverlay) -> Bool {
+        let prefixRange = Self.firstByteOffset..<(Self.firstByteOffset + Self.shebangPrefix.count)
+        return overlay.data(relativePath, in: prefixRange) == Self.shebangPrefix
     }
 }

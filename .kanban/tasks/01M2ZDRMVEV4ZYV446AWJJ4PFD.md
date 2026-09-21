@@ -118,11 +118,27 @@ comments:
     - note: `ReadResourceTests.swift` and `SkillWatcherTests.swift` each have one `@Test(.enabled(if:)/.disabled(if:))` guard tied to the process user (root vs. non-root). These are not skips to hide a fail. They mark a branch that is not reachable under root. The run was not root, so both tests ran and passed.
     - next: ready for review.
   timestamp: 2026-09-21T13:42:50.446346+00:00
+- actor: claude-code
+  id: 01m323d4jq9n8fctskkyq8jkkb
+  text: |
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (f6c6cca) — 0 findings, 0 confirmed, 0 refuted; 7 validator runs attempted, 0 failed. 1 file reviewed, 2 files excluded by `.reviewignore`. The prior finding of 2026-09-21 08:27 is marked done.
+    - next: none. The card moves to done.
+  timestamp: 2026-09-21T13:45:05.879316+00:00
+- actor: wballard
+  id: 01m323d9kt18dam3s376qtqqwf
+  text: |-
+    ### finish iteration 2 — clean
+    - implement: changed — 1 file, 1 of 1 findings checked
+    - test: green — swift test, 587 passed, 0 warnings
+    - commit: f6c6cca
+    - review: clean — 0 findings; task moved to done
+  timestamp: 2026-09-21T13:45:11.034377+00:00
 depends_on:
 - 01M2X2J679TGA1ENB64G9JT4SQ
 - 01M2XD7YJF87V9PF0EPSG5CF2N
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: ff8a80
 title: 'Resources: take the confinement from Extras; delete the local PathConfinement'
 ---
 ## What

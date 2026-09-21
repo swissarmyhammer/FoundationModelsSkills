@@ -12,9 +12,9 @@ import FoundationModelsExtras
 ///
 /// The `DotfolderStack` of `FoundationModelsExtras` walks the disk for
 /// `entries()`, finds the winning copy for `resolve(_:)`, and reads a file for
-/// `size(of:)` and `data(_:in:)`; `confines(_:)` asks the `PathConfinement` of
-/// that same package. Thus this type opens no directory and no file of its
-/// own.
+/// `size(of:)`, `data(_:in:)` and `isExecutable(_:)`; `confines(_:)` asks the
+/// `PathConfinement` of that same package. Thus this type opens no directory
+/// and no file of its own.
 internal struct SkillOverlay: Sendable {
     /// The layer directories of the skill, lowest precedence first.
     ///
@@ -26,8 +26,8 @@ internal struct SkillOverlay: Sendable {
 
     /// Creates an overlay over the layer directories of one skill.
     ///
-    /// Does no I/O; only `resolve(_:)`, `entries()`, `size(of:)` and
-    /// `data(_:in:)` touch disk.
+    /// Does no I/O; only `resolve(_:)`, `entries()`, `size(of:)`,
+    /// `data(_:in:)` and `isExecutable(_:)` touch disk.
     ///
     /// - Parameter directories: The layer directories of the skill, lowest
     ///   precedence first.
@@ -86,7 +86,7 @@ internal struct SkillOverlay: Sendable {
     /// The stack reads no file to make this view, thus a file whose bytes are
     /// not UTF-8 text -- an image under `assets/`, a compiled helper under
     /// `scripts/` -- is in the result as well. A caller that needs the bytes
-    /// of such a file reads them itself.
+    /// of such a file asks `data(_:in:)` for them.
     ///
     /// - Returns: A dictionary from the file path, relative to a layer
     ///   directory, to the URL of the winning copy. A directory that does not
@@ -122,8 +122,23 @@ internal struct SkillOverlay: Sendable {
         stack.data(relativePath, in: range)
     }
 
+    /// Whether the winning copy of `relativePath` carries the execute bit.
+    ///
+    /// The stack reads the mode, thus a caller that lists the files of the
+    /// skill, or that runs a script of it, opens no file of its own. The copy
+    /// of the highest layer directory that holds the path gives the answer,
+    /// the same copy that `resolve(_:)` and `data(_:in:)` read.
+    ///
+    /// - Parameter relativePath: A path relative to a layer directory.
+    /// - Returns: Whether the current user may run the winning copy. `false`
+    ///   when no directory holds the path as well.
+    internal func isExecutable(_ relativePath: String) -> Bool {
+        stack.isExecutable(relativePath)
+    }
+
     /// Every layer directory as one `DotfolderStack`, which gives the union of
-    /// the paths, the size of a file and the bytes of a file.
+    /// the paths, the size of a file, the bytes of a file and the execute bit
+    /// of a file.
     private var stack: DotfolderStack {
         Self.stack(over: directories)
     }

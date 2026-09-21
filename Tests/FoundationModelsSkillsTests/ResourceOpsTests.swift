@@ -724,6 +724,33 @@ struct ResourceOpsTests {
                     + Self.jsonPathField(of: Self.rulesReferencePath)))
     }
 
+    @Test func listResourceMarksAScriptExecutableThatOnlyTheLowestDirectoryHolds() async throws {
+        let directories = try Self.makeThreeLayerFixture()
+        defer { LayerFixtureSupport.removeDirectories(directories) }
+        try LayerFixtureSupport.makeExecutable(
+            directories[0].appendingPathComponent(Self.layerPath(of: Self.reportScriptPath)))
+
+        let json = try await Self.listOverlayResources(roots: directories)
+
+        #expect(
+            json.contains(
+                "\"executable\":true,\"kind\":\"script\"," + Self.jsonPathField(of: Self.reportScriptPath)))
+    }
+
+    @Test func listResourceTakesTheExecutableBitOfTheHigherCopyForAPathThatTwoDirectoriesHold() async throws {
+        let directories = try Self.makeSharedPathFixture()
+        defer { LayerFixtureSupport.removeDirectories(directories) }
+        try LayerFixtureSupport.makeExecutable(
+            directories[0].appendingPathComponent(Self.layerPath(of: Self.rulesReferencePath)))
+
+        let json = try await Self.listOverlayResources(roots: directories)
+
+        #expect(
+            json.contains(
+                "\"executable\":false,\"kind\":\"reference\","
+                    + Self.jsonPathField(of: Self.rulesReferencePath)))
+    }
+
     @Test func readResourceGivesTheCopyOfTheMiddleDirectoryForAScriptOnlyItHolds() async throws {
         let directories = try Self.makeThreeLayerFixture()
         defer { LayerFixtureSupport.removeDirectories(directories) }
