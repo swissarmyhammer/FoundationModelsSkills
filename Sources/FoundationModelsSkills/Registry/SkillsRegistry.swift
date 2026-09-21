@@ -126,16 +126,17 @@ public struct UnknownSkillError: Error, Sendable, Equatable {
 ///
 /// `SkillsRegistry` holds no opinion about where skills live: `roots` is
 /// entirely the caller's choice, ordered from lowest to highest precedence,
-/// the same contract `SkillDiscovery` and `SkillWatcher` already follow
+/// the same contract `SkillDiscovery` and `DotfolderWatcher` already follow
 /// (decision #29, amended). A skill `SkillValidator` hides entirely (the
 /// retired `partial: true` flag) never enters the catalog at all -- every
 /// method below only ever sees the skills that survived validation
 /// un-hidden.
 ///
 /// With `watch: false` (the default), the catalog never changes after
-/// `init` returns. With `watch: true`, a `SkillWatcher` observes every
-/// layer root and rebuilds the catalog on its coalesced signal; the rebuild
-/// swaps in a whole new catalog atomically, so `metadata()`,
+/// `init` returns. With `watch: true`, a `DotfolderWatcher` of
+/// `FoundationModelsExtras` observes every layer root and rebuilds the
+/// catalog on its coalesced signal; the rebuild swaps in a whole new
+/// catalog atomically, so `metadata()`,
 /// `commandListing()`, `preloadedBodies()`, `call(id:arguments:)`, and
 /// `diagnostics` always read one complete generation of the catalog, never
 /// a partially-rebuilt one, regardless of how many readers query
@@ -208,8 +209,8 @@ public struct SkillsRegistry: Sendable {
     /// immediately visible to every other copy.
     private let catalogBox: CatalogBox
 
-    /// Owns the `SkillWatcher` and `onReload` continuation for a `watch:
-    /// true` registry; `nil` for `watch: false`.
+    /// Owns the `DotfolderWatcher` and the `onReload` continuation for a
+    /// `watch: true` registry; `nil` for `watch: false`.
     ///
     /// Retained purely for its lifetime: `ReloadCoordinator.deinit` stops
     /// the watcher and finishes `onReload`, so keeping this field alive for
@@ -1122,9 +1123,10 @@ public struct SkillsRegistry: Sendable {
         }
     }
 
-    /// Owns the `SkillWatcher` and `EventBroadcaster` for a `watch: true`
-    /// registry: rebuilds `catalogBox` on every coalesced watcher signal and
-    /// publishes the refreshed metadata list to every current subscriber.
+    /// Owns the `DotfolderWatcher` and the `EventBroadcaster` for a
+    /// `watch: true` registry: rebuilds `catalogBox` on every coalesced
+    /// watcher signal and publishes the refreshed metadata list to every
+    /// current subscriber.
     ///
     /// A `final class` rather than a value type since its lifetime -- when
     /// the watcher starts and, more importantly, when it stops -- is what
@@ -1133,9 +1135,10 @@ public struct SkillsRegistry: Sendable {
     ///
     /// `@unchecked Sendable`: every stored property (`watcher`,
     /// `broadcaster`, `marketplaceUpdates`) is an immutable `let` referring
-    /// to a type that is itself safe under concurrent use -- `SkillWatcher`
-    /// is `@unchecked Sendable` and serializes its own mutable state on a
-    /// private queue, `EventBroadcaster` locks its own mutable state, and
+    /// to a type that is itself safe under concurrent use --
+    /// `DotfolderWatcher` is `@unchecked Sendable` and serializes its own
+    /// mutable state on a private queue, `EventBroadcaster` locks its own
+    /// mutable state, and
     /// `Task` is `Sendable`. This class itself declares no other stored
     /// state: the rebuild closure wired up in `init` captures
     /// `source`/`catalogBox`/`reader`/`broadcaster` directly rather than
@@ -1147,7 +1150,7 @@ public struct SkillsRegistry: Sendable {
     private final class ReloadCoordinator: @unchecked Sendable {
         /// The watcher over the local layer roots, or `nil` for a registry
         /// that only a marketplace update rebuilds.
-        private let watcher: SkillWatcher?
+        private let watcher: DotfolderWatcher?
         private let broadcaster: EventBroadcaster<[SkillMetadata]>
         /// The task that rebuilds on each marketplace update, or `nil` when
         /// no provider backs this registry.
@@ -1181,7 +1184,7 @@ public struct SkillsRegistry: Sendable {
                 catalogBox.replace(catalog: rebuilt.catalog, diagnostics: rebuilt.diagnostics)
                 broadcaster.publish(reader.metadata())
             }
-            watcher = watchedRoots.map { SkillWatcher(roots: $0, onChange: rebuild) }
+            watcher = watchedRoots.map { DotfolderWatcher(roots: $0, onChange: rebuild) }
             marketplaceUpdates = source.marketplaceUpdates.map { updates in
                 Task {
                     for await _ in updates {

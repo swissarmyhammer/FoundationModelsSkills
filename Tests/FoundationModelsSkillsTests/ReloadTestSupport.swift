@@ -10,8 +10,8 @@ import Testing
 /// previously reimplemented in parallel across the two files (review
 /// findings, 2026-07-29 21:57).
 ///
-/// `SkillWatcherTests` and `MarketplaceCatalogTests` also use the `SKILL.md`
-/// helpers, so that the test target has one builder of `SKILL.md` text.
+/// The marketplace suites also use the `SKILL.md` helpers, so that the test
+/// target has one builder of `SKILL.md` text.
 enum ReloadTestSupport {
     // MARK: - Event tally
 

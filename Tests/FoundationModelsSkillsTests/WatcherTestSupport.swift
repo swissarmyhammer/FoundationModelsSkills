@@ -1,8 +1,8 @@
 import Foundation
 
 /// Shared fixture-directory helper for the tests that drive a real temp
-/// directory tree -- `SkillWatcherTests` and `SkillsRegistryReloadTests` watch
-/// one, `SkillOperationsTests` and `SingleImportTests` only need one -- and
+/// directory tree -- `SkillsRegistryReloadTests` watches one,
+/// `SkillOperationsTests` and `SingleImportTests` only need one -- and
 /// all of them need an identical way to create it (mirrors
 /// `HotReloadTestSupport`, the same pairing for `HotReloadTests`/
 /// `HotReloadLiveTests`).

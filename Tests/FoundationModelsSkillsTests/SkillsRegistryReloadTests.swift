@@ -3,9 +3,10 @@ import FoundationModelsSkills
 import Testing
 
 /// Tests for `SkillsRegistry`'s reloadable half (plan.md §7 "Reload &
-/// metadata injection"; decision #13): `watch: true` wires a `SkillWatcher`
-/// over every layer root and rebuilds the catalog on its coalesced signal,
-/// the rebuild swaps the catalog atomically so a concurrent reader never
+/// metadata injection"; decision #13): `watch: true` wires a
+/// `DotfolderWatcher` of `FoundationModelsExtras` over every layer root and
+/// rebuilds the catalog on its coalesced signal, the rebuild swaps the
+/// catalog atomically so a concurrent reader never
 /// observes a half-built catalog, `onReload` publishes the refreshed
 /// `[SkillMetadata]` exactly once per rebuild, `watch: false` performs no
 /// watching at all, and the watcher's lifecycle is owned by the registry --
@@ -149,6 +150,39 @@ struct SkillsRegistryReloadTests {
         let body = try await registry.call(id: "callable-skill")
         #expect(body.contains("v2"))
         #expect(!body.contains("v1"))
+    }
+
+    // MARK: - A file deep inside a skill directory
+
+    /// The directory a skill keeps its reference files in, one level below the
+    /// skill directory itself.
+    private static let referencesDirectoryName = "references"
+
+    /// Proves that the watch reaches the WHOLE tree of a layer root, and not
+    /// the `SKILL.md` of each skill alone: a write to a file two levels below
+    /// the root gives exactly one rebuild.
+    ///
+    /// Every other reload case of this file writes `<root>/<id>/SKILL.md`, one
+    /// level below the root. A watch that armed the skill directories alone
+    /// would pass each of those and miss the reference files, the partials and
+    /// the scripts that a skill reads at render time.
+    @Test func writingAFileDeepInsideASkillDirectoryGivesExactlyOneRebuild() async throws {
+        let root = try WatcherTestSupport.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try ReloadTestSupport.writeSkillFile(id: "deep-skill", in: root)
+        let references = root.appendingPathComponent("deep-skill", isDirectory: true)
+            .appendingPathComponent(Self.referencesDirectoryName, isDirectory: true)
+        try FileManager.default.createDirectory(at: references, withIntermediateDirectories: true)
+
+        let registry = SkillsRegistry(roots: [root], watch: true)
+        let recorder = MetadataUpdateRecorder()
+        let subscription = Self.subscribe(registry, to: recorder)
+        defer { subscription.cancel() }
+
+        try "Reference text.\n".write(
+            to: references.appendingPathComponent("notes.md"), atomically: true, encoding: .utf8)
+
+        await Self.expectExactlyOnePublication(recorder, since: 0)
     }
 
     // MARK: - Add / remove propagate to metadata() and commandListing()
@@ -441,9 +475,9 @@ struct SkillsRegistryReloadTests {
     /// during a test.
     ///
     /// An actor rather than relying on the `AsyncStream` itself for
-    /// assertions, mirroring `SkillWatcherTests.SignalRecorder`: polling this
-    /// recorder's state sidesteps an `AsyncStream` iterator's single-consumer
-    /// limitation entirely. Carries its own metadata payload (unlike
+    /// assertions: polling this recorder's state sidesteps an `AsyncStream`
+    /// iterator's single-consumer limitation entirely. Carries its own
+    /// metadata payload (unlike
     /// `ReloadTestSupport.EventTally`, which is count-only), so it is not
     /// itself a candidate for that shared type.
     private actor MetadataUpdateRecorder {
@@ -486,8 +520,6 @@ struct SkillsRegistryReloadTests {
     /// `baseline`: the count reaches `baseline + 1` within
     /// `ReloadTestSupport.expectedSignalTimeout`, and stays there through
     /// `ReloadTestSupport.noFurtherSignalWindow`.
-    ///
-    /// Mirrors `SkillWatcherTests.expectExactlyOneSignal(_:since:)`.
     ///
     /// - Parameters:
     ///   - recorder: The recorder to assert against.

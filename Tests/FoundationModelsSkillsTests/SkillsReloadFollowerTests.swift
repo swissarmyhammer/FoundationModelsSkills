@@ -21,7 +21,7 @@ struct SkillsReloadFollowerTests {
     // MARK: - Constants
 
     /// How long a case waits for a watcher-driven reload to reach the
-    /// assembled tool. Generous against `SkillWatcher`'s 200 ms debounce
+    /// assembled tool. Generous against `DotfolderWatcher`'s 200 ms debounce
     /// interval, thus scheduler and filesystem-event jitter never fails a
     /// case (mirrors `HotReloadTests.expectedSignalTimeout`).
     private static let reloadTimeout: Duration = .seconds(10)

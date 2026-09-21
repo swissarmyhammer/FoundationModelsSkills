@@ -448,7 +448,7 @@ struct SkillOperationsTests {
 
     /// How long the injected race hook waits for the watcher-driven rebuild
     /// to drop the deleted skill from the live catalog before it gives up.
-    /// Generous relative to `SkillWatcher`'s default 200ms debounce (mirrors
+    /// Generous relative to `DotfolderWatcher`'s default 200ms debounce (mirrors
     /// `SkillsRegistryReloadTests.expectedSignalTimeout`).
     private static let reloadRaceTimeout: TimeInterval = 10
 

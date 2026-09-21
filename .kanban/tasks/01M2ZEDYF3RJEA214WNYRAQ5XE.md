@@ -47,10 +47,26 @@ comments:
     - checked: `ListResource.swift` and `RunScript.swift` have no `FileManager`, no `FileHandle`, no `resourceValues`.
     - next: ready for review.
   timestamp: 2026-09-21T13:57:34.204532+00:00
+- actor: claude-code
+  id: 01m324ba1haysfxsf0fd1jeban
+  text: |
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (commit fd91160) — 0 findings, 0 confirmed, 0 refuted; 7 validator runs, 0 failed; 8 files reviewed, 4 `.kanban/` files not reviewed by the ignore rule.
+    - next: no work is open. The card moves to Done.
+  timestamp: 2026-09-21T14:01:34.513012+00:00
+- actor: wballard
+  id: 01m324brs2bxgcg0rz0ph8t9re
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 8 files, 1 new guard suite
+    - test: green — swift test, 594 passed, 0 warnings
+    - commit: fd91160
+    - review: clean — 0 findings; task moved to done
+  timestamp: 2026-09-21T14:01:49.602769+00:00
 depends_on:
 - 01M2X2J679TGA1ENB64G9JT4SQ
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: ff8b80
 title: 'Resources: take the execute bit and the shebang bytes from the Extras stack'
 ---
 ## What
