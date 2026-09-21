@@ -1,6 +1,14 @@
 ---
 assignees:
 - claude-code
+comments:
+- actor: claude-code
+  id: 01m31z67cx07ax68gjdj2nxa7d
+  text: |-
+    Part of item 2 is done already, by the card `^sg5cf2n`: the "Add a marketplace in code" example of `docs/marketplaces.md` passes `layout: SkillMarketplaceLayout.skills` now, because the Extras initializer needs a layout and the example would otherwise not compile. The rest of item 2 (the intro sentences) and every other item are still open.
+
+    Note for item 1: the §6.2 sketch of `marketplace.md` still writes `MarketplaceStore(sources: [...])` with no layout, thus a reader who copies it gets code that does not compile. Give that sketch the same `layout:` line.
+  timestamp: 2026-09-21T12:31:25.085626+00:00
 depends_on:
 - 01M2XD7YJF87V9PF0EPSG5CF2N
 position_column: todo

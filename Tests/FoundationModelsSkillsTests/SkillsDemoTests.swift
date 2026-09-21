@@ -191,7 +191,7 @@ import Testing
     /// - Returns: The environment of this process, with the cache variable set.
     private static func environment(cacheDirectory: URL) -> [String: String] {
         var environment = ProcessInfo.processInfo.environment
-        environment[MarketplaceCache.cacheVariable] = cacheDirectory.path
+        environment[MarketplaceStore.cacheDirectoryVariable] = cacheDirectory.path
         return environment
     }
 }

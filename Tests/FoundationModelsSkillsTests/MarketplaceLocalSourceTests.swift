@@ -1,5 +1,6 @@
 import Foundation
 import FoundationModelsExtras
+import MarketplaceFixtures
 import Testing
 
 @testable import FoundationModelsSkills
@@ -189,7 +190,7 @@ struct MarketplaceLocalSourceTests {
             let seeding = try MarketplaceStoreFixture(sources: [source], cacheDirectory: seedDirectory)
             await seeding.store.start()
             fixture = try MarketplaceStoreFixture(
-                sources: [source], environment: [MarketplaceCache.seedVariable: seedDirectory.path])
+                sources: [source], environment: [MarketplaceStore.seedDirectoryVariable: seedDirectory.path])
         }
 
         /// The commits that the seed folder holds.

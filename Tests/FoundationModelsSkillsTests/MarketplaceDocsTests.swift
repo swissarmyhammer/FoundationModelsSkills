@@ -1,3 +1,4 @@
+import Foundation
 import Operations
 import Testing
 
@@ -56,8 +57,8 @@ struct MarketplaceDocsTests {
     /// The environment variables that a host can set. Each value is the
     /// constant that the code reads, thus the list can never go stale.
     private static let environmentVariables = [
-        MarketplaceCache.cacheVariable,
-        MarketplaceCache.seedVariable,
+        MarketplaceStore.cacheDirectoryVariable,
+        MarketplaceStore.seedDirectoryVariable,
         MarketplacePolicy.automaticUpdateVariable,
     ]
 
@@ -69,12 +70,36 @@ struct MarketplaceDocsTests {
     /// `git@github.com:owner/repo.git`.
     private static let sshURLPrefix = "git@"
 
+    /// A URL of no supported form: the reader takes `https`, `github:` and
+    /// `file://` only (marketplace.md §5.1).
+    private static let unsupportedURL = "ftp://example.invalid/owner/repo.git"
+
+    /// A cache folder that does not exist, thus a listing made over it holds
+    /// only what the source itself says.
+    private static let absentCacheDirectory = URL(
+        fileURLWithPath: NSTemporaryDirectory(), isDirectory: true
+    ).appendingPathComponent("marketplace-docs-absent-cache", isDirectory: true)
+
     /// Each text that recommends a URL form to the user: the message of a URL
     /// that is not a supported form, and the help of the `add` command.
     private static let urlFormAdvice = [
-        MarketplaceSourceError.unsupportedForm.description,
+        unsupportedFormMessage(),
         MarketplaceCLI.Add.helpMessage(),
     ]
+
+    /// The message that `marketplace add` gives for ``unsupportedURL``.
+    ///
+    /// The reader of the `Marketplace` module owns that sentence, and the
+    /// listing of a source that the reader refuses carries it. Thus the test
+    /// reads the text that a user sees, and holds no copy of it.
+    ///
+    /// - Returns: The message.
+    private static func unsupportedFormMessage() -> String {
+        let listing = MarketplaceStore.listings(
+            of: [MarketplaceSource(unsupportedURL)], cacheDirectory: absentCacheDirectory
+        ).first
+        return MarketplaceCLIError.unusableSource(reason: listing?.lastError).description
+    }
 
     /// The name of each subcommand of the `marketplace` command group, taken
     /// from the configuration of the group itself.

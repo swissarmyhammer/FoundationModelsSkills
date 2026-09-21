@@ -1,4 +1,5 @@
 import Foundation
+import Marketplace
 import Operations
 
 /// The `marketplace` command group of the CLI (marketplace.md §9.2 and §9.3).
@@ -267,9 +268,9 @@ public struct MarketplaceCLI: AsyncParsableCommand {
         /// Pins the marketplace and writes one line.
         ///
         /// - Throws: ``MarketplacePinError`` when no source has that id or
-        ///   the marketplace is a folder on this computer,
-        ///   ``MarketplaceCacheError`` when the commit is no object name,
-        ///   else ``MarketplaceConfigError``.
+        ///   the marketplace is a folder on this computer, the error of the
+        ///   cache when the commit is no object name, else
+        ///   ``MarketplaceConfigError``.
         func run() async throws {
             let session = MarketplaceCLISession.active
             let marketplace = try session.marketplace(
@@ -342,30 +343,25 @@ public struct MarketplaceCLI: AsyncParsableCommand {
         /// The call parses the URL first. Thus a URL that carries a
         /// credential never reaches the file, and no message shows it.
         ///
-        /// - Throws: ``MarketplaceSourceError`` when the URL is no §5.1 form,
+        /// - Throws: ``MarketplaceCLIError/unusableSource(reason:)`` when the
+        ///   URL is no §5.1 form,
         ///   ``MarketplaceCLIError/duplicateMarketplace(key:)`` when the user
         ///   configuration already has that id, else the error of the file
         ///   write.
         func run() async throws {
             let session = MarketplaceCLISession.active
             let source = MarketplaceSource(url, ref: ref, alias: alias)
-            let key = try MarketplaceIdentity.preFetchKey(for: source)
+            let row = session.row(of: source)
+            guard let key = row?.key else {
+                throw MarketplaceCLIError.unusableSource(reason: row?.lastError)
+            }
             var sources = try session.sources(includeProject: false)
-            guard !sources.contains(where: { Self.key(of: $0) == key }) else {
+            guard !session.rows(of: sources).contains(where: { $0.key == key }) else {
                 throw MarketplaceCLIError.duplicateMarketplace(key: key)
             }
             sources.append(source)
             try session.saveUserSources(sources)
             session.write("Added the marketplace \(key).")
-        }
-
-        /// The pre-fetch key of one source that is already in the file.
-        ///
-        /// - Parameter source: The source.
-        /// - Returns: The key, or `nil` when the source gives none. Such a
-        ///   source blocks no new id.
-        private static func key(of source: MarketplaceSource) -> String? {
-            try? MarketplaceIdentity.preFetchKey(for: source)
         }
     }
 

@@ -1,4 +1,5 @@
 import Foundation
+import Marketplace
 import Synchronization
 
 /// One run of the `marketplace` command group: the folders that the
@@ -123,6 +124,14 @@ internal final class MarketplaceCLISession: Sendable {
         MarketplaceRow.rows(of: sources, cacheDirectory: context.cacheDirectory)
     }
 
+    /// The row of one source.
+    ///
+    /// - Parameter source: The source to read.
+    /// - Returns: The row, or `nil` when the reader gave none.
+    func row(of source: MarketplaceSource) -> MarketplaceRow? {
+        rows(of: [source]).first
+    }
+
     /// The rows of the configuration.
     ///
     /// - Parameter includeProject: Whether to read the project file.
@@ -159,6 +168,7 @@ internal final class MarketplaceCLISession: Sendable {
     func makeStore(includeProject: Bool) throws -> MarketplaceStore {
         MarketplaceStore(
             sources: try sources(includeProject: includeProject),
+            layout: SkillMarketplaceLayout.skills,
             cacheDirectory: context.cacheDirectory,
             policy: MarketplacePolicy(environment: context.environment))
     }

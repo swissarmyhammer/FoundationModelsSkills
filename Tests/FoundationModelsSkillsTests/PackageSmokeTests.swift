@@ -1,3 +1,4 @@
+import Foundation
 import FoundationModelsExtras
 import FoundationModelsMetadataRegistry
 import FoundationModelsSkills
@@ -19,3 +20,27 @@ import Yams
 @Test func moduleAndDependenciesImportCleanly() {
     #expect(Bool(true))
 }
+
+/// Proves that one `import FoundationModelsSkills` gives a host the
+/// marketplace types.
+///
+/// The marketplace lives in the `Marketplace` module of
+/// `FoundationModelsExtras` now. This file imports that module nowhere, thus
+/// the names below resolve only through the re-export in
+/// `Sources/FoundationModelsSkills/SeamReexports.swift`. A change that drops
+/// the re-export stops this file from compiling, and a host that follows
+/// `docs/marketplaces.md` would then need a second import.
+@Test func oneImportGivesTheMarketplaceTypes() throws {
+    let cacheDirectory = try WatcherTestSupport.makeTempDirectory()
+    defer { try? FileManager.default.removeItem(at: cacheDirectory) }
+    let source = MarketplaceSource("github:acme/team-skills")
+
+    let store = MarketplaceStore(
+        sources: [source], layout: SkillMarketplaceLayout.skills,
+        cacheDirectory: cacheDirectory)
+
+    let layer = try #require(store.marketplaceLayers().first)
+    #expect(store.marketplaceLayers().count == 1, "the store serves one layer for the one source")
+    #expect(layer.provenance.sha == nil, "no fetch ran, thus the layer serves no commit yet")
+}
+

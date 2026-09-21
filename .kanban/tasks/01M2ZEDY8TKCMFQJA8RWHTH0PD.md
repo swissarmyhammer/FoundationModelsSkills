@@ -237,8 +237,24 @@ comments:
     - no commit made, per instruction.
     - next: `/review`.
   timestamp: 2026-09-20T21:35:52.904223+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01m30c459nq4b458y5n8ke6mwg
+  text: |
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (commit 0583d7c) — 0 findings, 0 confirmed, 0 refuted, 7 attempted. 3 files reviewed. Five Swift hygiene rules declined their item, because the commit deleted `Sources/FoundationModelsSkills/Discovery/DotfolderStack+Layers.swift` and thus no file is there to read.
+    - next: no open findings, and each prior checklist item is checked. Task moved to done.
+  timestamp: 2026-09-20T21:39:00.021592+00:00
+- actor: wballard
+  id: 01m30c4pnxtkr4v2ee5apz9m00
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 3 files; the shim silently shadowed the public initializer
+    - test: green — swift test, 812 passed, 0 warnings
+    - commit: 0583d7c
+    - review: clean — 0 findings; task moved to done
+  timestamp: 2026-09-20T21:39:17.821828+00:00
+position_column: done
+position_ordinal: ff8680
 title: Delete the DotfolderStack(layers:) shim when Extras gives the public initializer
 ---
 ## What

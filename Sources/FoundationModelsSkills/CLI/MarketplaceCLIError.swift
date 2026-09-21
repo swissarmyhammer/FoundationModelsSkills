@@ -13,6 +13,14 @@ internal enum MarketplaceCLIError: Error, Equatable, Sendable {
     /// The configuration stack has no user layer, thus `add` and `remove`
     /// have no file to write.
     case noUserLayer
+
+    /// The URL of the new source is of no supported form, thus the reader
+    /// gave it no pre-fetch key (marketplace.md §5.1).
+    ///
+    /// - Parameter reason: The message of the reader, which never holds a
+    ///   URL and never holds a credential, or `nil` when the reader gave no
+    ///   message.
+    case unusableSource(reason: String?)
 }
 
 extension MarketplaceCLIError: CustomStringConvertible {
@@ -25,6 +33,18 @@ extension MarketplaceCLIError: CustomStringConvertible {
             """#
         case .noUserLayer:
             "The configuration stack has no user layer, thus the command cannot write marketplaces.yaml."
+        case .unusableSource(let reason):
+            reason ?? Self.unusableSourceText
         }
     }
+
+    /// What ``unusableSource(reason:)`` says when the reader gave no message.
+    ///
+    /// The sentence names the supported forms, thus a user who wrote an SSH
+    /// URL or a URL with a credential in it reads what to write instead.
+    private static let unusableSourceText = """
+        The URL of the marketplace is of no supported form. Write \
+        https://host/owner/repo.git, github:owner/repo, or file:///path, and put no credential \
+        in the URL.
+        """
 }

@@ -1,5 +1,6 @@
 import Foundation
 import FoundationModelsExtras
+import Marketplace
 
 /// Where the `marketplace` commands read their configuration and their cache
 /// (marketplace.md §9.2 and §9.3).
@@ -61,6 +62,6 @@ public struct MarketplaceCLIContext: Sendable {
     /// The cache folder that holds `state.json` and every marketplace folder
     /// (marketplace.md §7.1).
     internal var cacheDirectory: URL {
-        MarketplaceCache.cacheDirectory(environment: environment)
+        MarketplaceStore.cacheDirectory(environment: environment)
     }
 }

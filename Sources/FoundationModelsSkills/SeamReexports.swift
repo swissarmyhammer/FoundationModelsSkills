@@ -1,4 +1,4 @@
-// Re-exports the two sibling packages whose types stand in this package's own
+// Re-exports the sibling modules whose types stand in this package's own
 // API, so one `import FoundationModelsSkills` is sufficient for a host.
 //
 // A host must give the fused `SkillsTool` a `MetadataSearcher<SkillMetadata>`
@@ -29,5 +29,13 @@
 // `CLI/SkillsCLI.swift` stay as they are. A re-export makes a module's names
 // visible to a consumer of this module; it does not make a file's own import
 // wrong.
+//
+// The third line gives a host the marketplace: `MarketplaceStore`,
+// `MarketplaceSource`, `MarketplacePolicy`, `MarketplaceConfig`, and the
+// provenance that `SkillDiagnostic` already carries. That module is a second
+// product of `FoundationModelsExtras`, thus a host that wrote one import
+// would otherwise need `import Marketplace` beside it. `docs/marketplaces.md`
+// shows the host example with one import only.
 @_exported import FoundationModelsExtras
 @_exported import FoundationModelsMetadataRegistry
+@_exported import Marketplace

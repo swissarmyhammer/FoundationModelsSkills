@@ -1,5 +1,6 @@
 import Foundation
 import FoundationModelsExtras
+import MarketplaceFixtures
 import Testing
 
 @testable import FoundationModelsSkills
@@ -337,7 +338,7 @@ private struct MarketplaceCLIFixture {
             userDirectory: root.appendingPathComponent(Self.userDirectoryName, isDirectory: true),
             environment: [:])
         context = MarketplaceCLIContext(
-            stack: stack, environment: [MarketplaceCache.cacheVariable: cacheDirectory.path])
+            stack: stack, environment: [MarketplaceStore.cacheDirectoryVariable: cacheDirectory.path])
         userFile = try #require(stack.layers.first { $0.source == .user })
             .root.appendingPathComponent(MarketplaceConfig.fileName)
         projectFile = try #require(stack.layers.first { $0.source == .project })
@@ -345,10 +346,15 @@ private struct MarketplaceCLIFixture {
     }
 
     /// Whether the cache folder holds at least one installed snapshot.
+    ///
+    /// `MarketplaceStore.listings(of:cacheDirectory:)` reads the state of the
+    /// cache and opens no connection. A marketplace that carries a commit has
+    /// a snapshot that the cache serves.
     var cacheHoldsASnapshot: Bool {
-        let state = try? MarketplaceState.load(
-            from: MarketplaceCache.stateFile(inCacheDirectory: cacheDirectory))
-        return state?.marketplaces.values.contains { $0.currentSha != nil } == true
+        let sources = (try? MarketplaceConfig.load(from: stack, includeProject: false))?
+            .marketplaces ?? []
+        return MarketplaceStore.listings(of: sources, cacheDirectory: cacheDirectory)
+            .contains { $0.currentSha != nil }
     }
 
     /// Runs the `marketplace` group over the folders of the fixture.

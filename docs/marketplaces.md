@@ -19,10 +19,14 @@ its own.
 import FoundationModelsSkills
 
 // Left to right: the last source wins over the sources before it.
-let store = MarketplaceStore(sources: [
-    MarketplaceSource("https://github.com/swissarmyhammer/skills.git"),
-    MarketplaceSource("github:acme/team-skills", autoUpdate: false),
-])
+// `SkillMarketplaceLayout.skills` tells the store that `SKILL.md` marks a
+// skill folder, which is the same shape as a local layer.
+let store = MarketplaceStore(
+    sources: [
+        MarketplaceSource("https://github.com/swissarmyhammer/skills.git"),
+        MarketplaceSource("github:acme/team-skills", autoUpdate: false),
+    ],
+    layout: SkillMarketplaceLayout.skills)
 
 let stack = DotfolderStack(
     name: "skills",

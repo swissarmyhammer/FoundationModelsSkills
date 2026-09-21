@@ -41,9 +41,23 @@ let commonDependencies: [Target.Dependency] = [
     .product(name: "OperationsCLI", package: "FoundationModelsExtras"),
     .product(name: "FoundationModelsMetadataRegistry", package: "FoundationModelsMetadataRegistry"),
     .product(name: "Yams", package: "Yams"),
-    // The C API behind the internal `GitTransport` (marketplace.md §5.1): the
-    // remote head, the shallow fetch, and the tree read of a marketplace.
-    .product(name: "libgit2", package: "swift-libgit2"),
+    // The whole marketplace (marketplace.md): `MarketplaceStore`,
+    // `MarketplaceSource`, `MarketplacePolicy`, `MarketplaceConfig` and the
+    // git transport below them. This package keeps only the skill knowledge
+    // around that product: the registry hookup, the provenance in the
+    // diagnostics, and the `skills marketplace` command group. The product
+    // links libgit2 itself, thus no manifest entry here names a git package.
+    .product(name: "Marketplace", package: "FoundationModelsExtras"),
+]
+
+/// The fixtures of the marketplace, which only the test target links.
+///
+/// `MarketplaceStoreFixture`, `GitFixtureRepository`, `RecordingGitTransport`,
+/// `GatedGitTransport`, `ManualClock`, `MarketplaceEventLog` and `TestSignal`
+/// come from here. The library links none of them, thus a host gets no test
+/// code at all.
+let testOnlyDependencies: [Target.Dependency] = [
+    .product(name: "MarketplaceFixtures", package: "FoundationModelsExtras")
 ]
 
 /// The `FoundationModelsSkills` SwiftPM package definition.
@@ -92,11 +106,6 @@ let package = Package(
         // rule (plan.md decision #29). Pinned `exact:`, matching
         // `FoundationModelsExtras`' own Yams pin.
         .package(url: "https://github.com/jpsim/Yams.git", exact: "6.2.2"),
-        // Marketplace git sources go through libgit2, never the `git` binary
-        // (marketplace.md §5.1, decision 10). libgit2 compiles from C source
-        // as a SwiftPM target, so there is no binary artifact and no system
-        // dependency. Pinned `exact:`, in the same style as the Yams pin.
-        .package(url: "https://github.com/danielctull-forks/swift-libgit2.git", exact: "1.9.7"),
     ],
     targets: [
         .target(
@@ -115,6 +124,7 @@ let package = Package(
         .testTarget(
             name: testTargetName,
             dependencies: [.byName(name: packageName)] + commonDependencies
+                + testOnlyDependencies
         ),
     ]
 )

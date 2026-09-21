@@ -65,10 +65,57 @@ struct DependencyGraphTests {
     /// What the prose walk reads, relative to the package root: the shipped
     /// sources, the package manifest, and the documentation. An entry may name
     /// a directory, which is read to its full depth, or one file.
-    private static let prosePaths = ["Sources", "Package.swift", "docs"]
+    private static let prosePaths = [sourcesPath, manifestFileName, documentationPath]
 
     /// The resolution file, relative to the package root.
     private static let resolutionFileName = "Package.resolved"
+
+    /// The sources folder, relative to the package root.
+    private static let sourcesPath = "Sources"
+
+    /// The package manifest, relative to the package root.
+    private static let manifestFileName = "Package.swift"
+
+    /// The git package that the marketplace code of this package used, which
+    /// the `Marketplace` product of `FoundationModelsExtras` owns now.
+    ///
+    /// This package declares no git package of its own now. The `Marketplace`
+    /// product links libgit2, thus the library reaches libgit2 through that
+    /// product and through no entry of this manifest.
+    private static let removedGitPackageName = "swift-libgit2"
+
+    /// The product that gives this package the marketplace types, as the
+    /// manifest declares it.
+    ///
+    /// The whole declaration is the marker, and not the name alone: the word
+    /// `Marketplace` stands in many a comment of the manifest, thus a check
+    /// for the name alone would pass on prose.
+    private static let marketplaceProductDeclaration =
+        #".product(name: "Marketplace", package: "FoundationModelsExtras")"#
+
+    /// The C module of the removed git package, as an import line spells it.
+    private static let removedGitModuleImport = "import libgit2"
+
+    /// The marketplace types that `FoundationModelsExtras` owns now, thus no
+    /// file of this package may declare one of them again.
+    ///
+    /// A call of such a type is right and stays: the CLI of this package
+    /// builds a `MarketplaceStore` and reads a `MarketplaceConfig`. Only a
+    /// declaration is the defect, because a second declaration of one name
+    /// makes every use of that name ambiguous.
+    private static let extrasOwnedTypeNames = [
+        "CatalogResolver",
+        "GitTransport",
+        "MarketplaceCache",
+        "MarketplaceConfig",
+        "MarketplaceStore",
+        "SnapshotWriter",
+    ]
+
+    /// The keywords that open a type declaration in Swift.
+    private static let typeDeclarationKeywords = [
+        "actor", "class", "enum", "extension", "protocol", "struct",
+    ]
 
     /// The decision record, relative to the package root.
     ///
@@ -190,6 +237,83 @@ struct DependencyGraphTests {
             \(offenders.joined(separator: ", "))
             """
         )
+    }
+
+    /// Proves that the manifest takes the marketplace from
+    /// `FoundationModelsExtras`, and links no git package of its own.
+    ///
+    /// The marketplace implementation lives in the `Marketplace` product of
+    /// `FoundationModelsExtras` now. Thus the manifest must name that product,
+    /// and it must name `swift-libgit2` no more: the `Marketplace` product
+    /// links libgit2 itself, thus no entry of this manifest names a git
+    /// package.
+    @Test("the manifest names the Marketplace product and no git package")
+    func manifestTakesTheMarketplaceFromExtras() throws {
+        let manifest = try FixtureLibrary.readText(relativePath: Self.manifestFileName)
+        #expect(
+            !manifest.contains(Self.removedGitPackageName),
+            """
+            Package.swift must not name \(Self.removedGitPackageName): the marketplace, and with \
+            it every git call, belongs to the Marketplace product of FoundationModelsExtras now.
+            """
+        )
+        #expect(
+            manifest.contains(Self.marketplaceProductDeclaration),
+            """
+            Package.swift must declare \(Self.marketplaceProductDeclaration): that product gives \
+            this package MarketplaceStore, MarketplaceSource and the rest of the marketplace \
+            types.
+            """
+        )
+    }
+
+    /// Proves that no file under `Sources/` declares a marketplace type that
+    /// `FoundationModelsExtras` owns, and that none imports libgit2.
+    ///
+    /// `SeamReexports.swift` re-exports the `Marketplace` module, thus every
+    /// name of that module is visible here under its own spelling. A second
+    /// declaration of one of those names would make each use of the name
+    /// ambiguous, and a reader could not tell the two apart.
+    @Test("no source file declares a marketplace type of FoundationModelsExtras")
+    func declaresNoMarketplaceTypeOfExtras() {
+        let root = FixtureLibrary.packageRoot()
+        let sources = root.appendingPathComponent(Self.sourcesPath)
+        let offenders = Self.extrasOwnedTypeNames.flatMap { name in
+            Self.linesNaming(name, under: sources, in: root, where: { Self.declares(name, $0) })
+        }
+        #expect(
+            offenders.isEmpty,
+            """
+            No file under Sources/ may declare one of \
+            \(Self.extrasOwnedTypeNames.joined(separator: ", ")): the Marketplace product of \
+            FoundationModelsExtras owns each of them, and SeamReexports.swift makes each name \
+            visible here; found: \(offenders.joined(separator: ", "))
+            """
+        )
+        let gitImports = Self.linesNaming(Self.removedGitModuleImport, under: sources, in: root)
+        #expect(
+            gitImports.isEmpty,
+            """
+            No file under Sources/ may write "\(Self.removedGitModuleImport)": every git call of \
+            the marketplace belongs to the Marketplace product of FoundationModelsExtras, thus no \
+            file of this package calls libgit2; found: \(gitImports.joined(separator: ", "))
+            """
+        )
+    }
+
+    /// Whether one line opens the declaration of a type of one name.
+    ///
+    /// The reading is by keyword: a line that holds `struct <name>`, or one of
+    /// the other five keywords before the name, declares that type. A line
+    /// that only calls the type, or that names it in prose, holds no such
+    /// keyword.
+    ///
+    /// - Parameters:
+    ///   - name: The type name to look for.
+    ///   - line: The line to read.
+    /// - Returns: `true` when the line declares a type of that name.
+    private static func declares(_ name: String, _ line: String) -> Bool {
+        typeDeclarationKeywords.contains { line.contains("\($0) \(name)") }
     }
 
     /// Proves that no documentation line gives the retired operation-tool

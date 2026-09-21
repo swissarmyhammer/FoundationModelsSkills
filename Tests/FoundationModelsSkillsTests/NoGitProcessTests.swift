@@ -3,6 +3,11 @@ import Testing
 /// Guards marketplace.md decision 10: the package never starts the `git`
 /// binary. Git work goes through libgit2 behind `GitTransport`.
 ///
+/// `GitTransport` lives in the `Marketplace` module of
+/// `FoundationModelsExtras` now, and the tests of that module hold a guard of
+/// the same shape over its own sources. Thus this suite reads `Sources/` of
+/// this package only, which is the code that this package ships.
+///
 /// The suite gives `SwiftSourceScan` the test of a line below, and that reader
 /// walks every Swift file under `Sources/`. A line starts a process when it
 /// sets `executableURL` or `launchPath`, or when it builds a `Process`. A line

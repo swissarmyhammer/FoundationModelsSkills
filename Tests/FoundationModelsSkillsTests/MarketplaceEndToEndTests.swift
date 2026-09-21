@@ -3,6 +3,7 @@ import FoundationModels
 import FoundationModelsExtras
 import FoundationModelsMetadataRegistry
 import FoundationModelsSkills
+import MarketplaceFixtures
 import Operations
 import Testing
 
