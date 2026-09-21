@@ -53,8 +53,10 @@
 ## Marketplaces
 
 A marketplace is a git repository, or a folder on this computer, that gives a
-skill layer below the full local stack. [`marketplaces.md`](marketplaces.md) is
-the host guide. These are the rules that hold for every marketplace:
+skill layer below the full local stack. The `Marketplace` product of
+`FoundationModelsExtras` implements it, and this package consumes that product.
+[`marketplaces.md`](marketplaces.md) is the host guide. These are the rules that
+hold for every marketplace:
 
 1. **A marketplace is untrusted content.** It always renders untrusted, as a
    `user` layer and a `project` layer do, and it gets no permission switch of
@@ -68,12 +70,15 @@ the host guide. These are the rules that hold for every marketplace:
 3. **A project `marketplaces.yaml` can add a remote source.** A repository that
    you cloned can carry that file. Load it only for a folder that you trust.
    The `skills marketplace` commands read it only with `--include-project`.
-4. **The package does not start the `git` binary.** Git work goes through
-   libgit2, which runs no hooks, fetches no submodules, and runs no large file
-   storage filters. HTTPS uses the system trust store. SSH URLs are not
-   supported: the libgit2 build has no SSH transport, thus the package starts
-   no `ssh` process, and an SSH URL gives the diagnostic
-   `unsupported URL protocol`.
+4. **No package of this family starts the `git` binary.** Git work goes
+   through libgit2, which runs no hooks, fetches no submodules, and runs no
+   large file storage filters. HTTPS uses the system trust store. SSH URLs are
+   not supported: the libgit2 build has no SSH transport, thus no `ssh` process
+   starts, and an SSH URL gives the diagnostic `unsupported URL protocol`. The
+   `FoundationModelsSkills` library links no libgit2 and starts no `git`
+   process; the test bundle links libgit2 only through the
+   `MarketplaceFixtures` product of `FoundationModelsExtras`, and libgit2
+   itself is a dependency of `FoundationModelsExtras`.
 5. **A credential stays out of every record.** A credential never appears in a
    stored URL, in a log line, in a diagnostic, or in an error message. An HTTPS
    URL that holds a user name or a password is refused when the store parses

@@ -1,7 +1,11 @@
 # Plan: skill marketplaces
 
-**Status: Part B is implemented.** The package holds the store, the cache, the layers, the
-checks and the updates, the pins, and the `skills marketplace` commands. Read
+**Status: Part B is implemented, and it lives in `FoundationModelsExtras`.** The
+`Marketplace` product of that package holds the store, the cache, the git transport, the
+catalog read, the snapshot writer, the checks and the updates, the pins, and the
+`marketplaces.yaml` configuration. This package consumes that product and keeps only the
+skill knowledge around it: the registry hookup, the provenance in the diagnostics, and the
+`skills marketplace` command group. Read
 [`docs/marketplaces.md`](docs/marketplaces.md) for the host guide of the behavior that
 shipped, and [`docs/security.md`](docs/security.md) for the security posture. This page stays
 the design record. Part A, the `../skills` repository, is not made yet.
@@ -11,11 +15,11 @@ This plan adds remote skill marketplaces to `FoundationModelsSkills`. It has two
 - **Part A — a new `../skills` repository.** This repository is a skill marketplace in the
   Claude / OpenAI / agentskills.io format. It holds a **copy** of the skills in
   `../swissarmyhammer/builtin`. sah does not change.
-- **Part B — marketplace support in this package.** A host gives an ordered list of
-  marketplace URLs. The package fetches each marketplace, keeps it in a cache, checks it for
-  updates, and updates it automatically. Each marketplace becomes a skill layer **below** the
-  local skill folder stack. Thus a local file always wins over a marketplace file of the same
-  path.
+- **Part B — marketplace support, in the `Marketplace` product of `FoundationModelsExtras`.**
+  A host gives an ordered list of marketplace URLs. That product fetches each marketplace,
+  keeps it in a cache, checks it for updates, and updates it automatically. Each marketplace
+  becomes a skill layer **below** the local skill folder stack. Thus a local file always wins
+  over a marketplace file of the same path.
 
 This plan does not make kanban tasks yet. The phases in §12 are the input for those tasks.
 
@@ -44,11 +48,11 @@ This plan does not make kanban tasks yet. The phases in §12 are the input for t
 - **Agents are later.** v1 copies skills only.
 - The model does not add, remove, or update marketplaces. Marketplace control is a host and
   CLI function only. A model that can add a remote source can inject instructions.
-- The package does not install Claude Code plugins, MCP servers, or hooks. It reads only
+- The store does not install Claude Code plugins, MCP servers, or hooks. It reads only
   skills from a marketplace.
 - We do not publish a pre-rendered copy of the skills for plain clients in v1 (see §11, Later).
 - We do not support `npm` or `command` sources.
-- **No hard-coded times.** The package has no built-in check interval, start delay, or age
+- **No hard-coded times.** The store has no built-in check interval, start delay, or age
   limit. A time value exists only when the host gives one (§8.2).
 
 ## 2. Research summary
@@ -256,14 +260,18 @@ marketplace that is not fetched yet is an empty layer and not an error.
 ### 4.3 Layer source tag
 
 `DotfolderStack.Source` in Extras has `defaults`, `user`, and `project`. Trust depends on this
-tag: only `.defaults` renders trusted (`StencilPass.resolvedTrust`).
+tag: only `.defaults` renders trusted.
 
 **Decision:** add a `case marketplace` to `DotfolderStack.Source` in `FoundationModelsExtras`.
 
 - A marketplace layer must never render trusted. A new case makes that clear. If we reuse
   `.user`, the trust is correct but the provenance is wrong.
-- `StencilPass.resolvedTrust` does not change: every source except `.defaults` is untrusted.
-- This is a change in a sibling package. It must merge in Extras before Part B can use it.
+- The trust rule does not change: every source except `.defaults` is untrusted.
+  `StenciledDotfolderStack` in Extras reads the tag of the layer that won the skill, renders
+  each layer that is not `.defaults` untrusted, and scopes the partials of that layer (§6.5).
+- **Shipped.** The case merged in Extras, and the rest of Part B followed it there. Thus the
+  tag is one part of the Extras marketplace now, and not the only part: the `Marketplace`
+  product beside it holds the whole store.
 
 ## 5. Marketplace sources
 
@@ -290,8 +298,9 @@ We compared the Swift options (September 2026):
 | [swift-git](https://github.com/danielctull/swift-git) | Rejected as the API layer. It has `clone` but no fetch options, no remote ref listing, and no credential callbacks. |
 | [SwiftGit2](https://github.com/SwiftGit2/SwiftGit2), [libgit2-apple](https://github.com/mfcollins3/libgit2-apple) | Rejected. Old libgit2 (1.5 or earlier), or little maintenance. |
 
-Thus the package depends on the libgit2 SwiftPM target directly and has a small **internal**
-Swift wrapper, `GitTransport`, over the few C calls that the store needs:
+Thus `FoundationModelsExtras` depends on the libgit2 SwiftPM target directly, for its
+`Marketplace` target alone, and has a small **internal** Swift wrapper, `GitTransport`, over
+the few C calls that the store needs:
 
 | Need | libgit2 call |
 |---|---|
@@ -303,7 +312,8 @@ Swift wrapper, `GitTransport`, over the few C calls that the store needs:
 Rules:
 
 - **Pin exactly.** `.package(url: "https://github.com/danielctull-forks/swift-libgit2.git",
-  exact: "1.9.7")`. This agrees with the `Yams` pin in `Package.swift`.
+  exact: "1.9.7")`, in the manifest of `FoundationModelsExtras`. This agrees with the `Yams`
+  pin that both manifests carry.
 - **`GitTransport` is internal and is a protocol.** The store gets a `GitTransport` value. Tests
   use a counting double (§13). If we must change the libgit2 package, only the concrete type
   changes.
@@ -375,14 +385,25 @@ existing tests stay valid. A host that uses no marketplaces sees no change.
 
 ### 6.2 Public API sketch (illustrative)
 
+Every marketplace type below lives in the `Marketplace` product of
+`FoundationModelsExtras`. `SkillMarketplaceLayout` is the one value that this package
+adds: it names `SKILL.md` and the `_partials` folder of the skill format.
+
 ```swift
+// `FoundationModelsSkills` re-exports that product, thus one import is still
+// sufficient for a host that wants skills as well.
 import FoundationModelsSkills
 
 // Left to right: the last URL wins over the earlier URLs.
-let store = MarketplaceStore(sources: [
-    MarketplaceSource("https://github.com/swissarmyhammer/skills.git"),
-    MarketplaceSource("github:acme/team-skills", autoUpdate: false),
-])
+// The `layout` is a `MarketplaceLayout`, the shape of a marketplace tree.
+// `SkillMarketplaceLayout.skills` is the value of that type for a skill tree:
+// `SKILL.md` marks a skill folder, and `_partials` holds the partials.
+let store = MarketplaceStore(
+    sources: [
+        MarketplaceSource("https://github.com/swissarmyhammer/skills.git"),
+        MarketplaceSource("github:acme/team-skills", autoUpdate: false),
+    ],
+    layout: SkillMarketplaceLayout.skills)
 
 let stack = DotfolderStack(name: "skills", workingDirectory: projectDirectory,
                            defaultsDirectory: shippedSkillsURL, userDirectory: userConfigURL)
@@ -408,7 +429,8 @@ public struct MarketplaceSource: Sendable, Hashable, Codable {
 
 public actor MarketplaceStore {
     public init(sources: [MarketplaceSource],
-                cacheDirectory: URL = MarketplaceStore.cacheDirectory(environment: ProcessInfo.processInfo.environment),
+                layout: MarketplaceLayout,                  // the shape of a marketplace tree
+                cacheDirectory: URL = MarketplaceStore.cacheDirectory(),
                 policy: MarketplacePolicy = MarketplacePolicy())
     public nonisolated func marketplaceLayers() -> [MarketplaceLayer]  // stable `current` paths, lowest first
     public func start() async                                   // first sync and check; then the host's schedule, if any
@@ -432,9 +454,9 @@ public enum MarketplaceEvent: Sendable {
 
 ### 6.3 Configuration
 
-The host gives the source list in code. This follows decision #29: the package names no
-directory convention of its own. As a convenience (like `DotfolderStack`), the package also
-gives `MarketplaceConfig`. This is a `Codable` file named `marketplaces.yaml`:
+The host gives the source list in code. This follows decision #29: no package of this
+family names a directory convention of its own. As a convenience (like `DotfolderStack`), the `Marketplace`
+product also gives `MarketplaceConfig`. This is a `Codable` file named `marketplaces.yaml`:
 
 ```yaml
 marketplaces:            # left to right; the last entry wins
@@ -465,9 +487,8 @@ exist for the registry.
 
 ### 6.5 Partial scope
 
-**Problem.** `StencilPass` builds one partials stack from all layers. A skill from
-marketplace A can then include `_partials/header.md` from marketplace B, if B is later in the
-list.
+**Problem.** A partials stack built from all the layers together lets a skill from
+marketplace A include `_partials/header.md` from marketplace B, if B is later in the list.
 
 **Decision:** scope partials by the layer that won. For a skill from marketplace layer *k*,
 the partials stack is:
@@ -481,8 +502,10 @@ url[k]._partials < defaults < user < project
   the same "local wins" rule as for skills.
 - A skill from a local layer sees only the local layers. Local skills do not include
   marketplace partials. This keeps local skills independent of a remote source.
-- Change: `StencilPass.partialsStack(layers:)` takes the winning layer and builds the scoped
-  list. It is a small change, and the existing tests cover it.
+- `StenciledDotfolderStack.partialsStack(for:)` in Extras builds that scoped list. It takes
+  the layer that holds the document, keeps every local layer, and adds a `.marketplace` layer
+  below them only when that layer holds the document. This package renders through that
+  stack, thus it writes no partials rule of its own.
 
 ### 6.6 Trust and execution
 
@@ -627,7 +650,7 @@ A check is a cheap remote query. It downloads no skill content:
 
 ### 8.2 When a check runs
 
-There is no correct hard-coded time. Thus the package has no built-in time value:
+There is no correct hard-coded time. Thus the store has no built-in time value:
 
 - **At start.** `store.start()` checks every marketplace one time.
 - **On request.** `check()`, `update()`, and the CLI check immediately.
@@ -698,10 +721,11 @@ skills marketplace remove <id>
    `run script`, for every layer.
 2. The allowlist and the blocklist run before any I/O.
 3. A project `marketplaces.yaml` can add a remote source. Load it only for a trusted folder.
-4. The package does not start the `git` binary. libgit2 runs no hooks, does not fetch
-   submodules, and runs no LFS filters. SSH URLs are not supported, thus the package starts
-   no `ssh` process. HTTPS uses the system trust store. An HTTPS credential goes only to the origin of its
-   source.
+4. No package of this family starts the `git` binary. libgit2 runs no hooks, does not fetch
+   submodules, and runs no LFS filters. SSH URLs are not supported, thus no `ssh` process
+   starts. HTTPS uses the system trust store. An HTTPS credential goes only to the origin of
+   its source. The `FoundationModelsSkills` library links no libgit2; the test bundle links
+   it only through the `MarketplaceFixtures` product of `FoundationModelsExtras`.
 5. The materializer rejects path traversal, escaping symlinks, and oversized content.
 6. The model cannot change the source list.
  7. A marketplace file can never win over a local file of the same path. The unit of
@@ -744,8 +768,8 @@ skills marketplace remove <id>
 
 Each phase ends with green tests. The phase ids continue after plan.md M7.
 
-- **MK0 — Extras.** Add `DotfolderStack.Source.marketplace`. Confirm that `StencilPass`
-  renders it untrusted.
+- **MK0 — Extras.** Add `DotfolderStack.Source.marketplace`. Confirm that a layer with
+  that tag renders untrusted.
 - **MK1 — Repository and copy.** Make `../skills` with the §3.2 layout. Copy 24 skills and
   8 partials. Do the §3.4 conversions. Add `scripts/generate-catalogs`, `scripts/release`, and
   the §3.6 CI. Tag `v1.0.0`. Do not change sah.
@@ -764,15 +788,31 @@ Each phase ends with green tests. The phase ids continue after plan.md M7.
   `MarketplaceConfig`. Changes to `docs/security.md`, `docs/operations.md`, and the README.
   A `--marketplace` mode in `skills-demo`.
 
+MK0 to MK6 all shipped. **MK5 and each phase after it are cards of `FoundationModelsExtras`
+now.** The checks and the automatic update, the pins, the policy lists, `MarketplaceConfig`,
+and the store that they all drive are the `Marketplace` product of that package. A card that
+changes one of them goes to that repository. The cards that stay here are the skill knowledge
+around the product: `SkillMarketplaceLayout`, the registry hookup, the provenance in the
+diagnostics, the `skills marketplace` command group, and the `--marketplace` mode of
+`skills-demo`.
+
 ## 13. Testing
 
 The unit tier stays hermetic. It uses no network (CI requires this).
 
+**Where the fixtures live.** The git fixture repository, the transport doubles, the manual
+clock and the catalog fixtures are all in the `MarketplaceFixtures` product of
+`FoundationModelsExtras`, and the store tests that drive them are the `MarketplaceTests`
+target of that package. `MarketplaceFixtures` is a product, and not test-target code, thus
+this package imports the doubles from it. Only the test bundle links that product, and with
+it libgit2.
+
 - **Git fixtures.** A test makes a temporary repository with libgit2 (init, commit, tag). It
-  uses a `file://` URL as a git source. This tests the real libgit2 `GitTransport` with no
-  network and no `git` binary.
-- **Transport double.** The other store tests use a counting `GitTransport` double. It records
-  each remote-head call and each fetch.
+  uses a `file://` URL as a git source. This tests the real libgit2 transport with no
+  network and no `git` binary. `GitFixtureRepository` of `MarketplaceFixtures` gives it.
+- **Transport double.** The other store tests use a counting transport double. It records
+  each remote-head call and each fetch. `RecordingGitTransport` and `GatedGitTransport` of
+  `MarketplaceFixtures` give it.
 - **Precedence.** Two marketplaces and a local stack all have a skill `commit`. The local
   skill wins. Remove the local skill: the last URL wins. Reverse the list: the other
   marketplace wins. Each shadow diagnostic names the correct sides.
@@ -806,7 +846,8 @@ The unit tier stays hermetic. It uses no network (CI requires this).
 - **Cache location.** `cacheDirectory(environment:)` gives `SKILLS_MARKETPLACE_CACHE` when it
   is set, and `~/.cache/skills/marketplaces` when it is not set.
 - **Catalog goldens.** Parse checked-in copies of the `anthropics/skills` catalog, the Claude
-  official catalog (with `renames` and `git-subdir` entries), and our own catalog.
+  official catalog (with `renames` and `git-subdir` entries), and our own catalog. Those
+  fixtures and the tests over them are in `MarketplaceFixtures` and `MarketplaceTests`.
 - **Copy.** In `../skills` CI: every skill validates, and every skill renders untrusted
   (§3.6).
 
@@ -827,7 +868,11 @@ The unit tier stays hermetic. It uses no network (CI requires this).
     (`exact: "1.9.7"`) behind an internal `GitTransport` protocol. SSH URLs are not supported
     (amended 2026-09-18): that package builds no SSH transport on macOS, and an SSH URL gives
     `unsupported URL protocol`. We do not fork the package, and we do not enable its `libssh2`
-    trait. Every example uses the HTTPS form.
+    trait. Every example uses the HTTPS form. **The libgit2 dependency lives in
+    `FoundationModelsExtras`** (amended 2026-09-19): the manifest of that package pins
+    libgit2 for its `Marketplace` target alone. Thus the `FoundationModelsSkills` library
+    links no libgit2, and the test bundle here reaches libgit2 only through
+    `MarketplaceFixtures`.
 11. **The store is separate from the registry.** The registry reads only disk. It reloads on a
     store event.
 12. **The cache is in `~/.cache/skills/marketplaces`**, with `SKILLS_MARKETPLACE_CACHE` as the
@@ -841,6 +886,14 @@ The unit tier stays hermetic. It uses no network (CI requires this).
 17. **`.claude-plugin/marketplace.json` is the primary catalog.** The repository also
     generates the Codex mirror and the well-known index.
 18. **Agents are later.**
+19. **`FoundationModelsExtras` owns every marketplace file read** (2026-09-19). The
+    `Marketplace` product of that package opens each marketplace file: the catalog blob of a
+    commit, each file of a local `file://` folder, and each file that the snapshot writer
+    writes. `FoundationModelsSkills` opens none of them. It reads the materialized layer root
+    as it reads any other layer root. **There is no per-marketplace grant.** The host
+    `RenderPolicy` is the one gate of the shell injection and of `run script`, for every
+    layer, and the `allowed-tools` grant of the winning `SKILL.md` is still necessary for a
+    script.
 
 ---
 
@@ -874,6 +927,12 @@ The unit tier stays hermetic. It uses no network (CI requires this).
   (`HF_HUB_CACHE` → `HF_HOME/hub` → `~/.cache/huggingface/hub`, `snapshots/<revision>/`)
 - This package: plan.md (§3, §4, #29), `docs/security.md`,
   `Sources/FoundationModelsSkills/Discovery/SkillDiscovery.swift`,
-  `Sources/FoundationModelsSkills/Render/StencilPass.swift`
+  `Sources/FoundationModelsSkills/Discovery/SkillMarketplaceLayout.swift`,
+  `Sources/FoundationModelsSkills/Render/StencilPass.swift` (which renders through the
+  Extras stack and holds no Stencil work of its own)
 - Extras: `Sources/FoundationModelsExtras/TemplateEngine.swift` (untrusted whitelist),
-  `DotfolderStack.swift` (`Source`), `DotfolderLoader.swift` (`_partials/` resolution)
+  `DotfolderStack.swift` (`Source`), `DotfolderLoader.swift` (`_partials/` resolution),
+  `StenciledDotfolderStack.swift` (trust, scoped partials, quarantined spans)
+- Extras, the marketplace itself: `Sources/Marketplace/` (the store, the cache, the git
+  transport, the catalog read and the snapshot writer), `Tests/MarketplaceFixtures/` (the git
+  fixture repository and the transport doubles), `Tests/MarketplaceTests/`

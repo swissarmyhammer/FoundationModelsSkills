@@ -6,21 +6,30 @@ skill layer for each marketplace to `SkillsRegistry`. Each marketplace layer is
 below the full local stack, thus a local file always wins over a marketplace
 file of the same path.
 
+`MarketplaceStore`, `MarketplaceSource`, `MarketplacePolicy`,
+`MarketplaceConfig` and `MarketplaceLayout` are types of the `Marketplace`
+product of `FoundationModelsExtras`. `FoundationModelsSkills` re-exports that
+product, thus the example below needs one import only. A host that uses
+`FoundationModelsExtras` alone writes `import Marketplace` instead, and it gets
+the same types.
+
 This page is the host guide. It tells you how to add a marketplace, what the
 store does with it, and what the `skills marketplace` commands do. Read
 [`security.md`](security.md) for the security posture of a marketplace.
 
 ## Add a marketplace in code
 
-The host gives the source list. The package names no directory convention of
+The host gives the source list. The store names no directory convention of
 its own.
 
 ```swift
 import FoundationModelsSkills
 
 // Left to right: the last source wins over the sources before it.
-// `SkillMarketplaceLayout.skills` tells the store that `SKILL.md` marks a
-// skill folder, which is the same shape as a local layer.
+// The `layout` is a `MarketplaceLayout`, the shape of a marketplace tree.
+// `SkillMarketplaceLayout.skills` is the value of that type for a skill tree:
+// it tells the store that `SKILL.md` marks a skill folder, which is the same
+// shape as a local layer.
 let store = MarketplaceStore(
     sources: [
         MarketplaceSource("https://github.com/swissarmyhammer/skills.git"),
@@ -114,8 +123,8 @@ layer, is what makes the layer render untrusted and what scopes its partials.
 | folder on this computer | `file:///Users/me/skills` |
 | ref suffix on a git form | `…/skills.git#v1.2.0` |
 
-**SSH URLs are not supported.** The libgit2 build of this package has no SSH
-transport. The parser accepts an SSH URL, but the store cannot connect to it:
+**SSH URLs are not supported.** The libgit2 build that the store uses has no
+SSH transport. The parser accepts an SSH URL, but the store cannot connect to it:
 the check and the fetch fail, and the diagnostic is `unsupported URL protocol`.
 Use the HTTPS form of the same repository. For a private repository, give a
 token through `MarketplacePolicy.credentials`.
@@ -234,7 +243,7 @@ A check is a cheap query of the remote. It downloads no skill content: the
 store connects a detached remote, reads the ref list, and compares the head
 commit with the commit of the snapshot.
 
-The package has no built-in time value. A check runs:
+The store has no built-in time value. A check runs:
 
 - **At start.** `store.start()` checks each marketplace one time.
 - **On request.** `check()`, `update()`, and the commands below check at once.

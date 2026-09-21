@@ -41,6 +41,39 @@ struct MarketplaceDocsTests {
     /// The design record of the marketplaces, relative to the package root.
     private static let designRecordPath = "marketplace.md"
 
+    /// The package that holds the marketplace: the store, the cache, the
+    /// transport, the catalog read, the snapshot writer and the
+    /// configuration file. A host document must name it, so that a reader
+    /// knows which repository a change of the behavior goes to.
+    private static let marketplacePackageName = "FoundationModelsExtras"
+
+    /// The fixtures product of that package, which only the test bundle
+    /// links. The design record names it, thus a reader knows that the
+    /// library links no libgit2.
+    private static let fixturesProductName = "MarketplaceFixtures"
+
+    /// The date of the decision that gave the whole marketplace to
+    /// ``marketplacePackageName`` (marketplace.md decision 19).
+    private static let marketplaceDecisionDate = "2026-09-19"
+
+    /// The name of the layout type that the store initializer needs, taken
+    /// from the type itself. Thus a rename makes this suite fail until the
+    /// design record names the new type.
+    private static let layoutTypeName = String(describing: MarketplaceLayout.self)
+
+    /// Every document that states where the marketplace is implemented.
+    private static let implementationDocuments = [
+        designRecordPath, hostGuidePath, securityPath,
+    ]
+
+    /// The wording that puts an implementation in this repository.
+    private static let localHomeWording = "in this package"
+
+    /// The parts of the marketplace that ``marketplacePackageName`` owns. A
+    /// line that names one of these, and ``localHomeWording`` beside it,
+    /// gives the reader the wrong home.
+    private static let movedPartNouns = ["store", "cache", "transport"]
+
     /// The name of the type that carried the per-marketplace grants. The
     /// host `RenderPolicy` gates every layer now, thus no document may name
     /// that type any more.
@@ -108,7 +141,8 @@ struct MarketplaceDocsTests {
 
     /// Every claim that the documentation must make: the host guide names
     /// each environment variable and each subcommand, the security document
-    /// has its marketplace section, and the README points to the host guide.
+    /// has its marketplace section, the README points to the host guide, and
+    /// each document names the package that holds the marketplace now.
     private static let claims =
         environmentVariables.map { DocumentClaim(document: hostGuidePath, text: $0) }
         + subcommandNames.map {
@@ -119,6 +153,13 @@ struct MarketplaceDocsTests {
             DocumentClaim(document: hostGuidePath, text: sshDiagnostic),
             DocumentClaim(document: securityPath, text: securityHeading),
             DocumentClaim(document: readmePath, text: hostGuidePath),
+            DocumentClaim(document: hostGuidePath, text: marketplacePackageName),
+            DocumentClaim(document: securityPath, text: marketplacePackageName),
+            DocumentClaim(document: securityPath, text: fixturesProductName),
+            DocumentClaim(document: designRecordPath, text: marketplacePackageName),
+            DocumentClaim(document: designRecordPath, text: fixturesProductName),
+            DocumentClaim(document: designRecordPath, text: marketplaceDecisionDate),
+            DocumentClaim(document: designRecordPath, text: layoutTypeName),
         ]
 
     @Test(arguments: claims)
@@ -137,6 +178,23 @@ struct MarketplaceDocsTests {
         #expect(
             !text.contains(Self.removedGrantsTypeName),
             "\(document) must not name \"\(Self.removedGrantsTypeName)\"")
+    }
+
+    @Test(arguments: implementationDocuments)
+    func noDocumentPutsAMovedPartInThisPackage(document: String) throws {
+        let text = try FixtureLibrary.readText(relativePath: document)
+
+        for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
+            let sentence = line.lowercased()
+            guard sentence.contains(Self.localHomeWording) else { continue }
+            let named = Self.movedPartNouns.filter { sentence.contains($0) }
+            #expect(
+                named.isEmpty,
+                """
+                \(document) says the \(named.joined(separator: ", ")) is \
+                "\(Self.localHomeWording)": \(line)
+                """)
+        }
     }
 
     @Test func theHostGuideGivesNoSSHURLAsAnExample() throws {

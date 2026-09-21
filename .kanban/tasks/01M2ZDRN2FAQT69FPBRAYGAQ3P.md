@@ -116,10 +116,28 @@ comments:
     - no commit made, per instruction.
     - next: ready for review.
   timestamp: 2026-09-21T14:39:33.218140+00:00
+- actor: claude-code
+  id: 01m326pmj5wddyyae3gmwqk0p3
+  text: |
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (commit f89027a) — 0 findings, 0 confirmed, 0 refuted; 7 validators attempted, 0 failed; 9 files reviewed, 4 `.kanban/` files excluded by `.reviewignore`.
+    - note: five `code-hygiene` Swift rules declined one item each, because they found no file at `Sources/FoundationModelsSkills/Render/QuarantinedText.swift`. That file is the deletion of this change, thus the decline is correct and it is not a finding.
+    - no prior `## Review Findings` section on this card, and each acceptance and test item is checked.
+    - next: the card moves to Done.
+  timestamp: 2026-09-21T14:42:42.885849+00:00
+- actor: wballard
+  id: 01m326q4c9908zh26bvkad31hw
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 9 files; StencilPass 445 lines to 155, QuarantinedText deleted
+    - test: green — swift test, 569 passed, 0 warnings
+    - commit: f89027a
+    - review: clean — 0 findings; task moved to done
+  timestamp: 2026-09-21T14:42:59.081827+00:00
 depends_on:
 - 01M2ZDRMMGTDZCMB4ZS15QQK20
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: ff8d80
 title: 'Render: give Stencil and the quarantine to Extras; keep the two grammar passes of the skill format'
 ---
 ## What

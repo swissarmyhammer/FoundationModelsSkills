@@ -76,3 +76,13 @@
   `swift-ci.yaml` reusable workflow, which only checks out the calling
   repository — a `path:` dependency on an uncommitted sibling checkout
   would not exist there.
+- **The marketplace resolves from `FoundationModelsExtras`.** `Marketplace` and
+  `MarketplaceFixtures` are two products of that package on `main`. The library
+  target takes `Marketplace`; the test target alone takes
+  `MarketplaceFixtures`, and with it libgit2, which Extras pins for its own
+  `Marketplace` target. Thus no manifest entry here names a git package. A
+  change to the behavior of a marketplace — the store, the cache, the git
+  transport, the catalog read, the snapshot writer, or `marketplaces.yaml` —
+  goes to that repository. What stays here is the skill knowledge around the
+  product: `SkillMarketplaceLayout`, the registry hookup, the provenance in the
+  diagnostics, and the `skills marketplace` command group.
