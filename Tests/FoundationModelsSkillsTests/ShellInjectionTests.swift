@@ -272,9 +272,12 @@ struct ShellInjectionTests {
 
             Shell says: !`cat sentinel.txt`
             """
+        // Pass 3 gets the real process environment, thus `{{ HOME }}` names a
+        // value that a template of this render could resolve. The assertion
+        // below then proves the quarantine, and not an empty ladder.
         let pipeline = RenderPipeline(
             argumentSubstitution: ArgumentSubstitution(), shellInjection: ShellInjection(),
-            stencil: StencilPass())
+            stencil: StencilPass(environment: ProcessInfo.processInfo.environment))
         var renderRequest = request(text: body, workingDirectory: workingDirectory)
         renderRequest.arguments = ["real-value"]
 

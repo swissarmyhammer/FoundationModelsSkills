@@ -3,15 +3,6 @@ import FoundationModelsExtras
 import FoundationModelsSkills
 import Testing
 
-// `FoundationModelsExtras` declares a `QuarantinedText` of its own, and this
-// package re-exports that module, thus the bare name is ambiguous in a type
-// position. A scoped import takes precedence over a whole-module import, thus
-// the line below names the type of this package. The module name itself cannot
-// do it, because this package declares the namespace `enum
-// FoundationModelsSkills` as well. The card ^69fpbra gives the quarantine to
-// Extras and deletes the local type, and this line with it.
-import struct FoundationModelsSkills.QuarantinedText
-
 /// Skeleton tests for the §5 render pipeline (plan.md §5, decision #25):
 /// fixed pass order, the body/metadata pass-set split, the single-shot
 /// no-re-scan invariant, and `RenderPolicy` plumbing -- all provable with
@@ -95,8 +86,12 @@ struct RenderPipelineTests {
         // never spawn a process, never expand a template tag. `RenderPipelineNoRescanTests`
         // carries the full acceptance-criteria matrix; this is the
         // pipeline-level pin.
+        // The pass gets the real process environment, thus `{{ HOME }}` names
+        // a value that a template of this render could resolve. The assertion
+        // below then proves the quarantine, and not an empty ladder.
         let pipeline = RenderPipeline(
-            argumentSubstitution: ArgumentSubstitution(), shellInjection: ShellInjection(), stencil: StencilPass())
+            argumentSubstitution: ArgumentSubstitution(), shellInjection: ShellInjection(),
+            stencil: StencilPass(environment: ProcessInfo.processInfo.environment))
         let maliciousArgument = "!`echo pwned` {{ HOME }}"
 
         let result = try await pipeline.renderBody(

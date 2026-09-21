@@ -44,9 +44,15 @@ struct RenderPipelineNoRescanTests {
 
     /// The real, fully-wired pipeline every test in this file drives --
     /// never `IdentityRenderPass` for any of the three slots.
+    ///
+    /// Pass 3 gets the real process environment, the same as the registry
+    /// gives it, thus a `{{ VAR }}` of a spliced value names a variable that
+    /// the template of the same render could resolve. Each assertion below
+    /// then proves the quarantine, and not an empty ladder.
     private func realPipeline() -> RenderPipeline {
         RenderPipeline(
-            argumentSubstitution: ArgumentSubstitution(), shellInjection: ShellInjection(), stencil: StencilPass())
+            argumentSubstitution: ArgumentSubstitution(), shellInjection: ShellInjection(),
+            stencil: StencilPass(environment: ProcessInfo.processInfo.environment))
     }
 
     // MARK: - An argument value containing `` !`echo pwned` `` renders literal; no process spawns
@@ -85,7 +91,14 @@ struct RenderPipelineNoRescanTests {
         setenv("RENDER_PIPELINE_NO_RESCAN_TESTS_HOME", "/should-never-appear", 1)
         defer { unsetenv("RENDER_PIPELINE_NO_RESCAN_TESTS_HOME") }
         let sentinelProbe = skillDirectory.appendingPathComponent("second-order-pwned.txt")
-        let sentinel = "$0 !`touch second-order-pwned.txt` {{ RENDER_PIPELINE_NO_RESCAN_TESTS_HOME }}"
+        // The `{% include %}` names a partial that no layer of this render
+        // holds, and this pipeline gives pass 3 no layer at all. Thus a pass 3
+        // that scanned the output of pass 2 would raise a render error here,
+        // and the render below would throw instead of giving the text back.
+        let sentinel = """
+            $0 !`touch second-order-pwned.txt` {{ RENDER_PIPELINE_NO_RESCAN_TESTS_HOME }} \
+            {% include "no-such-partial" %}
+            """
         try sentinel.write(
             to: skillDirectory.appendingPathComponent("sentinel.txt"), atomically: true, encoding: .utf8)
 
@@ -124,54 +137,6 @@ struct RenderPipelineNoRescanTests {
         #expect(!FileManager.default.fileExists(atPath: argumentProbe.path))
         #expect(!FileManager.default.fileExists(atPath: shellProbe.path))
         #expect(!result.contains("/should-never-appear"))
-    }
-
-    // MARK: - Shared budgets: N splices never multiply the single-render limits (^q1mywft)
-
-    /// The number of `$0` splices the budget fixtures repeat -- enough that
-    /// the per-span loop sums below cross one of Extras' untrusted limits in
-    /// aggregate while each span alone stays well under every limit.
-    private static let spliceCount = 50
-
-    /// Builds a body of `spliceCount` repetitions of `$0` followed by
-    /// `fragment`, so pass 1 splits it into `spliceCount` `.original` spans
-    /// separated by `.quarantined` argument values.
-    private static func repeatedSpliceBody(fragment: String) -> String {
-        String(repeating: "$0\(fragment)", count: spliceCount)
-    }
-
-    /// One `{% for %}` per span of 3000 empty iterations: 3000 sits far
-    /// under the 100k iteration limit, 50 x 3000 = 150k does not.
-    private static let iterationBudgetFragment = "{% for i in 1...3000 %}{% endfor %}"
-
-    /// One `{% for %}` per span of 1500 x 16 bytes = 24 KiB: 24 KiB sits far
-    /// under the 1 MiB output limit and 1500 iterations far under the 100k
-    /// iteration limit; 50 x 24 KiB = 1.2 MiB crosses the output limit
-    /// while 50 x 1500 = 75k iterations still does not cross the other.
-    private static let outputBudgetFragment = "{% for i in 1...1500 %}0123456789abcdef{% endfor %}"
-
-    @Test(
-        "a 50-splice untrusted body draws every span's loops from ONE shared budget",
-        arguments: [
-            (name: "iteration budget", fragment: RenderPipelineNoRescanTests.iterationBudgetFragment),
-            (name: "output budget", fragment: RenderPipelineNoRescanTests.outputBudgetFragment),
-        ])
-    func fiftySpliceUntrustedBodyCannotExceedTheSingleRenderBudgets(name: String, fragment: String) async throws {
-        let skillDirectory = try makeTempDirectory()
-        let body = Self.repeatedSpliceBody(fragment: fragment)
-
-        await #expect(throws: TemplateEngineError.self, "\(name)") {
-            try await realPipeline().renderBody(request(text: body, arguments: ["x"], skillDirectory: skillDirectory))
-        }
-    }
-
-    @Test func singleSpliceBodyUnderTheBudgetsRendersSoTheBudgetFixtureIsValidTemplateText() async throws {
-        let skillDirectory = try makeTempDirectory()
-
-        let result = try await realPipeline().renderBody(
-            request(text: "$0\(Self.iterationBudgetFragment)", arguments: ["x"], skillDirectory: skillDirectory))
-
-        #expect(result == "x\n\nARGUMENTS: x")
     }
 
     // MARK: - Empty quarantined spans never split an original span

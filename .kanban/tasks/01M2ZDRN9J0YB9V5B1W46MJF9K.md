@@ -59,10 +59,26 @@ comments:
     - checked: `SkillsRegistryReloadTests.editingASkillFileTriggersExactlyOneRebuildAndOneOnReloadPublicationWithRefreshedMetadata`, `reloadRefreshesPreloadedBodiesAndDiagnostics`, `writingAFileDeepInsideASkillDirectoryGivesExactlyOneRebuild`, and `HotReloadTests.hotReloadEndToEndFiveStepScenario` still write real files under a real temp root to a real `SkillsRegistry(watch: true)` and wait for a real reload signal — proof of a true hot-reload path, not a mock.
     - next: /review
   timestamp: 2026-09-21T14:18:30.247562+00:00
+- actor: claude-code
+  id: 01m325f63kv82pt1rwb1mak02q
+  text: |-
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (commit 5491e6e) — 0 findings, 0 confirmed, 0 refuted; 7 validators ran, 0 failed; 9 files reviewed. The hygiene rules declined only the two deleted files, `Sources/FoundationModelsSkills/Registry/SkillWatcher.swift` and `Tests/FoundationModelsSkillsTests/SkillWatcherTests.swift`.
+    - next: task moved to done.
+  timestamp: 2026-09-21T14:21:10.131344+00:00
+- actor: wballard
+  id: 01m325fnn89ad1fckctx7bx9bz
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 9 files; SkillWatcher and its tests deleted
+    - test: green — swift test, 580 passed, 0 warnings
+    - commit: 5491e6e
+    - review: clean — 0 findings; task moved to done
+  timestamp: 2026-09-21T14:21:26.056541+00:00
 depends_on:
 - 01M2ZDRMMGTDZCMB4ZS15QQK20
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: ff8c80
 title: Watch the layer roots with the Extras DotfolderWatcher; delete SkillWatcher
 ---
 ## What

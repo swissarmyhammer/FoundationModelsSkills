@@ -379,9 +379,14 @@ public struct SkillsRegistry: Sendable {
 
         let built = Self.buildCatalog(plan: plan)
         catalogBox = CatalogBox(catalog: built.catalog, diagnostics: built.diagnostics)
+        // The stenciled stack of Extras keeps the process environment out of
+        // its own ladder, thus this registry reads the environment one time,
+        // here, and pass 3 interpolates it below the named arguments of a
+        // skill. One read also keeps every render of one registry on one set
+        // of values.
         pipeline = RenderPipeline(
             argumentSubstitution: ArgumentSubstitution(), shellInjection: ShellInjection(),
-            stencil: StencilPass(layers: plan.layers))
+            stencil: StencilPass(layers: plan.layers, environment: ProcessInfo.processInfo.environment))
 
         guard watch || source.marketplaceUpdates != nil else {
             reloadCoordinator = nil

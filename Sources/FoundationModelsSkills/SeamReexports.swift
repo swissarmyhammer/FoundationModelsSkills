@@ -22,7 +22,7 @@
 // standard `LanguageModelSession` where an `any AgentSession` is expected.
 //
 // The first line below gives a host `DotfolderStack`, and with it the rest of
-// the Layer 1-2 substrate (`FrontmatterValue`, `TemplateEngine`,
+// the Layer 1-2 substrate (`FrontmatterValue`, `QuarantinedText`,
 // `SlashCommand`) that this package's own public API already names.
 //
 // The plain `import` lines in `Search/SkillSearchAgent.swift` and
