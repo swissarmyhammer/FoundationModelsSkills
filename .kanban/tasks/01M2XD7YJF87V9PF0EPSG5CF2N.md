@@ -149,10 +149,26 @@ comments:
     - check: no test in the suite has a skip mark or a disable mark. No test was removed to hide a failure.
     - next: send to review.
   timestamp: 2026-09-21T12:42:21.853239+00:00
+- actor: claude-code
+  id: 01m320489ezkasawyvmz5rrabn
+  text: |
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (commit 07a77c8) — findings 0, confirmed 0, refuted 0; 14 validators attempted, 0 failed. 61 files reviewed; 6 `.kanban/` files excluded by `.reviewignore`; `docs/marketplaces.md` matched no validator. The `code-hygiene` rules declined the deleted `Sources/FoundationModelsSkills/Marketplace/` and `Tests/` files, because those files are gone after the delete; no finding came from them.
+    - next: none. The card moves to `done`.
+  timestamp: 2026-09-21T12:47:49.038662+00:00
+- actor: wballard
+  id: 01m3204rb56bay9d8s13rptt6m
+  text: |-
+    ### finish iteration 2 — clean
+    - implement: changed — 66 files (42 marketplace sources and 15 test files deleted)
+    - test: green — swift test, 584 passed, 0 warnings
+    - commit: 07a77c8
+    - review: clean — 0 findings; task moved to done
+  timestamp: 2026-09-21T12:48:05.477510+00:00
 depends_on:
 - 01M2XCY70WHM6NWN6XR8MXHN6A
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: ff8780
 title: Consume the Extras Marketplace product and delete the marketplace code from this package
 ---
 ## What
