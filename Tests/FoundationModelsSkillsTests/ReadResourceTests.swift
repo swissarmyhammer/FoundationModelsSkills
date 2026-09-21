@@ -1,7 +1,8 @@
 import Foundation
 import FoundationModels
-import FoundationModelsSkills
 import Testing
+
+@testable import FoundationModelsSkills
 
 /// Tests for `ReadResource` that call the operation directly, without the
 /// fused `skills` tool in front of it: the memberwise initializer, the
@@ -41,15 +42,6 @@ struct ReadResourceTests {
     /// - Returns: The message, in the operation's own wording.
     private static func unreadableMessage(path: String) -> String {
         "The path `\(path)` could not be read."
-    }
-
-    /// The corrective `ReadResource` draws for a path that leaves the skill
-    /// directory.
-    ///
-    /// - Parameter path: The path that was denied.
-    /// - Returns: The message, in the operation's own wording.
-    private static func deniedMessage(path: String) -> String {
-        "The path `\(path)` is not accessible: it must resolve to a location inside the skill directory."
     }
 
     /// The package's own `.build` directory, whose real path is its path.
@@ -202,7 +194,7 @@ struct ReadResourceTests {
     @Test func readResourceOnAPathThatWalksUpDrawsTheDeniedCorrective() async throws {
         let output = try await Self.read(id: "walker", path: "../outside.md") { _ in }
 
-        #expect(output == .corrective(Self.deniedMessage(path: "../outside.md")))
+        #expect(output == .corrective(ResourcePathRules.deniedMessage(path: "../outside.md")))
     }
 
     /// A symbolic link inside the skill that points at a directory outside it.
@@ -219,7 +211,7 @@ struct ReadResourceTests {
                 at: skillDirectory.appendingPathComponent("escape"), withDestinationURL: outside)
         }
 
-        #expect(output == .corrective(Self.deniedMessage(path: "escape/secret.md")))
+        #expect(output == .corrective(ResourcePathRules.deniedMessage(path: "escape/secret.md")))
     }
 
     // MARK: - Empty window

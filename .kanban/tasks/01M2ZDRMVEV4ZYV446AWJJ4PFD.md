@@ -56,6 +56,68 @@ comments:
       - `SkillOverlayTests`: `resolveDeniesAPathThatLeavesEachDirectory` and `resolveGivesNothingForAPathThatNoDirectoryHolds` both check the new `nil` contract.
     - next: ready for review.
   timestamp: 2026-09-21T13:26:50.650463+00:00
+- actor: claude-code
+  id: 01m322mpa2a8j98arjee642k59
+  text: |-
+    ### review — findings
+    - evidence: 1 finding (1 confirmed, 0 refuted) from `review sha HEAD~1..HEAD` — Tests/FoundationModelsSkillsTests/ReadResourceTests.swift:51
+    - next: delete the private deniedMessage helper in ReadResourceTests.swift and call ResourcePathRules.deniedMessage(path:) at each call site. The card stays in Review.
+  timestamp: 2026-09-21T13:31:44.834459+00:00
+- actor: claude-code
+  id: 01m322r1vbk7hym60gghxv7hbw
+  text: |-
+    Research for the review finding, before the edit.
+
+    The finding: `Tests/FoundationModelsSkillsTests/ReadResourceTests.swift:51` `reuse/reuse` -- the private `deniedMessage` helper writes again the text of the shared `ResourcePathRules.deniedMessage(path:)`.
+
+    What the file holds:
+
+    - `ReadResourceTests.deniedMessage(path:)` gives exactly the text of `ResourcePathRules.deniedMessage(path:)` of `Sources/FoundationModelsSkills/Resources/ResourceSupport.swift`. Two call sites use it: the `..` path test and the symbolic-link test.
+    - `ResourcePathRules` is `internal`, and `ReadResourceTests.swift` has a plain `import FoundationModelsSkills`. Thus the import becomes `@testable import FoundationModelsSkills`, which is the pattern of `SkillOverlayTests.swift`, `RunScriptTests.swift` and `ResourcePathRulesTests.swift`: the plain imports, a blank line, then the testable one.
+    - The same file keeps a second private helper, `unreadableMessage(path:)`. It gives the text of `ReadResource.unreadableMessage(path:)`, which is `private` inside `ReadResource` and thus unreachable from a test, even with `@testable`. There is no shared function to call for that text, thus the cause of the finding -- a copy of a function the test can call -- is not present there. I do not move that message to a shared home: that is a design decision the card does not record, and it is an unrelated change.
+    - `ResourcePathRulesTests.theDeniedTextNamesThePathAndTheSkillDirectory` holds the one literal copy of the denied text, thus the wording stays pinned in one place.
+  timestamp: 2026-09-21T13:33:34.955733+00:00
+- actor: claude-code
+  id: 01m3232xrh11e1rmd1jcm23emp
+  text: |-
+    The rules that read this edit, and the decisions.
+
+    I read the full validator dump for `.swift` (61 rule sections). What it says about this edit:
+
+    - **Duplication Validator** makes the edit necessary and gives exactly this fix: "**The counterpart is already a shared function.** Call it from the changed code. Delete the copy the change added. Do not rewrite the counterpart." **Reuse Validator** check 1 says the same: new code that does what a shared function does "should call the existing one, or extend it, not duplicate the capability."
+    - **Swift Access Control** permits the import change: "A test target is a caller. A Swift test target reads a library's `internal` members through `@testable import`, and `@testable` opens `internal` -- it never opens `private` or `fileprivate`." `ResourcePathRules` is `internal`, thus `@testable` reaches it.
+    - **Import order is not a review finding.** Swift Idioms: "Whitespace, indentation, and import ordering are `swift-format`'s job, not review findings." The idioms tool allowlist does not hold `OrderedImports`.
+    - **Missing Documentation -- Swift** reports only `open` and `public` declarations, thus the deleted doc comment was never required.
+    - No other rule -- magic numbers, hard-coded test values, function length, disallowed constructs, test partitioning, dead code, the Swift prompt rules -- reads any part of this edit.
+
+    The one tension, and how I resolved it:
+
+    **No Test Cheating** check 4 names "a weakened assertion": an expected value that can no longer fail. The two call sites now build the expected text with the same function the operation calls, thus they alone cannot catch a change of the wording. They do not need to: `ResourcePathRulesTests.theDeniedTextNamesThePathAndTheSkillDirectory` holds the literal text and fails if the wording changes. The partition is sound -- one test pins the text, and these two tests pin **which** text the operation chooses for a `..` path and for a symbolic link that leaves the skill. That is their true subject, and it is what the finding asks for: the wording must live in one place so the operations cannot differ on it.
+
+    The second private helper, `unreadableMessage(path:)`, stays:
+
+    - Its counterpart, `ReadResource.unreadableMessage(path:)`, is `private`. `@testable` does not reach `private`, thus no test can call it.
+    - The Duplication Validator refuses the other fix: "Do not edit the counterpart to make the two halves agree. The counterpart is outside this change, and an edit there is a different piece of work."
+    - The Reuse Validator also forbids a finding toward inlining a single-call-site helper.
+    - Only `ReadResource` makes that text, thus there is no second operation that can differ from it, and the test copy is the independent oracle the No Test Cheating rule wants. The cause the finding names -- a copy of a shared function the test can call -- is not present there.
+
+    `swift format lint --strict` reports indentation for every file of the repository, changed or not (the package holds no `.swift-format` file, thus the 2-space default disagrees with the 4-space code). It reports nothing about the import placement.
+  timestamp: 2026-09-21T13:39:31.217729+00:00
+- actor: claude-code
+  id: 01m32332wkzsxjzr866heazvdm
+  text: |-
+    ### implement — changed
+    - evidence: 1 file — Tests/FoundationModelsSkillsTests/ReadResourceTests.swift. Deleted the private `deniedMessage(path:)` helper with its doc comment; changed `import FoundationModelsSkills` to `@testable import FoundationModelsSkills`; both call sites now read `ResourcePathRules.deniedMessage(path:)`. `swift build --build-tests` exit 0, 0 warnings. `swift test` exit 0, 587 tests in 54 suites, 0 failures, 0 skipped. The review finding item is now `- [x]`; 0 open findings of 1.
+    - next: /review
+  timestamp: 2026-09-21T13:39:36.467808+00:00
+- actor: claude-code
+  id: 01m32390aee4vgdrtp93y0267n
+  text: |-
+    ### test — green
+    - evidence: `swift build --build-tests` after a clean `.build` removal — 0 warnings. `swift test` — 587 tests, 54 suites, 0 failures, 0 skipped in this run.
+    - note: `ReadResourceTests.swift` and `SkillWatcherTests.swift` each have one `@Test(.enabled(if:)/.disabled(if:))` guard tied to the process user (root vs. non-root). These are not skips to hide a fail. They mark a branch that is not reachable under root. The run was not root, so both tests ran and passed.
+    - next: ready for review.
+  timestamp: 2026-09-21T13:42:50.446346+00:00
 depends_on:
 - 01M2X2J679TGA1ENB64G9JT4SQ
 - 01M2XD7YJF87V9PF0EPSG5CF2N
@@ -97,3 +159,42 @@ The `Marketplace/` folder of this package also calls the local type (`CatalogFil
 - Record each decision in a comment on this card. Do not ask the user about an implementation detail.
 
 #loading-boundary #skills
+
+## Review Findings (2026-09-21 08:27)
+
+> Scope: `review sha HEAD~1..HEAD` — reviewed the diffs only — lines this change added or modified. 10 file(s) reviewed, 4 not reviewed.
+
+> 4 file(s) not reviewed — excluded by an ignore rule:
+> - `.kanban/ (from .reviewignore)` — 4 file(s)
+
+> ⚠️ tool rule 'code-hygiene/disallowed-constructs-swift' declined an item — it judged the rest of the code, and this it could not judge:
+> disallowed-constructs-swift found no file at Sources/FoundationModelsSkills/Resources/PathConfinement.swift, so its constructs are unread
+
+> ⚠️ tool rule 'code-hygiene/disallowed-constructs-swift' declined an item — it judged the rest of the code, and this it could not judge:
+> disallowed-constructs-swift found no file at Tests/FoundationModelsSkillsTests/PathConfinementTests.swift, so its constructs are unread
+
+> ⚠️ tool rule 'code-hygiene/function-length-swift' declined an item — it judged the rest of the code, and this it could not judge:
+> function-length-swift found no file at Sources/FoundationModelsSkills/Resources/PathConfinement.swift, so its bodies are unread
+
+> ⚠️ tool rule 'code-hygiene/function-length-swift' declined an item — it judged the rest of the code, and this it could not judge:
+> function-length-swift found no file at Tests/FoundationModelsSkillsTests/PathConfinementTests.swift, so its bodies are unread
+
+> ⚠️ tool rule 'code-hygiene/idioms-swift' declined an item — it judged the rest of the code, and this it could not judge:
+> idioms-swift found no file at Sources/FoundationModelsSkills/Resources/PathConfinement.swift, so its declarations are unread
+
+> ⚠️ tool rule 'code-hygiene/idioms-swift' declined an item — it judged the rest of the code, and this it could not judge:
+> idioms-swift found no file at Tests/FoundationModelsSkillsTests/PathConfinementTests.swift, so its declarations are unread
+
+> ⚠️ tool rule 'code-hygiene/magic-numbers-swift' declined an item — it judged the rest of the code, and this it could not judge:
+> magic-numbers-swift found no file at Sources/FoundationModelsSkills/Resources/PathConfinement.swift, so its literals are unread
+
+> ⚠️ tool rule 'code-hygiene/magic-numbers-swift' declined an item — it judged the rest of the code, and this it could not judge:
+> magic-numbers-swift found no file at Tests/FoundationModelsSkillsTests/PathConfinementTests.swift, so its literals are unread
+
+> ⚠️ tool rule 'code-hygiene/missing-docs-swift' declined an item — it judged the rest of the code, and this it could not judge:
+> missing-docs-swift found no file at Sources/FoundationModelsSkills/Resources/PathConfinement.swift, so its declarations are unread
+
+> ⚠️ tool rule 'code-hygiene/missing-docs-swift' declined an item — it judged the rest of the code, and this it could not judge:
+> missing-docs-swift found no file at Tests/FoundationModelsSkillsTests/PathConfinementTests.swift, so its declarations are unread
+
+- [x] `Tests/FoundationModelsSkillsTests/ReadResourceTests.swift:51` `reuse/reuse` — The deniedMessage helper function reimplements identical logic that already exists as ResourcePathRules.deniedMessage. The design intent documented in ResourceSupport.swift is that this message be shared across all resource operations so they cannot diverge on wording; the test should call the shared function rather than maintain a duplicate. Remove the private deniedMessage function (lines 51-53) and replace its callers (lines 205, 222) with ResourcePathRules.deniedMessage(path:).
