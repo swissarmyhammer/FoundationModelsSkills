@@ -48,10 +48,26 @@ comments:
     - check: `Examples/marketplace-fixtures/` is absent. No file under Sources/, Tests/, Examples/, docs/ has the text "marketplace-fixtures" or "marketplaceCatalog(".
     - next: ready for review.
   timestamp: 2026-09-21T13:07:28.652891+00:00
+- actor: claude-code
+  id: 01m321e39jyqprvpc4vfj2scxf
+  text: |-
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (commit 340b569) — 0 findings, 0 confirmed, 0 refuted, 7 validator runs attempted, 0 failed. 2 files reviewed; 57 files not reviewed (4 by an ignore rule, 53 because no validator matches a fixture file).
+    - next: task moved from review to done. No findings to correct.
+  timestamp: 2026-09-21T13:10:40.178907+00:00
+- actor: wballard
+  id: 01m321en4v13yy155hkw83qpqc
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 55 files (53 fixture files deleted)
+    - test: green — swift test, 586 passed, 0 warnings
+    - commit: 340b569
+    - review: clean — 0 findings; task moved to done
+  timestamp: 2026-09-21T13:10:58.459751+00:00
 depends_on:
 - 01M2XD7YJF87V9PF0EPSG5CF2N
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: ff8980
 title: Delete the marketplace catalog fixtures and the fixture helper that reads them
 ---
 ## What

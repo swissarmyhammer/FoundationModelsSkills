@@ -163,8 +163,8 @@ public struct RunScript: OperationDefinition {
             guard path.hasPrefix(scriptsDirectoryPrefix) else {
                 return .corrective(Self.notUnderScriptsMessage(path: path))
             }
-            guard let winning = overlay.resolve(path) else {
-                return .corrective(PathConfinement.deniedMessage(path: path))
+            guard overlay.confines(path) else {
+                return .corrective(ResourcePathRules.deniedMessage(path: path))
             }
 
             let allowedTools = context.registry.allowedTools(id: id) ?? []
@@ -172,6 +172,9 @@ public struct RunScript: OperationDefinition {
                 return .corrective(message)
             }
 
+            guard let winning = overlay.resolve(path) else {
+                return .corrective(Self.missingScriptMessage(path: path))
+            }
             if let issue = Self.executabilityIssue(path: path, at: winning.url) {
                 return .corrective(issue)
             }
@@ -367,7 +370,33 @@ public struct RunScript: OperationDefinition {
             unmet.append(Self.shebangRequirement)
         }
         guard !unmet.isEmpty else { return nil }
-        return "The script `\(path)` must \(unmet.joined(separator: " and "))."
+        return Self.requirementMessage(path: path, unmet: unmet)
+    }
+
+    /// The corrective message for a `path` the combined view holds no copy of,
+    /// although the skill confines it.
+    ///
+    /// The file is not there, thus it carries neither the executable bit nor a
+    /// shebang line, and the message names both fixes -- the same message a
+    /// file that is there and carries neither one draws.
+    ///
+    /// - Parameter path: The script's path, relative to the skill directory.
+    /// - Returns: The corrective message.
+    private static func missingScriptMessage(path: String) -> String {
+        Self.requirementMessage(
+            path: path, unmet: [Self.executableBitRequirement, Self.shebangRequirement])
+    }
+
+    /// The corrective message that names each direct-exec requirement `path`
+    /// does not meet.
+    ///
+    /// - Parameters:
+    ///   - path: The script's path, relative to the skill directory.
+    ///   - unmet: The requirements the script does not meet, in the order the
+    ///     message names them.
+    /// - Returns: The corrective message.
+    private static func requirementMessage(path: String, unmet: [String]) -> String {
+        "The script `\(path)` must \(unmet.joined(separator: " and "))."
     }
 
     /// Whether the file at `url` starts with `shebangPrefix`.

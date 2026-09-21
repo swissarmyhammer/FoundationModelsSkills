@@ -10,9 +10,11 @@ import FoundationModelsExtras
 /// skill through this type, thus `list resource`, `read resource` and
 /// `run script` can never differ on which copy of a file they give.
 ///
-/// `DotfolderStack` walks the disk for `entries()` and reads a file for
-/// `size(of:)` and `data(_:in:)`, and `PathConfinement` resolves one path for
-/// `resolve(_:)`, thus this type opens no directory and no file of its own.
+/// The `DotfolderStack` of `FoundationModelsExtras` walks the disk for
+/// `entries()`, finds the winning copy for `resolve(_:)`, and reads a file for
+/// `size(of:)` and `data(_:in:)`; `confines(_:)` asks the `PathConfinement` of
+/// that same package. Thus this type opens no directory and no file of its
+/// own.
 internal struct SkillOverlay: Sendable {
     /// The layer directories of the skill, lowest precedence first.
     ///
@@ -35,18 +37,44 @@ internal struct SkillOverlay: Sendable {
 
     /// The winning copy of `relativePath`, and which layer directory gave it.
     ///
-    /// A path that no directory holds still resolves, in the highest
-    /// directory that confines it: the caller then reports that the file
-    /// could not be read, and not that the path is denied.
+    /// Only a copy that exists resolves. The stack of one directory applies
+    /// the confinement rule itself, thus a path that leaves its directory, and
+    /// a path that no directory holds, give `nil` alike. A caller tells the
+    /// two apart with `confines(_:)`.
     ///
     /// - Parameter relativePath: A path relative to a layer directory, e.g.
     ///   `"references/notes.md"`.
     /// - Returns: The URL of the winning copy and the position of its
-    ///   directory in `directories`, or `nil` when the path is empty,
-    ///   absolute, `..`-traversing, or leaves each of the directories.
+    ///   directory in `directories`, or `nil` when no directory holds a
+    ///   confined copy of the path.
     internal func resolve(_ relativePath: String) -> (url: URL, directoryIndex: Int)? {
-        PathConfinement.winningCopy(relativePath: relativePath, in: highestFirstDirectories)
-            .map { (url: $0.url, directoryIndex: lowestFirstIndex(of: $0.directoryIndex)) }
+        for index in directories.indices.reversed() {
+            guard let url = Self.stack(over: [directories[index]]).nearest(relativePath) else { continue }
+            return (url: url, directoryIndex: index)
+        }
+        return nil
+    }
+
+    /// Whether `relativePath` is well formed and stays inside the highest
+    /// layer directory of the skill.
+    ///
+    /// The check opens no file of this package: the text half is
+    /// `ResourcePathRules.isWellFormedRelativePath(_:)`, and the filesystem
+    /// half is `PathConfinement.isConfined(_:to:)` of
+    /// `FoundationModelsExtras`, the same rule each lookup of the stack
+    /// applies. A caller asks this after `resolve(_:)` gave `nil`, to tell a
+    /// path that no directory holds from a path that leaves the skill.
+    ///
+    /// - Parameter relativePath: A path relative to a layer directory.
+    /// - Returns: Whether the path may name a file of the skill.
+    internal func confines(_ relativePath: String) -> Bool {
+        guard ResourcePathRules.isWellFormedRelativePath(relativePath),
+            let highestDirectory = directories.last
+        else {
+            return false
+        }
+        return PathConfinement.isConfined(
+            highestDirectory.appendingPathComponent(relativePath), to: highestDirectory)
     }
 
     /// Every file path of the skill, at every depth, each with its winning
@@ -94,35 +122,27 @@ internal struct SkillOverlay: Sendable {
         stack.data(relativePath, in: range)
     }
 
-    /// The layer directories as one `DotfolderStack`, which gives the union of
+    /// Every layer directory as one `DotfolderStack`, which gives the union of
     /// the paths, the size of a file and the bytes of a file.
     private var stack: DotfolderStack {
-        DotfolderStack(layers: layers)
+        Self.stack(over: directories)
     }
 
-    /// The layer directories as the layers of a `DotfolderStack`, lowest
-    /// precedence first, which is the order the stack reads.
+    /// A `DotfolderStack` over `directories`.
+    ///
+    /// The whole overlay reads one stack of every directory, and `resolve(_:)`
+    /// reads one stack of each single directory in turn, thus both make the
+    /// stack here and neither one builds a layer of its own.
     ///
     /// The stack reads the root of a layer only, thus the source carries no
     /// meaning here. `.project` is the local source, the same source
-    /// `SkillDiscovery.init(roots:)` gives a bare root.
-    private var layers: [DotfolderStack.Layer] {
-        directories.map { DotfolderStack.Layer(source: .project, root: $0) }
-    }
-
-    /// The layer directories highest precedence first, which is the order
-    /// `PathConfinement` reads.
-    private var highestFirstDirectories: [URL] {
-        directories.reversed()
-    }
-
-    /// Turns a position of `highestFirstDirectories` into a position of
-    /// `directories`.
+    /// `SkillDiscovery.init(roots:)` gives a bare root. Making a stack opens no
+    /// file; each lookup reads the disk at the time of the call.
     ///
-    /// - Parameter highestFirstIndex: The position of a directory in
-    ///   `highestFirstDirectories`.
-    /// - Returns: The position of that same directory in `directories`.
-    private func lowestFirstIndex(of highestFirstIndex: Int) -> Int {
-        directories.count - 1 - highestFirstIndex
+    /// - Parameter directories: The layer directories, lowest precedence
+    ///   first, which is the order the stack reads.
+    /// - Returns: The stack over those directories.
+    private static func stack(over directories: [URL]) -> DotfolderStack {
+        DotfolderStack(layers: directories.map { DotfolderStack.Layer(source: .project, root: $0) })
     }
 }

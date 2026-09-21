@@ -5,9 +5,9 @@ import Testing
 
 /// Tests for `ReadResource` that call the operation directly, without the
 /// fused `skills` tool in front of it: the memberwise initializer, the
-/// `generatedContent` round trip, the unreadable-file corrective, and the
-/// empty window. `ResourceOpsTests` covers the same operation through the
-/// tool's dispatch.
+/// `generatedContent` round trip, the unreadable-file corrective, the
+/// denied-path corrective, and the empty window. `ResourceOpsTests` covers the
+/// same operation through the tool's dispatch.
 struct ReadResourceTests {
     /// The skill id every direct-construction test names.
     private static let sampleID = "release-notes"
@@ -43,14 +43,23 @@ struct ReadResourceTests {
         "The path `\(path)` could not be read."
     }
 
+    /// The corrective `ReadResource` draws for a path that leaves the skill
+    /// directory.
+    ///
+    /// - Parameter path: The path that was denied.
+    /// - Returns: The message, in the operation's own wording.
+    private static func deniedMessage(path: String) -> String {
+        "The path `\(path)` is not accessible: it must resolve to a location inside the skill directory."
+    }
+
     /// The package's own `.build` directory, whose real path is its path.
     private static let buildScratchParent = FixtureLibrary.packageRoot()
         .appendingPathComponent(".build", isDirectory: true)
 
     /// The macOS temp directory. `SkillDiscovery` lists a root under it as
-    /// `/private/var/...`, and `resolvingSymlinksInPath()` resolves a path
-    /// that exists under it to `/var/...`, so a missing path under such a
-    /// root is the case ^2dzxvms fixed in `PathConfinement`.
+    /// `/private/var/...`, and a resolution of the symbolic links gives
+    /// `/var/...` for a path that exists under it, so a missing path under
+    /// such a root is the case ^2dzxvms fixed in the confinement rule.
     private static let temporaryScratchParent = FileManager.default.temporaryDirectory
 
     /// Creates a fresh scratch root under `parent`.
@@ -186,6 +195,31 @@ struct ReadResourceTests {
         }
 
         #expect(output == .corrective(Self.unreadableMessage(path: "secret.txt")))
+    }
+
+    // MARK: - Denied-path correctives
+
+    @Test func readResourceOnAPathThatWalksUpDrawsTheDeniedCorrective() async throws {
+        let output = try await Self.read(id: "walker", path: "../outside.md") { _ in }
+
+        #expect(output == .corrective(Self.deniedMessage(path: "../outside.md")))
+    }
+
+    /// A symbolic link inside the skill that points at a directory outside it.
+    /// The file is there through the link, and the path leaves the skill, thus
+    /// the read is denied and not reported as unreadable.
+    @Test func readResourceOnASymbolicLinkThatLeavesTheSkillDrawsTheDeniedCorrective() async throws {
+        let output = try await Self.read(id: "escaper", path: "escape/secret.md") { skillDirectory in
+            let outside = skillDirectory.deletingLastPathComponent()
+                .appendingPathComponent("outside", isDirectory: true)
+            try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+            try "top secret\n".write(
+                to: outside.appendingPathComponent("secret.md"), atomically: true, encoding: .utf8)
+            try FileManager.default.createSymbolicLink(
+                at: skillDirectory.appendingPathComponent("escape"), withDestinationURL: outside)
+        }
+
+        #expect(output == .corrective(Self.deniedMessage(path: "escape/secret.md")))
     }
 
     // MARK: - Empty window

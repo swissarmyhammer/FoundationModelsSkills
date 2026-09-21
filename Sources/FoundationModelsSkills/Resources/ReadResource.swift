@@ -167,7 +167,7 @@ public struct ReadResource: OperationDefinition {
     public func execute(in context: SkillsToolContext) async throws -> ReadResourceOutput {
         await ResourceIDLookup.withResolvedOverlay(id: id, context: context) { overlay in
             guard overlay.resolve(path) != nil else {
-                return .corrective(PathConfinement.deniedMessage(path: path))
+                return .corrective(Self.unresolvedMessage(path: path, in: overlay))
             }
             guard let statedSize = overlay.size(of: path) else {
                 return .corrective(Self.unreadableMessage(path: path))
@@ -203,6 +203,21 @@ public struct ReadResource: OperationDefinition {
         ReadResourceResult(
             id: id, path: path, content: lines.joined(separator: "\n"), start: window.first,
             end: window.first + lines.count - 1, totalLines: totalLines)
+    }
+
+    /// The corrective message for a `path` the combined view gave no copy of.
+    ///
+    /// The view gives no copy for two different reasons, and the caller must
+    /// hear which one: a path that leaves the skill is denied, and a path the
+    /// skill confines but no layer holds could not be read.
+    ///
+    /// - Parameters:
+    ///   - path: The path that gave no copy.
+    ///   - overlay: The combined view of the layer directories of the skill.
+    /// - Returns: The corrective message.
+    private static func unresolvedMessage(path: String, in overlay: SkillOverlay) -> String {
+        overlay.confines(path)
+            ? Self.unreadableMessage(path: path) : ResourcePathRules.deniedMessage(path: path)
     }
 
     /// The corrective message for a confined `path` that could not be read.

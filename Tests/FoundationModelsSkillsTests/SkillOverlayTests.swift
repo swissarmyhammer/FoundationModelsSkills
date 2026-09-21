@@ -5,8 +5,8 @@ import Testing
 
 /// Tests for `SkillOverlay`, the combined view of one skill over the layer
 /// directories that contribute to it (plan.md §3, §7.3): the union of the
-/// paths, the copy of the highest directory, and which directory gave the
-/// winning copy.
+/// paths, the copy of the highest directory, which directory gave the winning
+/// copy, and which paths the overlay confines.
 ///
 /// The directories of an overlay are ordered lowest precedence first, the
 /// order of `DiscoveredSkill.contributingDirectories`.
@@ -23,6 +23,13 @@ struct SkillOverlayTests {
     /// The path of a file of bytes that are not UTF-8 text, which the lowest
     /// directory only holds.
     private static let bytesOnlyPath = "assets/logo.png"
+
+    /// The path of a file that no directory of the fixture holds.
+    private static let missingPath = "references/missing.md"
+
+    /// The path of a file reached through a symbolic link that leaves the
+    /// skill.
+    private static let escapingPath = "escape/secret.md"
 
     // MARK: - The union of the paths
 
@@ -75,9 +82,7 @@ struct SkillOverlayTests {
         let winner = try #require(SkillOverlay(directories: directories).resolve(Self.lowerOnlyPath))
 
         #expect(winner.directoryIndex == 0)
-        #expect(
-            winner.url.path
-                == LayerFixtureSupport.resolvedPath(of: directories[0].appendingPathComponent(Self.lowerOnlyPath)))
+        #expect(winner.url.path == directories[0].appendingPathComponent(Self.lowerOnlyPath).path)
     }
 
     @Test func resolveNamesTheHighestDirectoryForAPathThatTwoDirectoriesHold() throws {
@@ -87,9 +92,7 @@ struct SkillOverlayTests {
         let winner = try #require(SkillOverlay(directories: directories).resolve(Self.sharedPath))
 
         #expect(winner.directoryIndex == 1)
-        #expect(
-            winner.url.path
-                == LayerFixtureSupport.resolvedPath(of: directories[1].appendingPathComponent(Self.sharedPath)))
+        #expect(winner.url.path == directories[1].appendingPathComponent(Self.sharedPath).path)
     }
 
     @Test func resolveDeniesAPathThatLeavesEachDirectory() throws {
@@ -97,6 +100,49 @@ struct SkillOverlayTests {
         defer { LayerFixtureSupport.removeDirectories(directories) }
 
         #expect(SkillOverlay(directories: directories).resolve("../outside.md") == nil)
+    }
+
+    /// Only a copy that exists resolves. A caller that gets nothing back then
+    /// asks `confines(_:)` whether the path is denied or simply not there.
+    @Test func resolveGivesNothingForAPathThatNoDirectoryHolds() throws {
+        let directories = try Self.makeTwoLayerFixture()
+        defer { LayerFixtureSupport.removeDirectories(directories) }
+
+        #expect(SkillOverlay(directories: directories).resolve(Self.missingPath) == nil)
+    }
+
+    // MARK: - The paths the overlay confines
+
+    /// A well-formed path that no directory holds is confined: the caller
+    /// reports that the file could not be read, and not that it is denied.
+    @Test func aWellFormedPathThatNoDirectoryHoldsIsConfined() throws {
+        let directories = try Self.makeTwoLayerFixture()
+        defer { LayerFixtureSupport.removeDirectories(directories) }
+
+        #expect(SkillOverlay(directories: directories).confines(Self.missingPath))
+    }
+
+    @Test func aPathThatWalksUpIsNotConfined() throws {
+        let directories = try Self.makeTwoLayerFixture()
+        defer { LayerFixtureSupport.removeDirectories(directories) }
+
+        #expect(!SkillOverlay(directories: directories).confines("../outside.md"))
+    }
+
+    /// A symbolic link in the highest directory that points at a directory
+    /// outside the skill: the file is there, and the path leaves the skill,
+    /// thus the overlay does not confine it.
+    @Test func aPathThatLeavesTheSkillThroughASymbolicLinkIsNotConfined() throws {
+        let directories = try LayerFixtureSupport.makeLayerDirectories(count: 3)
+        defer { LayerFixtureSupport.removeDirectories(directories) }
+        let outside = directories[2]
+        try LayerFixtureSupport.writeTextFile(at: "secret.md", in: outside)
+        try FileManager.default.createSymbolicLink(
+            at: directories[1].appendingPathComponent("escape"), withDestinationURL: outside)
+
+        let overlay = SkillOverlay(directories: Array(directories.prefix(2)))
+
+        #expect(!overlay.confines(Self.escapingPath))
     }
 
     // MARK: - Test helpers

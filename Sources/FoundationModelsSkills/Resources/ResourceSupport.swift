@@ -8,6 +8,44 @@ internal let resourceOperationNoun = "resource"
 /// confine execution to.
 internal let scriptsDirectoryPrefix = "scripts/"
 
+/// The rules of a skill-relative resource path that open no file: whether the
+/// path is well formed, and the text a resource operation gives for a path it
+/// denies (plan.md §7.3).
+///
+/// `ReadResource` and `RunScript` each read these, thus the two can never
+/// differ on what counts as a relative path, or on the wording of the refusal.
+/// The other half of the confinement rule is
+/// `PathConfinement.isConfined(_:to:)` of `FoundationModelsExtras`, which each
+/// lookup of the stack applies; `SkillOverlay.confines(_:)` puts the two
+/// halves together.
+internal enum ResourcePathRules {
+    /// Whether `path` is not empty, is truly relative, and holds no `..`
+    /// component.
+    ///
+    /// The check reads the text of the path alone, before any file access,
+    /// thus `../x` and `/etc/passwd` are refused although nothing stands at
+    /// that path. The text check of the Extras stack accepts a leading `~`,
+    /// thus this check keeps that case of its own.
+    ///
+    /// - Parameter path: The candidate path.
+    /// - Returns: Whether `path` is well formed.
+    internal static func isWellFormedRelativePath(_ path: String) -> Bool {
+        guard !path.isEmpty, !path.hasPrefix("/"), !path.hasPrefix("~") else { return false }
+        return !path.split(separator: "/", omittingEmptySubsequences: true).contains("..")
+    }
+
+    /// The corrective message for a `path` that leaves the skill directory --
+    /// shared by every resource operation that applies the confinement rule
+    /// (`ReadResource`, `RunScript`), thus they can never differ on its
+    /// wording.
+    ///
+    /// - Parameter path: The path that was refused.
+    /// - Returns: The corrective message.
+    internal static func deniedMessage(path: String) -> String {
+        "The path `\(path)` is not accessible: it must resolve to a location inside the skill directory."
+    }
+}
+
 /// Shared "resolve `id` against the calling context's visible catalog"
 /// lookup and corrective-message logic for `ListResource`, `ReadResource`,
 /// and `RunScript` (plan.md §7.3, decision #22).

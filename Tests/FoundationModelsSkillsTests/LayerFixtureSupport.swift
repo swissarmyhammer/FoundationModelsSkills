@@ -1,9 +1,9 @@
 import Foundation
 
 /// Shared fixture helpers for the tests that make layer directories on real
-/// disk and put files in them -- `PathConfinementTests`, `SkillOverlayTests`,
-/// `SkillDiscoveryTests` and `ResourceOpsTests`. Each needs the same helpers,
-/// thus the helpers are in this one file.
+/// disk and put files in them -- `SkillOverlayTests`, `SkillDiscoveryTests`
+/// and `ResourceOpsTests`. Each needs the same helpers, thus the helpers are
+/// in this one file.
 ///
 /// `WatcherTestSupport` gives the temporary directory, thus this file makes
 /// none of its own.
@@ -84,15 +84,6 @@ enum LayerFixtureSupport {
         let url = try preparedFileURL(at: relativePath, in: directory)
         try Data(pngSignature).write(to: url, options: .atomic)
         return url
-    }
-
-    /// The path of `url` with each symbolic link resolved, which is the form
-    /// `PathConfinement` gives back.
-    ///
-    /// - Parameter url: The URL of a file that exists.
-    /// - Returns: The resolved, standardized path.
-    static func resolvedPath(of url: URL) -> String {
-        url.resolvingSymlinksInPath().standardizedFileURL.path
     }
 
     /// The byte that starts a PNG file. Its high bit is set, thus it can start
