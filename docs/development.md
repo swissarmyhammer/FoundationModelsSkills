@@ -62,6 +62,41 @@
 
 ## Development
 
+- **The loading boundary: the raw work of loading lives in
+  `FoundationModelsExtras`** *(the user, 2026-09-20)*. This package keeps only
+  the work of the skill schema. One table states the rule, and plan.md §3
+  states it as well:
+
+  | # | where | what does the work |
+  |---|---|---|
+  | 1 | Extras | `Marketplace` — fetch a marketplace, and materialize a layer root |
+  | 2 | Extras | `DotfolderStack` — find a file in the combined view; say which layer gave it; confine the path |
+  | 3 | Extras | `DotfolderWatcher` — say that a layer root changed |
+  | 4 | Extras | `FrontmatterDocumentStack` — split the frontmatter from the body |
+  | 5 | Extras | `StenciledDotfolderStack` — Stencil, with the trust and the partial scope of the layer |
+  | 6 | here | everything above it: the skill schema |
+
+  Row 6 is the decode of the frontmatter into `SkillFrontmatter`, the
+  validation rules, the catalog, the two grammar passes of the skill format
+  (arguments and shell injection), `allowed-tools` and the script gate, the
+  resource operations as contracts (the paging, the caps, the kinds, the
+  correctives), the search, the operations, and the CLI.
+
+  Thus no file of `Sources/FoundationModelsSkills/` opens a file, watches a
+  folder, splits a frontmatter, or runs Stencil. A change that needs one of
+  those five goes to `FoundationModelsExtras`, and this package calls it.
+  `Tests/FoundationModelsSkillsTests/LoadingBoundaryTests.swift` holds one
+  table of the forbidden names, with the reason of each one, and it walks
+  every Swift file of the package. Its walk reads the full text of a file,
+  comments included, thus a stale doc comment fails it as well as a line of
+  code. Two files carry an exemption, and the suite holds each exemption to a
+  real line: `CLI/StandardStream.swift` names `FileHandle` for the two
+  standard streams, and `SeamReexports.swift` names `TemplateEngine` in the
+  comment that tells a host what the re-export of Extras gives.
+
+  `Resources/ScriptGate.swift` is in no rule of the table, and its doc comment
+  says why: its `fnmatch` call matches a path against the glob of an
+  `allowed-tools` grant, which is text work on two strings.
 - **Sibling dependencies are remote, not local `path:`.**
   `FoundationModelsExtras` and `FoundationModelsMetadataRegistry` both pin
   to `git@github.com:swissarmyhammer/<name>.git` (`main` branch) in

@@ -78,10 +78,26 @@ comments:
     - evidence: `swift build --build-tests` — build complete, 0 warnings. `swift test` — 570 tests in 56 suites passed, 0 failures, 0 skipped.
     - next: ready for review.
   timestamp: 2026-09-21T14:57:00.126662+00:00
+- actor: claude-code
+  id: 01m327nsdsg3zkhp1vn7btnrbb
+  text: |-
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (40e71f4) — 0 findings, 0 confirmed, 0 refuted, 7 validator runs attempted, 0 failed. 5 document files had no matching validator; 4 board files were excluded by `.reviewignore`.
+    - next: task moved to done.
+  timestamp: 2026-09-21T14:59:43.673428+00:00
+- actor: wballard
+  id: 01m327nznz7yy7adznjtjvnzbw
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 6 files
+    - test: green — swift test, 570 passed, 0 warnings
+    - commit: 40e71f4
+    - review: clean — 0 findings; task moved to done
+  timestamp: 2026-09-21T14:59:50.079629+00:00
 depends_on:
 - 01M2XD7YJF87V9PF0EPSG5CF2N
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: ff8e80
 title: Correct marketplace.md and the host documents for the Extras home of the marketplace
 ---
 ## What

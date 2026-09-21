@@ -29,6 +29,11 @@ internal enum ScriptGateResult {
 ///    so there is no third code path here to enforce it -- a host that
 ///    needs this guarantee enforces it itself, at the point it decides
 ///    which roots to construct a registry over.
+///
+/// The gate opens no file, thus it stands inside the loading boundary of
+/// plan.md §3 and `LoadingBoundaryTests` names it in no rule: the `fnmatch`
+/// call below matches a path against the glob of an `allowed-tools` grant,
+/// which is text work on two strings.
 internal enum ScriptGate {
     /// Evaluates gate 1 (host policy) alone, independent of any id/path
     /// resolution.

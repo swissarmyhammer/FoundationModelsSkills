@@ -62,7 +62,7 @@ public enum SkillsCLI {
     ///   another command. A host writes the output of a result with a
     ///   non-zero exit code to standard error.
     public static func runMarketplace(
-        arguments: [String], context: MarketplaceCLIContext = MarketplaceCLIContext()
+        arguments: [String], context: MarketplaceCLIContext = .currentProcess
     ) async -> MarketplaceCLIResult? {
         guard arguments.first == Self.marketplaceCommandName else {
             return nil

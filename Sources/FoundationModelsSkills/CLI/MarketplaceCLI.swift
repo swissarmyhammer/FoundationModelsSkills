@@ -16,6 +16,9 @@ import Operations
 /// ```swift
 /// let result = await MarketplaceCLI.run(arguments: ["list"])
 /// ```
+///
+/// The default context is ``MarketplaceCLIContext/currentProcess``, thus the
+/// call above reads the `skills` stack of the working folder of this process.
 public struct MarketplaceCLI: AsyncParsableCommand {
     /// The name of the group, and the argument that names it.
     public static let commandName = "marketplace"
@@ -47,7 +50,7 @@ public struct MarketplaceCLI: AsyncParsableCommand {
     /// - Returns: The output of the subcommand and the exit code of the run.
     ///   A failure gives the text of the error and a non-zero exit code.
     public static func run(
-        arguments: [String], context: MarketplaceCLIContext = MarketplaceCLIContext()
+        arguments: [String], context: MarketplaceCLIContext = .currentProcess
     ) async -> MarketplaceCLIResult {
         let session = MarketplaceCLISession(context: context)
         return await MarketplaceCLISession.$current.withValue(session) {

@@ -272,6 +272,35 @@ struct MarketplaceCLITests {
         #expect(result.output.contains("nothing-here"))
     }
 
+    // MARK: - The folders of the context
+
+    @Test func theWorkingDirectoryOfTheContextHoldsTheProjectLayer() throws {
+        let folders = try MarketplaceCLIFolders()
+        defer { folders.remove() }
+
+        let projectLayer = try #require(
+            folders.context.stack.layers.first { $0.source == .project })
+
+        #expect(
+            projectLayer.root
+                == folders.workingDirectory.appendingPathComponent(
+                    ".\(MarketplaceCLIContext.dotfolderName)", isDirectory: true))
+    }
+
+    @Test func addWritesTheSourceUnderTheFoldersThatTheContextNames() async throws {
+        let folders = try MarketplaceCLIFolders()
+        defer { folders.remove() }
+        let repository = try GitFixtureRepository()
+
+        let result = await MarketplaceCLI.run(
+            arguments: ["add", repository.url, "--alias", Self.alias], context: folders.context)
+
+        #expect(result.exitCode == 0)
+        let saved = try MarketplaceConfig.load(from: folders.context.stack, includeProject: false)
+        #expect(saved.marketplaces == [MarketplaceSource(repository.url, alias: Self.alias)])
+        #expect(FileManager.default.fileExists(atPath: folders.userFile.path))
+    }
+
     // MARK: - The group next to the driver tree
 
     @Test func theGroupRunsOnlyWhenTheArgumentsNameIt() async throws {
@@ -363,6 +392,65 @@ private struct MarketplaceCLIFixture {
     /// - Returns: What the run gave.
     func run(_ arguments: [String]) async -> MarketplaceCLIResult {
         await MarketplaceCLI.run(arguments: arguments, context: context)
+    }
+
+    /// Removes the temporary folder and everything in it.
+    func remove() {
+        try? FileManager.default.removeItem(at: root)
+    }
+}
+
+/// A context that ``MarketplaceCLIContext/init(workingDirectory:environment:)``
+/// built, over temporary folders alone.
+///
+/// ``MarketplaceCLIFixture`` gives the stack itself, thus it proves nothing
+/// about the initializer that the command entry points use. This fixture
+/// gives that initializer a temporary working folder and an environment that
+/// sends the user layer and the cache into the same temporary folder. Thus
+/// the case reads the real home folder nowhere, and a command that reached
+/// past the folders of its caller shows up as a file that is not there.
+private struct MarketplaceCLIFolders {
+    /// The environment name that moves the user layer of a dotfolder stack.
+    private static let configHomeVariable = "XDG_CONFIG_HOME"
+
+    /// The name of the folder that stands in for the configuration home.
+    private static let configDirectoryName = "config"
+
+    /// The name of the folder that stands in for the working folder.
+    private static let workingDirectoryName = "working"
+
+    /// The name of the folder that holds the marketplace cache.
+    private static let cacheDirectoryName = "cache"
+
+    /// The temporary folder that holds every other folder of the fixture.
+    private let root: URL
+
+    /// The folder that the context takes as its working folder.
+    let workingDirectory: URL
+
+    /// The context under test.
+    let context: MarketplaceCLIContext
+
+    /// The `marketplaces.yaml` path of the user layer.
+    let userFile: URL
+
+    /// Makes the temporary folders and the context. No layer holds a file yet.
+    ///
+    /// - Throws: The error of a folder write, or of a missing user layer.
+    init() throws {
+        root = try MarketplaceTestSupport.makeTempDirectory()
+        workingDirectory = root.appendingPathComponent(
+            Self.workingDirectoryName, isDirectory: true)
+        context = MarketplaceCLIContext(
+            workingDirectory: workingDirectory,
+            environment: [
+                Self.configHomeVariable: root.appendingPathComponent(
+                    Self.configDirectoryName, isDirectory: true).path,
+                MarketplaceStore.cacheDirectoryVariable: root.appendingPathComponent(
+                    Self.cacheDirectoryName, isDirectory: true).path,
+            ])
+        userFile = try #require(context.stack.layers.first { $0.source == .user })
+            .root.appendingPathComponent(MarketplaceConfig.fileName)
     }
 
     /// Removes the temporary folder and everything in it.

@@ -23,7 +23,7 @@ internal final class MarketplaceCLISession: Sendable {
     /// else a new session over the process environment that writes each line
     /// to standard output.
     static var active: MarketplaceCLISession {
-        current ?? MarketplaceCLISession(context: MarketplaceCLIContext(), collectsLines: false)
+        current ?? MarketplaceCLISession(context: .currentProcess, collectsLines: false)
     }
 
     /// Where the subcommands read their configuration and their cache.

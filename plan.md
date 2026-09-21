@@ -68,12 +68,13 @@ leaf — not built here *(decision #29)*.
 ├─ Layer 3  SkillsRegistry  (discovery + domain validation + semantics) ──────┤
 │   dir-shaped discovery over the stack (name/SKILL.md, file-level override), │
 │   Yams frontmatter decode, agentskills.io + Claude validation, visibility,  │
-│   arguments, render pipeline (§5), file watcher, reload → injectable        │
-│   metadata, generic call(id:arguments:) — built ON the Extras substrate     │
+│   arguments, render pipeline (§5), reload → injectable metadata,            │
+│   generic call(id:arguments:) — built ON the Extras substrate               │
 ├─ Layers 1–2  FoundationModelsExtras  (imported substrate) ──────────────────┤
 │   DotfolderStack — one way to derive layer roots (host may supply its own); │
 │   nearest/locate/enumerate/content, source tracking, path-safety checks     │
 │   FrontmatterDocument — textual (frontmatter, body) split; no YAML dep      │
+│   DotfolderWatcher — says that a layer root changed, with a debounce        │
 │   TemplateEngine — Stencil facade: _partials/ includes via DotfolderLoader, │
 │   trusted/untrusted split, context > env > well-known precedence ladder     │
 └──────────────────────────────────────────────────────────────────────────┘
@@ -93,10 +94,9 @@ leaf — not built here *(decision #29)*.
   directories, so the registry asks `DotfolderStack` for the layer directories of each id
   and reads the combined view over them (#32), provenance from the layer that gave the
   winning `SKILL.md`; (b) **YAML decoding** (Yams) over the split that
-  `FrontmatterDocumentStack` does; (c) the **file watcher** — the stack locates,
-  it never watches; we watch every layer root and rebuild (§7); (d) all **skill
-  semantics** — validation, visibility, arguments, and the render pipeline's
-  `$`-substitution and shell passes (§5).
+  `FrontmatterDocumentStack` does; (c) all **skill semantics** — validation,
+  visibility, arguments, and the render pipeline's `$`-substitution and shell
+  passes (§5).
 - **`SkillsRegistry`** (Layer 3, the source of truth) — wraps the `.skills`
   `DotfolderStack`; adds discovery, agentskills.io + Claude validation, the visibility
   model (§6), argument handling (§5), and **reload → injectable metadata** (§7). Exposes a
@@ -104,6 +104,33 @@ leaf — not built here *(decision #29)*.
 - **FM adapter** (Layer 4) — the skill operation structs and their fused `OperationTool`,
   the `SkillSearchAgent`, preload injection, the `commandListing()`, and the CLI driver —
   all reading the registry.
+
+### The loading boundary *(the user, 2026-09-20)*
+
+The raw work of loading a skill lives in `FoundationModelsExtras`. This
+package keeps only the work of the skill schema. One table states the rule:
+
+| # | where | what does the work |
+|---|---|---|
+| 1 | Extras | `Marketplace` — fetch a marketplace, and materialize a layer root |
+| 2 | Extras | `DotfolderStack` — find a file in the combined view; say which layer gave it; confine the path |
+| 3 | Extras | `DotfolderWatcher` — say that a layer root changed |
+| 4 | Extras | `FrontmatterDocumentStack` — split the frontmatter from the body |
+| 5 | Extras | `StenciledDotfolderStack` — Stencil, with the trust and the partial scope of the layer |
+| 6 | here | everything above it: the skill schema |
+
+Row 6 is the decode of the frontmatter into `SkillFrontmatter`, the validation
+rules, the catalog, the two grammar passes of the skill format (arguments and
+shell injection), `allowed-tools` and the script gate, the resource operations
+as contracts (the paging, the caps, the kinds, the correctives), the search,
+the operations, and the CLI. No file of `Sources/FoundationModelsSkills/`
+opens a file, watches a folder, splits a frontmatter, or runs Stencil.
+
+`Tests/FoundationModelsSkillsTests/LoadingBoundaryTests.swift` guards the
+rule. It holds one table of forbidden names, with the reason of each one, and
+it walks every Swift file of the package. The walk reads the full text of a
+file, comments included, thus a stale doc comment fails it as well as a line
+of code.
 
 ## 4. Identity & naming
 

@@ -23,7 +23,12 @@
 //
 // The first line below gives a host `DotfolderStack`, and with it the rest of
 // the Layer 1-2 substrate (`FrontmatterValue`, `QuarantinedText`,
-// `SlashCommand`) that this package's own public API already names.
+// `SlashCommand`) that this package's own public API already names. The same
+// line gives a host the render machinery of the loading boundary, which this
+// package holds none of: `TemplateEngine` and the stenciled stack above it.
+// `LoadingBoundaryTests` forbids the name `TemplateEngine` everywhere under
+// `Sources/` and exempts this one file, because this comment states what the
+// re-export gives rather than doing the work itself.
 //
 // The plain `import` lines in `Search/SkillSearchAgent.swift` and
 // `CLI/SkillsCLI.swift` stay as they are. A re-export makes a module's names
