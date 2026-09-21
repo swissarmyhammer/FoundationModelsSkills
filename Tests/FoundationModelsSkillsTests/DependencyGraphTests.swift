@@ -117,6 +117,36 @@ struct DependencyGraphTests {
         "actor", "class", "enum", "extension", "protocol", "struct",
     ]
 
+    /// The test folder, relative to the package root.
+    private static let testsPath = "Tests"
+
+    /// The example folder, relative to the package root.
+    private static let examplesPath = "Examples"
+
+    /// What the fixture walk reads, relative to the package root: the shipped
+    /// sources, the tests, and the examples. The documentation stands outside
+    /// it, because a document of this package may still tell a reader where
+    /// the catalog fixtures live now.
+    private static let fixtureWalkPaths = [sourcesPath, testsPath, examplesPath]
+
+    /// The name of the deleted catalog-fixture folder under `Examples/`.
+    ///
+    /// The name joins from two parts when the case runs. The walk below reads
+    /// `Tests/`, thus one whole literal here would make this file report
+    /// itself, and a walk that can never come back empty proves nothing. The
+    /// join keeps the whole name off every line of every file, thus the walk
+    /// needs no exception for its own suite.
+    private static let deletedFixtureFolderName = "marketplace" + "-fixtures"
+
+    /// The opening text of a call of the deleted fixture helper, joined from
+    /// two parts for the reason ``deletedFixtureFolderName`` states.
+    private static let deletedFixtureHelperCall = "marketplaceCatalog" + "("
+
+    /// Each name of the deleted catalog fixtures that no file may hold now.
+    private static let deletedFixtureNames = [
+        deletedFixtureFolderName, deletedFixtureHelperCall,
+    ]
+
     /// The decision record, relative to the package root.
     ///
     /// ``prosePaths`` deliberately leaves this file out, because the record
@@ -314,6 +344,61 @@ struct DependencyGraphTests {
     /// - Returns: `true` when the line declares a type of that name.
     private static func declares(_ name: String, _ line: String) -> Bool {
         typeDeclarationKeywords.contains { line.contains("\($0) \(name)") }
+    }
+
+    /// Proves that the catalog fixtures of the marketplace are gone from this
+    /// package.
+    ///
+    /// The `Marketplace` product of `FoundationModelsExtras` owns the
+    /// marketplace, and it holds its own copy of the catalog fixtures. No
+    /// test of this package reads a catalog now. A folder that stays behind
+    /// reads to the next author as a fixture that some suite still needs, and
+    /// it would grow stale beside the copy that the tests really read.
+    @Test("the marketplace catalog fixtures are gone from Examples/")
+    func holdsNoMarketplaceCatalogFixtures() {
+        let folder = FixtureLibrary.packageRoot()
+            .appendingPathComponent(Self.examplesPath, isDirectory: true)
+            .appendingPathComponent(Self.deletedFixtureFolderName, isDirectory: true)
+        #expect(
+            !FileManager.default.fileExists(atPath: folder.path),
+            """
+            \(Self.examplesPath)/\(Self.deletedFixtureFolderName)/ must be gone: the Marketplace \
+            product of FoundationModelsExtras holds the catalog fixtures now, and no test of this \
+            package reads them.
+            """
+        )
+    }
+
+    /// Proves that no file of this package names the deleted catalog fixtures
+    /// or the fixture helper that read them.
+    ///
+    /// The case above reads the folder, and this one reads the text. A path
+    /// that names a folder which is gone fails only when a test runs it, thus
+    /// such a path can stand for a long time unread. The walk finds it at
+    /// once.
+    ///
+    /// The walk reads `Tests/` as well, which the Router walk above cannot
+    /// do. Nothing keeps a disclosure note about the catalog fixtures, thus
+    /// there is no note to pass over, and the two names join from parts at
+    /// run time thus this file holds neither of them whole.
+    @Test("no file under Sources, Tests or Examples names the deleted marketplace fixtures")
+    func namesNoDeletedMarketplaceFixture() {
+        let root = FixtureLibrary.packageRoot()
+        let offenders = Self.fixtureWalkPaths.flatMap { path in
+            Self.deletedFixtureNames.flatMap {
+                Self.linesNaming($0, under: root.appendingPathComponent(path), in: root)
+            }
+        }
+        #expect(
+            offenders.isEmpty,
+            """
+            No file under \(Self.fixtureWalkPaths.joined(separator: "/, "))/ may name \
+            \(Self.deletedFixtureFolderName) or \(Self.deletedFixtureHelperCall): the catalog \
+            fixtures and the helper that read them are deleted, and the Marketplace product of \
+            FoundationModelsExtras holds its own copy of the fixtures; found: \
+            \(offenders.joined(separator: ", "))
+            """
+        )
     }
 
     /// Proves that no documentation line gives the retired operation-tool

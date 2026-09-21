@@ -45,10 +45,26 @@ comments:
     - evidence: `swift build --build-tests` — 0 warnings, build complete. `swift test` — 584 tests passed, 0 failed, 0 skipped, 54 suites passed.
     - next: none. The build and the test suite are clean.
   timestamp: 2026-09-21T12:56:16.765245+00:00
+- actor: claude-code
+  id: 01m320rncbk86xtghjb1rgx6h0
+  text: |-
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (786df68) — 0 findings, 0 confirmed, 0 refuted, 7 attempted, 0 failed. 1 file reviewed; 4 `.kanban/` files left out by `.reviewignore`.
+    - next: task moved to done. No open finding stays.
+  timestamp: 2026-09-21T12:58:57.803513+00:00
+- actor: wballard
+  id: 01m320s3zpagws9ynpmvea8818
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 1 file
+    - test: green — swift test, 584 passed, 0 warnings
+    - commit: 786df68
+    - review: clean — 0 findings; task moved to done
+  timestamp: 2026-09-21T12:59:12.758210+00:00
 depends_on:
 - 01M2XD7YJF87V9PF0EPSG5CF2N
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: ff8880
 title: Delete the Marketplace exception of the frontmatter-split guard
 ---
 ## What
