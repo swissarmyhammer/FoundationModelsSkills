@@ -35,8 +35,31 @@ comments:
     - evidence: `swift test` — 564 tests in 53 suites passed, 0 failed, 0 skipped, no warning
     - next: /commit
   timestamp: 2026-09-22T16:40:21.012192+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01m34zvb8a18vkrffxawztayej
+  text: |-
+    ### commit — changed
+    - evidence: 9901b19 feat(slash-commands): render the typed text through the full pipeline
+    - next: /review 01M34XXTN3HQ3VFJ0KHKEZXK6C HEAD~1..HEAD
+  timestamp: 2026-09-22T16:40:40.458974+00:00
+- actor: claude-code
+  id: 01m34zymhfg1nygvcg9cbz1vqm
+  text: |-
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` — 0 findings, 7 validator runs attempted, 0 failed; 3 files reviewed (the two Swift sources and the test file); CHANGELOG.md and plan.md matched no validator; .kanban/ is in .reviewignore
+    - next: move to done
+  timestamp: 2026-09-22T16:42:28.271788+00:00
+- actor: claude-code
+  id: 01m34zz41mxfwvh19jfvv9zp6z
+  text: |-
+    ### finish iteration 1 — review clean
+    - implement: changed — Sources/FoundationModelsSkills/Registry/SkillsRegistry+SlashCommands.swift, Sources/FoundationModelsSkills/Registry/SkillsRegistry.swift, Tests/FoundationModelsSkillsTests/SlashCommandProvidingTests.swift, plan.md, CHANGELOG.md
+    - test: green — `swift test`, 564 tests in 53 suites passed, 0 failed, 0 skipped, no warning
+    - commit: 9901b19
+    - review: clean — no finding
+  timestamp: 2026-09-22T16:42:44.148165+00:00
+position_column: done
+position_ordinal: ff9180
 title: Render the slash-command text into $ARGUMENTS through the pipeline
 ---
 ## What
