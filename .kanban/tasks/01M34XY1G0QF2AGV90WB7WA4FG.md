@@ -21,11 +21,34 @@ comments:
     - evidence: swift test — 564 tests in 53 suites passed, 0 failed, 0 skipped, 0 warnings; exit 0
     - next: /commit
   timestamp: 2026-09-22T16:54:25.273887+00:00
+- actor: claude-code
+  id: 01m350n05dvyj34pg7h5kh0hpz
+  text: |-
+    ### commit — changed
+    - evidence: 342366c feat(listing): synthesize a [name] placeholder for a parameter with no hint
+    - next: /review HEAD~1..HEAD
+  timestamp: 2026-09-22T16:54:41.069004+00:00
+- actor: claude-code
+  id: 01m350qsrxytpx48e4x51aczrx
+  text: |-
+    ### review — clean
+    - evidence: review sha HEAD~1..HEAD (342366c) — 0 findings, 0 confirmed, 0 refuted, 7 validator runs; 2 files reviewed (SkillsRegistry.swift, SlashCommandProvidingTests.swift); CHANGELOG.md and .kanban/ not reviewed (no validator, ignore rule)
+    - next: card moved to done
+  timestamp: 2026-09-22T16:56:12.829970+00:00
+- actor: claude-code
+  id: 01m350qvzvhk2f7xz1jjhe61vb
+  text: |-
+    ### finish iteration 1 — review clean, card moved to done
+    - implement: changed — Sources/FoundationModelsSkills/Registry/SkillsRegistry.swift, Tests/FoundationModelsSkillsTests/SlashCommandProvidingTests.swift, CHANGELOG.md
+    - test: green — swift test, 564 tests in 53 suites passed, 0 failed, 0 skipped, 0 warnings
+    - commit: 342366c
+    - review: clean — no file:line
+  timestamp: 2026-09-22T16:56:15.099982+00:00
 depends_on:
 - 01M34XXTN3HQ3VFJ0KHKEZXK6C
 - 01M34XXTWAM72JQ59NAMZW32K2
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: ff9280
 title: Synthesize a [name] placeholder for a parameter with no hint
 ---
 ## What
