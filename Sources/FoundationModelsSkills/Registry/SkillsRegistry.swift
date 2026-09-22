@@ -850,16 +850,16 @@ public struct SkillsRegistry: Sendable {
     }
 
     /// Summarizes one parameter as a display placeholder: its own
-    /// `argument-hint:` token text when it has one, otherwise a
-    /// synthesized `<name>`/`[name]` (optionally `...`-suffixed for a
-    /// variadic parameter) built from `required`/`variadic`.
+    /// `argument-hint:` token text when it has one, otherwise the
+    /// synthesized `[name]`.
+    ///
+    /// A skill demands no argument, thus the synthesized form is always the
+    /// bracketed one. A hint token is shown as written.
     ///
     /// - Parameter parameter: The parameter to summarize.
     /// - Returns: The placeholder summary text.
     internal static func parameterSummary(parameter: SkillParameter) -> String {
-        if let placeholder = parameter.placeholder { return placeholder }
-        let name = parameter.variadic ? "\(parameter.name)..." : parameter.name
-        return parameter.required ? "<\(name)>" : "[\(name)]"
+        parameter.placeholder ?? "[\(parameter.name)]"
     }
 
     // MARK: - metadata()

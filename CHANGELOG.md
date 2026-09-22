@@ -5,6 +5,24 @@ change is at the top.
 
 ## Unreleased
 
+### Changed: the synthesized command hint is `[name]`, never `<name>`
+
+This change breaks no source. It changes one text: the `argumentHint` of a
+`SlashCommand` whose skill declares `arguments:` and no `argument-hint:`. A
+host that compared that hint with the `<name>` form must take the `[name]`
+form.
+
+**Cause.** `SkillsRegistry.parameterSummary(parameter:)` read the `required`
+flag of the parameter and gave `<name>` when the flag was set. The flag was set
+for each parameter with no hint token. No argument is required, thus the
+`<name>` form showed the user a rule that does not exist.
+
+**What changed.**
+
+- A parameter with no `argument-hint:` token gets the hint `[name]`. An
+  authored `argument-hint:` token is shown as written.
+- `parameterSummary(parameter:)` reads `placeholder` and `name` only.
+
 ### Changed: each `SlashCommand` body is `.rendered` through the full pipeline
 
 This change breaks no source. It changes the body kind of each `SlashCommand`

@@ -117,7 +117,7 @@ struct SlashCommandProvidingTests {
 
     // MARK: - argumentHint assembly
 
-    @Test func commandWithASingleRequiredHintedParameterGetsThatPlaceholderAsItsHint() async throws {
+    @Test func commandWithASingleHintedParameterGetsThatPlaceholderAsItsHint() async throws {
         let registry = SkillsRegistry(roots: Self.fixtureRoots)
         let commands = await registry.commands(workingDirectory: Self.fixtureRoots[0])
         let commit = try #require(commands.first { $0.name == "commit" })
@@ -158,7 +158,7 @@ struct SlashCommandProvidingTests {
         #expect(command.argumentHint == "<target> [mode] files...")
     }
 
-    @Test func commandWithUnhintedArgumentsSynthesizesARequiredPlaceholder() async throws {
+    @Test func commandWithUnhintedArgumentsSynthesizesABracketedPlaceholder() async throws {
         let root = try Self.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         try Self.writeSkillFixture(
@@ -177,7 +177,7 @@ struct SlashCommandProvidingTests {
         let registry = SkillsRegistry(roots: [root])
         let commands = await registry.commands(workingDirectory: root)
         let command = try #require(commands.first { $0.name == "unhinted" })
-        #expect(command.argumentHint == "<target>")
+        #expect(command.argumentHint == "[target]")
     }
 
     // MARK: - commandUpdates reload tick
