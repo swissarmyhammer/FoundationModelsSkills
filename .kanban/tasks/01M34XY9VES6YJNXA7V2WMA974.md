@@ -27,11 +27,35 @@ comments:
     - evidence: `swift test` — 562 tests in 53 suites passed, 0 failed, 0 skipped, 0 warnings
     - next: /commit
   timestamp: 2026-09-22T17:03:34.455796+00:00
+- actor: claude-code
+  id: 01m35179kwefpzdpp5wvbps5nq
+  text: |-
+    ### commit — changed
+    - evidence: 6366e8e refactor(listing): remove required from SkillParameter and parameterDetails from SkillMetadata
+    - next: /review 01M34XY9VES6YJNXA7V2WMA974 HEAD~1..HEAD
+  timestamp: 2026-09-22T17:04:40.572377+00:00
+- actor: claude-code
+  id: 01m351af9qg8jdnd0jer3pjf3b
+  text: |-
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (6366e8e) — 0 findings, 0 confirmed, 0 refuted; 5 files reviewed, 7 validator runs; `.kanban/` excluded by `.reviewignore`, `CHANGELOG.md` matched no validator
+    - prior findings: none
+    - next: the card moves to done
+  timestamp: 2026-09-22T17:06:24.695457+00:00
+- actor: claude-code
+  id: 01m351atsx32wr0v896z8c0r58
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — Sources/FoundationModelsSkills/Listing/SkillParameter.swift, Sources/FoundationModelsSkills/Listing/ParameterInference.swift, Sources/FoundationModelsSkills/Registry/SkillsRegistry.swift, Tests/FoundationModelsSkillsTests/ParameterInferenceTests.swift, Tests/FoundationModelsSkillsTests/SkillListingTests.swift, CHANGELOG.md
+    - test: green — `swift test`, 562 tests in 53 suites passed, 0 failed, 0 skipped, 0 warnings
+    - commit: 6366e8e
+    - review: clean — 0 findings over HEAD~1..HEAD
+  timestamp: 2026-09-22T17:06:36.477721+00:00
 depends_on:
 - 01M34XXTWAM72JQ59NAMZW32K2
 - 01M34XY1G0QF2AGV90WB7WA4FG
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: ff9380
 title: Remove required from SkillParameter and ParameterInference
 ---
 ## What
