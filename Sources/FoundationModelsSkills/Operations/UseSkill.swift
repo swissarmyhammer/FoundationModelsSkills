@@ -5,9 +5,9 @@ import Operations
 /// The outcome of a `use skill` operation: either the rendered body or a
 /// corrective message (plan.md §7).
 ///
-/// An unusable id (unknown, stale, or model-hidden) or a missing required
-/// argument is the two conditions `UseSkill.execute(in:)` fails
-/// correctively on.
+/// An unusable id (unknown, stale, or model-hidden) is the one condition
+/// `UseSkill.execute(in:)` fails correctively on. No argument is required:
+/// a reference with no value renders as an empty string.
 ///
 /// The success value is the rendered body and nothing else. Both cases
 /// encode as one JSON string, and `SkillsCatalogTool` gives the model that
@@ -21,9 +21,10 @@ public typealias UseSkillOutput = CorrectiveOutcome<String>
 /// shared, atomically-swappable catalog storage -- so hot-reload between
 /// turns is invisible to this operation: an id that only just appeared (or
 /// disappeared) is resolved correctly on the very next dispatch. An
-/// unknown, stale, or model-hidden id and a missing required argument both
-/// return a corrective message rather than throwing (decision #22); extra
-/// trailing arguments ride the §5 `ARGUMENTS:` auto-append and never fail.
+/// unknown, stale, or model-hidden id returns a corrective message rather
+/// than throwing (decision #22). No argument is required: a missing one
+/// renders as an empty string, and extra trailing arguments ride the §5
+/// `ARGUMENTS:` auto-append. Neither fails.
 public struct UseSkill: OperationDefinition {
     /// The shared context this operation dispatches against.
     public typealias Context = SkillsToolContext
@@ -121,8 +122,7 @@ public struct UseSkill: OperationDefinition {
     /// - Parameter context: The shared context supplying the live registry
     ///   and which entries `context.visibilityPredicate` accepts.
     /// - Returns: `.success(_:)` carrying the rendered body on success;
-    ///   `.corrective(_:)` for an unusable id or a missing required
-    ///   argument.
+    ///   `.corrective(_:)` for an unusable id.
     /// - Throws: Nothing recoverable; the signature carries `throws` to
     ///   satisfy the `OperationDefinition` protocol requirement. Rethrows
     ///   whatever `SkillsRegistry.call(id:arguments:)` throws other than
@@ -135,15 +135,8 @@ public struct UseSkill: OperationDefinition {
                 Self.unusableIDMessage(id: id, catalog: catalog, visibilityPredicate: context.visibilityPredicate))
         }
 
-        let supplied = arguments ?? []
-        if let missingParameterName = Self.firstMissingRequiredParameterName(
-            parameters: entry.parameterDetails, suppliedCount: supplied.count)
-        {
-            return .corrective(Self.missingArgumentMessage(name: missingParameterName))
-        }
-
         do {
-            return .success(try await context.registry.call(id: id, arguments: supplied))
+            return .success(try await context.registry.call(id: id, arguments: arguments ?? []))
         } catch is UnknownSkillError {
             // The live catalog changed between the lookup above and this
             // call (a race with a hot reload) -- report it the same way as
@@ -175,37 +168,5 @@ public struct UseSkill: OperationDefinition {
             return "\(prefix), and no skills are currently usable."
         }
         return "\(prefix). Currently usable ids: \(validIDs.joined(separator: ", "))."
-    }
-
-    // MARK: - Missing required argument (plan.md §6.1)
-
-    /// The corrective message naming a missing required argument.
-    ///
-    /// - Parameter name: The missing parameter's name.
-    /// - Returns: The corrective message.
-    private static func missingArgumentMessage(name: String) -> String {
-        "Missing required argument `\(name)` for this skill."
-    }
-
-    /// The name of the first required parameter `suppliedCount` doesn't
-    /// cover, or `nil` when every required parameter has a value.
-    ///
-    /// Consults `SkillParameter.required` directly (plan.md §6.1) rather
-    /// than re-deriving requiredness from a display placeholder's bracket
-    /// syntax -- `ParameterInference` owns the optionality rules, including
-    /// the bare-token rule (an unbracketed `argument-hint: env` is optional
-    /// and never draws this corrective). The returned name is
-    /// `SkillParameter.name`, which `arguments:` supplies authoritatively
-    /// when present -- never the hint token's inner text.
-    ///
-    /// - Parameters:
-    ///   - parameters: The target skill's structured parameters, in
-    ///     position order.
-    ///   - suppliedCount: The number of arguments actually supplied.
-    /// - Returns: The first missing required parameter's name, or `nil`.
-    private static func firstMissingRequiredParameterName(
-        parameters: [SkillParameter], suppliedCount: Int
-    ) -> String? {
-        parameters.first { $0.position >= suppliedCount && $0.required }?.name
     }
 }

@@ -273,7 +273,6 @@ struct SkillListing {
 struct SkillParameter {
   let name: String                // from `arguments:` or the hint token
   let position: Int               // 0-based, matches $0/$1/$ARGUMENTS[N]
-  let required: Bool
   let variadic: Bool              // trailing `...`
   let placeholder: String?        // raw hint text for display
 }
@@ -282,17 +281,12 @@ struct SkillParameter {
 Parameters merge three sources by position — precedence `arguments:` > `argument-hint:` > body
 inference:
 - **`arguments:`** — authoritative names for `$name` and order.
-- **`argument-hint:`** — display + optionality (`<x>` required, `[x]` optional, trailing `...`
-  variadic). **Bare-token rule:** a token with neither bracket form — a bare word (`env`) or a
-  malformed placeholder (`[env`, unclosed) — is **optional**. The hint is display text, and only
-  the explicit `<x>` form marks a token required; a display-only word must never block `use skill`
-  with a missing-argument corrective. A malformed token keeps its raw text verbatim as both
-  placeholder and name. This is distinct from a position **no** hint token describes (`arguments:`
-  past the hint's arity, or body inference), which stays required — there the source is silent.
-  The missing-argument corrective names the structured `SkillParameter.name` (`arguments:` when
-  present), never the hint token's inner text.
+- **`argument-hint:`** — display text only: each token keeps its raw text, and a trailing `...`
+  marks a variadic tail.
 - **Body inference** — when neither is present, scan the body for `$0`/`$N`/`$ARGUMENTS[N]` and
   synthesize positional params so the listing is never empty.
+
+Every argument is optional: a reference with no value renders as an empty string (§5).
 
 `acceptsTrailingArguments` is true only when the body **references** `$ARGUMENTS` (a
 meaningful free-form tail the UI should prompt for). The §5 auto-append (`ARGUMENTS: <value>`
@@ -312,7 +306,7 @@ throws** (upstream's return-don't-throw + retry-cap pattern).
 |---|---|---|
 | `search skill` | `query` (req), `limit?` (default 5) | Delegates to the **`SkillSearchAgent`** (`MetadataSearcher`, #26) over the **model-visible** catalog → returns ranked matches — id, rendered description, parsed parameter summary (§6.1) — best first, plus `total` so the model knows to raise `limit`. Primary discovery path: the catalog lives in the search agent, never the root. Empty/blank `query` → corrective message. |
 | `list skill` | `filter?` (case-insensitive substring over id + description) | The model-visible catalog (full or filtered) on demand — same row shape as `search skill`, catalog order, no session, no ranking, no tokens. For small sets or explicit enumeration. A `filter` matching nothing returns an empty list (not an error) with `total: 0`. |
-| `use skill` | `id` (req), `arguments?` (positional strings, §5 quoting) | Dereferences the **live registry at dispatch time** → renders the §5 pipeline with `arguments` → returns the rendered body. Unknown/stale/model-hidden id → corrective message **carrying the current id list** (#22); a missing required argument (§6.1) → corrective message naming it; extra trailing args ride the §5 `ARGUMENTS:` auto-append, never an error. |
+| `use skill` | `id` (req), `arguments?` (positional strings, §5 quoting) | Dereferences the **live registry at dispatch time** → renders the §5 pipeline with `arguments` → returns the rendered body. Unknown/stale/model-hidden id → corrective message **carrying the current id list** (#22); extra trailing args ride the §5 `ARGUMENTS:` auto-append, never an error. |
 
 **Typed outputs** (upstream `AnyOperation.run` JSON-encodes every `Output: Encodable` —
 the Shelltool pattern; corrective messages stay plain strings per the

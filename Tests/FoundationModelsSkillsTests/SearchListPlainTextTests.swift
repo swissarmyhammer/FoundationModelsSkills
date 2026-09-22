@@ -32,8 +32,8 @@ struct SearchListPlainTextTests {
     /// A `list skill` filter that no fixture id or description holds.
     private static let noMatchFilter = "no-such-skill-exists"
 
-    /// The fixture skill with no required argument: `use skill` renders its
-    /// body with no argument at all.
+    /// The fixture skill that declares no parameter and references no
+    /// argument: `use skill` renders its body with no argument at all.
     private static let noArgumentSkillID = "lint"
 
     /// The answer of a search with no match, word for word from the card.

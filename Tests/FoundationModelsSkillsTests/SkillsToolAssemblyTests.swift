@@ -305,8 +305,8 @@ struct SkillsToolAssemblyTests {
         #"{"ids":["\#(id)"]}"#
     }
 
-    /// A fixture skill with no required argument, thus `use skill` renders
-    /// its body with no argument at all.
+    /// A fixture skill that declares no parameter and references no
+    /// argument, thus `use skill` renders its body with no argument at all.
     private static let noArgumentSkillID = "lint"
 
     /// The op of the `use skill` operation, as a model writes it.

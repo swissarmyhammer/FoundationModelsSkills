@@ -40,13 +40,12 @@ struct ParameterInferenceTests {
         #expect(result.diagnostics.isEmpty)
     }
 
-    // MARK: - Single source: argument-hint: only -- bare tokens are optional (plan.md §6.1)
+    // MARK: - Single source: argument-hint: only -- a bare token reads `required: false`
 
     @Test func hintBareTokenWithoutBracketsIsOptional() {
-        // plan.md §6.1's bare-token rule: `argument-hint:` is display text,
-        // and only the explicit `<x>` form marks a token required. A bare
-        // word such as `env` must never block dispatch with a
-        // missing-argument corrective, so it reads `required: false`.
+        // `argument-hint:` is display text, and only the explicit `<x>` form
+        // marks a token required. A bare word such as `env` reads
+        // `required: false`.
         let frontmatter = SkillFrontmatter(argumentHint: "env")
         let result = ParameterInference.infer(frontmatter: frontmatter, body: "")
 
@@ -59,10 +58,10 @@ struct ParameterInferenceTests {
 
     @Test func hintMalformedUnclosedBracketTokenIsOptional() {
         // Deliberate: a malformed placeholder such as `[env` (an unclosed
-        // bracket) is not a well-formed `<x>` or `[x]` token, so it falls
-        // through to the bare-token rule and reads optional -- the same
-        // reading a bare word gets. The raw text is kept verbatim as the
-        // placeholder and as the name; no bracket is stripped.
+        // bracket) is not a well-formed `<x>` or `[x]` token, so it reads
+        // `required: false` -- the same reading a bare word gets. The raw
+        // text is kept verbatim as the placeholder and as the name; no
+        // bracket is stripped.
         let frontmatter = SkillFrontmatter(argumentHint: "[env <target")
         let result = ParameterInference.infer(frontmatter: frontmatter, body: "")
 
@@ -75,8 +74,8 @@ struct ParameterInferenceTests {
     }
 
     @Test func hintBareTokenMergedWithArgumentsNameIsOptional() {
-        // The bare-token rule also holds through the `arguments:` merge:
-        // the hint token supplies optionality by position, so `arguments:
+        // The bare-token reading also holds through the `arguments:` merge:
+        // the hint token supplies `required` by position, so `arguments:
         // env` + `argument-hint: env` reads optional, unlike `arguments:`
         // alone (whose silent positions default to required).
         let frontmatter = SkillFrontmatter(argumentsRaw: .string("env"), argumentHint: "env")
@@ -155,7 +154,8 @@ struct ParameterInferenceTests {
         // arguments: is authoritative for names (plan.md §6.1) -- even though
         // the hint token's own inner text ("msg") differs from the
         // arguments: name ("message"), the merged parameter keeps the
-        // arguments: name and only borrows the hint's placeholder/optionality.
+        // arguments: name and only borrows the hint's placeholder and
+        // `required` flag.
         let frontmatter = SkillFrontmatter(
             argumentsRaw: .string("message"), argumentHint: "<msg>")
         let result = ParameterInference.infer(frontmatter: frontmatter, body: "")
@@ -260,7 +260,7 @@ struct ParameterInferenceTests {
     @Test func hintParsesDegenerateEmptyBracketAndTooShortTokensWithoutCrashing() {
         // <> and [] are well-formed brackets around an empty name; a bare
         // "<" is too short (< 2 chars) to be recognized as either bracket
-        // form, so it falls through to the bare-token rule (optional).
+        // form, so it reads `required: false`, as a bare word does.
         let frontmatter = SkillFrontmatter(argumentHint: "<> [] <")
         let result = ParameterInference.infer(frontmatter: frontmatter, body: "")
 

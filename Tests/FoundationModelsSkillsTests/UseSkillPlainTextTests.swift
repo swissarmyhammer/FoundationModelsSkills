@@ -19,11 +19,11 @@ struct UseSkillPlainTextTests {
     /// the canonical op and its `call`, `invoke`, and `get` aliases.
     private static let useSkillOps = ["use skill", "skill_call", "skill_invoke", "skill_get"]
 
-    /// The fixture skill with one required argument and a body of more than
+    /// The fixture skill with one named argument and a body of more than
     /// one line, thus JSON would escape its line breaks.
     private static let commitSkillID = "commit"
 
-    /// The value of the required argument of `commitSkillID`.
+    /// The value of the argument of `commitSkillID`.
     private static let commitMessage = "fix parser"
 
     /// An id that no fixture skill has.
@@ -91,13 +91,16 @@ struct UseSkillPlainTextTests {
     }
 
     @Test(arguments: useSkillOps)
-    func aMissingRequiredArgumentGivesAPlainSentence(op: String) async throws {
-        let tool = try Self.makeTool(registry: Self.makeFixtureRegistry())
+    func aCallWithNoArgumentsGivesTheRenderedBodyWithTheArgumentEmpty(op: String) async throws {
+        let registry = Self.makeFixtureRegistry()
+        let tool = try Self.makeTool(registry: registry)
+        let renderedBody = try await registry.call(id: Self.commitSkillID, arguments: [])
 
         let answer = try await tool.call(
             arguments: GeneratedContent(properties: ["op": op, "id": Self.commitSkillID]))
 
-        #expect(answer == "Missing required argument `message` for this skill.")
+        #expect(answer == renderedBody)
+        #expect(answer.contains("using the message: \n"))
     }
 
     // MARK: - Fixtures

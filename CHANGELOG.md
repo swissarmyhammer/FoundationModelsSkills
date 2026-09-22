@@ -5,6 +5,28 @@ change is at the top.
 
 ## Unreleased
 
+### Changed: `use skill` renders a missing argument as an empty string
+
+This change breaks no source. It changes one answer of the `skills` tool: a
+`use skill` call that gives fewer arguments than the skill declares. A host
+that compared that answer with the corrective sentence must take the rendered
+body.
+
+**Cause.** `use skill` gave the corrective "Missing required argument `x` for
+this skill." when the count of the arguments was below the position of a
+parameter with the `required` flag. No argument is required. The render
+pipeline already gives an empty string for a reference with no value.
+
+**What changed.**
+
+- `UseSkill.execute(in:)` no longer counts the arguments. It calls
+  `SkillsRegistry.call(id:arguments:)` with the given arguments, or with no
+  argument.
+- The missing-argument corrective is gone. An unknown, stale, or hidden id
+  still gives the unusable-id corrective with the current id list.
+- `plan.md` §6.1 and §7 and `docs/operations.md` no longer describe a
+  required argument.
+
 ### Changed: the use rule of the `skills` tool asks for each skill that helps
 
 This change breaks no source. It changes two texts that the model reads: the

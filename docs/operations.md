@@ -130,12 +130,6 @@ hidden id, it names the ids that the model can use:
 The skill id `totally-made-up` is not currently usable. Currently usable ids: commit, env-report, lint.
 ```
 
-A missing required argument of the skill gives:
-
-```text
-Missing required argument `message` for this skill.
-```
-
 The resource operations keep their JSON answers. The command line
 (`SkillsCLI`) prints the JSON of each operation, thus `skills skill search`,
 `skills skill list`, and `skills skill use` print the text as one JSON string.

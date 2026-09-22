@@ -6,8 +6,8 @@ import Foundation
 /// §6.1).
 ///
 /// Precedence: `arguments:` (authoritative names/order) > `argument-hint:`
-/// (placeholders + optionality, merged by position when `arguments:` is also
-/// present) > body inference (`$0`/`$N`/`$ARGUMENTS[N]` scanning), used only
+/// (placeholders and `required` flags, merged by position when `arguments:`
+/// is also present) > body inference (`$0`/`$N`/`$ARGUMENTS[N]` scanning), used only
 /// when both frontmatter sources are absent, so the listing is never empty
 /// for a skill that clearly takes arguments in its body.
 public enum ParameterInference {
@@ -86,7 +86,7 @@ public enum ParameterInference {
     // MARK: - arguments: + argument-hint: merge
 
     /// Merges authoritative `arguments:` names/order with `argument-hint:`
-    /// placeholders/optionality by position.
+    /// placeholders and `required` flags by position.
     ///
     /// A hint token at the same position supplies
     /// `required`/`variadic`/`placeholder`; a position with no matching hint
@@ -119,21 +119,20 @@ public enum ParameterInference {
 
     // MARK: - argument-hint: grammar
 
-    /// Parses `argument-hint:`'s space-separated token grammar (plan.md
-    /// §6.1): `<x>` required, `[x]` optional, a trailing `...` (on either
-    /// bracket form, or on a bare unbracketed token) variadic.
+    /// Parses `argument-hint:`'s space-separated token grammar: `<x>` sets
+    /// `required: true`, `[x]` sets `required: false`, and a trailing `...`
+    /// (on either bracket form, or on a bare unbracketed token) sets
+    /// `variadic`. The trailing `...` is the one token shape plan.md §6.1
+    /// gives a meaning; the bracket forms are display text with a flag.
     ///
-    /// **Bare-token rule (plan.md §6.1):** a token with neither bracket form
-    /// -- a bare word such as `env`, or a malformed placeholder such as
-    /// `[env` (unclosed bracket) -- reads `required: false`. `argument-hint:`
-    /// is display text, and only the explicit `<x>` form marks a token
-    /// required; a display-only word must never block dispatch with a
-    /// missing-argument corrective. This is deliberately the opposite of
-    /// the `required: true` default `mergeArgumentsWithHint` and
-    /// `inferFromBody` use for a position **no** hint token describes: there
-    /// the source is silent, here the author wrote a token and declined to
-    /// mark it `<required>`. A malformed token's raw text is kept verbatim
-    /// as both `placeholder` and `name`; no bracket is stripped.
+    /// A token with neither bracket form -- a bare word such as `env`, or a
+    /// malformed placeholder such as `[env` (unclosed bracket) -- reads
+    /// `required: false`: the author wrote a token and did not mark it
+    /// `<x>`. This is the opposite of the `required: true` default
+    /// `mergeArgumentsWithHint` and `inferFromBody` use for a position
+    /// **no** hint token describes, where the source is silent. A malformed
+    /// token's raw text is kept verbatim as both `placeholder` and `name`;
+    /// no bracket is stripped.
     ///
     /// - Parameter hint: The raw `argument-hint:` string, or `nil`.
     /// - Returns: One `HintToken` per whitespace-separated token, in order;
@@ -145,25 +144,24 @@ public enum ParameterInference {
         }
     }
 
-    /// One bracket form `argument-hint:` tokens may use, and the optionality
-    /// it signals -- data for `parseHintToken`'s single lookup, rather than
-    /// one hand-written branch per bracket type.
+    /// One bracket form `argument-hint:` tokens may use, and the `required`
+    /// value it signals -- data for `parseHintToken`'s single lookup, rather
+    /// than one hand-written branch per bracket type.
     private struct BracketPattern {
         let open: Character
         let close: Character
         let required: Bool
     }
 
-    /// `<x>` required, `[x]` optional -- plan.md §6.1's `argument-hint:`
-    /// grammar.
+    /// `<x>` sets `required: true`, `[x]` sets `required: false`.
     private static let bracketPatterns = [
         BracketPattern(open: "<", close: ">", required: true),
         BracketPattern(open: "[", close: "]", required: false),
     ]
 
     /// Parses one `argument-hint:` token (e.g. `"<message>"`, `"[env]"`,
-    /// `"files..."`) into a `HintToken`, applying `parseHint`'s bare-token
-    /// rule to any token that is not a well-formed bracket pair.
+    /// `"files..."`) into a `HintToken`, reading `required: false` for any
+    /// token that is not a well-formed bracket pair (see `parseHint`).
     private static func parseHintToken(_ token: String) -> HintToken {
         var stripped = Substring(token)
         let variadic = stripped.hasSuffix("...")

@@ -241,18 +241,17 @@ struct SkillOperationsTests {
         #expect(output == .success(try await context.registry.call(id: "lint")))
     }
 
-    @Test func useSkillWithAMissingRequiredArgumentReturnsACorrectiveNamingIt() async throws {
+    @Test func useSkillWithNoArgumentForADeclaredNameRendersThatNameEmpty() async throws {
         // `commit` declares `arguments: [message]` / `argument-hint: "<message>"`.
-        let output = try await UseSkill(id: "commit", arguments: []).execute(in: Self.makeFixtureContext())
+        // No argument is required: `$0` renders as an empty string.
+        let context = Self.makeFixtureContext()
 
-        guard case .corrective(let message) = output else {
-            Issue.record("expected a corrective outcome, got \(output)")
-            return
-        }
-        #expect(message.contains("message"))
+        let output = try await UseSkill(id: "commit", arguments: []).execute(in: context)
+
+        #expect(output == .success(try await context.registry.call(id: "commit", arguments: [])))
     }
 
-    @Test func useSkillWithTheRequiredArgumentSuppliedSucceeds() async throws {
+    @Test func useSkillWithTheArgumentSuppliedSubstitutesIt() async throws {
         let output = try await UseSkill(id: "commit", arguments: ["fix parser"]).execute(
             in: Self.makeFixtureContext())
 
@@ -260,7 +259,7 @@ struct SkillOperationsTests {
         #expect(body.contains("fix parser"))
     }
 
-    // MARK: - Missing-argument check consults SkillParameter.required directly (^dw132bc)
+    // MARK: - Each parameter source, with and without an argument
 
     /// The id (and directory name) of the single skill every temp-root case
     /// in this file writes.
@@ -313,9 +312,7 @@ struct SkillOperationsTests {
         return (context, { try? FileManager.default.removeItem(at: root) })
     }
 
-    @Test func useSkillWithAnUnbracketedHintAndTheArgumentSuppliedSucceeds() async throws {
-        // `argument-hint: env` (no brackets) reads optional (plan.md §6.1's
-        // bare-token rule); a supplied argument is substituted as usual.
+    @Test func useSkillWithAHintAndTheArgumentSuppliedSubstitutesIt() async throws {
         let (context, cleanup) = try Self.makeTempContext(
             argumentHintLine: "argument-hint: env\n", body: "Value: $0\n")
         defer { cleanup() }
@@ -323,106 +320,32 @@ struct SkillOperationsTests {
         let output = try await UseSkill(id: "widget", arguments: ["production"]).execute(in: context)
 
         let body = try #require(Self.renderedBody(of: output))
-        #expect(body.contains("production"))
+        #expect(body.contains("Value: production"))
     }
 
-    @Test func useSkillWithAnUnbracketedHintAndTheArgumentMissingSucceeds() async throws {
-        // plan.md §6.1's bare-token rule: `argument-hint:` is display text,
-        // and only `<x>` marks a token required. A bare `env` therefore
-        // reads optional, and omitting it must dispatch without a
-        // missing-argument corrective.
+    // MARK: - No argument is required: a missing one renders empty (plan.md §6.1)
+
+    @Test(
+        "use skill with no arguments renders the body whatever the parameter sources say",
+        arguments: [
+            (argumentsLine: "", argumentHintLine: ""),
+            (argumentsLine: "arguments: env\n", argumentHintLine: ""),
+            (argumentsLine: "", argumentHintLine: "argument-hint: \"<env>\"\n"),
+            (argumentsLine: "arguments: env\n", argumentHintLine: "argument-hint: \"<env>\"\n"),
+        ])
+    func useSkillWithNoArgumentsRendersTheBodyWithTheReferenceEmpty(
+        argumentsLine: String, argumentHintLine: String
+    ) async throws {
+        // No parameter source makes an argument required: `$0` with no
+        // value renders as an empty string, and the call succeeds.
         let (context, cleanup) = try Self.makeTempContext(
-            argumentHintLine: "argument-hint: env\n", body: "Value: $0\n")
+            argumentsLine: argumentsLine, argumentHintLine: argumentHintLine, body: "Value: $0\n")
         defer { cleanup() }
 
         let output = try await UseSkill(id: "widget", arguments: []).execute(in: context)
 
-        guard case .success = output else {
-            Issue.record("expected a result outcome, got \(output)")
-            return
-        }
-    }
-
-    @Test func useSkillWithAMalformedUnclosedBracketHintAndTheArgumentMissingSucceeds() async throws {
-        // Deliberate: a malformed placeholder such as `[env` (unclosed
-        // bracket) is neither `<x>` nor `[x]`, so it falls through to the
-        // bare-token rule and reads optional -- omitting it dispatches.
-        let (context, cleanup) = try Self.makeTempContext(
-            argumentHintLine: "argument-hint: \"[env\"\n", body: "Value: $0\n")
-        defer { cleanup() }
-
-        let output = try await UseSkill(id: "widget", arguments: []).execute(in: context)
-
-        guard case .success = output else {
-            Issue.record("expected a result outcome, got \(output)")
-            return
-        }
-    }
-
-    @Test func useSkillMissingArgumentCorrectiveNamesTheStructuredArgumentsNameNotTheHintText() async throws {
-        // The corrective names `SkillParameter.name`, which `arguments:`
-        // supplies authoritatively (plan.md §6.1) -- not the hint token's
-        // inner text. With `arguments: message` and `argument-hint: <msg>`,
-        // the message must say `message` and must not say `msg`.
-        let (context, cleanup) = try Self.makeTempContext(
-            argumentsLine: "arguments: message\n", argumentHintLine: "argument-hint: \"<msg>\"\n",
-            body: "Value: $0\n")
-        defer { cleanup() }
-
-        let output = try await UseSkill(id: "widget", arguments: []).execute(in: context)
-
-        guard case .corrective(let message) = output else {
-            Issue.record("expected a corrective outcome, got \(output)")
-            return
-        }
-        #expect(message.contains("`message`"))
-        #expect(!message.contains("`msg`"))
-    }
-
-    @Test func useSkillWithABracketedOptionalHintAndTheArgumentMissingSucceeds() async throws {
-        // `[env]` explicitly marks the parameter optional -- omitting it
-        // must dispatch successfully, proving the optional case still
-        // reads correctly through the structured `required` flag.
-        let (context, cleanup) = try Self.makeTempContext(
-            argumentHintLine: "argument-hint: \"[env]\"\n", body: "Body text.\n")
-        defer { cleanup() }
-
-        let output = try await UseSkill(id: "widget", arguments: []).execute(in: context)
-
-        guard case .success = output else {
-            Issue.record("expected a result outcome, got \(output)")
-            return
-        }
-    }
-
-    @Test func useSkillWithArgumentsOnlyNoHintAndTheArgumentMissingReturnsACorrective() async throws {
-        // `arguments:` alone (no `argument-hint:`) also defaults every
-        // named parameter to required.
-        let (context, cleanup) = try Self.makeTempContext(argumentsLine: "arguments: env\n")
-        defer { cleanup() }
-
-        let output = try await UseSkill(id: "widget", arguments: []).execute(in: context)
-
-        guard case .corrective(let message) = output else {
-            Issue.record("expected a corrective outcome, got \(output)")
-            return
-        }
-        #expect(message.contains("env"))
-    }
-
-    @Test func useSkillWithABodyInferredParameterAndTheArgumentMissingReturnsACorrective() async throws {
-        // No `arguments:`/`argument-hint:` at all -- the sole parameter is
-        // synthesized from the body's `$0` reference, always required.
-        let (context, cleanup) = try Self.makeTempContext(body: "Value: $0\n")
-        defer { cleanup() }
-
-        let output = try await UseSkill(id: "widget", arguments: []).execute(in: context)
-
-        guard case .corrective(let message) = output else {
-            Issue.record("expected a corrective outcome, got \(output)")
-            return
-        }
-        #expect(message.contains("arg0"))
+        let body = try #require(Self.renderedBody(of: output), "expected a success outcome, got \(output)")
+        #expect(body.contains("Value: \n"))
     }
 
     // MARK: - Surplus arguments ride the §5 ARGUMENTS: auto-append, never an error

@@ -1,6 +1,6 @@
 /// One inferred or declared parameter of a skill, merged from up to three
 /// frontmatter/body sources by position (plan.md §6.1): `arguments:` (names +
-/// order), `argument-hint:` (placeholders + optionality), and body inference
+/// order), `argument-hint:` (placeholders and `required` flags), and body inference
 /// (`$0`/`$N`/`$ARGUMENTS[N]` scanning) when neither frontmatter source is
 /// present.
 ///
@@ -20,8 +20,8 @@ public struct SkillParameter: Sendable, Equatable {
     ///
     /// An `argument-hint:` token of `<x>` -> `true`; `[x]` -> `false`; a
     /// bare/unbracketed or malformed hint token (`env`, `[env`) -> `false`
-    /// (plan.md §6.1's bare-token rule: only `<x>` marks a hint token
-    /// required). A position with no hint token at all (body-inferred, or an
+    /// (only `<x>` marks a hint token required). A position with no hint
+    /// token at all (body-inferred, or an
     /// `arguments:`-only position past the hint's arity) defaults to `true`
     /// -- the conservative reading when the source is silent.
     public var required: Bool
