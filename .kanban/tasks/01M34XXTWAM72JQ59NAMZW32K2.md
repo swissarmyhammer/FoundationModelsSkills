@@ -25,8 +25,31 @@ comments:
     - evidence: swift test — 562 tests in 53 suites passed, 0 failed, 0 skipped, 0 warnings
     - next: /commit
   timestamp: 2026-09-22T16:29:05.967166+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01m34z6hkt5mtkkyffbarvh9pd
+  text: |-
+    ### commit — changed
+    - evidence: c054cc5 feat(use-skill): remove the missing-argument corrective
+    - next: /review 01M34XXTWAM72JQ59NAMZW32K2 HEAD~1..HEAD
+  timestamp: 2026-09-22T16:29:18.842572+00:00
+- actor: claude-code
+  id: 01m34zc8wbbzh2cccvhh26e26b
+  text: |-
+    ### review — clean
+    - evidence: review sha HEAD~1..HEAD (c054cc5) — 0 findings, 0 confirmed, 0 refuted, 7 validator runs; 9 files reviewed, CHANGELOG.md, docs/operations.md and plan.md matched no validator, .kanban/ excluded by .reviewignore
+    - next: none; the card is in done
+  timestamp: 2026-09-22T16:32:26.507406+00:00
+- actor: claude-code
+  id: 01m34zccynzbj1rbnh66w8s1br
+  text: |-
+    ### finish iteration 1 — review clean, card moved to done
+    - implement: changed — Sources/FoundationModelsSkills/Operations/UseSkill.swift, Sources/FoundationModelsSkills/Listing/ParameterInference.swift, Sources/FoundationModelsSkills/Listing/SkillParameter.swift, Sources/FoundationModelsSkills/Registry/SkillsRegistry.swift, Tests/FoundationModelsSkillsTests/SkillOperationsTests.swift, Tests/FoundationModelsSkillsTests/UseSkillPlainTextTests.swift, Tests/FoundationModelsSkillsTests/SkillsToolAssemblyTests.swift, Tests/FoundationModelsSkillsTests/SearchListPlainTextTests.swift, Tests/FoundationModelsSkillsTests/ParameterInferenceTests.swift, docs/operations.md, plan.md, CHANGELOG.md
+    - test: green — swift test, 562 tests in 53 suites passed, 0 failed, 0 skipped, 0 warnings
+    - commit: c054cc5
+    - review: clean — no finding
+  timestamp: 2026-09-22T16:32:30.677911+00:00
+position_column: done
+position_ordinal: ff9080
 title: Remove the missing-argument corrective from use skill
 ---
 ## What
@@ -57,7 +80,7 @@ The code and the tests of this task are in the working tree, uncommitted. The tw
 
 - [x] `SkillOperationsTests.useSkillWithNoArgumentForADeclaredNameRendersThatNameEmpty` and the parameterized `useSkillWithNoArgumentsRendersTheBodyWithTheReferenceEmpty` (4 cases: no source, `arguments:`, `argument-hint: "<env>"`, both).
 - [x] `UseSkillPlainTextTests.aCallWithNoArgumentsGivesTheRenderedBodyWithTheArgumentEmpty` for each op alias.
-- [ ] `swift test` passes with no failure and no warning.
+- [x] `swift test` passes with no failure and no warning.
 
 ## Workflow
 
