@@ -5,6 +5,29 @@ change is at the top.
 
 ## Unreleased
 
+### Removed: `SkillParameter.required` and `SkillMetadata.parameterDetails`
+
+This change breaks the source of a host that reads `SkillParameter.required`,
+gives `required:` to `SkillParameter.init`, or reads
+`SkillMetadata.parameterDetails`. A host that only lists, searches or uses
+skills compiles with no change.
+
+**Cause.** No argument is required. `use skill` and the command hint no longer
+read the flag, thus nothing read `SkillParameter.required`.
+`SkillMetadata.parameterDetails` existed only so that `use skill` could read
+that flag, and nothing read the field.
+
+**What changed.**
+
+- `SkillParameter` has no `required` property. Its initializer is
+  `init(name:position:variadic:placeholder:)`.
+- `ParameterInference` sets no flag from an `argument-hint:` token. A
+  well-formed `<x>` or `[x]` token gives `x` as the name; any other token
+  gives its raw text as the name. Each token stays verbatim as the
+  placeholder.
+- `SkillMetadata` has no `parameterDetails` property, and its initializer has
+  no `parameterDetails:` parameter.
+
 ### Changed: the synthesized command hint is `[name]`, never `<name>`
 
 This change breaks no source. It changes one text: the `argumentHint` of a

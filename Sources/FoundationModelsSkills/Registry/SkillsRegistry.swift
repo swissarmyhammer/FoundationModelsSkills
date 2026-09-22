@@ -36,11 +36,6 @@ public struct SkillMetadata: Sendable, Equatable {
     /// `"[env]"` (the placeholder shape of plan.md §6.1).
     public var parameters: [String]
 
-    /// The same parameters `parameters` summarizes, in their original
-    /// structured form (`SkillParameter.name`, `.required`, `.variadic`,
-    /// `.placeholder`), as `ParameterInference` produced them.
-    public var parameterDetails: [SkillParameter]
-
     /// Whether this skill is currently eligible for the model-facing
     /// surface: `search skill`/`list skill`/`use skill` (plan.md §6).
     public var isModelVisible: Bool
@@ -64,22 +59,18 @@ public struct SkillMetadata: Sendable, Equatable {
     ///     scalar (at any depth) rendered. Defaults to empty.
     ///   - parameters: Placeholder summaries of this skill's parameters.
     ///     Defaults to empty.
-    ///   - parameterDetails: The structured form of `parameters`, carrying
-    ///     `required`/`variadic`/`name`. Defaults to empty.
     ///   - isModelVisible: Whether this skill is currently eligible for the
     ///     model-facing surface.
     ///   - source: The marketplace this skill came from. Defaults to `nil`,
     ///     a local skill.
     public init(
         id: String, description: String, metadata: [String: FrontmatterValue] = [:],
-        parameters: [String] = [], parameterDetails: [SkillParameter] = [], isModelVisible: Bool,
-        source: String? = nil
+        parameters: [String] = [], isModelVisible: Bool, source: String? = nil
     ) {
         self.id = id
         self.description = description
         self.metadata = metadata
         self.parameters = parameters
-        self.parameterDetails = parameterDetails
         self.isModelVisible = isModelVisible
         self.source = source
     }
@@ -884,7 +875,6 @@ public struct SkillsRegistry: Sendable {
                     description: renderedMetadataText(text: entry.frontmatter.description ?? "", entry: entry),
                     metadata: renderedMetadataFields(entry: entry),
                     parameters: entryParameters.map(Self.parameterSummary),
-                    parameterDetails: entryParameters,
                     isModelVisible: entry.isModelVisible,
                     source: entry.marketplace?.displayText)
             }

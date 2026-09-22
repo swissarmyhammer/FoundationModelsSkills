@@ -35,8 +35,7 @@ struct SkillListingTests {
         #expect(listing.compatibility == nil)
         #expect(
             listing.parameters == [
-                SkillParameter(
-                    name: "message", position: 0, required: true, variadic: false, placeholder: "<message>")
+                SkillParameter(name: "message", position: 0, variadic: false, placeholder: "<message>")
             ])
         #expect(listing.acceptsTrailingArguments == true)
     }

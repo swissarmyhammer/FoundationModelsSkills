@@ -6,10 +6,10 @@ import Foundation
 /// §6.1).
 ///
 /// Precedence: `arguments:` (authoritative names/order) > `argument-hint:`
-/// (placeholders and `required` flags, merged by position when `arguments:`
-/// is also present) > body inference (`$0`/`$N`/`$ARGUMENTS[N]` scanning), used only
-/// when both frontmatter sources are absent, so the listing is never empty
-/// for a skill that clearly takes arguments in its body.
+/// (placeholders, merged by position when `arguments:` is also present) >
+/// body inference (`$0`/`$N`/`$ARGUMENTS[N]` scanning), used only when both
+/// frontmatter sources are absent, so the listing is never empty for a skill
+/// that clearly takes arguments in its body.
 public enum ParameterInference {
     /// The outcome of merging one skill's sources: the merged parameters,
     /// the `$ARGUMENTS`-reference flag, and any source-mismatch diagnostics.
@@ -44,7 +44,6 @@ public enum ParameterInference {
         /// The token's inner name (brackets and trailing `...` stripped),
         /// used only when no `arguments:` name exists at this position.
         let name: String
-        let required: Bool
         let variadic: Bool
     }
 
@@ -70,8 +69,8 @@ public enum ParameterInference {
         } else if !hintTokens.isEmpty {
             parameters = hintTokens.enumerated().map { position, token in
                 SkillParameter(
-                    name: token.name, position: position, required: token.required,
-                    variadic: token.variadic, placeholder: token.placeholder)
+                    name: token.name, position: position, variadic: token.variadic,
+                    placeholder: token.placeholder)
             }
         } else {
             parameters = inferFromBody(body)
@@ -86,14 +85,12 @@ public enum ParameterInference {
     // MARK: - arguments: + argument-hint: merge
 
     /// Merges authoritative `arguments:` names/order with `argument-hint:`
-    /// placeholders and `required` flags by position.
+    /// placeholders by position.
     ///
-    /// A hint token at the same position supplies
-    /// `required`/`variadic`/`placeholder`; a position with no matching hint
-    /// token defaults to `required: true, variadic: false, placeholder: nil`
-    /// -- the same conservative default used everywhere else a source is
-    /// silent. An arity mismatch between the two sources draws a diagnostic
-    /// but never fails the merge.
+    /// A hint token at the same position supplies `variadic`/`placeholder`;
+    /// a position with no matching hint token gets `variadic: false,
+    /// placeholder: nil`. An arity mismatch between the two sources draws a
+    /// diagnostic but never fails the merge.
     ///
     /// - Parameters:
     ///   - names: `arguments:`'s tokenized names, in order.
@@ -112,27 +109,23 @@ public enum ParameterInference {
         return names.enumerated().map { position, name in
             let hint = position < hintTokens.count ? hintTokens[position] : nil
             return SkillParameter(
-                name: name, position: position, required: hint?.required ?? true,
-                variadic: hint?.variadic ?? false, placeholder: hint?.placeholder)
+                name: name, position: position, variadic: hint?.variadic ?? false,
+                placeholder: hint?.placeholder)
         }
     }
 
     // MARK: - argument-hint: grammar
 
-    /// Parses `argument-hint:`'s space-separated token grammar: `<x>` sets
-    /// `required: true`, `[x]` sets `required: false`, and a trailing `...`
-    /// (on either bracket form, or on a bare unbracketed token) sets
+    /// Parses `argument-hint:`'s space-separated token grammar: `<x>` and
+    /// `[x]` are display text whose inner `x` is the name, and a trailing
+    /// `...` (on either bracket form, or on a bare unbracketed token) sets
     /// `variadic`. The trailing `...` is the one token shape plan.md §6.1
-    /// gives a meaning; the bracket forms are display text with a flag.
+    /// gives a meaning.
     ///
     /// A token with neither bracket form -- a bare word such as `env`, or a
-    /// malformed placeholder such as `[env` (unclosed bracket) -- reads
-    /// `required: false`: the author wrote a token and did not mark it
-    /// `<x>`. This is the opposite of the `required: true` default
-    /// `mergeArgumentsWithHint` and `inferFromBody` use for a position
-    /// **no** hint token describes, where the source is silent. A malformed
-    /// token's raw text is kept verbatim as both `placeholder` and `name`;
-    /// no bracket is stripped.
+    /// malformed placeholder such as `[env` (unclosed bracket) -- keeps its
+    /// raw text verbatim as both `placeholder` and `name`; no bracket is
+    /// stripped.
     ///
     /// - Parameter hint: The raw `argument-hint:` string, or `nil`.
     /// - Returns: One `HintToken` per whitespace-separated token, in order;
@@ -144,42 +137,39 @@ public enum ParameterInference {
         }
     }
 
-    /// One bracket form `argument-hint:` tokens may use, and the `required`
-    /// value it signals -- data for `parseHintToken`'s single lookup, rather
-    /// than one hand-written branch per bracket type.
+    /// One bracket form `argument-hint:` tokens may use -- data for
+    /// `parseHintToken`'s single lookup, rather than one hand-written branch
+    /// per bracket type.
     private struct BracketPattern {
         let open: Character
         let close: Character
-        let required: Bool
     }
 
-    /// `<x>` sets `required: true`, `[x]` sets `required: false`.
+    /// The two bracket forms, `<x>` and `[x]`; each strips to `x` for the
+    /// name.
     private static let bracketPatterns = [
-        BracketPattern(open: "<", close: ">", required: true),
-        BracketPattern(open: "[", close: "]", required: false),
+        BracketPattern(open: "<", close: ">"),
+        BracketPattern(open: "[", close: "]"),
     ]
 
     /// Parses one `argument-hint:` token (e.g. `"<message>"`, `"[env]"`,
-    /// `"files..."`) into a `HintToken`, reading `required: false` for any
-    /// token that is not a well-formed bracket pair (see `parseHint`).
+    /// `"files..."`) into a `HintToken`: a well-formed bracket pair gives
+    /// its inner text as the name, any other token gives its raw text (see
+    /// `parseHint`).
     private static func parseHintToken(_ token: String) -> HintToken {
         var stripped = Substring(token)
         let variadic = stripped.hasSuffix("...")
         if variadic { stripped = stripped.dropLast(3) }
 
-        let required: Bool
         let name: String
         if stripped.count >= 2,
-            let bracket = bracketPatterns.first(
-                where: { stripped.first == $0.open && stripped.last == $0.close })
+            bracketPatterns.contains(where: { stripped.first == $0.open && stripped.last == $0.close })
         {
-            required = bracket.required
             name = String(stripped.dropFirst().dropLast())
         } else {
-            required = false
             name = String(stripped)
         }
-        return HintToken(placeholder: token, name: name, required: required, variadic: variadic)
+        return HintToken(placeholder: token, name: name, variadic: variadic)
     }
 
     // MARK: - Body inference
@@ -192,8 +182,7 @@ public enum ParameterInference {
     /// existing, even one the body never named explicitly.
     ///
     /// Synthesized parameters have no name/placeholder source, so they get a
-    /// deterministic `"arg<position>"` name, `required: true`, and
-    /// `variadic: false`.
+    /// deterministic `"arg<position>"` name and `variadic: false`.
     ///
     /// - Parameter body: The skill's render-pipeline body text.
     /// - Returns: `[]` when `body` references no position at all.
@@ -201,9 +190,7 @@ public enum ParameterInference {
         let positions = referencedPositions(in: body)
         guard let highest = positions.max() else { return [] }
         return (0...highest).map { position in
-            SkillParameter(
-                name: "arg\(position)", position: position, required: true, variadic: false,
-                placeholder: nil)
+            SkillParameter(name: "arg\(position)", position: position, variadic: false, placeholder: nil)
         }
     }
 
