@@ -5,20 +5,12 @@ import FoundationModelsExtras
 /// (plan.md §6, §7.1; decision #29): the user `/` menu's rows, translated
 /// into `SlashCommand` values a host feeds to its own session/UI layer.
 ///
-/// **The §7.1 caveat, stated plainly.** Every command below carries a
-/// `.prompt(template:)` body: the skill's raw, unrendered body text. A
-/// host that runs this template through the harness engine gets only that
-/// engine's own rendering (`SlashCommand.Body.prompt`'s doc comment calls
-/// it "Pillar 3") -- none of this package's §5 passes 1-2 ever run
-/// (`$`-argument substitution, shell injection), so `$0`/`$ARGUMENTS`
-/// placeholders and `` !`command` `` shell-injection syntax pass through
-/// completely inert. A host that wants full render fidelity -- every §5
-/// pass, with the user's typed arguments actually substituted -- calls
-/// `registry.call(id:arguments:)` directly instead of running the
-/// `.prompt` template through the harness engine. An invocation-aware
-/// prompt body the harness engine could itself render with full §5
-/// fidelity is a recorded Extras coordination item, not something this
-/// conformance can address on its own.
+/// Each command carries a `.rendered` body. When the user runs `/name
+/// text`, the body gives `text` to `call(id:arguments:)` as one argument,
+/// thus the §5 pipeline runs in full: `$ARGUMENTS` gets the text as typed,
+/// `$N` and `$name` get its shell-style tokens, shell injection runs, and
+/// Stencil runs. The harness feeds the result to the model as the prompt
+/// of the turn, the same as a `.prompt` template it rendered itself.
 extension SkillsRegistry: SlashCommandProviding {
     /// This registry's user-invocable skills (plan.md §6.1), one
     /// `SlashCommand` per `commandListing()` row.
@@ -76,19 +68,40 @@ extension SkillsRegistry: SlashCommandProviding {
 
     /// Builds one `SlashCommand` for `listing`.
     ///
+    /// The body captures `detachedReader`, never `self`, for the reason
+    /// `commandUpdates` gives: a command list a host keeps must not keep
+    /// the watcher of this registry alive.
+    ///
     /// - Parameter listing: The `commandListing()` row to translate.
     /// - Returns: The `SlashCommand`: `name` is `listing.id`, `description`
     ///   is `listing.description` (empty when absent), `argumentHint` is
     ///   assembled from `listing.parameters` (`argumentHint(for:)`), and
-    ///   the body is a `.prompt(template:)` carrying the skill's raw,
-    ///   unrendered body text -- none of §5's three render passes have run
-    ///   on it yet.
+    ///   the body renders the skill through `call(id:arguments:)` with the
+    ///   typed text as its one argument.
     private func slashCommand(for listing: SkillListing) -> SlashCommand {
-        SlashCommand(
-            name: listing.id,
+        let reader = detachedReader
+        let id = listing.id
+        return SlashCommand(
+            name: id,
             description: listing.description ?? "",
             argumentHint: Self.argumentHint(for: listing.parameters),
-            body: .prompt(template: rawBody(id: listing.id) ?? ""))
+            body: .rendered { invocation in
+                try await reader.call(id: id, arguments: Self.arguments(typed: invocation.arguments))
+            })
+    }
+
+    /// The arguments of one `/command` invocation.
+    ///
+    /// The typed text is ONE argument: `$ARGUMENTS` gets it as typed, and
+    /// pass 1 splits it into positions with shell-style quoting. Text that
+    /// is empty or whitespace only is no argument at all, thus `/name` with
+    /// nothing after it renders with no `ARGUMENTS:` fallback.
+    ///
+    /// - Parameter text: The raw text after `/name `.
+    /// - Returns: `[text]`, or `[]` when `text` holds no non-whitespace
+    ///   character.
+    private static func arguments(typed text: String) -> [String] {
+        text.allSatisfy(\.isWhitespace) ? [] : [text]
     }
 
     /// The `SlashCommand.argumentHint` text for `parameters`: each

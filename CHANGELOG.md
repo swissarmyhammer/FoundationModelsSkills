@@ -5,6 +5,30 @@ change is at the top.
 
 ## Unreleased
 
+### Changed: each `SlashCommand` body is `.rendered` through the full pipeline
+
+This change breaks no source. It changes the body kind of each `SlashCommand`
+that `SkillsRegistry.commands(workingDirectory:)` and `commandUpdates` give.
+A host that matched the `.prompt(template:)` case must match the `.rendered`
+case.
+
+**Cause.** Each command carried a `.prompt(template:)` body with the raw skill
+text. The harness rendered that body with Stencil only. Pass 1 (`$ARGUMENTS`,
+`$N`, `$name`) and pass 2 (shell injection) never ran, so `/name text` gave
+the model a body with the `$` placeholders and the shell syntax still in it.
+
+**What changed.**
+
+- Each command body is `SlashCommand.Body.rendered`. When the user runs
+  `/name text`, the body gives `text` to `call(id:arguments:)` as one
+  argument. `$ARGUMENTS` gets the text as typed, and pass 1 splits the text
+  into positions with shell-style quoting: for `/commit fix the bug`, `$0` is
+  `fix`; for `/commit "fix the bug"`, `$0` is `fix the bug`.
+- Text that is empty or whitespace only is no argument. `/name` with nothing
+  after it renders with no `ARGUMENTS:` fallback.
+- `SkillsRegistry.rawBody(id:)` is gone. It was internal, and the `.prompt`
+  body was its only caller.
+
 ### Changed: `use skill` renders a missing argument as an empty string
 
 This change breaks no source. It changes one answer of the `skills` tool: a

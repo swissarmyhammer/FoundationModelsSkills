@@ -1,5 +1,41 @@
 ---
-position_column: todo
+comments:
+- actor: claude-code
+  id: 01m34zm4fe17m7rk77mzrxmyx9
+  text: |-
+    Picked up. The `.rendered` body, the removal of `rawBody(id:)` and four tests were in the working tree. This round added the open items:
+
+    - `Tests/FoundationModelsSkillsTests/SlashCommandProvidingTests.swift`: new test `commandBodyWithUnquotedTextGivesTheFirstWordToDollarZero`. It renders `commit` with `fix the bug`, compares with `call(id:arguments:)`, and asserts `using the message: fix\n` and one body line equal to `fix the bug`.
+    - `plan.md` §6 bullet: the caveat is replaced with the `.rendered` behavior.
+    - `plan.md` §7.1 diagram: the UI row says that a `/` command renders through `call(id:arguments:)`. The row is two lines; each row line is 84 columns, the same as the other rows.
+    - `plan.md` decision #29: Extras item `c2pad49` is delivered as `SlashCommand.Body.rendered`, and this package uses it.
+    - `CHANGELOG.md`: one "Changed" entry at the top of Unreleased, in the shape of the entry below it.
+
+    Discoveries:
+
+    - The `commit` fixture (`Examples/skill-library/project/.skills/commit/SKILL.md`) has `$0` on the `using the message:` line and `$ARGUMENTS` alone on its own line. Thus the "ARGUMENTS line" of the card is a body line that holds the typed text alone, and the test asserts it as one line of `split(separator: "\n")`.
+    - The acceptance grep `rg -in "coordination item|passes 1.2 ever run|completely inert|data only\)" plan.md Sources/` finds no line now. It found three lines before (plan.md 251, 391, 743).
+    - `swift test --filter SlashCommandProvidingTests`: 14 tests, 14 passed, no warning.
+  timestamp: 2026-09-22T16:36:44.142742+00:00
+- actor: claude-code
+  id: 01m34zrtpvfa68pw92n1p2g6qn
+  text: |-
+    Rules applied before the edit (`dump validators` over the Swift and Markdown files): the `duplication` rule says that near-verbatim copies that differ by one literal are one function with an argument, and that the fix goes in the changed code. The five body tests of this change repeated the same three-line lookup of one command. They now call one helper, `command(named:in:)`, which reads `commands(workingDirectory:)` and unwraps the match with `try #require`. The tests that existed at HEAD keep their shape, because the rule says not to edit the counterpart.
+
+    `swift test --filter SlashCommandProvidingTests` after the helper: 14 tests, 14 passed, no warning.
+
+    ### implement — changed
+    - evidence: 5 files — Sources/FoundationModelsSkills/Registry/SkillsRegistry+SlashCommands.swift, Sources/FoundationModelsSkills/Registry/SkillsRegistry.swift, Tests/FoundationModelsSkillsTests/SlashCommandProvidingTests.swift, plan.md, CHANGELOG.md
+    - next: /test, the full `swift test`
+  timestamp: 2026-09-22T16:39:17.979710+00:00
+- actor: claude-code
+  id: 01m34ztr8m6dxc5nwk2m45xazj
+  text: |-
+    ### test — green
+    - evidence: `swift test` — 564 tests in 53 suites passed, 0 failed, 0 skipped, no warning
+    - next: /commit
+  timestamp: 2026-09-22T16:40:21.012192+00:00
+position_column: doing
 position_ordinal: '80'
 title: Render the slash-command text into $ARGUMENTS through the pipeline
 ---
@@ -22,18 +58,18 @@ The code and the tests of this task are in the working tree, uncommitted, except
 
 ## Acceptance Criteria
 
-- [ ] Each `SlashCommand` from `commands(workingDirectory:)` carries a `.rendered` body.
-- [ ] The `commit` command rendered with the typed text `"fix the off-by-one bug"` (the quotation marks are part of the typed text) gives the same text as `registry.call(id: "commit", arguments: ["\"fix the off-by-one bug\""])`: the body holds `using the message: fix the off-by-one bug`, holds the typed text with its quotation marks, and holds no `$0` and no `$ARGUMENTS`.
-- [ ] The `commit` command rendered with the typed text `fix the bug` (no quotation marks) gives a body that holds `using the message: fix` and holds `fix the bug` on the `$ARGUMENTS` line.
-- [ ] The `commit` command rendered with an empty typed text gives the same text as a call with no arguments, and the body holds no `ARGUMENTS:`.
-- [ ] The `git-context` command body holds `on branch main, working tree clean` and no `` !` ``. The `env-report` command body holds `Shared Header` and no `{% include`.
-- [ ] `rg -in "coordination item|passes 1.2 ever run|completely inert|data only\)" plan.md Sources/` finds no line. `rg -n "rendered" CHANGELOG.md` finds a line under Unreleased.
+- [x] Each `SlashCommand` from `commands(workingDirectory:)` carries a `.rendered` body.
+- [x] The `commit` command rendered with the typed text `"fix the off-by-one bug"` (the quotation marks are part of the typed text) gives the same text as `registry.call(id: "commit", arguments: ["\"fix the off-by-one bug\""])`: the body holds `using the message: fix the off-by-one bug`, holds the typed text with its quotation marks, and holds no `$0` and no `$ARGUMENTS`.
+- [x] The `commit` command rendered with the typed text `fix the bug` (no quotation marks) gives a body that holds `using the message: fix` and holds `fix the bug` on the `$ARGUMENTS` line.
+- [x] The `commit` command rendered with an empty typed text gives the same text as a call with no arguments, and the body holds no `ARGUMENTS:`.
+- [x] The `git-context` command body holds `on branch main, working tree clean` and no `` !` ``. The `env-report` command body holds `Shared Header` and no `{% include`.
+- [x] `rg -in "coordination item|passes 1.2 ever run|completely inert|data only\)" plan.md Sources/` finds no line. `rg -n "rendered" CHANGELOG.md` finds a line under Unreleased.
 
 ## Tests
 
-- [ ] `Tests/FoundationModelsSkillsTests/SlashCommandProvidingTests.swift`: `commandBodyRendersTheTypedTextAsTheOneArgumentOfCall`, `commandBodyWithNoTypedTextRendersWithNoArgumentsAppend`, `commandBodyRunsShellInjection`, `commandBodyRunsStencil` (in the working tree).
-- [ ] New in the same file: `commandBodyWithUnquotedTextGivesTheFirstWordToDollarZero`, typed text `fix the bug`, expects `using the message: fix` and `ARGUMENTS`-line text `fix the bug`.
-- [ ] `swift test` passes with no failure and no warning.
+- [x] `Tests/FoundationModelsSkillsTests/SlashCommandProvidingTests.swift`: `commandBodyRendersTheTypedTextAsTheOneArgumentOfCall`, `commandBodyWithNoTypedTextRendersWithNoArgumentsAppend`, `commandBodyRunsShellInjection`, `commandBodyRunsStencil` (in the working tree).
+- [x] New in the same file: `commandBodyWithUnquotedTextGivesTheFirstWordToDollarZero`, typed text `fix the bug`, expects `using the message: fix` and `ARGUMENTS`-line text `fix the bug`.
+- [x] `swift test` passes with no failure and no warning.
 
 ## Workflow
 

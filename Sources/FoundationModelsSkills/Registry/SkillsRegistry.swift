@@ -1011,19 +1011,6 @@ public struct SkillsRegistry: Sendable {
         return try await pipeline.renderBody(request)
     }
 
-    /// The unrendered body text of `id`'s current catalog entry.
-    ///
-    /// None of the §5 render passes have run on this text -- it is exactly
-    /// the `SKILL.md` body as read from disk, `$`-argument placeholders,
-    /// shell-injection syntax, and Stencil tags all still present verbatim.
-    ///
-    /// - Parameter id: The skill id to look up.
-    /// - Returns: The raw body text, or `nil` when `id` is not currently in
-    ///   the catalog.
-    internal func rawBody(id: String) -> String? {
-        catalogBox.snapshot.catalog[id]?.body
-    }
-
     /// The absolute directory `id`'s current catalog entry lives in --
     /// where the resource operations (plan.md §7.3) enumerate and read
     /// under.

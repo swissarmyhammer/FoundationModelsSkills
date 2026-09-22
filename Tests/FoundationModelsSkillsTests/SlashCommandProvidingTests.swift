@@ -48,49 +48,71 @@ struct SlashCommandProvidingTests {
                 == "Create a git commit for the currently staged changes using the given message.")
     }
 
-    @Test func commandsCarryARawUnrenderedPromptTemplateBody() async throws {
+    // MARK: - The body renders through the §5 pipeline
+
+    @Test func commandBodyRendersTheTypedTextAsTheOneArgumentOfCall() async throws {
+        // The text after `/commit ` goes into the pipeline as one argument,
+        // thus `$ARGUMENTS` gets it as typed and `$0` gets its first
+        // shell-style token. The result is what `call(id:arguments:)` gives
+        // for the same text.
         let registry = SkillsRegistry(roots: Self.fixtureRoots)
-        let commands = await registry.commands(workingDirectory: Self.fixtureRoots[0])
-        let commit = try #require(commands.first { $0.name == "commit" })
-        guard case .prompt(let template) = commit.body else {
-            Issue.record("expected commit's body to be .prompt, got \(commit.body)")
-            return
-        }
-        // §5 pass 1 ($-argument substitution) has not run: the raw
-        // `$0`/`$ARGUMENTS` tokens are still present, unsubstituted
-        // (plan.md §7.1's caveat).
-        #expect(template.contains("$0"))
-        #expect(template.contains("$ARGUMENTS"))
+        let commit = try await Self.command(named: "commit", in: registry)
+        let typed = "\"fix the off-by-one bug\""
+
+        let rendered = try await Self.render(commit, typed: typed)
+
+        #expect(rendered == (try await registry.call(id: "commit", arguments: [typed])))
+        #expect(rendered.contains("using the message: fix the off-by-one bug"))
+        #expect(rendered.contains(typed))
+        #expect(!rendered.contains("$0"))
+        #expect(!rendered.contains("$ARGUMENTS"))
     }
 
-    @Test func commandsPreserveRawShellInjectionSyntaxUninterpretedInThePromptTemplate() async throws {
+    @Test func commandBodyWithUnquotedTextGivesTheFirstWordToDollarZero() async throws {
+        // Text with no quotation marks splits with shell-style quoting: `$0`
+        // gets the first word only, and `$ARGUMENTS` gets the text as typed.
         let registry = SkillsRegistry(roots: Self.fixtureRoots)
-        let commands = await registry.commands(workingDirectory: Self.fixtureRoots[0])
-        let gitContext = try #require(commands.first { $0.name == "git-context" })
-        guard case .prompt(let template) = gitContext.body else {
-            Issue.record("expected git-context's body to be .prompt, got \(gitContext.body)")
-            return
-        }
-        // §5 pass 2 (shell injection) has not run: the raw `` !`command` ``
-        // token is still present verbatim, not replaced by the command's
-        // executed output (plan.md §7.1's caveat).
-        #expect(template.contains(#"!`echo "on branch main, working tree clean"`"#))
+        let commit = try await Self.command(named: "commit", in: registry)
+        let typed = "fix the bug"
+
+        let rendered = try await Self.render(commit, typed: typed)
+
+        #expect(rendered == (try await registry.call(id: "commit", arguments: [typed])))
+        #expect(rendered.contains("using the message: fix\n"))
+        #expect(rendered.split(separator: "\n").contains("fix the bug"))
     }
 
-    @Test func commandsPreserveRawStencilSyntaxUnrenderedInThePromptTemplate() async throws {
+    @Test func commandBodyWithNoTypedTextRendersWithNoArgumentsAppend() async throws {
+        // `/commit` with nothing after it is a call with no arguments, not a
+        // call with one empty argument: the `ARGUMENTS:` fallback stays out.
         let registry = SkillsRegistry(roots: Self.fixtureRoots)
-        let commands = await registry.commands(workingDirectory: Self.fixtureRoots[0])
-        let envReport = try #require(commands.first { $0.name == "env-report" })
-        guard case .prompt(let template) = envReport.body else {
-            Issue.record("expected env-report's body to be .prompt, got \(envReport.body)")
-            return
-        }
-        // §5 pass 3 (Stencil) has not run either: the raw `{% include %}`/
-        // `{{ }}` tags are still present verbatim, not substituted (plan.md
-        // §7.1's caveat).
-        #expect(template.contains(#"{% include "header" %}"#))
-        #expect(template.contains("{{ HOME }}"))
-        #expect(template.contains("{{ working_directory }}"))
+        let commit = try await Self.command(named: "commit", in: registry)
+
+        let rendered = try await Self.render(commit, typed: "")
+
+        #expect(rendered == (try await registry.call(id: "commit", arguments: [])))
+        #expect(!rendered.contains("ARGUMENTS:"))
+    }
+
+    @Test func commandBodyRunsShellInjection() async throws {
+        let registry = SkillsRegistry(roots: Self.fixtureRoots)
+        let gitContext = try await Self.command(named: "git-context", in: registry)
+
+        let rendered = try await Self.render(gitContext, typed: "")
+
+        #expect(rendered.contains("on branch main, working tree clean"))
+        #expect(!rendered.contains("!`"))
+    }
+
+    @Test func commandBodyRunsStencil() async throws {
+        let registry = SkillsRegistry(roots: Self.fixtureRoots)
+        let envReport = try await Self.command(named: "env-report", in: registry)
+
+        let rendered = try await Self.render(envReport, typed: "")
+
+        #expect(rendered.contains("Shared Header"))
+        #expect(!rendered.contains("{% include"))
+        #expect(!rendered.contains("{{ HOME }}"))
     }
 
     // MARK: - argumentHint assembly
@@ -208,6 +230,44 @@ struct SlashCommandProvidingTests {
     }
 
     // MARK: - Test helpers
+
+    /// The error a test throws when a command carries a body of a kind other
+    /// than `.rendered`.
+    private struct UnexpectedBodyKind: Error, CustomStringConvertible {
+        let body: SlashCommand.Body
+        var description: String { "expected a .rendered body, got \(body)" }
+    }
+
+    /// The command of `registry` that `commands(workingDirectory:)` lists
+    /// under `name`.
+    ///
+    /// - Parameters:
+    ///   - name: The command name, which is the skill id.
+    ///   - registry: The registry over the §11 fixture stack to read.
+    /// - Returns: The one `SlashCommand` named `name`.
+    /// - Throws: The `#require` failure when no command holds `name`.
+    private static func command(named name: String, in registry: SkillsRegistry) async throws
+        -> SlashCommand
+    {
+        let commands = await registry.commands(workingDirectory: Self.fixtureRoots[0])
+        return try #require(commands.first { $0.name == name })
+    }
+
+    /// Renders `command` with `typed` as the text after `/name `.
+    ///
+    /// - Parameters:
+    ///   - command: The command to render.
+    ///   - typed: The raw text the user typed after the command name.
+    /// - Returns: The rendered prompt text.
+    /// - Throws: `UnexpectedBodyKind` when the body is not `.rendered`, or
+    ///   whatever the render itself throws.
+    private static func render(_ command: SlashCommand, typed: String) async throws -> String {
+        guard case .rendered(let render) = command.body else {
+            throw UnexpectedBodyKind(body: command.body)
+        }
+        return try await render(
+            SlashCommand.Invocation(arguments: typed, workingDirectory: Self.fixtureRoots[0]))
+    }
 
     /// Tallies every `[SlashCommand]` list `SkillsRegistry.commandUpdates`
     /// publishes during a test.

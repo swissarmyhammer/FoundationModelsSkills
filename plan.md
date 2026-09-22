@@ -246,10 +246,12 @@ Adopt Claude's two axes, plus our `preload`:
 - **Harness delivery channel: Extras' `SlashCommandProviding`** *(decision #29)* — the
   registry conforms: `commands(workingDirectory:)` derives from `commandListing()` (name,
   description, `argumentHint` from §6.1), and `commandUpdates` ticks on every reload (§7).
-  Caveat, stated plainly: the `.prompt(template:)` body kind re-renders through the
-  harness's engine, which runs none of §5's passes 1–2 (`$`-arguments, shell injection) —
-  an invocation-aware prompt body is a recorded Extras coordination item; a host that
-  wants full render fidelity calls `registry.call(id:arguments:)` directly (§7.1).
+  Each command carries a `.rendered` body. When the user runs `/name text`, the body
+  gives `text` to `call(id:arguments:)` as one argument, thus the full §5 pipeline
+  runs: `$ARGUMENTS` gets the text as typed, `$N` and `$name` get its shell-style
+  tokens, shell injection runs, and Stencil runs. Text that is empty or whitespace only
+  is no argument, thus the `ARGUMENTS:` fallback stays out. The harness feeds the
+  result to the model as the prompt of the turn (§7.1).
 - `partial: true` is **retired** *(#29)*: shared building blocks are `_partials/*.md`
   files in the stack — not skill directories, so they are invisible to discovery by
   construction. Encountering `partial: true` draws a diagnostic and hides the skill from
@@ -388,7 +390,8 @@ full catalog is never dumped into the root session. One `SkillsRegistry`, four c
 
 ```
                        ┌──────────── SkillsRegistry (source of truth) ────────────┐
-  UI (presentation) ◀──┤ commandListing()  →  [SkillListing] (data only)          │
+  UI (presentation) ◀──┤ commandListing()  →  [SkillListing] for the `/` menu;     │
+                       │ a `/` command renders through call(id:arguments:)         │
   search session    ◀──┤ metadata()        →  SkillSearchAgent (re-injected/reload)│
   root session      ◀──┤ preloadedBodies() →  Instructions at startup              │
   CLI (§7.2)        ◀──┤ call(id:arguments:) → one rendered body, on demand        │
@@ -739,11 +742,12 @@ Revisit when Apple ships a supported per-process confinement API. *(decision #28
     directory-shaped discovery** — both stay in Layer 3 (§3). Hosts wanting the client
     guide's `.agents/skills` layout construct the stack's `Layer`s explicitly. The §6
     user surface additionally conforms to Extras' `SlashCommandProviding` (commands from
-    `commandListing()`, `commandUpdates` from reload); `.prompt(template:)`'s inability
-    to run §5 passes 1–2 is a recorded Extras coordination item — **now filed as Extras
-    `c2pad49`**, asking for a body case that lets a provider render and still take a model
-    turn (`FoundationModelsACPAgent` plan §6.3 has the full analysis). Amends #1, #2, #3, #5,
-    #7, #16, #17, #19 in place.
+    `commandListing()`, `commandUpdates` from reload). A `.prompt(template:)` body cannot
+    run §5 passes 1–2, so Extras item `c2pad49` asked for a body case that lets a provider
+    render and still take a model turn (`FoundationModelsACPAgent` plan §6.3 has the full
+    analysis). Extras delivered that case as `SlashCommand.Body.rendered`, and this package
+    uses it: each command body renders through `call(id:arguments:)` with the typed text as
+    one argument (§6, §7.1). Amends #1, #2, #3, #5, #7, #16, #17, #19 in place.
 30. **Router-free package; the host injects the selection session.**
     *(Decided 2026-08-30. Amends #17 and #26.)* This package does not depend on
     `FoundationModelsRouter`, and no live routing package is in its resolved graph. Its
