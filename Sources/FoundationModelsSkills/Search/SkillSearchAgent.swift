@@ -1,5 +1,5 @@
 import FoundationModelsMetadataRegistry
-import os
+import Logging
 
 /// A thin wrapper over `MetadataSearcher<SkillMetadata>` that searches and
 /// hot-reloads a chosen surface's skill catalog (plan.md §7, §7.1, §7.2;
@@ -37,7 +37,17 @@ public struct SkillSearchAgent: Sendable {
 
     /// Where a search records a failure of `searcher` that the retrieval
     /// fallback answered.
-    private static let logger = Logger(subsystem: "FoundationModelsSkills", category: "SkillSearchAgent")
+    ///
+    /// The record holds a fixed message and the type name of the error, and
+    /// never the description of the error: the error of a selection session
+    /// can hold the query or the model response (see the no-content rule of
+    /// ``SkillsTracing``).
+    private let logger: Logging.Logger
+
+    /// The message of the record that a fallback writes. It is fixed, thus it
+    /// holds no content.
+    private static let fallbackMessage: Logging.Logger.Message =
+        "The selection tier failed, thus the retrieval rank answers this search."
 
     /// Creates a `SkillSearchAgent` over an already-configured searcher.
     ///
@@ -60,9 +70,37 @@ public struct SkillSearchAgent: Sendable {
         retrievalFallback: MetadataSearcher<SkillMetadata>? = nil,
         visibilityPredicate: @escaping @Sendable (SkillMetadata) -> Bool = { $0.isModelVisible }
     ) {
+        self.init(
+            searcher: searcher,
+            retrievalFallback: retrievalFallback,
+            visibilityPredicate: visibilityPredicate,
+            logger: Logging.Logger(label: SkillsTracing.LoggerLabel.search))
+    }
+
+    /// Creates a `SkillSearchAgent` that writes its log records to `logger`.
+    ///
+    /// The public initializer calls this one with the logger of the label
+    /// `SkillsTracing.LoggerLabel.search`. A test gives a logger with its own
+    /// handler, and reads the records back.
+    ///
+    /// - Parameters:
+    ///   - searcher: The `MetadataSearcher` to wrap.
+    ///   - retrievalFallback: A searcher in `.retrieval` mode over the same
+    ///     subset, or `nil`.
+    ///   - visibilityPredicate: Which catalog entries `update(items:)`
+    ///     forwards to `searcher`.
+    ///   - logger: Where a search records a failure of `searcher` that the
+    ///     retrieval fallback answered.
+    init(
+        searcher: MetadataSearcher<SkillMetadata>,
+        retrievalFallback: MetadataSearcher<SkillMetadata>?,
+        visibilityPredicate: @escaping @Sendable (SkillMetadata) -> Bool,
+        logger: Logging.Logger
+    ) {
         self.searcher = searcher
         self.retrievalFallback = retrievalFallback
         self.visibilityPredicate = visibilityPredicate
+        self.logger = logger
     }
 
     /// Searches the wrapped catalog for `query`, ranked best first.
@@ -109,9 +147,9 @@ public struct SkillSearchAgent: Sendable {
             return SkillSearchAnswer(matches: matches.map(\.item), isSelection: isSelection)
         } catch {
             guard let retrievalFallback, !Self.isCancellation(error) else { throw error }
-            Self.logger.notice(
-                "The selection tier failed, thus the retrieval rank answers this search. Cause: \(String(describing: error))"
-            )
+            logger.notice(
+                Self.fallbackMessage,
+                metadata: [SkillsTracing.MetadataKey.errorType: "\(String(reflecting: type(of: error)))"])
             let matches = try await retrievalFallback.search(intent: query, limit: limit)
             return SkillSearchAnswer(matches: matches.map(\.item), isSelection: false)
         }

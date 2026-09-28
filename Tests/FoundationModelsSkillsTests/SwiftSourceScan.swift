@@ -3,11 +3,12 @@ import Foundation
 /// Reads the Swift source of this package for a suite that guards a rule of
 /// the code.
 ///
-/// Four suites guard a rule this way: `LoadingBoundaryTests`, which holds the
+/// Five suites guard a rule this way: `LoadingBoundaryTests`, which holds the
 /// raw work of loading to `FoundationModelsExtras`;
 /// `NoDotfolderStackExtensionTests`, which holds the layer stack to the
 /// initializer of Extras; `NoGitProcessTests`, which holds the package to
-/// libgit2; and `NoStandardOutWriteTests`, which holds it to one line writer.
+/// libgit2; `NoStandardOutWriteTests`, which holds it to one line writer; and
+/// `SkillsTracingTests`, which holds it to one logging API, swift-log.
 /// Each one gives a test of a line, and this file does the two steps under it
 /// -- it counts the lines of a text, and it walks the Swift files of a
 /// directory. Thus no suite keeps a copy of those steps.

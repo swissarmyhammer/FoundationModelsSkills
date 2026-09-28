@@ -1,6 +1,9 @@
 import FoundationModelsMetadataRegistry
-import FoundationModelsSkills
+import Logging
+import Synchronization
 import Testing
+
+@testable import FoundationModelsSkills
 
 /// Tests for `SkillSearchAgent`, the thin `MetadataSearcher<SkillMetadata>`
 /// wrapper (plan.md §7, §7.1, §13; decision #26): seeding filters to the
@@ -222,5 +225,133 @@ struct SkillSearchAgentTests {
 
         #expect(answer.matches.map(\.id) == ["alpha"])
         #expect(!answer.isSelection)
+    }
+
+    // MARK: - The log record of a fallback
+
+    /// Shows that a fallback writes one log record, and that the record holds
+    /// the error type and no content.
+    ///
+    /// The error description and the query both hold `contentMarker`. The
+    /// description of a selection error can hold the query or the model
+    /// response, thus the record must hold neither: a fixed message, and the
+    /// error type in the metadata.
+    @Test func aFallbackLogsOneRecordWithTheErrorTypeAndNoContent() async throws {
+        let recorder = LogRecorder()
+        let agent = SkillSearchAgent(
+            searcher: MetadataSearcher(
+                items: [Self.alphaSkill], mode: .selection,
+                selection: SelectionConfig(model: { _ in ContentThrowingSession() })),
+            retrievalFallback: MetadataSearcher(items: [Self.alphaSkill], mode: .retrieval),
+            visibilityPredicate: { $0.isModelVisible },
+            logger: Logger(label: SkillsTracing.LoggerLabel.search) { _ in recorder.handler })
+
+        let answer = try await agent.answer(query: "alpha \(Self.contentMarker)", limit: 10)
+
+        let records = recorder.records
+        #expect(answer.matches.map(\.id) == ["alpha"])
+        #expect(records.count == 1)
+        #expect(
+            records.first?.metadata[SkillsTracing.MetadataKey.errorType]
+                == .string(String(reflecting: ContentThrowingSession.ContentError.self)))
+        #expect(records.allSatisfy { !$0.holds(Self.contentMarker) })
+    }
+
+    /// The text that the error description and the query of the fallback case
+    /// hold, and that no log record may hold.
+    private static let contentMarker = "QUERY-AND-RESPONSE-CONTENT-7f3c"
+
+    /// An `AgentSession` double whose every call throws an error, and whose
+    /// error description holds `contentMarker`, as the description of a
+    /// selection error can hold the query or the model response.
+    private struct ContentThrowingSession: AgentSession {
+        /// The error every call of this double throws.
+        struct ContentError: Error, CustomStringConvertible {
+            /// The description of the error: the content marker.
+            var description: String {
+                "the model answered: \(SkillSearchAgentTests.contentMarker)"
+            }
+        }
+
+        func respond(to prompt: String) async throws -> String {
+            throw ContentError()
+        }
+    }
+
+    /// One log record that `LogRecorder` recorded.
+    private struct LogRecord: Sendable {
+        /// The message of the record.
+        let message: String
+
+        /// The merged metadata of the record: the handler metadata and the
+        /// metadata of the call.
+        let metadata: Logger.Metadata
+
+        /// The description of the error that the event carried, or `nil` when
+        /// it carried no error. A backend can write that description, thus it
+        /// is content too.
+        let errorDescription: String?
+
+        /// Tells whether the message, a metadata value or the error of the
+        /// event holds `text`.
+        ///
+        /// - Parameter text: The text to find.
+        /// - Returns: `true` when the message, the description of a metadata
+        ///   value, or the description of the error holds `text`.
+        func holds(_ text: String) -> Bool {
+            message.contains(text)
+                || metadata.values.contains { $0.description.contains(text) }
+                || errorDescription?.contains(text) == true
+        }
+    }
+
+    /// Records each log record that its handler receives.
+    ///
+    /// The agent logs in a task that is not the task of the test, thus a
+    /// `Mutex` holds the records, and the class is `Sendable` with no
+    /// unchecked claim.
+    private final class LogRecorder: Sendable {
+        /// The records so far, in the order the handler received them.
+        private let recorded = Mutex<[LogRecord]>([])
+
+        /// Every record so far.
+        var records: [LogRecord] {
+            recorded.withLock { $0 }
+        }
+
+        /// A handler that records each record into this recorder.
+        var handler: RecordingLogHandler {
+            RecordingLogHandler(recorder: self)
+        }
+
+        /// Records `record`.
+        ///
+        /// - Parameter record: The record the handler received.
+        func record(_ record: LogRecord) {
+            recorded.withLock { $0.append(record) }
+        }
+    }
+
+    /// A `LogHandler` that gives each log record to a `LogRecorder`.
+    private struct RecordingLogHandler: LogHandler {
+        /// Where each record goes.
+        let recorder: LogRecorder
+
+        var metadata: Logger.Metadata = [:]
+
+        var logLevel: Logger.Level = .trace
+
+        subscript(metadataKey key: String) -> Logger.Metadata.Value? {
+            get { metadata[key] }
+            set { metadata[key] = newValue }
+        }
+
+        func log(event: LogEvent) {
+            let merged = metadata.merging(event.metadata ?? [:]) { _, call in call }
+            recorder.record(
+                LogRecord(
+                    message: event.message.description, metadata: merged,
+                    errorDescription: event.error.map { String(describing: $0) }))
+        }
     }
 }

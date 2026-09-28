@@ -5,6 +5,27 @@ change is at the top.
 
 ## Unreleased
 
+### Changed: the fallback log record goes through swift-log
+
+This change breaks no source. It changes where one log record goes, and what
+it holds.
+
+**Cause.** The package logged with `os.Logger`, and the record of a selection
+failure held the description of the error. That description can hold the
+search query or the model response, and a log record must hold no content.
+
+**What changed.**
+
+- The package depends on the three telemetry APIs: `swift-distributed-tracing`
+  (`Tracing`), `swift-log` (`Logging`) and `swift-metrics` (`Metrics`). It
+  depends on no exporter, and it bootstraps no backend.
+- `SkillSearchAgent` logs through a `Logging.Logger` with the label
+  `FoundationModelsSkills.search`, not through `os.Logger`. Until the host
+  bootstraps `LoggingSystem`, swift-log writes the record to standard error.
+- When the retrieval fallback answers a search, the record holds a fixed
+  message and the metadata key `error.type` with the type name of the error.
+  It does not hold the description of the error.
+
 ### Removed: `SkillParameter.required` and `SkillMetadata.parameterDetails`
 
 This change breaks the source of a host that reads `SkillParameter.required`,

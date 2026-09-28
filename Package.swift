@@ -27,6 +27,17 @@ let testTargetName = packageName + "Tests"
 /// that pair.
 let swissArmyHammerOrg = "git@github.com:swissarmyhammer/"
 
+/// The package of the tracing API. The library opens its spans through the
+/// `Tracing` product, and the test target reads finished spans back through
+/// the `InMemoryTracing` product.
+let tracingPackage = "swift-distributed-tracing"
+
+/// The package of the logging API: the `Logging` product.
+let loggingPackage = "swift-log"
+
+/// The package of the metrics API: the `Metrics` product.
+let metricsPackage = "swift-metrics"
+
 /// Shared product dependencies needed by both the library target and its test
 /// target -- factored out so the two lists can't drift out of sync.
 let commonDependencies: [Target.Dependency] = [
@@ -48,6 +59,14 @@ let commonDependencies: [Target.Dependency] = [
     // diagnostics, and the `skills marketplace` command group. The product
     // links libgit2 itself, thus no manifest entry here names a git package.
     .product(name: "Marketplace", package: "FoundationModelsExtras"),
+    // The three telemetry APIs: spans, log records and metrics. Each one is
+    // an API only, with no backend. Until a host application bootstraps a
+    // backend, each call goes to a no-op handler. Only an executable of the
+    // family bootstraps a backend; a library never does. Thus this package
+    // declares no exporter package.
+    .product(name: "Tracing", package: tracingPackage),
+    .product(name: "Logging", package: loggingPackage),
+    .product(name: "Metrics", package: metricsPackage),
 ]
 
 /// The fixtures of the marketplace, which only the test target links.
@@ -56,8 +75,12 @@ let commonDependencies: [Target.Dependency] = [
 /// `GatedGitTransport`, `ManualClock`, `MarketplaceEventLog` and `TestSignal`
 /// come from here. The library links none of them, thus a host gets no test
 /// code at all.
+///
+/// `InMemoryTracer` comes from the `InMemoryTracing` product. A test gives it
+/// to the code under test and reads the finished spans back.
 let testOnlyDependencies: [Target.Dependency] = [
-    .product(name: "MarketplaceFixtures", package: "FoundationModelsExtras")
+    .product(name: "MarketplaceFixtures", package: "FoundationModelsExtras"),
+    .product(name: "InMemoryTracing", package: tracingPackage),
 ]
 
 /// The `FoundationModelsSkills` SwiftPM package definition.
@@ -106,6 +129,12 @@ let package = Package(
         // rule (plan.md decision #29). Pinned `exact:`, matching
         // `FoundationModelsExtras`' own Yams pin.
         .package(url: "https://github.com/jpsim/Yams.git", exact: "6.2.2"),
+        // The telemetry APIs (see `commonDependencies`). The tracing range is
+        // the range that `FoundationModelsExtras` declares. The logging and
+        // metrics ranges start at the current release of each package.
+        .package(url: "https://github.com/apple/\(tracingPackage).git", from: "1.4.1"),
+        .package(url: "https://github.com/apple/\(loggingPackage).git", from: "1.15.1"),
+        .package(url: "https://github.com/apple/\(metricsPackage).git", from: "2.11.0"),
     ],
     targets: [
         .target(
