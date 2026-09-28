@@ -46,9 +46,9 @@ import Testing
     /// output, its standard error and its exit code.
     ///
     /// The two streams are kept apart, because the answer of the CLI is on
-    /// standard output alone. Standard error holds the log records of the
-    /// run: with no bootstrapped logging backend, swift-log writes each
-    /// record, for example the "enter" record of a search span, there.
+    /// standard output alone, and a case can then examine standard error by
+    /// itself. `skills-demo` bootstraps the logging handler that does
+    /// nothing, thus no log record goes to standard error.
     private struct RunResult {
         /// The standard output of the run.
         let standardOutput: String
@@ -118,8 +118,14 @@ import Testing
         #expect(SkillLineReader.ids(in: answer).contains(Self.commitSkillID))
     }
 
+    /// The arguments of a CLI skill search for the commit skill.
+    private static let searchArguments = ["skill", "search", "--query", "commit my changes"]
+
+    /// The arguments of a CLI skill use of the commit skill.
+    private static let useArguments = ["skill", "use", "--id", commitSkillID, "--arguments", "fix parser"]
+
     @Test func cliSearchFindsTheCommitSkillByIntent() throws {
-        let result = try Self.run(arguments: ["skill", "search", "--query", "commit my changes"])
+        let result = try Self.run(arguments: Self.searchArguments)
 
         #expect(result.exitCode == 0)
         let answer = try Self.decodedAnswer(result.standardOutput)
@@ -140,10 +146,35 @@ import Testing
     }
 
     @Test func cliUseRendersTheCommitSkillBodyWithArguments() throws {
-        let result = try Self.run(arguments: ["skill", "use", "--id", "commit", "--arguments", "fix parser"])
+        let result = try Self.run(arguments: Self.useArguments)
 
         #expect(result.exitCode == 0)
         #expect(result.output.contains("fix parser"))
+    }
+
+    // MARK: - Telemetry: no "enter" record on standard error
+
+    /// The name of each span that a CLI run can open. The message of the
+    /// "enter" record of a span is `enter <span name>`, thus a line that holds
+    /// a span name is an "enter" line.
+    private static let spanNames = [
+        SkillsTracing.SpanName.search, SkillsTracing.SpanName.catalogLoad, SkillsTracing.SpanName.skillLoad,
+    ]
+
+    /// `skills-demo` bootstraps the logging handler that does nothing. Thus a
+    /// skill search and a skill use, which each open a span and write an
+    /// "enter" record, write no "enter" line to standard error.
+    ///
+    /// - Parameter arguments: The CLI arguments of one run.
+    @Test(arguments: [searchArguments, useArguments])
+    func cliRunWritesNoEnterLineToStandardError(arguments: [String]) throws {
+        let result = try Self.run(arguments: arguments)
+
+        #expect(result.exitCode == 0)
+        let enterLines = result.standardError.split(separator: "\n").filter { line in
+            Self.spanNames.contains { line.contains($0) }
+        }
+        #expect(enterLines.isEmpty, "standard error: \(result.standardError)")
     }
 
     // MARK: - `--chat` mode: the deterministic forced-unavailable seam

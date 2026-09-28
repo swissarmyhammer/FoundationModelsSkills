@@ -72,10 +72,26 @@ comments:
     - note: only SwiftPM "failed loading/storing cached manifest ... disk I/O error" warnings appear. They come from the environment manifest cache, not from the code.
     - next: review
   timestamp: 2026-09-28T21:19:46.752015+00:00
+- actor: claude-code
+  id: 01m3mynqn0kbah8z3kn88gdemx
+  text: |-
+    ### review — clean
+    - evidence: review sha HEAD~1..HEAD (commit 74b7cb8). 0 findings, 0 confirmed, 0 refuted. 7 validator runs, 0 failed. The ignore rule excluded 6 files in .kanban/. No validator matched CHANGELOG.md. The task had no prior Review Findings sections.
+    - next: none. The task moved to done.
+  timestamp: 2026-09-28T21:27:58.880526+00:00
+- actor: claude-code
+  id: 01m3myp0v703dg013saw3gqg4k
+  text: |-
+    ### finish iteration 2 — clean
+    - implement: changed — 11 files; Extras pin 4a733cd -> 70ad74d
+    - test: green — swift test --parallel, 585 tests in 56 suites passed, 0 compiler warnings
+    - commit: 74b7cb8
+    - review: clean — 0 findings
+  timestamp: 2026-09-28T21:28:08.295173+00:00
 depends_on:
 - 01M3MNGJMH6FMPX4VFWJ12KKSS
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: ff9580
 title: 'OTel B: add spans and metrics for skill search and skill load, and the content-safety test'
 ---
 ## What

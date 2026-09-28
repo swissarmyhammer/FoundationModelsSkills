@@ -1,5 +1,6 @@
 import Foundation
 import FoundationModelsSkills
+import Logging
 import Operations
 import OperationsCLI
 
@@ -30,7 +31,18 @@ internal enum SkillsDemoMain {
 
     /// Dispatches to `--chat`/`--watch`/`--marketplace` mode or the default
     /// CLI mode, based on `CommandLine.arguments`.
+    ///
+    /// The first step bootstraps logging, before a mode makes a registry or a
+    /// search agent. An executable must always bootstrap logging: with no
+    /// bootstrap, swift-log writes each record to standard error, for example
+    /// the "enter" record of each skill search and each skill load. The
+    /// telemetry of the package goes to the OpenTelemetry backend that a host
+    /// bootstraps, and this demo does not show the telemetry. Thus the demo
+    /// bootstraps the handler that does nothing. The demo bootstraps no tracer
+    /// and no metrics factory, thus the spans and the metrics stay on their
+    /// no-op defaults.
     internal static func main() async {
+        LoggingSystem.bootstrap(SwiftLogNoOpLogHandler.init)
         let arguments = Array(CommandLine.arguments.dropFirst())
         switch arguments.first {
         case chatFlag:
