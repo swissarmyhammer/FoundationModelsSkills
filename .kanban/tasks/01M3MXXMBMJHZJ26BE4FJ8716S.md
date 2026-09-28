@@ -29,8 +29,24 @@ comments:
     - note: SwiftPM prints 32 "failed loading/storing manifest ... disk I/O error" lines at startup. They come from the SwiftPM manifest cache in this environment, not from package source. No source change can affect them.
     - next: review
   timestamp: 2026-09-28T21:44:29.872813+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01m3mzrnt41xj3d6mvgb2zhv3p
+  text: |-
+    ### review — clean
+    - evidence: review sha HEAD~1..HEAD (cedd0af). 0 findings, 0 confirmed, 0 refuted. 2 files reviewed. 4 .kanban files not reviewed (excluded by .reviewignore).
+    - next: none. The task is in done.
+  timestamp: 2026-09-28T21:47:03.876580+00:00
+- actor: claude-code
+  id: 01m3mzrx9ecqnv514s119q9etc
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 2 files (Examples/skills-demo/SkillsDemoMain.swift, Tests/FoundationModelsSkillsTests/SkillsDemoTests.swift)
+    - test: green — swift test --parallel, 586 tests in 56 suites passed, 0 compiler warnings
+    - commit: cedd0af
+    - review: clean — 0 findings
+  timestamp: 2026-09-28T21:47:11.534334+00:00
+position_column: done
+position_ordinal: ff9680
 title: 'skills-demo: bootstrap logging at startup (OTel rule 6)'
 ---
 ## What
