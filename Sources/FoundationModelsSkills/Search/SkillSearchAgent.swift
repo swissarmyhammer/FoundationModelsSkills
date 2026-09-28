@@ -1,5 +1,7 @@
+import FoundationModelsExtras
 import FoundationModelsMetadataRegistry
 import Logging
+import Tracing
 
 /// A thin wrapper over `MetadataSearcher<SkillMetadata>` that searches and
 /// hot-reloads a chosen surface's skill catalog (plan.md §7, §7.1, §7.2;
@@ -35,14 +37,16 @@ public struct SkillSearchAgent: Sendable {
     /// surface than the one this agent was built for.
     private let visibilityPredicate: @Sendable (SkillMetadata) -> Bool
 
-    /// Where a search records a failure of `searcher` that the retrieval
-    /// fallback answered.
+    /// The tracer, the metrics factory and the logger of each search.
     ///
-    /// The record holds a fixed message and the type name of the error, and
-    /// never the description of the error: the error of a selection session
-    /// can hold the query or the model response (see the no-content rule of
-    /// ``SkillsTracing``).
-    private let logger: Logging.Logger
+    /// A search opens one ``SkillsTracing/SpanName/search`` span, writes one
+    /// "enter" record, and records one ``SkillsTracing/MetricName/searchDuration``
+    /// value. A failure of `searcher` that the retrieval fallback answered
+    /// also writes one record. That record holds a fixed message and the type
+    /// name of the error, and never the description of the error: the error
+    /// of a selection session can hold the query or the model response (see
+    /// the no-content rule of ``SkillsTracing``).
+    private let telemetry: SkillsTracing.Telemetry
 
     /// The message of the record that a fallback writes. It is fixed, thus it
     /// holds no content.
@@ -74,14 +78,16 @@ public struct SkillSearchAgent: Sendable {
             searcher: searcher,
             retrievalFallback: retrievalFallback,
             visibilityPredicate: visibilityPredicate,
-            logger: Logging.Logger(label: SkillsTracing.LoggerLabel.search))
+            telemetry: SkillsTracing.Telemetry())
     }
 
-    /// Creates a `SkillSearchAgent` that writes its log records to `logger`.
+    /// Creates a `SkillSearchAgent` with explicit telemetry.
     ///
-    /// The public initializer calls this one with the logger of the label
-    /// `SkillsTracing.LoggerLabel.search`. A test gives a logger with its own
-    /// handler, and reads the records back.
+    /// The public initializer calls this one with the default telemetry,
+    /// which reads the bootstrapped tracer, the factory of the current task
+    /// and a new logger of the label `SkillsTracing.LoggerLabel.search` when
+    /// a search starts. A test gives its own tracer, factory or logger, and
+    /// reads the records back.
     ///
     /// - Parameters:
     ///   - searcher: The `MetadataSearcher` to wrap.
@@ -89,18 +95,18 @@ public struct SkillSearchAgent: Sendable {
     ///     subset, or `nil`.
     ///   - visibilityPredicate: Which catalog entries `update(items:)`
     ///     forwards to `searcher`.
-    ///   - logger: Where a search records a failure of `searcher` that the
-    ///     retrieval fallback answered.
+    ///   - telemetry: The tracer, the metrics factory and the logger of each
+    ///     search.
     init(
         searcher: MetadataSearcher<SkillMetadata>,
         retrievalFallback: MetadataSearcher<SkillMetadata>?,
         visibilityPredicate: @escaping @Sendable (SkillMetadata) -> Bool,
-        logger: Logging.Logger
+        telemetry: SkillsTracing.Telemetry
     ) {
         self.searcher = searcher
         self.retrievalFallback = retrievalFallback
         self.visibilityPredicate = visibilityPredicate
-        self.logger = logger
+        self.telemetry = telemetry
     }
 
     /// Searches the wrapped catalog for `query`, ranked best first.
@@ -134,6 +140,16 @@ public struct SkillSearchAgent: Sendable {
     /// signals is a selection. An answer of the retrieval fallback is never a
     /// selection.
     ///
+    /// The search runs in one ``SkillsTracing/SpanName/search`` span. The
+    /// selection tier asks a language model and can wait for a long time,
+    /// thus the span also writes one "enter" record when the search starts
+    /// (`TracedCall`). The span holds the limit, the number of matches, the
+    /// tier and whether the fallback answered, and never the query. A search
+    /// that gives an answer records its duration in
+    /// ``SkillsTracing/MetricName/searchDuration``, with the tier as its
+    /// dimension. A search that throws records its error on the span, and no
+    /// duration, because no tier answered.
+    ///
     /// - Parameters:
     ///   - query: The search query.
     ///   - limit: The maximum number of matches to return.
@@ -141,18 +157,61 @@ public struct SkillSearchAgent: Sendable {
     ///   whether the selection tier chose them.
     /// - Throws: The same errors as `search(query:limit:)`.
     public func answer(query: String, limit: Int) async throws -> SkillSearchAnswer {
+        let clock = ContinuousClock()
+        let start = clock.now
+        let logger = telemetry.logger(label: SkillsTracing.LoggerLabel.search)
+        return try await TracedCall.run(
+            SkillsTracing.SpanName.search, tracer: telemetry.tracer, logger: logger,
+            attributes: { $0[SkillsTracing.AttributeKey.searchLimit] = limit }
+        ) { span in
+            let answer = try await rankedAnswer(query: query, limit: limit, span: span, logger: logger)
+            record(answer, on: span, duration: start.duration(to: clock.now))
+            return answer
+        }
+    }
+
+    /// Ranks `query` with the wrapped searcher, or with the retrieval
+    /// fallback when the wrapped searcher fails, and marks on `span` which of
+    /// the two answered.
+    ///
+    /// - Parameters:
+    ///   - query: The search query.
+    ///   - limit: The maximum number of matches to return.
+    ///   - span: The span of the search.
+    ///   - logger: Where a fallback writes its record.
+    /// - Returns: The matches, and whether the selection tier chose them.
+    /// - Throws: The same errors as `search(query:limit:)`.
+    private func rankedAnswer(
+        query: String, limit: Int, span: any Span, logger: Logging.Logger
+    ) async throws -> SkillSearchAnswer {
         do {
             let matches = try await searcher.search(intent: query, limit: limit)
             let isSelection = !matches.isEmpty && matches.allSatisfy { $0.signals == nil }
+            span.attributes[SkillsTracing.AttributeKey.searchFallback] = false
             return SkillSearchAnswer(matches: matches.map(\.item), isSelection: isSelection)
         } catch {
             guard let retrievalFallback, !Self.isCancellation(error) else { throw error }
-            logger.notice(
-                Self.fallbackMessage,
-                metadata: [SkillsTracing.MetadataKey.errorType: "\(String(reflecting: type(of: error)))"])
+            let errorType = String(reflecting: type(of: error))
+            span.attributes[SkillsTracing.AttributeKey.searchFallback] = true
+            span.attributes[SkillsTracing.AttributeKey.errorType] = errorType
+            logger.notice(Self.fallbackMessage, metadata: [SkillsTracing.MetadataKey.errorType: "\(errorType)"])
             let matches = try await retrievalFallback.search(intent: query, limit: limit)
             return SkillSearchAnswer(matches: matches.map(\.item), isSelection: false)
         }
+    }
+
+    /// Records the outcome of one search: the number of matches and the tier
+    /// on `span`, and `duration` in the timer of that tier.
+    ///
+    /// - Parameters:
+    ///   - answer: The answer of the search.
+    ///   - span: The span of the search.
+    ///   - duration: The time from the start of the search to the answer.
+    private func record(_ answer: SkillSearchAnswer, on span: any Span, duration: Duration) {
+        let tier: SkillsTracing.SearchTier = answer.isSelection ? .selection : .retrieval
+        span.attributes[SkillsTracing.AttributeKey.searchResultCount] = answer.matches.count
+        span.attributes[SkillsTracing.AttributeKey.searchTier] = tier.rawValue
+        telemetry.recordSearchDuration(duration, tier: tier)
     }
 
     /// Hot-reloads the wrapped searcher's catalog, and the retrieval

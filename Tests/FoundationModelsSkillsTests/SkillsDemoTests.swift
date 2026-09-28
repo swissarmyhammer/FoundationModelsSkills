@@ -42,15 +42,35 @@ import Testing
 
     // MARK: - Subprocess harness
 
-    /// The result of running `skills-demo` to completion: its combined
-    /// output and exit code.
+    /// The result of running `skills-demo` to completion: its standard
+    /// output, its standard error and its exit code.
+    ///
+    /// The two streams are kept apart, because the answer of the CLI is on
+    /// standard output alone. Standard error holds the log records of the
+    /// run: with no bootstrapped logging backend, swift-log writes each
+    /// record, for example the "enter" record of a search span, there.
     private struct RunResult {
-        let output: String
+        /// The standard output of the run.
+        let standardOutput: String
+
+        /// The standard error of the run.
+        let standardError: String
+
+        /// The exit code of the run.
         let exitCode: Int32
+
+        /// Both streams, standard output first. A case that looks for a
+        /// message, on either stream, reads this.
+        var output: String {
+            standardOutput + standardError
+        }
     }
 
     /// Launches the built `skills-demo` executable with `arguments`,
-    /// collecting its combined output and exit code once it exits.
+    /// collecting its two output streams and exit code once it exits.
+    ///
+    /// Standard error is read on a second thread while this thread reads
+    /// standard output, thus a full pipe on one stream cannot stop the run.
     ///
     /// - Parameters:
     ///   - arguments: The command-line arguments to pass.
@@ -65,14 +85,24 @@ import Testing
         process.environment = environment
 
         let outputPipe = Pipe()
+        let errorPipe = Pipe()
         process.standardOutput = outputPipe
-        process.standardError = outputPipe
+        process.standardError = errorPipe
 
         try process.run()
-        let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
+        let errorData = Recorder<Data>()
+        let errorDrained = DispatchGroup()
+        DispatchQueue.global().async(group: errorDrained) {
+            errorData.record(errorPipe.fileHandleForReading.readDataToEndOfFile())
+        }
+        let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
+        errorDrained.wait()
         process.waitUntilExit()
 
-        return RunResult(output: String(decoding: data, as: UTF8.self), exitCode: process.terminationStatus)
+        return RunResult(
+            standardOutput: String(decoding: outputData, as: UTF8.self),
+            standardError: String(decoding: errorData.recorded.joined(), as: UTF8.self),
+            exitCode: process.terminationStatus)
     }
 
     // MARK: - Default CLI mode
@@ -84,7 +114,7 @@ import Testing
         let result = try Self.run(arguments: ["skill", "list"])
 
         #expect(result.exitCode == 0)
-        let answer = try Self.decodedAnswer(result.output)
+        let answer = try Self.decodedAnswer(result.standardOutput)
         #expect(SkillLineReader.ids(in: answer).contains(Self.commitSkillID))
     }
 
@@ -92,7 +122,7 @@ import Testing
         let result = try Self.run(arguments: ["skill", "search", "--query", "commit my changes"])
 
         #expect(result.exitCode == 0)
-        let answer = try Self.decodedAnswer(result.output)
+        let answer = try Self.decodedAnswer(result.standardOutput)
         #expect(SkillLineReader.ids(in: answer).first == Self.commitSkillID)
     }
 
@@ -101,7 +131,7 @@ import Testing
     /// The CLI writes each answer as one JSON string and then a line break.
     /// This helper removes that line break and decodes the string.
     ///
-    /// - Parameter output: The output of the CLI run.
+    /// - Parameter output: The standard output of the CLI run.
     /// - Returns: The plain text of the answer.
     /// - Throws: A decode error when the output is not one JSON string.
     private static func decodedAnswer(_ output: String) throws -> String {

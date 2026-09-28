@@ -228,13 +228,16 @@ struct SkillSearchAgentTests {
 
     // MARK: - The log record of a fallback
 
-    /// Shows that a fallback writes one log record, and that the record holds
-    /// the error type and no content.
+    /// Shows that a fallback writes one log record with the error type, and
+    /// that no record of the search holds content.
     ///
     /// The error description and the query both hold `contentMarker`. The
     /// description of a selection error can hold the query or the model
     /// response, thus the record must hold neither: a fixed message, and the
-    /// error type in the metadata.
+    /// error type in the metadata. The same logger also gets the "enter"
+    /// record of the search span, thus the case finds the fallback record by
+    /// its error type, and holds each record of the logger to the no-content
+    /// rule.
     @Test func aFallbackLogsOneRecordWithTheErrorTypeAndNoContent() async throws {
         let recorder = Recorder<LogRecord>()
         let agent = SkillSearchAgent(
@@ -243,17 +246,17 @@ struct SkillSearchAgentTests {
                 selection: SelectionConfig(model: { _ in ContentThrowingSession() })),
             retrievalFallback: MetadataSearcher(items: [Self.alphaSkill], mode: .retrieval),
             visibilityPredicate: { $0.isModelVisible },
-            logger: Logger(label: SkillsTracing.LoggerLabel.search) { _ in
-                RecordingLogHandler(recorder: recorder)
-            })
+            telemetry: SkillsTracing.Telemetry(
+                logger: RecordingLogHandler.makeLogger(label: SkillsTracing.LoggerLabel.search, recorder: recorder)))
 
         let answer = try await agent.answer(query: "alpha \(Self.contentMarker)", limit: 10)
 
         let records = recorder.recorded
+        let fallbackRecords = records.filter { $0.metadata[SkillsTracing.MetadataKey.errorType] != nil }
         #expect(answer.matches.map(\.id) == ["alpha"])
-        #expect(records.count == 1)
+        #expect(fallbackRecords.count == 1)
         #expect(
-            records.first?.metadata[SkillsTracing.MetadataKey.errorType]
+            fallbackRecords.first?.metadata[SkillsTracing.MetadataKey.errorType]
                 == .string(String(reflecting: ContentThrowingSession.ContentError.self)))
         #expect(records.allSatisfy { !$0.holds(Self.contentMarker) })
     }
@@ -276,56 +279,6 @@ struct SkillSearchAgentTests {
 
         func respond(to prompt: String) async throws -> String {
             throw ContentError()
-        }
-    }
-
-    /// One log record that `RecordingLogHandler` recorded.
-    private struct LogRecord: Sendable {
-        /// The message of the record.
-        let message: String
-
-        /// The merged metadata of the record: the handler metadata and the
-        /// metadata of the call.
-        let metadata: Logger.Metadata
-
-        /// The description of the error that the event carried, or `nil` when
-        /// it carried no error. A backend can write that description, thus it
-        /// is content too.
-        let errorDescription: String?
-
-        /// Tells whether the message, a metadata value or the error of the
-        /// event holds `text`.
-        ///
-        /// - Parameter text: The text to find.
-        /// - Returns: `true` when the message, the description of a metadata
-        ///   value, or the description of the error holds `text`.
-        func holds(_ text: String) -> Bool {
-            message.contains(text)
-                || metadata.values.contains { $0.description.contains(text) }
-                || errorDescription?.contains(text) == true
-        }
-    }
-
-    /// A `LogHandler` that gives each log record to a `Recorder`.
-    private struct RecordingLogHandler: LogHandler {
-        /// Where each record goes.
-        let recorder: Recorder<LogRecord>
-
-        var metadata: Logger.Metadata = [:]
-
-        var logLevel: Logger.Level = .trace
-
-        subscript(metadataKey key: String) -> Logger.Metadata.Value? {
-            get { metadata[key] }
-            set { metadata[key] = newValue }
-        }
-
-        func log(event: LogEvent) {
-            let merged = metadata.merging(event.metadata ?? [:]) { _, call in call }
-            recorder.record(
-                LogRecord(
-                    message: event.message.description, metadata: merged,
-                    errorDescription: event.error.map { String(describing: $0) }))
         }
     }
 }

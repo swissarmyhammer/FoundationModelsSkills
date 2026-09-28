@@ -5,6 +5,37 @@ change is at the top.
 
 ## Unreleased
 
+### Added: spans and metrics for skill search, skill load and catalog load
+
+This change breaks no source. The public API did not change.
+
+**What changed.**
+
+- `SkillSearchAgent.answer(query:limit:)` (and thus `search(query:limit:)`)
+  runs in one span `FoundationModelsSkills.search`. The span holds
+  `search.limit`, `search.result_count`, `search.tier` (`selection` or
+  `retrieval`) and `search.fallback`. When the fallback answers, it also holds
+  `error.type`. The timer `FoundationModelsSkills.search.duration`, with the
+  dimension `search.tier`, records the duration of each search that gives an
+  answer.
+- `SkillsRegistry.call(id:arguments:)` runs in one span
+  `FoundationModelsSkills.skill.load` that holds `skill.id`. A thrown error is
+  recorded on the span.
+- The search and the skill load each write one "enter" record at level
+  `info` when they start (`TracedCall` of `FoundationModelsExtras`): the
+  logger `FoundationModelsSkills.search` for a search, and the logger
+  `FoundationModelsSkills.registry` for a skill load. A backend exports a span
+  only when it ends, thus the record shows a call that does not end.
+- Each catalog build (at construction, and at each hot reload) runs in one
+  span `FoundationModelsSkills.catalog.load` that holds `skill.count` and
+  `diagnostic.count`. The gauge `FoundationModelsSkills.skills.loaded`
+  records the skill count of each build.
+- No span, record or metric holds a query, a skill body, skill arguments,
+  rendered text or script output. `TelemetryContentSafetyTests` proves it.
+- Each component reads the tracer, the metrics factory and the logger when a
+  call starts, not when the component is made. Thus a host that bootstraps a
+  backend after it makes a registry or a search agent still observes them.
+
 ### Changed: the fallback log record goes through swift-log
 
 This change breaks no source. It changes where one log record goes, and what

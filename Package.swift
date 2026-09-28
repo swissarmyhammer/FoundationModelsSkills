@@ -76,11 +76,16 @@ let commonDependencies: [Target.Dependency] = [
 /// come from here. The library links none of them, thus a host gets no test
 /// code at all.
 ///
-/// `InMemoryTracer` comes from the `InMemoryTracing` product. A test gives it
-/// to the code under test and reads the finished spans back.
+/// `InMemoryTracer` comes from the `InMemoryTracing` product, and
+/// `TestMetrics` comes from the `MetricsTestKit` product. A test gives them to
+/// the code under test and reads the finished spans and the recorded values
+/// back. `TelemetryCapture`, the content-safety helper of the family, comes
+/// from the `TelemetryTestSupport` product of `FoundationModelsExtras`.
 let testOnlyDependencies: [Target.Dependency] = [
     .product(name: "MarketplaceFixtures", package: "FoundationModelsExtras"),
     .product(name: "InMemoryTracing", package: tracingPackage),
+    .product(name: "MetricsTestKit", package: metricsPackage),
+    .product(name: "TelemetryTestSupport", package: "FoundationModelsExtras"),
 ]
 
 /// The `FoundationModelsSkills` SwiftPM package definition.

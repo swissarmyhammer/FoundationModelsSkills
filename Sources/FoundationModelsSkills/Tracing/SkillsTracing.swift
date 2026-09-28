@@ -1,3 +1,5 @@
+import Logging
+import Metrics
 import Tracing
 
 /// The telemetry vocabulary of this package: the name of each span, the key of
@@ -45,6 +47,13 @@ import Tracing
 /// session can hold the query or the model response. Thus a record names the
 /// type of an error (``AttributeKey/errorType``, ``MetadataKey/errorType``),
 /// and never its description.
+///
+/// `TelemetryContentSafetyTests` proves this rule. It puts a unique marker in
+/// a search query, in the arguments of a skill, in the body of a skill and in
+/// the output of a script. It then runs a search, a skill load and a hot
+/// reload in a `TelemetryCapture` of `FoundationModelsExtras`, which fails on
+/// each span attribute, log message, log metadata value and metric dimension
+/// that holds a marker.
 enum SkillsTracing {
     /// What each span name, metric name and logger label starts with.
     private static let prefix = "FoundationModelsSkills."
@@ -136,6 +145,10 @@ enum SkillsTracing {
     enum LoggerLabel {
         /// The logger of ``SkillSearchAgent``.
         static let search = prefix + "search"
+
+        /// The logger of ``SkillsRegistry``. It gets the "enter" record of
+        /// each skill load.
+        static let registry = prefix + "registry"
     }
 
     /// The tracer that a call opens its span through.
@@ -150,5 +163,95 @@ enum SkillsTracing {
     /// - Returns: `explicit` when it is set, else `InstrumentationSystem.tracer`.
     static func tracer(explicit: (any Tracer)?) -> any Tracer {
         explicit ?? InstrumentationSystem.tracer
+    }
+
+    /// The tracer, the metrics factory and the logger of one component:
+    /// ``SkillSearchAgent`` or ``SkillsRegistry``.
+    ///
+    /// Each value is optional. `nil` is the resolve-late shape: the component
+    /// reads the bootstrapped tracer, the factory of the current task (see
+    /// `withMetricsFactory`) or a new logger when a call starts, not when the
+    /// component is made. Thus a host application that bootstraps a backend
+    /// after it makes the component still observes it.
+    ///
+    /// The public initializers of the two components give the default value,
+    /// which sets nothing, thus the public API has no telemetry parameter. A
+    /// test gives explicit values through an internal initializer. An
+    /// explicit value is necessary for the rebuild of a hot reload: that
+    /// rebuild runs on the queue of the watcher, where no task-local tracer
+    /// or factory reaches.
+    struct Telemetry: Sendable {
+        /// The explicit tracer, or `nil` for the bootstrapped tracer.
+        private let explicitTracer: (any Tracer)?
+
+        /// The explicit metrics factory, or `nil` for the factory of the
+        /// current task.
+        private let explicitMetricsFactory: (any MetricsFactory)?
+
+        /// The explicit logger, or `nil` for a new logger at each call.
+        private let explicitLogger: Logger?
+
+        /// Makes the telemetry of one component.
+        ///
+        /// - Parameters:
+        ///   - tracer: The tracer of each span, or `nil` for the
+        ///     bootstrapped tracer at call time.
+        ///   - metricsFactory: The factory of each metric, or `nil` for the
+        ///     factory of the current task at call time.
+        ///   - logger: The logger of each record, or `nil` for a new logger at
+        ///     call time.
+        init(tracer: (any Tracer)? = nil, metricsFactory: (any MetricsFactory)? = nil, logger: Logger? = nil) {
+            explicitTracer = tracer
+            explicitMetricsFactory = metricsFactory
+            explicitLogger = logger
+        }
+
+        /// The tracer that a call opens its span through. See
+        /// ``SkillsTracing/tracer(explicit:)``.
+        var tracer: any Tracer {
+            SkillsTracing.tracer(explicit: explicitTracer)
+        }
+
+        /// The factory that a call makes its metrics through: the explicit
+        /// factory, else `MetricsSystem.factory`, which is the factory of the
+        /// current task when `withMetricsFactory` binds one, else the
+        /// bootstrapped factory.
+        var metricsFactory: any MetricsFactory {
+            explicitMetricsFactory ?? MetricsSystem.factory
+        }
+
+        /// The logger that a call writes its records to.
+        ///
+        /// A new logger keeps the handler of the time that it is made, thus
+        /// the component makes it at call time and does not store it.
+        ///
+        /// - Parameter label: The label of a new logger, one of
+        ///   ``SkillsTracing/LoggerLabel``.
+        /// - Returns: The explicit logger, else a new logger with `label`.
+        func logger(label: String) -> Logger {
+            explicitLogger ?? Logger(label: label)
+        }
+
+        /// Records the duration of one search that gave an answer, in the
+        /// timer ``SkillsTracing/MetricName/searchDuration``.
+        ///
+        /// - Parameters:
+        ///   - duration: The time from the start of the search to the answer.
+        ///   - tier: The tier that chose the matches. It is the one dimension
+        ///     of the timer.
+        func recordSearchDuration(_ duration: Duration, tier: SearchTier) {
+            Timer(
+                label: MetricName.searchDuration, dimensions: [(AttributeKey.searchTier, tier.rawValue)],
+                factory: metricsFactory
+            ).record(duration: duration)
+        }
+
+        /// Records the size of one catalog build, in the gauge
+        /// ``SkillsTracing/MetricName/skillsLoaded``.
+        ///
+        /// - Parameter count: The number of skills in the catalog.
+        func recordSkillsLoaded(_ count: Int) {
+            Gauge(label: MetricName.skillsLoaded, factory: metricsFactory).record(count)
+        }
     }
 }

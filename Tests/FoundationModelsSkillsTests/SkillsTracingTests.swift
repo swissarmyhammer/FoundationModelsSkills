@@ -1,5 +1,8 @@
 import Foundation
 import InMemoryTracing
+import Logging
+import Metrics
+import MetricsTestKit
 import Testing
 import Tracing
 
@@ -36,7 +39,8 @@ struct SkillsTracingTests {
 
     /// Every logger label of the vocabulary.
     private static let loggerLabels = [
-        SkillsTracing.LoggerLabel.search
+        SkillsTracing.LoggerLabel.search,
+        SkillsTracing.LoggerLabel.registry,
     ]
 
     /// Every span attribute key of the vocabulary.
@@ -122,6 +126,50 @@ struct SkillsTracingTests {
         #expect(!(tracer is InMemoryTracer))
         #expect(ObjectIdentifier(type(of: tracer)) == ObjectIdentifier(type(of: InstrumentationSystem.tracer)))
     }
+
+    // MARK: - Telemetry
+
+    @Test func theTelemetryGivesItsExplicitTracer() {
+        let telemetry = SkillsTracing.Telemetry(tracer: InMemoryTracer())
+
+        #expect(telemetry.tracer is InMemoryTracer)
+    }
+
+    @Test func theTelemetryGivesItsExplicitMetricsFactory() {
+        let factory = TestMetrics()
+        let telemetry = SkillsTracing.Telemetry(metricsFactory: factory)
+
+        #expect((telemetry.metricsFactory as? TestMetrics) === factory)
+    }
+
+    /// Shows the resolve-late shape: with no explicit factory, the telemetry
+    /// reads the factory of the current task when the call starts, thus a
+    /// factory that `withMetricsFactory` binds is the factory of the call.
+    @Test func theTelemetryWithNoExplicitFactoryReadsTheFactoryOfTheCurrentTask() {
+        let factory = TestMetrics()
+        let telemetry = SkillsTracing.Telemetry()
+
+        let current = withMetricsFactory(factory) { telemetry.metricsFactory }
+
+        #expect((current as? TestMetrics) === factory)
+    }
+
+    @Test func theTelemetryGivesItsExplicitLogger() {
+        let explicit = Logger(label: Self.explicitLoggerLabel)
+        let telemetry = SkillsTracing.Telemetry(logger: explicit)
+
+        #expect(telemetry.logger(label: SkillsTracing.LoggerLabel.search).label == Self.explicitLoggerLabel)
+    }
+
+    @Test func theTelemetryWithNoExplicitLoggerMakesALoggerWithTheLabelOfTheCaller() {
+        let telemetry = SkillsTracing.Telemetry()
+
+        #expect(telemetry.logger(label: SkillsTracing.LoggerLabel.registry).label == SkillsTracing.LoggerLabel.registry)
+    }
+
+    /// The label of the explicit logger of the telemetry cases. It is not a
+    /// label of the vocabulary, thus a case can tell the two loggers apart.
+    private static let explicitLoggerLabel = "SkillsTracingTests.explicit"
 
     // MARK: - No os logging
 

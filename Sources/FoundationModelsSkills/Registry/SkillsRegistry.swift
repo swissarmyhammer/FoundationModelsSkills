@@ -1,5 +1,6 @@
 import Foundation
 import FoundationModelsExtras
+import Tracing
 
 /// One catalog row `SkillsRegistry.metadata()` returns: a skill's id, its
 /// rendered description and `metadata.*` values, parameter placeholder
@@ -206,6 +207,21 @@ public struct SkillsRegistry: Sendable {
     /// than a comment.
     private let reloadCoordinator: ReloadCoordinator?
 
+    /// The tracer, the metrics factory and the logger of each catalog load
+    /// and each skill load.
+    ///
+    /// A catalog load (the build at construction and the rebuild of each hot
+    /// reload) opens one ``SkillsTracing/SpanName/catalogLoad`` span and
+    /// records one ``SkillsTracing/MetricName/skillsLoaded`` value. A skill
+    /// load (`call(id:arguments:)`) opens one
+    /// ``SkillsTracing/SpanName/skillLoad`` span and writes one "enter"
+    /// record. Every public initializer gives the default telemetry, which
+    /// reads the bootstrapped tracer, the factory of the current task and a
+    /// new logger of the label `SkillsTracing.LoggerLabel.registry` when a
+    /// load starts. A test gives explicit values through
+    /// `init(layers:policy:watch:telemetry:)`.
+    private let telemetry: SkillsTracing.Telemetry
+
     /// This registry's current catalog generation, keyed by id.
     private var catalog: [String: CatalogEntry] {
         catalogBox.snapshot.catalog
@@ -295,9 +311,31 @@ public struct SkillsRegistry: Sendable {
     ///   - watch: Whether to watch every layer root and rebuild the catalog
     ///     on change (plan.md §7). Defaults to `false` -- a static catalog.
     public init(layers: [DotfolderStack.Layer], policy: RenderPolicy = RenderPolicy(), watch: Bool = false) {
+        self.init(layers: layers, policy: policy, watch: watch, telemetry: SkillsTracing.Telemetry())
+    }
+
+    /// Creates a `SkillsRegistry` over explicitly trust-labeled layers, with
+    /// explicit telemetry.
+    ///
+    /// `init(layers:policy:watch:)` calls this one with the default
+    /// telemetry. A test gives its own tracer, metrics factory or logger, and
+    /// reads the records back. The rebuild of a hot reload runs on the queue
+    /// of the watcher, where no task-local tracer or factory reaches, thus a
+    /// test of a reload gives them here.
+    ///
+    /// - Parameters:
+    ///   - layers: The layers to build the catalog over, lowest precedence
+    ///     first.
+    ///   - policy: The render policy every render call this registry makes
+    ///     honors.
+    ///   - watch: Whether to watch every layer root and rebuild the catalog
+    ///     on change.
+    ///   - telemetry: The tracer, the metrics factory and the logger of each
+    ///     catalog load and each skill load.
+    init(layers: [DotfolderStack.Layer], policy: RenderPolicy, watch: Bool, telemetry: SkillsTracing.Telemetry) {
         self.init(
             source: LayerSource(plan: { LayerPlan(localLayers: layers) }, marketplaceUpdates: nil),
-            policy: policy, watch: watch)
+            policy: policy, watch: watch, telemetry: telemetry)
     }
 
     /// Creates a `SkillsRegistry` over a marketplace provider's layers in
@@ -340,7 +378,7 @@ public struct SkillsRegistry: Sendable {
                         marketplaceLayers: marketplaces.marketplaceLayers(), localLayers: localLayers)
                 },
                 marketplaceUpdates: marketplaces.layerUpdates),
-            policy: policy, watch: watch)
+            policy: policy, watch: watch, telemetry: SkillsTracing.Telemetry())
     }
 
     /// Creates a `SkillsRegistry` over whatever computes its layers,
@@ -359,12 +397,15 @@ public struct SkillsRegistry: Sendable {
     ///     honors.
     ///   - watch: Whether to watch every layer root and rebuild the catalog
     ///     on change.
-    private init(source: LayerSource, policy: RenderPolicy, watch: Bool) {
+    ///   - telemetry: The tracer, the metrics factory and the logger of each
+    ///     catalog load and each skill load.
+    private init(source: LayerSource, policy: RenderPolicy, watch: Bool, telemetry: SkillsTracing.Telemetry) {
         let plan = source.plan()
         roots = plan.layers.map(\.root)
         self.policy = policy
+        self.telemetry = telemetry
 
-        let built = Self.buildCatalog(plan: plan)
+        let built = Self.loadCatalog(plan: plan, telemetry: telemetry)
         catalogBox = CatalogBox(catalog: built.catalog, diagnostics: built.diagnostics)
         // The stenciled stack of Extras keeps the process environment out of
         // its own ladder, thus this registry reads the environment one time,
@@ -384,10 +425,11 @@ public struct SkillsRegistry: Sendable {
         // to `ReloadCoordinator` so it can recompute `metadata()` after
         // every rebuild through the exact same rendering path every other
         // reader uses, without duplicating any of it.
-        let reader = SkillsRegistry(catalogBox: catalogBox, pipeline: pipeline, policy: policy, roots: roots)
+        let reader = SkillsRegistry(
+            catalogBox: catalogBox, pipeline: pipeline, policy: policy, roots: roots, telemetry: telemetry)
         let coordinator = ReloadCoordinator(
             source: source, watchedRoots: watch ? plan.watchedRoots : nil, catalogBox: catalogBox,
-            reader: reader)
+            reader: reader, telemetry: telemetry)
         coordinator.start()
         reloadCoordinator = coordinator
     }
@@ -483,11 +525,16 @@ public struct SkillsRegistry: Sendable {
     ///   - pipeline: The render pipeline to share.
     ///   - policy: The render policy to share.
     ///   - roots: The layer roots to share.
-    private init(catalogBox: CatalogBox, pipeline: RenderPipeline, policy: RenderPolicy, roots: [URL]) {
+    ///   - telemetry: The telemetry to share.
+    private init(
+        catalogBox: CatalogBox, pipeline: RenderPipeline, policy: RenderPolicy, roots: [URL],
+        telemetry: SkillsTracing.Telemetry
+    ) {
         self.roots = roots
         self.policy = policy
         self.catalogBox = catalogBox
         self.pipeline = pipeline
+        self.telemetry = telemetry
         reloadCoordinator = nil
     }
 
@@ -613,6 +660,32 @@ public struct SkillsRegistry: Sendable {
                 validated.isModelVisibleEligible && validated.frontmatter.disableModelInvocation != true
             isUserInvocable = validated.isUserInvocableEligible && validated.frontmatter.userInvocable != false
             isPreloaded = validated.frontmatter.preload == true
+        }
+    }
+
+    /// Builds one catalog generation in one
+    /// ``SkillsTracing/SpanName/catalogLoad`` span, and records its size.
+    ///
+    /// The construction of a registry and the rebuild of each hot reload
+    /// both come here, thus each build gives one span and one
+    /// ``SkillsTracing/MetricName/skillsLoaded`` value. The span holds the
+    /// number of skills and the number of diagnostics. A build reads files
+    /// and runs no shell command or model, thus it writes no "enter" record.
+    ///
+    /// - Parameters:
+    ///   - plan: The layers to build the catalog over, lowest precedence
+    ///     first, and the marketplace each of them came from.
+    ///   - telemetry: The tracer and the metrics factory of the build.
+    /// - Returns: The same value as ``buildCatalog(plan:)``.
+    private static func loadCatalog(
+        plan: LayerPlan, telemetry: SkillsTracing.Telemetry
+    ) -> (catalog: [String: CatalogEntry], diagnostics: [SkillDiagnostic]) {
+        telemetry.tracer.withSpan(SkillsTracing.SpanName.catalogLoad) { span in
+            let built = buildCatalog(plan: plan)
+            span.attributes[SkillsTracing.AttributeKey.skillCount] = built.catalog.count
+            span.attributes[SkillsTracing.AttributeKey.diagnosticCount] = built.diagnostics.count
+            telemetry.recordSkillsLoaded(built.catalog.count)
+            return built
         }
     }
 
@@ -977,6 +1050,12 @@ public struct SkillsRegistry: Sendable {
     /// Dereferences the catalog by `id` and renders that skill's body
     /// through all three §5 passes with `arguments`.
     ///
+    /// The call runs in one ``SkillsTracing/SpanName/skillLoad`` span that
+    /// holds the skill id, and never the arguments or the rendered body. The
+    /// shell pass can wait for a long time, thus the span also writes one
+    /// "enter" record when the call starts (`TracedCall`). A thrown error is
+    /// recorded on the span.
+    ///
     /// - Parameters:
     ///   - id: The skill id to call -- the directory name.
     ///   - arguments: The arguments to substitute into the rendered body
@@ -987,6 +1066,24 @@ public struct SkillsRegistry: Sendable {
     ///   unknown outright, or fully hidden from every surface. Otherwise,
     ///   any error a render pass raises (plan.md §5's three passes).
     public func call(id: String, arguments: [String] = []) async throws -> String {
+        try await TracedCall.run(
+            SkillsTracing.SpanName.skillLoad, tracer: telemetry.tracer,
+            logger: telemetry.logger(label: SkillsTracing.LoggerLabel.registry),
+            attributes: { $0[SkillsTracing.AttributeKey.skillID] = id }
+        ) { _ in
+            try await renderedCall(id: id, arguments: arguments)
+        }
+    }
+
+    /// Renders the body of the skill `id` with `arguments`: the work of
+    /// `call(id:arguments:)` in its span.
+    ///
+    /// - Parameters:
+    ///   - id: The skill id to call.
+    ///   - arguments: The arguments to substitute into the rendered body.
+    /// - Returns: The fully rendered body.
+    /// - Throws: The same errors as `call(id:arguments:)`.
+    private func renderedCall(id: String, arguments: [String]) async throws -> String {
         // Read `catalogBox.snapshot` exactly once and reuse it for both the
         // lookup and `validIDs`, so a reload racing between two separate
         // reads can never make them internally inconsistent (an `id`
@@ -1053,7 +1150,7 @@ public struct SkillsRegistry: Sendable {
     /// same `catalogBox`), it simply never itself keeps the coordinator
     /// alive.
     internal var detachedReader: SkillsRegistry {
-        SkillsRegistry(catalogBox: catalogBox, pipeline: pipeline, policy: policy, roots: roots)
+        SkillsRegistry(catalogBox: catalogBox, pipeline: pipeline, policy: policy, roots: roots, telemetry: telemetry)
     }
 
     // MARK: - Reload (plan.md §7)
@@ -1119,7 +1216,7 @@ public struct SkillsRegistry: Sendable {
     /// mutable state, and
     /// `Task` is `Sendable`. This class itself declares no other stored
     /// state: the rebuild closure wired up in `init` captures
-    /// `source`/`catalogBox`/`reader`/`broadcaster` directly rather than
+    /// `source`/`catalogBox`/`reader`/`broadcaster`/`telemetry` directly rather than
     /// `self`, so no `ReloadCoordinator` instance property is ever read or
     /// written outside of `init`/`start()`/`subscribe()`/`deinit`, none of
     /// which race with each other (`start()` and `deinit` are only ever
@@ -1141,7 +1238,7 @@ public struct SkillsRegistry: Sendable {
         /// updates, thus a marketplace update goes through exactly the
         /// catalog swap and the publication a file change goes through, and
         /// one update gives one `onReload` value. The closure captures
-        /// `source`, `catalogBox`, `reader`, and `broadcaster` directly
+        /// `source`, `catalogBox`, `reader`, `broadcaster`, and `telemetry` directly
         /// rather than `self`, so it creates no retain cycle between this
         /// coordinator and its own watcher or task.
         ///
@@ -1154,11 +1251,16 @@ public struct SkillsRegistry: Sendable {
         ///   - reader: A read-only registry view sharing `catalogBox`, used
         ///     to recompute `metadata()` after each rebuild via the real
         ///     rendering path.
-        init(source: LayerSource, watchedRoots: [URL]?, catalogBox: CatalogBox, reader: SkillsRegistry) {
+        ///   - telemetry: The tracer and the metrics factory of each
+        ///     rebuild.
+        init(
+            source: LayerSource, watchedRoots: [URL]?, catalogBox: CatalogBox, reader: SkillsRegistry,
+            telemetry: SkillsTracing.Telemetry
+        ) {
             let broadcaster = EventBroadcaster<[SkillMetadata]>()
             self.broadcaster = broadcaster
             let rebuild: @Sendable () -> Void = {
-                let rebuilt = SkillsRegistry.buildCatalog(plan: source.plan())
+                let rebuilt = SkillsRegistry.loadCatalog(plan: source.plan(), telemetry: telemetry)
                 catalogBox.replace(catalog: rebuilt.catalog, diagnostics: rebuilt.diagnostics)
                 broadcaster.publish(reader.metadata())
             }

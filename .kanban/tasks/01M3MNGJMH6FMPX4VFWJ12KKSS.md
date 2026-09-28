@@ -84,8 +84,24 @@ comments:
     - evidence: swift test --parallel — 575 tests in 54 suites passed, 0 failed, 0 skipped. swift build --build-tests after touching all test files — 0 code warnings. Only SwiftPM manifest cache "disk I/O error" warnings show; they come from the environment, not from code.
     - next: review
   timestamp: 2026-09-28T19:45:52.622978+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01m3ms1rjwbz9r6cc7w095rvwg
+  text: |-
+    ### review — clean
+    - evidence: review sha HEAD~1..HEAD (1f43adc); 0 findings, 0 confirmed, 0 refuted; 5 files reviewed, 2 .kanban files excluded by .reviewignore. The prior finding (2026-09-28 14:26) is checked.
+    - next: none. The task moved to done.
+  timestamp: 2026-09-28T19:49:41.596109+00:00
+- actor: claude-code
+  id: 01m3ms2092yb1t1wrhqb45ztdj
+  text: |-
+    ### finish iteration 2 — clean
+    - implement: changed — 5 files
+    - test: green — swift test --parallel, 575 passed in 54 suites
+    - commit: 1f43adc
+    - review: clean — 0 findings, prior finding checked
+  timestamp: 2026-09-28T19:49:49.474647+00:00
+position_column: done
+position_ordinal: ff9480
 title: 'OTel A: add the tracing, logging and metrics API dependencies, the SkillsTracing vocabulary file, and replace os.Logger with swift-log'
 ---
 ## What
