@@ -8,16 +8,13 @@ import Testing
 /// no-re-scan invariant, and `RenderPolicy` plumbing -- all provable with
 /// identity and recording fakes, before any pass does real work.
 struct RenderPipelineTests {
-    /// Records each `RenderPass.render` invocation it participates in --
-    /// `@unchecked Sendable` because these tests call the pipeline
-    /// synchronously, single-threaded (mirrors
-    /// `FoundationModelsShelltool`'s `WarningRecorder` test-fake pattern).
-    private final class InvocationRecorder: @unchecked Sendable {
-        private(set) var invocations: [(name: String, policy: RenderPolicy)] = []
+    /// One `RenderPass.render` call that a `RecordingPass` recorded.
+    private struct Invocation: Sendable {
+        /// The name of the pass that ran.
+        let name: String
 
-        func record(name: String, policy: RenderPolicy) {
-            invocations.append((name: name, policy: policy))
-        }
+        /// The policy of the request that the pass received.
+        let policy: RenderPolicy
     }
 
     /// A fake pass that records its own name and the request's policy, then
@@ -25,10 +22,10 @@ struct RenderPipelineTests {
     /// side-effect).
     private struct RecordingPass: RenderPass, ShellRenderPass {
         let name: String
-        let recorder: InvocationRecorder
+        let recorder: Recorder<Invocation>
 
         func render(_ text: QuarantinedText, request: RenderRequest) throws -> QuarantinedText {
-            recorder.record(name: name, policy: request.policy)
+            recorder.record(Invocation(name: name, policy: request.policy))
             return text
         }
     }
@@ -51,7 +48,7 @@ struct RenderPipelineTests {
     // MARK: - Fixed order 1 -> 2 -> 3
 
     @Test func bodyRenderRunsPassesInFixedOrderOneThroughThree() async throws {
-        let recorder = InvocationRecorder()
+        let recorder = Recorder<Invocation>()
         let pipeline = RenderPipeline(
             argumentSubstitution: RecordingPass(name: "argumentSubstitution", recorder: recorder),
             shellInjection: RecordingPass(name: "shellInjection", recorder: recorder),
@@ -59,13 +56,13 @@ struct RenderPipelineTests {
 
         _ = try await pipeline.renderBody(request())
 
-        #expect(recorder.invocations.map(\.name) == ["argumentSubstitution", "shellInjection", "stencil"])
+        #expect(recorder.recorded.map(\.name) == ["argumentSubstitution", "shellInjection", "stencil"])
     }
 
     // MARK: - Metadata render path never invokes pass 2
 
     @Test func metadataRenderNeverInvokesShellInjectionPass() throws {
-        let recorder = InvocationRecorder()
+        let recorder = Recorder<Invocation>()
         let pipeline = RenderPipeline(
             argumentSubstitution: RecordingPass(name: "argumentSubstitution", recorder: recorder),
             shellInjection: RecordingPass(name: "shellInjection", recorder: recorder),
@@ -73,8 +70,8 @@ struct RenderPipelineTests {
 
         _ = try pipeline.renderMetadata(request())
 
-        #expect(recorder.invocations.map(\.name) == ["argumentSubstitution", "stencil"])
-        #expect(!recorder.invocations.map(\.name).contains("shellInjection"))
+        #expect(recorder.recorded.map(\.name) == ["argumentSubstitution", "stencil"])
+        #expect(!recorder.recorded.map(\.name).contains("shellInjection"))
     }
 
     // MARK: - No re-scan: a model-supplied argument can't drive execution/templating
@@ -103,7 +100,7 @@ struct RenderPipelineTests {
     // MARK: - RenderPolicy plumbing
 
     @Test func renderPolicyIsPlumbedToEveryBodyPassInvocation() async throws {
-        let recorder = InvocationRecorder()
+        let recorder = Recorder<Invocation>()
         let pipeline = RenderPipeline(
             argumentSubstitution: RecordingPass(name: "argumentSubstitution", recorder: recorder),
             shellInjection: RecordingPass(name: "shellInjection", recorder: recorder),
@@ -112,14 +109,14 @@ struct RenderPipelineTests {
 
         _ = try await pipeline.renderBody(request(policy: policy))
 
-        #expect(recorder.invocations.count == 3)
-        for invocation in recorder.invocations {
+        #expect(recorder.recorded.count == 3)
+        for invocation in recorder.recorded {
             #expect(invocation.policy == policy)
         }
     }
 
     @Test func renderPolicyIsPlumbedToEveryMetadataPassInvocation() throws {
-        let recorder = InvocationRecorder()
+        let recorder = Recorder<Invocation>()
         let pipeline = RenderPipeline(
             argumentSubstitution: RecordingPass(name: "argumentSubstitution", recorder: recorder),
             shellInjection: RecordingPass(name: "shellInjection", recorder: recorder),
@@ -128,8 +125,8 @@ struct RenderPipelineTests {
 
         _ = try pipeline.renderMetadata(request(policy: policy))
 
-        #expect(recorder.invocations.map(\.name) == ["argumentSubstitution", "stencil"])
-        for invocation in recorder.invocations {
+        #expect(recorder.recorded.map(\.name) == ["argumentSubstitution", "stencil"])
+        for invocation in recorder.recorded {
             #expect(invocation.policy == policy)
         }
     }

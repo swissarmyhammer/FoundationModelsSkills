@@ -1,6 +1,5 @@
 import FoundationModelsMetadataRegistry
 import Logging
-import Synchronization
 import Testing
 
 @testable import FoundationModelsSkills
@@ -237,18 +236,20 @@ struct SkillSearchAgentTests {
     /// response, thus the record must hold neither: a fixed message, and the
     /// error type in the metadata.
     @Test func aFallbackLogsOneRecordWithTheErrorTypeAndNoContent() async throws {
-        let recorder = LogRecorder()
+        let recorder = Recorder<LogRecord>()
         let agent = SkillSearchAgent(
             searcher: MetadataSearcher(
                 items: [Self.alphaSkill], mode: .selection,
                 selection: SelectionConfig(model: { _ in ContentThrowingSession() })),
             retrievalFallback: MetadataSearcher(items: [Self.alphaSkill], mode: .retrieval),
             visibilityPredicate: { $0.isModelVisible },
-            logger: Logger(label: SkillsTracing.LoggerLabel.search) { _ in recorder.handler })
+            logger: Logger(label: SkillsTracing.LoggerLabel.search) { _ in
+                RecordingLogHandler(recorder: recorder)
+            })
 
         let answer = try await agent.answer(query: "alpha \(Self.contentMarker)", limit: 10)
 
-        let records = recorder.records
+        let records = recorder.recorded
         #expect(answer.matches.map(\.id) == ["alpha"])
         #expect(records.count == 1)
         #expect(
@@ -278,7 +279,7 @@ struct SkillSearchAgentTests {
         }
     }
 
-    /// One log record that `LogRecorder` recorded.
+    /// One log record that `RecordingLogHandler` recorded.
     private struct LogRecord: Sendable {
         /// The message of the record.
         let message: String
@@ -305,37 +306,10 @@ struct SkillSearchAgentTests {
         }
     }
 
-    /// Records each log record that its handler receives.
-    ///
-    /// The agent logs in a task that is not the task of the test, thus a
-    /// `Mutex` holds the records, and the class is `Sendable` with no
-    /// unchecked claim.
-    private final class LogRecorder: Sendable {
-        /// The records so far, in the order the handler received them.
-        private let recorded = Mutex<[LogRecord]>([])
-
-        /// Every record so far.
-        var records: [LogRecord] {
-            recorded.withLock { $0 }
-        }
-
-        /// A handler that records each record into this recorder.
-        var handler: RecordingLogHandler {
-            RecordingLogHandler(recorder: self)
-        }
-
-        /// Records `record`.
-        ///
-        /// - Parameter record: The record the handler received.
-        func record(_ record: LogRecord) {
-            recorded.withLock { $0.append(record) }
-        }
-    }
-
-    /// A `LogHandler` that gives each log record to a `LogRecorder`.
+    /// A `LogHandler` that gives each log record to a `Recorder`.
     private struct RecordingLogHandler: LogHandler {
         /// Where each record goes.
-        let recorder: LogRecorder
+        let recorder: Recorder<LogRecord>
 
         var metadata: Logger.Metadata = [:]
 

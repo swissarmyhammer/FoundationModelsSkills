@@ -70,7 +70,7 @@ struct SkillsToolAssemblyTests {
     @Test func theSessionRequestCarriesTheIdEnumSchemaOfTheVisibleCandidates() async throws {
         let registry = Self.makeFixtureRegistry()
         let visibleIDs = registry.metadata().filter(\.isModelVisible).map(\.id)
-        let recorder = RequestRecorder()
+        let recorder = Recorder<SelectionSessionRequest>()
         let session = RecordingAgentSession(answer: Self.selectionAnswer)
 
         let tool = try await SkillsTool.make(
@@ -81,9 +81,9 @@ struct SkillsToolAssemblyTests {
             })
         _ = try await Self.searchIDs(through: tool, query: Self.anyQuery)
 
-        let request = try #require(recorder.requests.first)
+        let request = try #require(recorder.recorded.first)
         let schema = try Self.idsSchema(in: request.jsonSchema)
-        #expect(recorder.requests.count == 1)
+        #expect(recorder.recorded.count == 1)
         #expect(request.candidateIDs == visibleIDs)
         #expect(schema.enumIDs == visibleIDs)
         #expect(schema.maxItems == visibleIDs.count)
@@ -460,27 +460,6 @@ struct SkillsToolAssemblyTests {
 
         func respond(to prompt: String) async throws -> String {
             throw SessionFailure()
-        }
-    }
-
-    /// Records each `SelectionSessionRequest` the factory gives the host's
-    /// session closure.
-    ///
-    /// The closure runs in the selection tier, across an `await` boundary
-    /// from the case that reads the records, thus a `Mutex` holds them.
-    private final class RequestRecorder: Sendable {
-        private let recorded = Mutex<[SelectionSessionRequest]>([])
-
-        /// Every request recorded so far, in the order the factory made them.
-        var requests: [SelectionSessionRequest] {
-            recorded.withLock { $0 }
-        }
-
-        /// Records `request`.
-        ///
-        /// - Parameter request: The request the factory gave the closure.
-        func record(_ request: SelectionSessionRequest) {
-            recorded.withLock { $0.append(request) }
         }
     }
 

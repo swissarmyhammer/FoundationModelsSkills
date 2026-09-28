@@ -46,7 +46,7 @@ struct HotReloadTests {
         let registry = SkillsRegistry(roots: [root], watch: true)
         let embedGate = EmbedGate()
         let embedder = FakeEmbedder(dimension: 2, gate: embedGate)
-        let diagnostics = DiagnosticRecorder()
+        let diagnostics = Recorder<MetadataDiagnostic>()
         // `weights: cosine: 0` matters beyond "this scenario never asserts
         // on cosine ranking" (already true before this change): step 1
         // deliberately closes `embedGate` around a catalog-item re-embed to
@@ -162,7 +162,7 @@ struct HotReloadTests {
     ///   present.
     private static func stepOneAdd(
         root: URL, registry: SkillsRegistry, updates: ReloadTestSupport.EventTally,
-        diagnostics: DiagnosticRecorder, embedGate: EmbedGate, tool: SkillsCatalogTool
+        diagnostics: Recorder<MetadataDiagnostic>, embedGate: EmbedGate, tool: SkillsCatalogTool
     ) async throws -> String {
         await embedGate.close()
         try ReloadTestSupport.writeSkillFile(id: "bravo", in: root, descriptionSuffix: "v1")
@@ -418,26 +418,7 @@ struct HotReloadTests {
             settleWindow: ReloadTestSupport.noFurtherSignalWindow)
     }
 
-    // MARK: - Diagnostic recorder
-
-    /// Tallies every `MetadataDiagnostic` the searcher under test emits,
-    /// mirroring `FoundationModelsMetadataRegistryTests.DiagnosticRecorder`.
-    ///
-    /// A `Mutex` holds the recorded diagnostics, thus the compiler itself
-    /// checks the plain `Sendable` conformance.
-    private final class DiagnosticRecorder: Sendable {
-        private let diagnostics = Mutex<[MetadataDiagnostic]>([])
-
-        /// Records `diagnostic` as observed.
-        ///
-        /// - Parameter diagnostic: The diagnostic to record.
-        func record(_ diagnostic: MetadataDiagnostic) {
-            diagnostics.withLock { $0.append(diagnostic) }
-        }
-
-        /// A snapshot of every diagnostic recorded so far.
-        var snapshot: [MetadataDiagnostic] { diagnostics.withLock { $0 } }
-    }
+    // MARK: - Diagnostic polling
 
     /// Polls `recorder` until some recorded diagnostic satisfies `matches`,
     /// or `timeout` elapses.
@@ -449,10 +430,11 @@ struct HotReloadTests {
     /// - Returns: `true` if a matching diagnostic was observed before
     ///   `timeout`; `false` otherwise.
     private static func waitForDiagnostic(
-        _ recorder: DiagnosticRecorder, timeout: Duration, matching matches: @escaping (MetadataDiagnostic) -> Bool
+        _ recorder: Recorder<MetadataDiagnostic>, timeout: Duration,
+        matching matches: @escaping (MetadataDiagnostic) -> Bool
     ) async -> Bool {
         await ReloadTestSupport.poll(
-            { recorder.snapshot.contains(where: matches) }, until: { $0 }, timeout: timeout)
+            { recorder.recorded.contains(where: matches) }, until: { $0 }, timeout: timeout)
     }
 
     /// Polls `embedder`'s embedded-text count until it reaches `target` or

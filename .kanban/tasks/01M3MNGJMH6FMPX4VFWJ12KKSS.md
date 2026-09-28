@@ -40,6 +40,50 @@ comments:
     - evidence: swift test --parallel — 575 tests in 54 suites passed, 0 failed, 0 skipped. Full rebuild of all Swift sources and tests (swift build --build-tests) gave 0 code warnings. The only warnings are SwiftPM manifest cache disk I/O messages from the environment, not from code.
     - next: review
   timestamp: 2026-09-28T19:25:40.197829+00:00
+- actor: claude-code
+  id: 01m3mr47gkq627ktg67bnx5bgz
+  text: |-
+    ### review — findings
+    - evidence: review sha HEAD~1..HEAD; 1 finding (1 confirmed, 0 refuted) — Tests/FoundationModelsSkillsTests/SkillSearchAgentTests.swift:313 (reuse/reuse)
+    - next: implement the open item in the "Review Findings (2026-09-28 14:26)" section. The task stays in review.
+  timestamp: 2026-09-28T19:33:33.843875+00:00
+- actor: claude-code
+  id: 01m3mr4pzqrxpd9n8dxethw5y2
+  text: |-
+    ### finish iteration 1 — findings
+    - implement: changed — 7 files
+    - test: green — swift test --parallel, 575 passed in 54 suites
+    - commit: c930fc8
+    - review: findings — Tests/FoundationModelsSkillsTests/SkillSearchAgentTests.swift:313
+  timestamp: 2026-09-28T19:33:49.687429+00:00
+- actor: claude-code
+  id: 01m3mrjtwy8tsj5ctc3zedkqq6
+  text: |-
+    Finding fixed (reuse/reuse, SkillSearchAgentTests.swift:313).
+    - New shared test helper `Tests/FoundationModelsSkillsTests/Recorder.swift`: `final class Recorder<Element: Sendable>: Sendable`. A `Mutex` holds the array. It has `record(_:)` and `recorded`.
+    - The same cause was in four test files. All four now use `Recorder`:
+      - SkillSearchAgentTests: `LogRecorder` removed. `RecordingLogHandler` holds a `Recorder<LogRecord>`. The `import Synchronization` is removed, because the file has no other `Mutex`.
+      - SkillsToolAssemblyTests: `RequestRecorder` removed. The case uses `Recorder<SelectionSessionRequest>`.
+      - HotReloadTests: `DiagnosticRecorder` removed. The scenario uses `Recorder<MetadataDiagnostic>` (MetadataDiagnostic is Sendable).
+      - RenderPipelineTests: `InvocationRecorder` (an `@unchecked Sendable` class with an array of tuples) removed. A small `Invocation` struct and `Recorder<Invocation>` replace it, thus the unchecked claim is gone too.
+    - Not changed: the `Mutex(0)` call counters (EmbedCallCounter, RecordingAgentSession, ScriptedAgentSession, SelectionSessionFactory). They count, they do not record a list, thus they are a different pattern. The `MarketplaceTestSupport` layer list is replaced as a whole, not appended to, thus it is also a different pattern.
+    - TDD note: this change is a refactor of test helpers only, with no production change. The existing cases are the proof: all of them must stay green.
+    - Process note: two text replacements in RenderPipelineTests were done with `sed`, because the `files` edit with `replace_all` changed only the first match.
+  timestamp: 2026-09-28T19:41:32.446783+00:00
+- actor: claude-code
+  id: 01m3mrjxbdxpb49yxaabzptctk
+  text: |-
+    ### implement — changed
+    - evidence: 5 files — Tests/FoundationModelsSkillsTests/Recorder.swift (new), Tests/FoundationModelsSkillsTests/SkillSearchAgentTests.swift, Tests/FoundationModelsSkillsTests/SkillsToolAssemblyTests.swift, Tests/FoundationModelsSkillsTests/HotReloadTests.swift, Tests/FoundationModelsSkillsTests/RenderPipelineTests.swift. `swift build --build-tests`: 0 code warnings (only the SwiftPM manifest cache disk I/O warnings of the environment). `swift test --parallel`: 575 tests in 54 suites passed, 0 failed.
+    - next: /test, then /review. The task stays in doing.
+  timestamp: 2026-09-28T19:41:34.957982+00:00
+- actor: claude-code
+  id: 01m3mrtrzex6vb6xzrb48pg8pc
+  text: |-
+    ### test — green
+    - evidence: swift test --parallel — 575 tests in 54 suites passed, 0 failed, 0 skipped. swift build --build-tests after touching all test files — 0 code warnings. Only SwiftPM manifest cache "disk I/O error" warnings show; they come from the environment, not from code.
+    - next: review
+  timestamp: 2026-09-28T19:45:52.622978+00:00
 position_column: doing
 position_ordinal: '80'
 title: 'OTel A: add the tracing, logging and metrics API dependencies, the SkillsTracing vocabulary file, and replace os.Logger with swift-log'
@@ -87,3 +131,15 @@ Do this:
 ## Workflow
 - Use `/tdd` — write failing tests first, then implement to make them pass.
 - Do not run `swift format`.
+
+## Review Findings (2026-09-28 14:26)
+
+> Scope: `review sha HEAD~1..HEAD` — reviewed the diffs only — lines this change added or modified. 6 file(s) reviewed, 5 not reviewed.
+
+> 4 file(s) not reviewed — excluded by an ignore rule:
+> - `.kanban/ (from .reviewignore)` — 4 file(s)
+
+> 1 file(s) not reviewed — no validator matched:
+> - `CHANGELOG.md` — no validator matches this file
+
+- [x] `Tests/FoundationModelsSkillsTests/SkillSearchAgentTests.swift:313` `reuse/reuse` — LogRecorder reimplements the Mutex-based recording pattern that already exists as RequestRecorder. Both classes have identical structure: Mutex-wrapped array, a property to access the array, and a method to record items. This pattern should be extracted to a shared generic utility. Extract a generic Recorder<T> class parameterized by the type being recorded, and use it for both RequestRecorder and LogRecorder. This avoids duplicating the Mutex-wrapping pattern across test helpers.
