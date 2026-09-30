@@ -153,8 +153,31 @@ comments:
     - evidence: 11 files changed (not committed): Sources/FoundationModelsSkills/Operations/SkillsToolAssembly.swift, Sources/FoundationModelsSkills/Search/SelectionSessionRequest.swift, Sources/FoundationModelsSkills/Tracing/SkillsTracing.swift, Tests/FoundationModelsSkillsTests/{DependencyGraphTests, HotReloadTestSupport, HotReloadTests, MarketplaceEndToEndTests, SkillSearchAgentTests, SkillsToolAssemblyTests, TelemetryContentSafetyTests}.swift, plan.md. Resolved: MetadataRegistry 8399118, Ranker 39e3717, Extras c5ca65a. `swift build --build-tests` passes (only the mlx-swift build-system warning). `swift test`: 587 tests in 56 suites, 0 failed.
     - next: /review. The acceptance item "CI is green on the pushed commit" stays open until a commit is pushed.
   timestamp: 2026-09-30T21:54:24.060895+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01m3t9dvkba1pmv748034tjnrv
+  text: |-
+    ### review — clean
+    - evidence: review sha HEAD~1..HEAD (ee08397). 0 findings, 0 confirmed, 0 refuted. 7 validator runs, 0 failed. 12 files reviewed. 5 files not reviewed: 4 files in .kanban/ (ignore rule), and plan.md (no validator matches).
+    - next: Push to origin main, then check that CI is green on the pushed commit. That is the last acceptance item.
+  timestamp: 2026-09-30T23:12:07.275489+00:00
+- actor: claude-code
+  id: 01m3t9erxm8wnbvys4xed23xef
+  text: |-
+    ### finish iteration 3 — clean
+    - implement: changed — 11 files; resolved MetadataRegistry 8399118, Ranker 39e3717, Extras c5ca65a
+    - test: green — swift test, 587 tests in 56 suites, 0 failed (fixed WatchMode SIGTERM order, serialized SkillsDemoTests)
+    - commit: ee08397
+    - review: clean — 0 findings
+    - next: push to origin main and check CI (user request).
+  timestamp: 2026-09-30T23:12:37.300819+00:00
+- actor: claude-code
+  id: 01m3t9tv6qaqdj3pnkqw03rngz
+  text: |-
+    ### ci — green
+    - evidence: ee08397 pushed to origin main. GitHub Actions CI run 36789911776: success. Jobs "ci / Build & test" and "ci / Integration (opt-in, real dependencies)" both completed with success.
+  timestamp: 2026-09-30T23:19:12.855157+00:00
+position_column: done
+position_ordinal: ff9780
 title: Adopt the async selection factory and the TextEmbedding without dimension
 ---
 **Wait for:** FoundationModelsRanker tasks 01M3QMD9KJ8T723R02085BEFYY ("Remove dimension from TextEmbedding") and 01M3QMD9X40XA640Z9CXCREQAM ("Async session factory…") on the Ranker board: done and pushed. Also FoundationModelsMetadataRegistry tasks 01M3QMDGR3PSYQ5PMM41Y9GJ7B ("Delete PooledTextEmbedding") and 01M3QMDGD8148YNDHWBB1YXAQ1 ("Remove dimension from the registry test doubles") on the MetadataRegistry board: done and pushed.
@@ -167,7 +190,7 @@ title: Adopt the async selection factory and the TextEmbedding without dimension
 ## Acceptance Criteria
 - [x] Skills builds with the new Ranker.
 - [x] No Skills source or test double declares an embedder `dimension`.
-- [ ] CI is green on the pushed commit.
+- [x] CI is green on the pushed commit.
 
 ## Tests
 - [x] Existing Skills selection and hot-reload tests pass.
