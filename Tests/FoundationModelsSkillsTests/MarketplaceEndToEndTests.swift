@@ -20,9 +20,9 @@ import Testing
 /// `check()`, one `update()`, and one failure. Each wait follows an event of
 /// the registry, thus the case waits for no fixed time.
 struct MarketplaceEndToEndTests {
-    /// The number of vector values of the counting embedder. The case
+    /// The length of each vector of the counting embedder. The case
     /// asserts on no vector, thus the shortest usable length is enough.
-    private static let embeddingDimension = 2
+    private static let embeddingVectorLength = 2
 
     /// The display id of marketplace A, which is the `name` field of its
     /// catalog.
@@ -302,10 +302,10 @@ struct MarketplaceEndToEndTests {
             stack.layers = [DotfolderStack.Layer(source: .user, root: cache.localRoot)]
             registry = SkillsRegistry(marketplaces: cache.store, stack: stack)
 
-            let searcher = await MetadataSearcher(
+            let searcher = MetadataSearcher(
                 items: registry.metadata().filter(\.isModelVisible),
                 weights: Weights(cosine: 0),
-                embedder: FakeEmbedder(dimension: embeddingDimension))
+                embedder: FakeEmbedder(vectorLength: embeddingVectorLength))
             let agent = SkillSearchAgent(searcher: searcher)
             tool = try SkillsTool.make(context: SkillsToolContext(registry: registry, searchAgent: agent))
             subscriptions = [

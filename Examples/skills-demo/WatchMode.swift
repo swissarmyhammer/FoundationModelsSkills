@@ -24,6 +24,10 @@ enum WatchMode {
     /// Watches the fixture stack and writes each reload's forwarded update,
     /// refreshed preload size, and refreshed `/` listing, until `SIGTERM`.
     static func run() async {
+        // The handler is first, before any `await`. A `SIGTERM` that comes
+        // while the registry or the tool is in construction must exit with
+        // status 0, not terminate the process with the default disposition.
+        Self.installTerminationHandler()
         let registry = SkillsDemoAssembly.makeRegistry(watch: true)
         guard let reloads = registry.onReload else {
             StandardStream.output.write(line: "Watch mode requires a watched registry.")
@@ -37,7 +41,6 @@ enum WatchMode {
             let tool = try await SkillsDemoAssembly.makeTool(registry: registry)
             StandardStream.output.write(
                 line: "Watching \(registry.roots.map(\.path).joined(separator: ", ")) for changes.")
-            Self.installTerminationHandler()
 
             for await metadata in reloads {
                 let report = await ReloadReport.make(metadata: metadata, registry: registry)

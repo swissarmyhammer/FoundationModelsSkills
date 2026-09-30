@@ -45,7 +45,7 @@ struct HotReloadTests {
 
         let registry = SkillsRegistry(roots: [root], watch: true)
         let embedGate = EmbedGate()
-        let embedder = FakeEmbedder(dimension: 2, gate: embedGate)
+        let embedder = FakeEmbedder(vectorLength: 2, gate: embedGate)
         let diagnostics = Recorder<MetadataDiagnostic>()
         // `weights: cosine: 0` matters beyond "this scenario never asserts
         // on cosine ranking" (already true before this change): step 1
@@ -55,7 +55,7 @@ struct HotReloadTests {
         // for the query -- on the same gate the test's own code is still
         // awaiting the search to return before it can open. A nonzero
         // cosine weight here would self-deadlock step 1 against itself.
-        let searcher = await MetadataSearcher(
+        let searcher = MetadataSearcher(
             items: registry.metadata().filter(\.isModelVisible),
             weights: Weights(cosine: 0),
             embedder: embedder,

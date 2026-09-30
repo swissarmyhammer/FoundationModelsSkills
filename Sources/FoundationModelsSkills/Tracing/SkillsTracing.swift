@@ -56,7 +56,10 @@ import Tracing
 /// that holds a marker.
 enum SkillsTracing {
     /// What each span name, metric name and logger label starts with.
-    private static let prefix = "FoundationModelsSkills."
+    ///
+    /// The constant is internal, thus a test can tell the records of this
+    /// package from the records of a dependency in the same capture.
+    static let prefix = "FoundationModelsSkills."
 
     /// The operation name of each span that the package opens.
     enum SpanName {

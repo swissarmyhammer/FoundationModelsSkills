@@ -44,30 +44,12 @@ public struct SelectionSessionRequest: Sendable, Equatable {
     ///   - instructions: The instructions the new session starts with.
     ///   - candidateIDs: The ids the schema permits.
     /// - Throws: Whatever `SelectionTier.idEnumSchema(ids:)` throws. An array
-    ///   of strings always encodes, thus this is not expected.
+    ///   of strings always encodes, thus this is not expected. If it occurs,
+    ///   the session factory of the tool throws the same error, and
+    ///   `SkillSearchAgent` gives the rank of the retrieval tier.
     init(instructions: String, candidateIDs: [String]) throws {
         self.instructions = instructions
         self.candidateIDs = candidateIDs
         jsonSchema = try SelectionTier.idEnumSchema(ids: candidateIDs)
-    }
-}
-
-/// The session the tool gives the selection tier when it cannot make a
-/// `SelectionSessionRequest`.
-///
-/// Each call throws `cause`. Thus the failure reaches `SkillSearchAgent`, which
-/// records it and gives the rank of the retrieval tier. The failure does not
-/// stop the search, and it is not silent.
-struct UnavailableSelectionSession: AgentSession {
-    /// The error that stopped the request.
-    let cause: any Error
-
-    /// Throws `cause`, and sends no prompt.
-    ///
-    /// - Parameter prompt: The prompt the tier sends. It is not read.
-    /// - Returns: Nothing; the call always throws.
-    /// - Throws: `cause`.
-    func respond(to prompt: String) async throws -> String {
-        throw cause
     }
 }

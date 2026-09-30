@@ -32,8 +32,8 @@ enum HotReloadTestSupport {
 /// `MetadataSearcher` with no GPU, thus the double is here and not in one of
 /// the two suites.
 final class FakeEmbedder: TextEmbedding {
-    /// The length of every embedding vector this embedder gives.
-    let dimension: Int
+    /// The length of every all-zero vector this embedder gives.
+    private let vectorLength: Int
 
     /// The running total of texts that reached ``embed(_:)``.
     private let counter: EmbedCallCounter
@@ -46,12 +46,12 @@ final class FakeEmbedder: TextEmbedding {
     /// text.
     ///
     /// - Parameters:
-    ///   - dimension: The length of every embedding vector this
-    ///     embedder produces.
+    ///   - vectorLength: The length of every all-zero vector this
+    ///     embedder gives.
     ///   - gate: Blocks every `embed(_:)` call until the gate is open,
     ///     or `nil` to never block. Defaults to `nil`.
-    init(dimension: Int, gate: EmbedGate? = nil) {
-        self.dimension = dimension
+    init(vectorLength: Int, gate: EmbedGate? = nil) {
+        self.vectorLength = vectorLength
         self.counter = EmbedCallCounter()
         self.gate = gate
     }
@@ -63,11 +63,11 @@ final class FakeEmbedder: TextEmbedding {
     /// Gives one all-zero vector for each text, and counts the texts.
     ///
     /// - Parameter texts: The texts to embed.
-    /// - Returns: One all-zero vector of ``dimension`` values for each text.
+    /// - Returns: One all-zero vector of `vectorLength` values for each text.
     func embed(_ texts: [String]) async throws -> [[Float]] {
         if let gate { await gate.waitUntilOpen() }
         counter.increment(by: texts.count)
-        return texts.map { _ in [Float](repeating: 0, count: dimension) }
+        return texts.map { _ in [Float](repeating: 0, count: vectorLength) }
     }
 }
 

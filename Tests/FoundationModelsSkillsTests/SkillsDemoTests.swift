@@ -12,7 +12,11 @@ import Testing
 /// than importing the demo's own types: the point is proving the example's
 /// own construction path -- CLI, `--chat`, `--watch`, `--marketplace` --
 /// round-trips end to end exactly as a user running it would see.
-@Suite struct SkillsDemoTests {
+///
+/// The suite is serialized: each case blocks its thread until a subprocess
+/// ends, thus cases that ran in parallel would hold every thread of the
+/// cooperative pool and starve the timers of the other suites.
+@Suite(.serialized) struct SkillsDemoTests {
 
     // MARK: - Locating the built binary
 
@@ -194,6 +198,9 @@ import Testing
 
     // MARK: - `--watch` mode: starts and exits cleanly on SIGTERM
 
+    /// The start of the line that `--watch` writes once it is watching.
+    private static let watchStartedMarker = "Watching "
+
     @Test func watchModeStartsThenExitsCleanlyOnSIGTERM() throws {
         let process = Process()
         process.executableURL = try Self.skillsDemoBinary()
@@ -203,7 +210,14 @@ import Testing
         process.standardError = outputPipe
 
         try process.run()
-        Thread.sleep(forTimeInterval: 1)
+        // The start-up line is the signal that the mode is up; a fixed wait
+        // would race the process start under a loaded parallel run.
+        var output = Data()
+        while !String(decoding: output, as: UTF8.self).contains(Self.watchStartedMarker) {
+            let chunk = outputPipe.fileHandleForReading.availableData
+            guard !chunk.isEmpty else { break }
+            output.append(chunk)
+        }
         #expect(process.isRunning)
 
         process.terminate()

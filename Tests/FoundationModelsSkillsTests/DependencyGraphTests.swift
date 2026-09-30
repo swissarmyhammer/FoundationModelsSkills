@@ -1,8 +1,8 @@
 import Foundation
 import Testing
 
-/// Guards the resolved dependency graph against the packages the live-Router
-/// path pulled into this package.
+/// Guards the resolved dependency graph against the Router package that the
+/// live-Router path pulled into this package.
 ///
 /// This suite is a *live-resolution tripwire*, not a lockfile check.
 /// `.gitignore` ignores `Package.resolved`, thus Git holds no copy of it and
@@ -40,26 +40,19 @@ struct DependencyGraphTests {
     /// both, thus the two guards can never name different packages.
     private static let removedPackageName = "FoundationModelsRouter"
 
-    /// The package identities the live-Router path pulled in, which the
-    /// resolved graph must no longer hold.
+    /// The package identities that the resolved graph must not hold.
     ///
     /// SwiftPM writes each identity in lower case, thus each entry is spelled
-    /// that way. ``removedPackageName`` supplied the routing types.
-    /// `mlx-swift`, `mlx-swift-lm`, `swift-huggingface`, and
-    /// `swift-transformers` supplied the live model loader below it.
+    /// that way. ``removedPackageName`` supplied the routing types, and it is
+    /// the one denied package.
     ///
-    /// `swift-jinja` is deliberately absent from the list. The sibling
-    /// manifest kept that pin to hold `swift-transformers` away from a release
-    /// it cannot compile against, and only a sibling *test* target linked it.
-    /// Whether SwiftPM prunes such a pin from this package's graph is the
-    /// resolver's business, not this package's contract, thus this suite makes
-    /// no claim about it.
+    /// The MLX packages (`mlx-swift`, `mlx-swift-lm`, `swift-huggingface`
+    /// and `swift-transformers`) are deliberately absent from the list. The
+    /// model pool of `FoundationModelsExtras` declares them, and
+    /// `FoundationModelsMetadataRegistry` takes its `PooledEmbedder` from
+    /// that pool. Decision #30 of `plan.md` accepts them in this graph.
     private static let removedIdentities: Set<String> = [
-        removedPackageName.lowercased(),
-        "mlx-swift",
-        "mlx-swift-lm",
-        "swift-huggingface",
-        "swift-transformers",
+        removedPackageName.lowercased()
     ]
 
     /// What the prose walk reads, relative to the package root: the shipped
@@ -221,14 +214,14 @@ struct DependencyGraphTests {
     /// compiled copy does not, because a Swift file imports at its top.
     private static let importLinePrefix = "import "
 
-    @Test("Package.resolved holds none of the live-Router packages")
-    func resolvesNoneOfTheLiveRouterPackages() throws {
+    @Test("Package.resolved does not hold the Router package")
+    func resolvesNoRouterPackage() throws {
         let found = try Self.resolvedIdentities().intersection(Self.removedIdentities).sorted()
         #expect(
             found.isEmpty,
             """
-            Package.resolved must hold none of the packages the live-Router path pulled in -- \
-            nothing in this package resolves a live Router any more; found: \(found)
+            Package.resolved must not hold the Router package -- nothing in this package \
+            resolves a live Router any more; found: \(found)
             """
         )
     }

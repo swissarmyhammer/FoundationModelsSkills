@@ -37,11 +37,13 @@ struct SkillSearchAgentTests {
     /// need deterministic vectors to prove cosine joins fusion through
     /// `SkillSearchAgent`.
     private struct FakeEmbedder: TextEmbedding {
-        let dimension: Int
+        /// The length of the all-zero vector of a text that is not in
+        /// `vectorsByText`.
+        let vectorLength: Int
         let vectorsByText: [String: [Float]]
 
         func embed(_ texts: [String]) async throws -> [[Float]] {
-            texts.map { vectorsByText[$0] ?? [Float](repeating: 0, count: dimension) }
+            texts.map { vectorsByText[$0] ?? [Float](repeating: 0, count: vectorLength) }
         }
     }
 
@@ -81,14 +83,14 @@ struct SkillSearchAgentTests {
         let query = "save my work"
 
         let embedder = FakeEmbedder(
-            dimension: 2,
+            vectorLength: 2,
             vectorsByText: [
                 query: [1, 0],
                 alpha.renderBlock(): [1, 0],
                 beta.renderBlock(): [0, 1],
             ])
 
-        let searcher = await MetadataSearcher(items: [alpha, beta], embedder: embedder)
+        let searcher = MetadataSearcher(items: [alpha, beta], embedder: embedder)
         let agent = SkillSearchAgent(searcher: searcher)
 
         let matches = try await agent.search(query: query, limit: 5)
@@ -225,6 +227,28 @@ struct SkillSearchAgentTests {
         #expect(answer.matches.map(\.id) == ["alpha"])
         #expect(!answer.isSelection)
     }
+
+    /// Shows that a selection session factory that throws gives the rank of
+    /// the retrieval fallback, not a failed search.
+    ///
+    /// The selection tier cannot make its root session, thus the searcher
+    /// fails before it sends a prompt. The agent must then give the answer
+    /// of the fallback, and that answer must not claim the selection tier.
+    @Test func aSessionFactoryThatThrowsGivesTheRetrievalRank() async throws {
+        let agent = SkillSearchAgent(
+            searcher: MetadataSearcher(
+                items: [Self.alphaSkill], mode: .selection,
+                selection: SelectionConfig(model: { _ in throw SessionFactoryFailure() })),
+            retrievalFallback: MetadataSearcher(items: [Self.alphaSkill], mode: .retrieval))
+
+        let answer = try await agent.answer(query: "alpha", limit: 10)
+
+        #expect(answer.matches.map(\.id) == ["alpha"])
+        #expect(!answer.isSelection)
+    }
+
+    /// The error of a selection session factory that cannot make a session.
+    private struct SessionFactoryFailure: Error {}
 
     // MARK: - The log record of a fallback
 

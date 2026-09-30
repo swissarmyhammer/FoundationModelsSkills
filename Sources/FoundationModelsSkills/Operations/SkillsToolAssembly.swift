@@ -143,9 +143,10 @@ extension SkillsTool {
     /// while the schema permits every visible id. The tier drops an answered
     /// id that is not in the prompt's run.
     ///
-    /// When the request cannot be made, the tier gets an
-    /// `UnavailableSelectionSession`. Its failure reaches `SkillSearchAgent`,
-    /// which records it and gives the retrieval rank.
+    /// When the request cannot be made, the factory throws the error. The
+    /// search that asked for the session fails with it, and the failure
+    /// reaches `SkillSearchAgent`, which records it and gives the retrieval
+    /// rank.
     ///
     /// - Parameters:
     ///   - registry: The registry the candidate ids come from.
@@ -159,11 +160,7 @@ extension SkillsTool {
     ) -> SelectionConfig {
         SelectionConfig(model: { instructions in
             let candidateIDs = registry.metadata().filter(visibilityPredicate).map(\.id)
-            do {
-                return session(try SelectionSessionRequest(instructions: instructions, candidateIDs: candidateIDs))
-            } catch {
-                return UnavailableSelectionSession(cause: error)
-            }
+            return session(try SelectionSessionRequest(instructions: instructions, candidateIDs: candidateIDs))
         })
     }
 

@@ -78,9 +78,24 @@ struct TelemetryContentSafetyTests {
             #expect(rendered.contains(Self.argumentMarker))
             #expect(rendered.contains(Self.scriptOutputMarker))
             #expect(
-                Set(context.spans.map(\.operationName))
+                Self.packageSpanNames(context.spans.map(\.operationName))
                     == [SkillsTracing.SpanName.search, SkillsTracing.SpanName.skillLoad, SkillsTracing.SpanName.catalogLoad])
         }
+    }
+
+    /// Selects the span names of this package from the span names of a
+    /// capture.
+    ///
+    /// The capture also holds the spans of a dependency, for example the
+    /// search spans of `FoundationModelsMetadataRegistry`. Those names are not
+    /// the contract of this package, thus the comparison reads only the names
+    /// that start with ``SkillsTracing/prefix``.
+    ///
+    /// - Parameter names: The operation name of each captured span.
+    /// - Returns: Each distinct name that starts with the prefix of this
+    ///   package.
+    private static func packageSpanNames(_ names: [String]) -> Set<String> {
+        Set(names.filter { $0.hasPrefix(SkillsTracing.prefix) })
     }
 
     /// Runs one search for the query marker. The selection tier has no

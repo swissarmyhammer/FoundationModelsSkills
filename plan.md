@@ -767,6 +767,14 @@ Revisit when Apple ships a supported per-process confinement API. *(decision #28
     Only this decision speaks in the present tense about the Router. #17 and #26 keep
     their original text, because a decision record that rewrites its own history stops
     being a record.
+
+    **Amended 2026-09-30 by ^xbwbm13:** the Router stays out of the resolved graph, and
+    the MLX packages do not. The model pool of `FoundationModelsExtras` declares
+    `mlx-swift`, `mlx-swift-lm`, `swift-huggingface` and `swift-transformers`, and
+    `FoundationModelsMetadataRegistry` takes its `PooledEmbedder` from that pool. Thus
+    these packages are in the resolved graph of this package, and the model-pool work
+    accepts them. They are not a routing layer: the selection session stays with the
+    host. `DependencyGraphTests` denies only the `FoundationModelsRouter` package now.
 31. **The package owns the shape of the selection answer.**
     *(Decided 2026-09-18. Amends #30.)* A SWE-bench run of a host showed the cause: the
     host gave a session with no constraint, the selection model wrote `[explore]`, not

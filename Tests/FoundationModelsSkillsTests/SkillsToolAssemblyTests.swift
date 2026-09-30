@@ -484,10 +484,6 @@ struct SkillsToolAssemblyTests {
         /// when it holds one of these as a substring.
         let alignedMarkers: [String]
 
-        /// The length of every vector this double makes: both
-        /// `alignedVector` and `orthogonalVector` hold two elements.
-        let dimension = AxisAlignedEmbedder.alignedVector.count
-
         func embed(_ texts: [String]) async throws -> [[Float]] {
             texts.map { text in
                 let isAligned = alignedMarkers.contains { text.contains($0) }
