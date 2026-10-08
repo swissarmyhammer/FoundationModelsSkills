@@ -52,7 +52,7 @@ let commonDependencies: [Target.Dependency] = [
     .product(name: "OperationsCLI", package: "FoundationModelsExtras"),
     .product(name: "FoundationModelsMetadataRegistry", package: "FoundationModelsMetadataRegistry"),
     .product(name: "Yams", package: "Yams"),
-    // The whole marketplace (marketplace.md): `MarketplaceStore`,
+    // The whole marketplace: `MarketplaceStore`,
     // `MarketplaceSource`, `MarketplacePolicy`, `MarketplaceConfig` and the
     // git transport below them. This package keeps only the skill knowledge
     // around that product: the registry hookup, the provenance in the

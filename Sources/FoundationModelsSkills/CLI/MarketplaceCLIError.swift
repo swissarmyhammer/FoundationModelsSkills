@@ -1,11 +1,11 @@
-/// Why a `marketplace` command cannot do its work (marketplace.md §9.2).
+/// Why a `marketplace` command cannot do its work.
 ///
 /// No message holds a URL or a credential: it names only the id that the user
 /// gave.
 internal enum MarketplaceCLIError: Error, Equatable, Sendable {
     /// The user configuration already has a marketplace with this pre-fetch
     /// key. Two sources with the same key make the store refuse the whole
-    /// list, thus `add` stops before it writes (marketplace.md §5.3).
+    /// list, thus `add` stops before it writes.
     ///
     /// - Parameter key: The pre-fetch key of the new source.
     case duplicateMarketplace(key: String)
@@ -15,7 +15,7 @@ internal enum MarketplaceCLIError: Error, Equatable, Sendable {
     case noUserLayer
 
     /// The URL of the new source is of no supported form, thus the reader
-    /// gave it no pre-fetch key (marketplace.md §5.1).
+    /// gave it no pre-fetch key.
     ///
     /// - Parameter reason: The message of the reader, which never holds a
     ///   URL and never holds a credential, or `nil` when the reader gave no

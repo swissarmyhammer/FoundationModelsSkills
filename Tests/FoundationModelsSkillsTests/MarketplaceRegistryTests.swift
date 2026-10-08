@@ -3,8 +3,7 @@ import FoundationModelsExtras
 import FoundationModelsSkills
 import Testing
 
-/// Tests for the marketplace half of `SkillsRegistry` (marketplace.md §4.1,
-/// §4.2, §7.4, §9.1): marketplace layers sit below the local stack, so a
+/// Tests for the marketplace half of `SkillsRegistry`: marketplace layers sit below the local stack, so a
 /// local skill always wins and the last marketplace wins among themselves;
 /// a diagnostic carries the marketplace it came from; the shadow advisory
 /// names the marketplace that lost; and one provider update rebuilds the
@@ -30,7 +29,7 @@ struct MarketplaceRegistryTests {
     /// runs.
     private static let shellOutput = "hi"
 
-    // MARK: - Precedence (§4.1)
+    // MARK: - Precedence
 
     @Test func aLocalSkillWinsOverEveryMarketplaceCopyOfTheSameID() async throws {
         let fixture = try Fixture(localBody: "local body")
@@ -56,7 +55,7 @@ struct MarketplaceRegistryTests {
         #expect(body.contains("first marketplace body"))
     }
 
-    // MARK: - Shell injection under the host policy (§6.6)
+    // MARK: - Shell injection under the host policy
 
     @Test func aMarketplaceSkillRunsItsShellInjectionUnderAPermissiveHostPolicy() async throws {
         let fixture = try Fixture(localBody: nil, winningMarketplaceBody: Self.shellBody)
@@ -78,7 +77,7 @@ struct MarketplaceRegistryTests {
         #expect(!body.contains(Self.shellOutput))
     }
 
-    // MARK: - Shadow message (§9.1)
+    // MARK: - Shadow message
 
     @Test func theShadowMessageNamesEachMarketplaceThatLost() throws {
         let fixture = try Fixture(localBody: "local body")
@@ -91,7 +90,7 @@ struct MarketplaceRegistryTests {
         #expect(shadow.message.contains(fixture.localRoot.appendingPathComponent(Self.sharedSkillID).path))
     }
 
-    // MARK: - Provenance (§9.1)
+    // MARK: - Provenance
 
     @Test func aMarketplaceSkillCarriesItsMarketplaceProvenanceInEveryDiagnostic() throws {
         let fixture = try Fixture(localBody: nil)
@@ -111,7 +110,7 @@ struct MarketplaceRegistryTests {
         #expect(diagnostic.provenance.marketplace == nil)
     }
 
-    // MARK: - Reload on a provider update (§7.4)
+    // MARK: - Reload on a provider update
 
     @Test func aProviderUpdateRebuildsOnceAndCarriesTheNewShaEvenWithoutWatching() async throws {
         let fixture = try Fixture(localBody: nil)

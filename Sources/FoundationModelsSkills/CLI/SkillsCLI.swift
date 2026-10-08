@@ -37,8 +37,7 @@ public enum SkillsCLI {
     /// The first argument that names the `marketplace` command group.
     public static let marketplaceCommandName = MarketplaceCLI.commandName
 
-    /// Runs the `marketplace` command group when `arguments` names it
-    /// (marketplace.md §9.2).
+    /// Runs the `marketplace` command group when `arguments` names it.
     ///
     /// This is how a host puts the group next to the `OperationCLIDriver`
     /// tree that ``makeDriver(registry:)`` builds: the host offers the

@@ -2,8 +2,7 @@ import Foundation
 import FoundationModelsExtras
 import Marketplace
 
-/// Where the `marketplace` commands read their configuration and their cache
-/// (marketplace.md §9.2 and §9.3).
+/// Where the `marketplace` commands read their configuration and their cache.
 ///
 /// The host gives the folders and the environment. Thus a test drives every
 /// subcommand over a temporary stack and a temporary cache, and no test reads
@@ -30,7 +29,7 @@ public struct MarketplaceCLIContext: Sendable {
     }
 
     /// The stack that holds `marketplaces.yaml`. Only its user layer and its
-    /// project layer are read (marketplace.md §6.3).
+    /// project layer are read.
     public var stack: DotfolderStack
 
     /// The environment that names the cache folder, the read-only seed
@@ -74,8 +73,7 @@ public struct MarketplaceCLIContext: Sendable {
             environment: environment)
     }
 
-    /// The cache folder that holds `state.json` and every marketplace folder
-    /// (marketplace.md §7.1).
+    /// The cache folder that holds `state.json` and every marketplace folder.
     internal var cacheDirectory: URL {
         MarketplaceStore.cacheDirectory(environment: environment)
     }

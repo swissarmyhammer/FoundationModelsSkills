@@ -2,14 +2,15 @@ import Foundation
 import Marketplace
 
 /// What the configuration and the cache know about one marketplace, as
-/// `marketplace list` shows it (marketplace.md §9.2).
+/// `marketplace list` shows it.
 ///
 /// One row wraps one ``MarketplaceListing`` of the `Marketplace` module, and
 /// it adds what only a command line needs: the column headings, the status
 /// word, and the test that tells whether an id names this marketplace.
 ///
-/// A row holds no URL that did not parse. A URL with a credential in it is no
-/// §5.1 form, thus it never parses, thus a row can never show a credential.
+/// A row holds no URL that did not parse. A URL with a credential in it is not
+/// a supported source form (`https`, `github:` or `file://`), thus it never
+/// parses, thus a row can never show a credential.
 internal struct MarketplaceRow: Sendable {
     /// The text that a column shows when it has no value.
     static let emptyValue = "-"
@@ -17,13 +18,11 @@ internal struct MarketplaceRow: Sendable {
     /// The status of a marketplace that has no snapshot yet.
     static let notInstalledStatus = "not installed"
 
-    /// The status of a marketplace that holds one commit
-    /// (marketplace.md §8.3).
+    /// The status of a marketplace that holds one commit.
     static let pinnedStatus = "pinned"
 
     /// The status of a marketplace that is a folder on this computer. The
-    /// folder is the layer itself, thus it has no snapshot and no commit
-    /// (marketplace.md §5.1).
+    /// folder is the layer itself, thus it has no snapshot and no commit.
     static let localStatus = "local folder"
 
     /// The status of a marketplace that the cache serves.
@@ -37,7 +36,7 @@ internal struct MarketplaceRow: Sendable {
 
     /// The display id: the `name` field of the catalog of the snapshot that
     /// the cache serves, else the pre-fetch key, else the alias of the
-    /// source (marketplace.md §5.3).
+    /// source.
     ///
     /// A source that gives none of the three has the empty id in its
     /// listing, thus the row shows ``emptyValue`` in its place.

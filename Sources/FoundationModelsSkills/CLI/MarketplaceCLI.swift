@@ -2,7 +2,7 @@ import Foundation
 import Marketplace
 import Operations
 
-/// The `marketplace` command group of the CLI (marketplace.md §9.2 and §9.3).
+/// The `marketplace` command group of the CLI.
 ///
 /// Marketplace control is a host function and a command-line function. It is
 /// no model operation: the fused `skills` tool gets no operation from this
@@ -11,7 +11,7 @@ import Operations
 /// The group holds `list`, `check`, `update`, `pin`, `unpin`, `add`, and
 /// `remove`. Every command reads `marketplaces.yaml` of the user layer, and
 /// the file of the project layer only with `--include-project`, which is the
-/// trust gate of marketplace.md §6.3.
+/// trust gate of the project file.
 ///
 /// ```swift
 /// let result = await MarketplaceCLI.run(arguments: ["list"])
@@ -77,8 +77,7 @@ public struct MarketplaceCLI: AsyncParsableCommand {
         }
     }
 
-    /// The trust gate of the project `marketplaces.yaml` (marketplace.md
-    /// §6.3).
+    /// The trust gate of the project `marketplaces.yaml`.
     ///
     /// A cloned repository can carry a file that names a remote source, thus
     /// a command reads that file only when the user asks for it.
@@ -122,7 +121,7 @@ public struct MarketplaceCLI: AsyncParsableCommand {
     // MARK: - check
 
     /// `marketplace check`: what the remote head of each marketplace is. The
-    /// command downloads no content (marketplace.md §8.1).
+    /// command downloads no content.
     internal struct Check: AsyncParsableCommand {
         /// The name and the description of the command.
         static let configuration = CommandConfiguration(
@@ -180,7 +179,7 @@ public struct MarketplaceCLI: AsyncParsableCommand {
     // MARK: - update
 
     /// `marketplace update`: brings one marketplace, or every marketplace, to
-    /// its remote head (marketplace.md §8.3).
+    /// its remote head.
     internal struct Update: AsyncParsableCommand {
         /// The name and the description of the command.
         static let configuration = CommandConfiguration(
@@ -249,8 +248,7 @@ public struct MarketplaceCLI: AsyncParsableCommand {
 
     // MARK: - pin and unpin
 
-    /// `marketplace pin`: holds one marketplace at one commit
-    /// (marketplace.md §8.3).
+    /// `marketplace pin`: holds one marketplace at one commit.
     internal struct Pin: AsyncParsableCommand {
         /// The name and the description of the command.
         static let configuration = CommandConfiguration(
@@ -284,8 +282,7 @@ public struct MarketplaceCLI: AsyncParsableCommand {
         }
     }
 
-    /// `marketplace unpin`: lets one marketplace follow its ref again
-    /// (marketplace.md §8.3).
+    /// `marketplace unpin`: lets one marketplace follow its ref again.
     internal struct Unpin: AsyncParsableCommand {
         /// The name and the description of the command.
         static let configuration = CommandConfiguration(
@@ -317,8 +314,7 @@ public struct MarketplaceCLI: AsyncParsableCommand {
     // MARK: - add and remove
 
     /// `marketplace add`: puts one source at the end of the user
-    /// `marketplaces.yaml`, thus it wins over the earlier sources
-    /// (marketplace.md §6.2).
+    /// `marketplaces.yaml`, thus it wins over the earlier sources.
     internal struct Add: AsyncParsableCommand {
         /// The name and the description of the command.
         static let configuration = CommandConfiguration(
@@ -347,7 +343,8 @@ public struct MarketplaceCLI: AsyncParsableCommand {
         /// credential never reaches the file, and no message shows it.
         ///
         /// - Throws: ``MarketplaceCLIError/unusableSource(reason:)`` when the
-        ///   URL is no §5.1 form,
+        ///   URL is not a supported source form (`https`, `github:` or
+        ///   `file://`),
         ///   ``MarketplaceCLIError/duplicateMarketplace(key:)`` when the user
         ///   configuration already has that id, else the error of the file
         ///   write.

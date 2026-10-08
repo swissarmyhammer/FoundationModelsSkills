@@ -5,10 +5,10 @@ import Testing
 
 @testable import FoundationModelsSkills
 
-/// Tests for the two sources of ``MarketplaceStore`` that need no network
-/// (marketplace.md §5.1, §7.4, and §7.5): a `file://` folder that the store
-/// reads directly and watches as a local layer, and the read-only seed folder
-/// that serves a git marketplace when the cache holds none.
+/// Tests for the two sources of ``MarketplaceStore`` that need no network: a
+/// `file://` folder that the store reads directly and watches as a local
+/// layer, and the read-only seed folder that serves a git marketplace when
+/// the cache holds none.
 struct MarketplaceLocalSourceTests {
     /// How long a test waits for an expected `onReload` publication before it
     /// treats the absence as a failure (mirrors

@@ -1,7 +1,7 @@
 import Synchronization
 
 /// Gives every registered subscriber each published value. One registry can
-/// have more than one consumer at the same time (marketplace.md §7.4).
+/// have more than one consumer at the same time.
 ///
 /// A single shared `AsyncStream` cannot serve this: two concurrent `for await`
 /// loops over the same stream *split* its elements between them rather than

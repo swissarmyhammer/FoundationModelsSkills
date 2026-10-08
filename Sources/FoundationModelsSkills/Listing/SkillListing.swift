@@ -38,8 +38,7 @@ public struct SkillListing: Sendable, Equatable {
     public var acceptsTrailingArguments: Bool
 
     /// The marketplace this skill came from, for example
-    /// `swissarmyhammer-skills@1.2.0`, or `nil` for a local skill
-    /// (marketplace.md §9.1).
+    /// `swissarmyhammer-skills@1.2.0`, or `nil` for a local skill.
     ///
     /// Lets the `/` menu show `commit (swissarmyhammer-skills@1.2.0)`. The
     /// text names the marketplace and the snapshot, never the URL, thus it

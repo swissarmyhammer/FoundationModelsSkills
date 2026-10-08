@@ -13,7 +13,7 @@ import OperationsCLI
 /// - `--chat` -- scripted live-model validation via `ChatMode`, gated on
 ///   `SystemLanguageModel` availability (or `SKILLS_DEMO_FORCE_UNAVAILABLE`).
 /// - `--watch` -- live reload events via `WatchMode`.
-/// - `--marketplace` -- the `marketplace` command group (marketplace.md §9.2)
+/// - `--marketplace` -- the `marketplace` command group
 ///   over the fixture library, for example `skills-demo --marketplace list`.
 @main
 internal enum SkillsDemoMain {

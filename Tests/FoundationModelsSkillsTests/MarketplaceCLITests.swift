@@ -5,8 +5,7 @@ import Testing
 
 @testable import FoundationModelsSkills
 
-/// Proves the `marketplace` command group of the CLI (marketplace.md §9.2 and
-/// §9.3).
+/// Proves the `marketplace` command group of the CLI.
 ///
 /// Every case runs over a `GitFixtureRepository` that a `file://` URL names, a
 /// temporary cache folder, and a temporary configuration stack. Thus no case

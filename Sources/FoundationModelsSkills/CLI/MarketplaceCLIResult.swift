@@ -1,5 +1,4 @@
-/// What one run of the `marketplace` command group gave
-/// (marketplace.md §9.2).
+/// What one run of the `marketplace` command group gave.
 ///
 /// The run gives the text back instead of printing it, in the same shape as
 /// `OperationsCLI.CLIResult`, which a host cannot make itself. Thus a test

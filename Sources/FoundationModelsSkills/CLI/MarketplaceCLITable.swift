@@ -1,5 +1,4 @@
-/// Lays the rows of a `marketplace` command out as columns of text
-/// (marketplace.md §9.2).
+/// Lays the rows of a `marketplace` command out as columns of text.
 ///
 /// `list` and `check` both show a table, thus the layout lives here one time.
 internal enum MarketplaceCLITable {

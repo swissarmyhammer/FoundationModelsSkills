@@ -245,13 +245,13 @@ struct SkillsToolAssemblyTests {
     // MARK: - The operation surface does not change
 
     /// The operations of the fused tool, in the order `SkillsTool.make`
-    /// lists them (marketplace.md §9.2: the model surface does not change).
+    /// lists them. The marketplace does not change the model surface.
     private static let expectedOperationNames = [
         "search skill", "list skill", "use skill", "list resource", "read resource", "run script",
     ]
 
     /// The parameter names of each operation of the fused tool, keyed by the
-    /// operation name (marketplace.md §9.2).
+    /// operation name.
     private static let expectedParameterNames: [String: [String]] = [
         "search skill": ["query", "limit"],
         "list skill": ["filter"],

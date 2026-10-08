@@ -117,8 +117,7 @@ public enum SkillValidator {
     }
 
     /// Validates `discovered`'s already-decoded skill, naming the
-    /// marketplace of every layer that `marketplaces` knows
-    /// (marketplace.md §9.1).
+    /// marketplace of every layer that `marketplaces` knows.
     ///
     /// - Parameters:
     ///   - discovered: The skill's discovery record.
@@ -438,7 +437,7 @@ public enum SkillValidator {
     /// Rule: an id that a lower-precedence layer directory also holds draws
     /// an `.advisory` diagnostic naming how many, and then
     /// naming both sides of every lower directory that came from a
-    /// marketplace (marketplace.md §9.1) -- informational only, no effect on
+    /// marketplace -- informational only, no effect on
     /// eligibility.
     ///
     /// The lower directories are not replaced: each of them gives the files
@@ -460,8 +459,7 @@ public enum SkillValidator {
 
     /// Names both sides of every shadowed `SKILL.md` that came from a
     /// marketplace, for example "` local `/repo/.skills/commit` shadows
-    /// `commit` from marketplace `swissarmyhammer-skills`.`"
-    /// (marketplace.md §9.1).
+    /// `commit` from marketplace `swissarmyhammer-skills`.`".
     ///
     /// A layer that no marketplace backs contributes nothing, thus a purely
     /// local stack keeps the plain count message.

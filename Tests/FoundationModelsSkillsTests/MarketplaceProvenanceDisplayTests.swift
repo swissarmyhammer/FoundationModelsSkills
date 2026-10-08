@@ -5,8 +5,7 @@ import FoundationModelsSkills
 import Operations
 import Testing
 
-/// Tests for the marketplace source text of a display row (marketplace.md
-/// §9.1).
+/// Tests for the marketplace source text of a display row.
 ///
 /// A `commandListing()` row names the marketplace that a skill came from. A
 /// local skill names no marketplace. When the catalog of the marketplace has

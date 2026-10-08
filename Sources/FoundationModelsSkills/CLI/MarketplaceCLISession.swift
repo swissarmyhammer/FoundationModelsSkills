@@ -3,8 +3,7 @@ import Marketplace
 import Synchronization
 
 /// One run of the `marketplace` command group: the folders that the
-/// subcommands read, and the lines that they wrote
-/// (marketplace.md §9.2).
+/// subcommands read, and the lines that they wrote.
 ///
 /// ``MarketplaceCLI/run(arguments:context:)`` puts a session in ``current``
 /// before it parses. Thus every subcommand of that run reads the same folders
@@ -83,7 +82,7 @@ internal final class MarketplaceCLISession: Sendable {
 
     // MARK: - The configuration
 
-    /// The marketplace sources of the configuration (marketplace.md §6.3).
+    /// The marketplace sources of the configuration.
     ///
     /// - Parameter includeProject: Whether to read the `marketplaces.yaml` of
     ///   the project folder. A cloned repository can add a source there, thus

@@ -32,7 +32,7 @@ public struct SkillDiagnostic: Sendable, Equatable {
         /// The winning root itself.
         public var root: URL
         /// The marketplace the winning root came from, or `nil` for a local
-        /// layer (marketplace.md §9.1).
+        /// layer.
         public var marketplace: MarketplaceProvenance?
 
         /// Creates a `Provenance` by directly assigning every field.

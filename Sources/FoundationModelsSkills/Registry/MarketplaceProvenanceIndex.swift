@@ -5,8 +5,7 @@ import Marketplace
 ///
 /// `DiscoveredSkill.rootIndex` and `ContributingDirectory.rootIndex` are both
 /// indices into the same ordered layer list, thus one lookup by index
-/// serves the winner's provenance and the shadow message
-/// (marketplace.md §9.1).
+/// serves the winner's provenance and the shadow message.
 ///
 /// The marketplace itself lives in the `Marketplace` module of
 /// `FoundationModelsExtras`. This index is the skill knowledge around it: it

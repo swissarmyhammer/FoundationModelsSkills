@@ -1,7 +1,6 @@
 import Testing
 
-/// Guards marketplace.md decision 10: the package never starts the `git`
-/// binary. Git work goes through libgit2 behind `GitTransport`.
+/// Guards the rule that the package never starts the `git` binary. Git work goes through libgit2 behind `GitTransport`.
 ///
 /// `GitTransport` lives in the `Marketplace` module of
 /// `FoundationModelsExtras` now, and the tests of that module hold a guard of
@@ -52,7 +51,7 @@ struct NoGitProcessTests {
         #expect(
             offenders.isEmpty,
             """
-            No file under Sources/ may start the git binary (marketplace.md decision 10). Use \
+            No file under Sources/ may start the git binary. Use \
             GitTransport, which calls libgit2; found: \(offenders.joined(separator: ", "))
             """)
     }

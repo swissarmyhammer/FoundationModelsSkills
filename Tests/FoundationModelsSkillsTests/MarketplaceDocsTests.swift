@@ -17,8 +17,7 @@ struct DocumentClaim: Sendable {
     let text: String
 }
 
-/// Holds the marketplace documentation to the behavior that shipped
-/// (marketplace.md §10).
+/// Holds the marketplace documentation to the behavior that shipped.
 ///
 /// The suite reads the documentation files from the disk, found from this
 /// file's `#filePath`, and asserts that each one names what a host must know.
@@ -38,9 +37,6 @@ struct MarketplaceDocsTests {
     /// The README of the package, relative to the package root.
     private static let readmePath = "README.md"
 
-    /// The design record of the marketplaces, relative to the package root.
-    private static let designRecordPath = "marketplace.md"
-
     /// The package that holds the marketplace: the store, the cache, the
     /// transport, the catalog read, the snapshot writer and the
     /// configuration file. A host document must name it, so that a reader
@@ -48,22 +44,18 @@ struct MarketplaceDocsTests {
     private static let marketplacePackageName = "FoundationModelsExtras"
 
     /// The fixtures product of that package, which only the test bundle
-    /// links. The design record names it, thus a reader knows that the
+    /// links. The security document names it, thus a reader knows that the
     /// library links no libgit2.
     private static let fixturesProductName = "MarketplaceFixtures"
 
-    /// The date of the decision that gave the whole marketplace to
-    /// ``marketplacePackageName`` (marketplace.md decision 19).
-    private static let marketplaceDecisionDate = "2026-09-19"
-
     /// The name of the layout type that the store initializer needs, taken
     /// from the type itself. Thus a rename makes this suite fail until the
-    /// design record names the new type.
+    /// host guide names the new type.
     private static let layoutTypeName = String(describing: MarketplaceLayout.self)
 
     /// Every document that states where the marketplace is implemented.
     private static let implementationDocuments = [
-        designRecordPath, hostGuidePath, securityPath,
+        hostGuidePath, securityPath,
     ]
 
     /// The wording that puts an implementation in this repository.
@@ -81,7 +73,7 @@ struct MarketplaceDocsTests {
 
     /// Every document that describes the marketplaces to a reader.
     private static let marketplaceDocuments = [
-        hostGuidePath, securityPath, readmePath, designRecordPath,
+        hostGuidePath, securityPath, readmePath,
     ]
 
     /// The heading of the marketplace section of the security document.
@@ -104,7 +96,7 @@ struct MarketplaceDocsTests {
     private static let sshURLPrefix = "git@"
 
     /// A URL of no supported form: the reader takes `https`, `github:` and
-    /// `file://` only (marketplace.md §5.1).
+    /// `file://` only.
     private static let unsupportedURL = "ftp://example.invalid/owner/repo.git"
 
     /// A cache folder that does not exist, thus a listing made over it holds
@@ -156,10 +148,7 @@ struct MarketplaceDocsTests {
             DocumentClaim(document: hostGuidePath, text: marketplacePackageName),
             DocumentClaim(document: securityPath, text: marketplacePackageName),
             DocumentClaim(document: securityPath, text: fixturesProductName),
-            DocumentClaim(document: designRecordPath, text: marketplacePackageName),
-            DocumentClaim(document: designRecordPath, text: fixturesProductName),
-            DocumentClaim(document: designRecordPath, text: marketplaceDecisionDate),
-            DocumentClaim(document: designRecordPath, text: layoutTypeName),
+            DocumentClaim(document: hostGuidePath, text: layoutTypeName),
         ]
 
     @Test(arguments: claims)
