@@ -82,7 +82,13 @@ struct SkillsTelemetryTests {
         #expect(capture.enterRecords(ofSpanNamed: SkillsTracing.SpanName.skillLoad).count == 1)
     }
 
-    @Test func aCallThatThrowsRecordsTheErrorOnTheSkillLoadSpan() async throws {
+    /// Shows that a call that throws gives the skill load span the error
+    /// status and the type of the error.
+    ///
+    /// `TracedCall` records no error on the span, because the description of
+    /// an error can hold content. It records the status and the type name
+    /// only.
+    @Test func aCallThatThrowsRecordsTheErrorTypeOnTheSkillLoadSpan() async throws {
         let capture = TelemetryRecording()
         let registry = Self.fixtureRegistry(telemetry: capture.telemetry)
 
@@ -93,8 +99,11 @@ struct SkillsTelemetryTests {
         let spans = capture.spans(named: SkillsTracing.SpanName.skillLoad)
         let span = try #require(spans.first)
         #expect(spans.count == 1)
-        #expect(span.errors.count == 1)
-        #expect(span.errors.first?.error is UnknownSkillError)
+        #expect(span.errors.isEmpty)
+        #expect(span.status?.code == .error)
+        #expect(
+            span.attributes.get(SkillsTracing.AttributeKey.errorType)
+                == String(reflecting: UnknownSkillError.self).toSpanAttribute())
     }
 
     // MARK: - Catalog load and hot reload

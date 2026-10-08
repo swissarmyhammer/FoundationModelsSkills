@@ -1,3 +1,5 @@
+import FoundationModels
+import FoundationModelsExtras
 import FoundationModelsMetadataRegistry
 import Operations
 
@@ -6,8 +8,8 @@ import Operations
 /// Before these factories, a host had to build four things by hand: a
 /// `SkillsRegistry`, a `MetadataSearcher`, a `SkillSearchAgent`, and a
 /// `SkillsToolContext`. Each factory below does those steps in one call, and
-/// takes the selection session as a parameter. Thus the host gives the model
-/// its session, and no factory here makes a session of its own.
+/// takes the selection model as a parameter. Thus the host chooses the model,
+/// and no factory here chooses a model of its own.
 ///
 /// The result goes straight into `LanguageModelSession(tools:)`, because
 /// `SkillsCatalogTool` conforms to the FoundationModels `Tool` protocol.
@@ -18,16 +20,14 @@ import Operations
 /// forwards `catalogCharacterLimit` to it.
 extension SkillsTool {
     /// Builds the fused `skills` tool over `registry`, with a selection tier
-    /// that asks the host for a new session for each assembled candidate
-    /// prefix.
+    /// that asks `model` to choose among the candidate skills.
     ///
-    /// The package owns the shape of the selection answer (plan.md decision
-    /// #31). Each `SelectionSessionRequest` carries the JSON Schema that
-    /// limits an answer to `{"ids": [String]}` over the candidate skill ids,
-    /// and the host makes a session that applies it. A session with no
-    /// constraint can still answer with another shape, and that answer does
-    /// not fail the call: the search then gives the rank of the retrieval
-    /// tier.
+    /// For each assembled candidate prefix, the selection tier makes a new
+    /// `LanguageModelSession` on `model`, and asks for a `Selection` through
+    /// guided generation. Thus each answer has the `{"ids": [String]}` shape.
+    /// The tier drops an id that is not a candidate. An answer that does not
+    /// decode does not fail the call: the search then gives the rank of the
+    /// retrieval tier.
     ///
     /// The searcher runs in `.auto` mode, thus the selection tier answers
     /// every search. A second searcher in `.retrieval` mode shares the first
@@ -42,15 +42,13 @@ extension SkillsTool {
     /// - Parameters:
     ///   - registry: The registry every operation dereferences at dispatch
     ///     time.
-    ///   - session: Makes a session from a `SelectionSessionRequest`. Every
-    ///     selection call goes to a session this closure made. A session
-    ///     whose model takes a JSON Schema grammar applies
-    ///     `request.jsonSchema`. A `LanguageModelSession` needs only
-    ///     `request.instructions`, because its guided generation constrains
-    ///     the answer shape itself.
+    ///   - model: The FoundationModels model that answers each selection
+    ///     prompt: for example `SystemLanguageModel.default`, or a
+    ///     `PooledModel` of FoundationModelsExtras.
     ///   - embedder: The embedder that embeds every item's block at build
-    ///     time, and the query at search time. Defaults to `nil`, which
-    ///     leaves the cosine signal out.
+    ///     time, and the query at search time: for example a `PooledEmbedder`
+    ///     of FoundationModelsExtras. Defaults to `nil`, which leaves the
+    ///     cosine signal out.
     ///   - followReloads: Whether the tool follows `registry.onReload`
     ///     itself. Defaults to `true`. See `assemble(registry:mode:embedder:
     ///     selection:followReloads:catalogCharacterLimit:visibilityPredicate:)`.
@@ -66,8 +64,8 @@ extension SkillsTool {
     ///   throws.
     public static func make(
         registry: SkillsRegistry,
-        session: @escaping @Sendable (SelectionSessionRequest) -> any AgentSession,
-        embedder: (any TextEmbedding)? = nil,
+        model: any LanguageModel,
+        embedder: (any PooledEmbedding)? = nil,
         followReloads: Bool = true,
         catalogCharacterLimit: Int = defaultCatalogCharacterLimit,
         visibilityPredicate: @escaping @Sendable (SkillMetadata) -> Bool = { $0.isModelVisible }
@@ -76,7 +74,7 @@ extension SkillsTool {
             registry: registry,
             mode: .auto,
             embedder: embedder,
-            selection: makeSelection(registry: registry, session: session, visibilityPredicate: visibilityPredicate),
+            selection: SelectionConfig(model: model),
             followReloads: followReloads,
             catalogCharacterLimit: catalogCharacterLimit,
             visibilityPredicate: visibilityPredicate)
@@ -88,7 +86,7 @@ extension SkillsTool {
     /// The searcher gets `mode: .retrieval` explicitly. The default is
     /// `.auto`, which is the same thing while no selection tier is
     /// configured, but `.retrieval` says what this factory promises: no
-    /// session, no tokens, and an answer in milliseconds. A host with no
+    /// model, no tokens, and an answer in milliseconds. A host with no
     /// model, such as a command-line driver or a typeahead field, uses this
     /// one.
     ///
@@ -117,7 +115,7 @@ extension SkillsTool {
     ///   throws.
     public static func make(
         registry: SkillsRegistry,
-        embedder: (any TextEmbedding)? = nil,
+        embedder: (any PooledEmbedding)? = nil,
         followReloads: Bool = true,
         catalogCharacterLimit: Int = defaultCatalogCharacterLimit,
         visibilityPredicate: @escaping @Sendable (SkillMetadata) -> Bool = { $0.isModelVisible }
@@ -130,38 +128,6 @@ extension SkillsTool {
             followReloads: followReloads,
             catalogCharacterLimit: catalogCharacterLimit,
             visibilityPredicate: visibilityPredicate)
-    }
-
-    /// Makes the selection tier configuration that asks `session` for each
-    /// new session.
-    ///
-    /// The tier's factory takes the instructions alone, thus the candidate
-    /// ids come from the live `registry` through `visibilityPredicate` when
-    /// the tier asks. The tier asks when it makes its root session, and a
-    /// reload replaces the tier, thus the ids follow each reload. Over the
-    /// character budget, the tier prompts one run of candidates at a time
-    /// while the schema permits every visible id. The tier drops an answered
-    /// id that is not in the prompt's run.
-    ///
-    /// When the request cannot be made, the factory throws the error. The
-    /// search that asked for the session fails with it, and the failure
-    /// reaches `SkillSearchAgent`, which records it and gives the retrieval
-    /// rank.
-    ///
-    /// - Parameters:
-    ///   - registry: The registry the candidate ids come from.
-    ///   - session: The host's session factory.
-    ///   - visibilityPredicate: Which catalog entries are candidates.
-    /// - Returns: The selection tier configuration.
-    private static func makeSelection(
-        registry: SkillsRegistry,
-        session: @escaping @Sendable (SelectionSessionRequest) -> any AgentSession,
-        visibilityPredicate: @escaping @Sendable (SkillMetadata) -> Bool
-    ) -> SelectionConfig {
-        SelectionConfig(model: { instructions in
-            let candidateIDs = registry.metadata().filter(visibilityPredicate).map(\.id)
-            return session(try SelectionSessionRequest(instructions: instructions, candidateIDs: candidateIDs))
-        })
     }
 
     /// The assembly steps both factories above share.
@@ -189,7 +155,7 @@ extension SkillsTool {
     private static func assemble(
         registry: SkillsRegistry,
         mode: SearchMode,
-        embedder: (any TextEmbedding)?,
+        embedder: (any PooledEmbedding)?,
         selection: SelectionConfig?,
         followReloads: Bool,
         catalogCharacterLimit: Int,
@@ -241,7 +207,7 @@ extension SkillsTool {
     internal static func makeContext(
         registry: SkillsRegistry,
         mode: SearchMode,
-        embedder: (any TextEmbedding)?,
+        embedder: (any PooledEmbedding)?,
         selection: SelectionConfig?,
         followReloads: Bool,
         visibilityPredicate: @escaping @Sendable (SkillMetadata) -> Bool

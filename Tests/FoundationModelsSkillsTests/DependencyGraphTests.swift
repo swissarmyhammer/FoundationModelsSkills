@@ -27,7 +27,7 @@ import Testing
 /// The walk cannot read the decision record, because the record keeps the
 /// Router in the decisions that named it when they were taken. Thus
 /// ``planRecordsTheRouterFreeDecision()`` and
-/// ``apiSketchShowsTheInjectedSessionFactory()`` read the record themselves,
+/// ``apiSketchShowsTheInjectedModelFactory()`` read the record themselves,
 /// and pin what it must say now.
 @Suite("Dependency graph")
 struct DependencyGraphTests {
@@ -159,7 +159,7 @@ struct DependencyGraphTests {
     private static let apiSketchHeading = "## 10. Public API sketch"
 
     /// The one-call factory the public API sketch must show.
-    private static let injectedSessionFactory = "SkillsTool.make(registry:session:)"
+    private static let injectedModelFactory = "SkillsTool.make(registry:model:)"
 
     /// The Router-era embedder wrapper the public API sketch must not show.
     ///
@@ -495,15 +495,15 @@ struct DependencyGraphTests {
     /// the graph, it built the search context by hand, gave the selection tier
     /// a routed model, and wrapped a routed embedding model. None of those
     /// three compile now. The sketch must show the one-call factory that takes
-    /// the host's own session instead.
-    @Test("the public API sketch shows the injected-session factory")
-    func apiSketchShowsTheInjectedSessionFactory() throws {
+    /// the selection model of the host instead.
+    @Test("the public API sketch shows the injected-model factory")
+    func apiSketchShowsTheInjectedModelFactory() throws {
         let sketch = try Self.planSection(startingWith: Self.apiSketchHeading)
         #expect(
-            sketch.contains(Self.injectedSessionFactory),
+            sketch.contains(Self.injectedModelFactory),
             """
-            the public API sketch must show \(Self.injectedSessionFactory), the factory that takes \
-            the selection session from the host
+            the public API sketch must show \(Self.injectedModelFactory), the factory that takes \
+            the selection model from the host
             """
         )
         #expect(

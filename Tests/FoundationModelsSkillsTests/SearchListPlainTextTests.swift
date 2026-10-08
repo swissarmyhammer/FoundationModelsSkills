@@ -182,10 +182,10 @@ struct SearchListPlainTextTests {
     ///
     /// - Parameter registry: The registry the tool dispatches against.
     /// - Returns: The fused tool.
-    /// - Throws: Whatever `SkillsTool.make(registry:session:)` throws.
+    /// - Throws: Whatever `SkillsTool.make(registry:model:)` throws.
     private static func makeSelectionTool(registry: SkillsRegistry) async throws -> SkillsCatalogTool {
-        let session = FixedAnswerSession(answer: #"{"ids":["\#(selectedIDs.joined(separator: #"",""#))"]}"#)
-        return try await SkillsTool.make(registry: registry, session: { _ in session })
+        let model = ScriptedLanguageModel(#"{"ids":["\#(selectedIDs.joined(separator: #"",""#))"]}"#)
+        return try await SkillsTool.make(registry: registry, model: model)
     }
 
     /// The expected line of each skill in `ids`, in the order of `ids`.
@@ -224,15 +224,5 @@ struct SearchListPlainTextTests {
     /// - Returns: The number of times `part` stands in `text`.
     private static func count(of part: String, in text: String) -> Int {
         text.components(separatedBy: part).count - 1
-    }
-
-    /// An `AgentSession` double that gives one fixed answer for each prompt.
-    private struct FixedAnswerSession: AgentSession {
-        /// The text each `respond(to:)` call gives back.
-        let answer: String
-
-        func respond(to prompt: String) async throws -> String {
-            answer
-        }
     }
 }

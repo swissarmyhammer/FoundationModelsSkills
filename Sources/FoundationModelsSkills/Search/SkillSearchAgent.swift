@@ -62,7 +62,7 @@ public struct SkillSearchAgent: Sendable {
     ///   - retrievalFallback: A searcher in `.retrieval` mode over the same
     ///     subset, which ranks the query when `searcher` throws. Defaults to
     ///     `nil`, which gives every failure of `searcher` to the caller. The
-    ///     `SkillsTool.make(registry:session:embedder:followReloads:
+    ///     `SkillsTool.make(registry:model:embedder:followReloads:
     ///     visibilityPredicate:)` factory always gives one.
     ///   - visibilityPredicate: Which catalog entries `update(items:)`
     ///     forwards to `searcher`. Defaults to `SkillMetadata.isModelVisible`,
@@ -147,8 +147,9 @@ public struct SkillSearchAgent: Sendable {
     /// tier and whether the fallback answered, and never the query. A search
     /// that gives an answer records its duration in
     /// ``SkillsTracing/MetricName/searchDuration``, with the tier as its
-    /// dimension. A search that throws records its error on the span, and no
-    /// duration, because no tier answered.
+    /// dimension. A search that throws gives the span the error status and the
+    /// type name of the error, and records no duration, because no tier
+    /// answered.
     ///
     /// - Parameters:
     ///   - query: The search query.

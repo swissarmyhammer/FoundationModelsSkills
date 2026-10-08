@@ -8,22 +8,23 @@
 // write `import FoundationModelsMetadataRegistry` and
 // `import FoundationModelsExtras`. The host must then know which sibling
 // package holds the search seam and which one holds the dotfolder stack.
-// That knowledge belongs to this package, not to the host: a host that gives
-// the tool a standard `LanguageModelSession` must name one module only.
+// That knowledge belongs to this package, not to the host.
 //
 // `FoundationModelsMetadataRegistry` itself re-exports
 // `FoundationModelsRanker`
 // (`Sources/FoundationModelsMetadataRegistry/FoundationModelsRankerReexport.swift`),
 // thus the second line below gives a host the whole search and selection
 // seam: `MetadataSearcher`, `SearchMode`, `Match`, `SelectionConfig`,
-// `AgentSession`, `SelectionTierUnavailable`, `TextEmbedding`,
-// `SignalWeights`, and the ungated `extension LanguageModelSession:
-// AgentSession` conformance. That conformance is what lets a host pass a
-// standard `LanguageModelSession` where an `any AgentSession` is expected.
+// `SelectionTierUnavailable`, and `SignalWeights`.
+//
+// The selection model is a FoundationModels `LanguageModel`, for example
+// `SystemLanguageModel.default`. A host names that type through its own
+// `import FoundationModels`, which it already has for `LanguageModelSession`.
 //
 // The first line below gives a host `DotfolderStack`, and with it the rest of
 // the Layer 1-2 substrate (`FrontmatterValue`, `QuarantinedText`,
-// `SlashCommand`) that this package's own public API already names. The same
+// `SlashCommand`) that this package's own public API already names. It also
+// gives the embedder types: `PooledEmbedding` and `PooledEmbedder`. The same
 // line gives a host the render machinery of the loading boundary, which this
 // package holds none of: `TemplateEngine` and the stenciled stack above it.
 // `LoadingBoundaryTests` forbids the name `TemplateEngine` everywhere under

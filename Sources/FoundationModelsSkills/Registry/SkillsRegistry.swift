@@ -1053,8 +1053,9 @@ public struct SkillsRegistry: Sendable {
     /// The call runs in one ``SkillsTracing/SpanName/skillLoad`` span that
     /// holds the skill id, and never the arguments or the rendered body. The
     /// shell pass can wait for a long time, thus the span also writes one
-    /// "enter" record when the call starts (`TracedCall`). A thrown error is
-    /// recorded on the span.
+    /// "enter" record when the call starts (`TracedCall`). A thrown error gives
+    /// the span the error status and the type name of the error, and never
+    /// its description.
     ///
     /// - Parameters:
     ///   - id: The skill id to call -- the directory name.

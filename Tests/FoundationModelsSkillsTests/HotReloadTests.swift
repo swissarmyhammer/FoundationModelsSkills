@@ -3,7 +3,6 @@ import FoundationModels
 import FoundationModelsMetadataRegistry
 import FoundationModelsSkills
 import Operations
-import Synchronization
 import Testing
 
 /// The explicit, named hot-reload end-to-end case (plan.md §13, an M4
@@ -51,7 +50,7 @@ struct HotReloadTests {
         // on cosine ranking" (already true before this change): step 1
         // deliberately closes `embedGate` around a catalog-item re-embed to
         // observe it mid-flight, and a concurrent `search` call's own cosine
-        // scoring would otherwise call `embedder.embed(_:)` a *second* time
+        // scoring would otherwise call `embedder.embed(texts:)` a *second* time
         // for the query -- on the same gate the test's own code is still
         // awaiting the search to return before it can open. A nonzero
         // cosine weight here would self-deadlock step 1 against itself.
@@ -82,40 +81,32 @@ struct HotReloadTests {
             preloadedAfterEdit: preloadedAfterEdit, preloadedAfterRemove: preloadedAfterRemove)
     }
 
-    // MARK: - Selection tier: a scripted AgentSession double, GPU-free, post-reload
+    // MARK: - Selection tier: a scripted LanguageModel, GPU-free, post-reload
 
     /// Closes the other §13 gap distinct from the deterministic scenario
     /// above: that scenario's searcher is always `.retrieval`-mode (a
-    /// `FakeEmbedder`, no `AgentSession` at all) -- the selection tier had
-    /// zero GPU-free coverage anywhere in this package. Mirrors
-    /// `FoundationModelsMetadataRegistryTests.TestSupport.ScriptedAgentSession`
-    /// (this package's own zero-GPU stand-in for the selection tier's
-    /// session seam) and drives one `.selection`-mode search before a reload
-    /// and one after, proving `MetadataSearcher.update(items:)` genuinely
-    /// rebuilds the whole `SelectionTier` -- and therefore its id-enum
-    /// grammar and cached root session -- on a real content change, rather
-    /// than serving a stale one: `SelectionSessionFactory.callCount`
-    /// reaching `2` proves `SelectionConfig.model` was invoked a *second*
-    /// time, which only happens if the tier was rebuilt.
+    /// `FakeEmbedder`, no model at all). This case gives the selection tier a
+    /// `ScriptedLanguageModel` and drives one `.selection`-mode search before
+    /// a reload and one after. The instructions of the second call must name
+    /// the new skill `bravo` as a candidate. Thus `MetadataSearcher.update(items:)`
+    /// rebuilt the candidate prefix of the tier on a real content change, and
+    /// the tier did not use a stale prefix.
     @Test
-    func selectionTierSearchesThroughAScriptedAgentSessionAfterReload() async throws {
+    func selectionTierSearchesThroughAScriptedModelAfterReload() async throws {
         let root = try HotReloadTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         try ReloadTestSupport.writeSkillFile(id: "alpha", in: root, descriptionSuffix: "v1")
 
         let registry = SkillsRegistry(roots: [root], watch: true)
-        let sessionFactory = SelectionSessionFactory(responsesPerCall: [
-            [#"{"ids":["alpha"]}"#],
-            [#"{"ids":["bravo"]}"#],
-        ])
-        let config = SelectionConfig(model: { _ in sessionFactory.makeSession() })
+        let model = ScriptedLanguageModel(#"{"ids":["alpha"]}"#, #"{"ids":["bravo"]}"#)
         let searcher = MetadataSearcher(
-            items: registry.metadata().filter(\.isModelVisible), mode: .selection, selection: config)
+            items: registry.metadata().filter(\.isModelVisible), mode: .selection,
+            selection: SelectionConfig(model: model))
         let agent = SkillSearchAgent(searcher: searcher)
 
         let preReloadMatches = try await agent.search(query: "anything", limit: 5)
         #expect(preReloadMatches.map(\.id) == ["alpha"])
-        #expect(sessionFactory.callCount == 1)
+        #expect(model.calls.count == 1)
 
         let updates = ReloadTestSupport.EventTally()
         let subscription = Self.subscribe(registry, forwardingTo: agent, recordingInto: updates)
@@ -126,7 +117,11 @@ struct HotReloadTests {
 
         let postReloadMatches = try await agent.search(query: "anything", limit: 5)
         #expect(postReloadMatches.map(\.id) == ["bravo"])
-        #expect(sessionFactory.callCount == 2, "a real content change must rebuild the tier's cached root session")
+        #expect(model.calls.count == 2)
+        let postReloadInstructions = try #require(model.calls.last?.instructions)
+        #expect(
+            postReloadInstructions.contains("\nid: bravo\n"),
+            "a real content change must rebuild the candidate prefix of the tier")
     }
 
     // MARK: - Step 1: add
@@ -139,7 +134,7 @@ struct HotReloadTests {
     /// `.embedCatchUp(pending:total:)`.
     ///
     /// The pending window is made deterministic by `embedGate`: closed
-    /// before the write, so `FakeEmbedder.embed(_:)` blocks the very first
+    /// before the write, so `FakeEmbedder.embed(texts:)` blocks the very first
     /// time `MetadataSearcher.update(items:)` reaches it --
     /// `waitUntilBlockedOrTimeout(_:timeout:)` confirms that block has
     /// genuinely started (proving the synchronous
@@ -154,7 +149,7 @@ struct HotReloadTests {
     ///   - registry: The registry under test.
     ///   - updates: Tallies every forwarded `update(items:)` call.
     ///   - diagnostics: Tallies every `MetadataDiagnostic` the searcher emits.
-    ///   - embedGate: Gates `FakeEmbedder.embed(_:)` to make the pending
+    ///   - embedGate: Gates `FakeEmbedder.embed(texts:)` to make the pending
     ///     window deterministic.
     ///   - tool: The fused `skills` tool to dispatch through.
     /// - Returns: `registry.preloadedBodies()`, captured right after this
@@ -467,93 +462,9 @@ struct HotReloadTests {
     /// - Parameters:
     ///   - gate: The gate to wait on.
     ///   - timeout: How long to wait before giving up.
-    /// - Returns: `true` if `gate` reported a blocked `embed(_:)` call
+    /// - Returns: `true` if `gate` reported a blocked `embed(texts:)` call
     ///   before `timeout`; `false` otherwise.
     private static func waitUntilBlockedOrTimeout(_ gate: EmbedGate, timeout: Duration) async -> Bool {
         await ReloadTestSupport.poll({ await gate.isBlocked }, until: { $0 }, timeout: timeout)
-    }
-
-    // MARK: - Scripted AgentSession (selection tier, GPU-free)
-
-    /// A scripted `AgentSession` test double, mirroring
-    /// `FoundationModelsMetadataRegistryTests.TestSupport.ScriptedAgentSession`
-    /// (this package's own zero-GPU stand-in for the selection tier's
-    /// session seam, plan.md §6/§8): returns each of `responses` in order,
-    /// one per `respond(to:)` call, regardless of the prompt. Uses the
-    /// protocol's default `fork()` (returns `self`) since nothing here needs
-    /// to assert on fork call counts.
-    ///
-    /// A `Mutex` holds the call index that `respond(to:)` advances across an
-    /// `await` boundary, thus the compiler itself checks the plain
-    /// `Sendable` conformance.
-    private final class ScriptedAgentSession: AgentSession, Sendable {
-        /// Thrown once every scripted response has been consumed -- a test
-        /// bug (an under-scripted fixture), never expected in practice.
-        private struct ExhaustedScriptedResponses: Error {}
-
-        private let responses: [String]
-        private let callIndex = Mutex(0)
-
-        /// Creates a scripted session that returns `responses` in order, one
-        /// per `respond(to:)` call.
-        ///
-        /// - Parameter responses: The canned responses to return, in call
-        ///   order.
-        init(_ responses: [String]) {
-            self.responses = responses
-        }
-
-        func respond(to prompt: String) async throws -> String {
-            let index = callIndex.withLock { current -> Int in
-                let index = current
-                current += 1
-                return index
-            }
-            guard index < responses.count else { throw ExhaustedScriptedResponses() }
-            return responses[index]
-        }
-    }
-
-    /// Vends a fresh `ScriptedAgentSession` per call, one canned response
-    /// array per invocation -- lets a test script the selection tier's
-    /// pre-reload and post-reload sessions independently. `SelectionTier`
-    /// rebuilds its cached root session (and therefore calls
-    /// `SelectionConfig.model` again) only when
-    /// `MetadataSearcher.update(items:)` observes a genuine content change,
-    /// so `callCount` reaching `2` after a reload is itself proof the tier
-    /// was rebuilt, not merely reused.
-    ///
-    /// A `Mutex` holds the call index, thus the compiler itself checks the
-    /// plain `Sendable` conformance.
-    private final class SelectionSessionFactory: Sendable {
-        private let responsesPerCall: [[String]]
-        private let callIndex = Mutex(0)
-
-        /// Creates a factory that vends one freshly-scripted session per
-        /// call, drawing that call's canned responses from
-        /// `responsesPerCall` in order.
-        ///
-        /// - Parameter responsesPerCall: One scripted-response array per
-        ///   expected `makeSession()` call, in call order.
-        init(responsesPerCall: [[String]]) {
-            self.responsesPerCall = responsesPerCall
-        }
-
-        /// How many times `makeSession()` has been called so far.
-        var callCount: Int { callIndex.withLock { $0 } }
-
-        /// Creates and returns the next freshly-scripted session --
-        /// `SelectionConfig`'s `model` factory parameter. The closure
-        /// ignores the `instructions` text, because a scripted session
-        /// gives the same answers for all instructions.
-        func makeSession() -> any AgentSession {
-            let index = callIndex.withLock { current -> Int in
-                let index = current
-                current += 1
-                return index
-            }
-            let responses = index < responsesPerCall.count ? responsesPerCall[index] : []
-            return ScriptedAgentSession(responses)
-        }
     }
 }

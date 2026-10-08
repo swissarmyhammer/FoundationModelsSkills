@@ -25,9 +25,9 @@ struct SkillSearchAgentTests {
     private static let gammaSkill = SkillMetadata(
         id: "gamma", description: "Handles gamma workflow tasks.", isModelVisible: true)
 
-    // MARK: - `TextEmbedding` test double (plan.md §13)
+    // MARK: - `PooledEmbedding` test double (plan.md §13)
 
-    /// A deterministic `TextEmbedding` test double: returns a caller-
+    /// A deterministic `PooledEmbedding` test double: returns a caller-
     /// supplied vector for each registered text, falling back to an
     /// all-zero vector for any text not explicitly registered.
     ///
@@ -36,13 +36,13 @@ struct SkillSearchAgentTests {
     /// minus its call-counting -- unused by this task's cases, which only
     /// need deterministic vectors to prove cosine joins fusion through
     /// `SkillSearchAgent`.
-    private struct FakeEmbedder: TextEmbedding {
+    private struct FakeEmbedder: PooledEmbedding {
         /// The length of the all-zero vector of a text that is not in
         /// `vectorsByText`.
         let vectorLength: Int
         let vectorsByText: [String: [Float]]
 
-        func embed(_ texts: [String]) async throws -> [[Float]] {
+        func embed(texts: [String]) async throws -> [[Float]] {
             texts.map { vectorsByText[$0] ?? [Float](repeating: 0, count: vectorLength) }
         }
     }
@@ -228,27 +228,26 @@ struct SkillSearchAgentTests {
         #expect(!answer.isSelection)
     }
 
-    /// Shows that a selection session factory that throws gives the rank of
-    /// the retrieval fallback, not a failed search.
+    /// Shows that a selection model that throws gives the rank of the
+    /// retrieval fallback, not a failed search.
     ///
-    /// The selection tier cannot make its root session, thus the searcher
-    /// fails before it sends a prompt. The agent must then give the answer
-    /// of the fallback, and that answer must not claim the selection tier.
-    @Test func aSessionFactoryThatThrowsGivesTheRetrievalRank() async throws {
+    /// The model fails on the first prompt, thus the selection tier gives no
+    /// answer. The agent must then give the answer of the fallback, and that
+    /// answer must not claim the selection tier.
+    @Test func aSelectionModelThatThrowsGivesTheRetrievalRank() async throws {
+        let model = ScriptedLanguageModel.failing
         let agent = SkillSearchAgent(
             searcher: MetadataSearcher(
                 items: [Self.alphaSkill], mode: .selection,
-                selection: SelectionConfig(model: { _ in throw SessionFactoryFailure() })),
+                selection: SelectionConfig(model: model)),
             retrievalFallback: MetadataSearcher(items: [Self.alphaSkill], mode: .retrieval))
 
         let answer = try await agent.answer(query: "alpha", limit: 10)
 
+        #expect(model.calls.count == 1)
         #expect(answer.matches.map(\.id) == ["alpha"])
         #expect(!answer.isSelection)
     }
-
-    /// The error of a selection session factory that cannot make a session.
-    private struct SessionFactoryFailure: Error {}
 
     // MARK: - The log record of a fallback
 
@@ -267,7 +266,7 @@ struct SkillSearchAgentTests {
         let agent = SkillSearchAgent(
             searcher: MetadataSearcher(
                 items: [Self.alphaSkill], mode: .selection,
-                selection: SelectionConfig(model: { _ in ContentThrowingSession() })),
+                selection: SelectionConfig(model: ScriptedLanguageModel(answers: [.error(ContentError())]))),
             retrievalFallback: MetadataSearcher(items: [Self.alphaSkill], mode: .retrieval),
             visibilityPredicate: { $0.isModelVisible },
             telemetry: SkillsTracing.Telemetry(
@@ -281,7 +280,7 @@ struct SkillSearchAgentTests {
         #expect(fallbackRecords.count == 1)
         #expect(
             fallbackRecords.first?.metadata[SkillsTracing.MetadataKey.errorType]
-                == .string(String(reflecting: ContentThrowingSession.ContentError.self)))
+                == .string(String(reflecting: ContentError.self)))
         #expect(records.allSatisfy { !$0.holds(Self.contentMarker) })
     }
 
@@ -289,20 +288,13 @@ struct SkillSearchAgentTests {
     /// hold, and that no log record may hold.
     private static let contentMarker = "QUERY-AND-RESPONSE-CONTENT-7f3c"
 
-    /// An `AgentSession` double whose every call throws an error, and whose
-    /// error description holds `contentMarker`, as the description of a
-    /// selection error can hold the query or the model response.
-    private struct ContentThrowingSession: AgentSession {
-        /// The error every call of this double throws.
-        struct ContentError: Error, CustomStringConvertible {
-            /// The description of the error: the content marker.
-            var description: String {
-                "the model answered: \(SkillSearchAgentTests.contentMarker)"
-            }
-        }
-
-        func respond(to prompt: String) async throws -> String {
-            throw ContentError()
+    /// The error of the selection model of the fallback case. Its
+    /// description holds `contentMarker`, as the description of a selection
+    /// error can hold the query or the model response.
+    private struct ContentError: Error, CustomStringConvertible {
+        /// The description of the error: the content marker.
+        var description: String {
+            "the model answered: \(SkillSearchAgentTests.contentMarker)"
         }
     }
 }

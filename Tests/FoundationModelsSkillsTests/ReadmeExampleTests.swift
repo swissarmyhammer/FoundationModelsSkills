@@ -15,11 +15,11 @@ import Testing
 /// sufficient for a host: no `FoundationModelsMetadataRegistry`, and no
 /// `FoundationModelsExtras`.
 ///
-/// Every case is GPU-free. The block gives the factory a session closure,
-/// but the selection tier calls that closure only when a search runs, and
+/// Every case is GPU-free. The block gives the factory a model, but the
+/// selection tier sends a prompt to that model only when a search runs, and
 /// this suite runs no search through that tool. The search case below uses
-/// the no-session form of the same factory, which the README paragraph
-/// names, thus it ranks with keyword retrieval and needs no model.
+/// the no-model form of the same factory, which the README paragraph names,
+/// thus it ranks with keyword retrieval and needs no model.
 struct ReadmeExampleTests {
     // MARK: - Constants
 
@@ -61,10 +61,8 @@ struct ReadmeExampleTests {
         let registry = SkillsRegistry(stack: stack, watch: true)
 
         // One fused tool for the full catalog: search, list, use, resources, scripts.
-        // The session you supply runs the selection tier. Nothing is hardcoded.
-        let skillsTool = try await SkillsTool.make(
-            registry: registry,
-            session: { request in LanguageModelSession(model: .default, instructions: request.instructions) })
+        // The model you supply runs the selection tier. Nothing is hardcoded.
+        let skillsTool = try await SkillsTool.make(registry: registry, model: SystemLanguageModel.default)
 
         // A lean root session: one tool and the preloaded bodies. Other bodies load on use.
         // A body renders its shell commands, thus the render is async: read it first.
@@ -81,17 +79,17 @@ struct ReadmeExampleTests {
         #expect(Self.toolNames(in: session.transcript) == [Self.fusedToolName])
     }
 
-    // MARK: - The no-session form the README paragraph names
+    // MARK: - The no-model form the README paragraph names
 
-    /// Shows the claim the README paragraph makes about the no-session form:
-    /// a host that gives no session still gets ranked matches, with no model.
+    /// Shows the claim the README paragraph makes about the no-model form:
+    /// a host that gives no model still gets ranked matches, with no model.
     ///
     /// `SkillsToolAssemblyTests` proves the same factory ranks. This case
     /// proves something that suite cannot: it dispatches an operation and
     /// reads the answer from a file whose imports are only the two modules
     /// the README names. `SkillsToolAssemblyTests` imports `Operations`,
     /// thus it shows nothing about the import surface a host lives with.
-    @Test func theNoSessionFormOfTheFactoryRanksTheFixtureCatalogWithNoModel() async throws {
+    @Test func theNoModelFormOfTheFactoryRanksTheFixtureCatalogWithNoModel() async throws {
         let registry = SkillsRegistry(stack: FixtureLibrary.stack())
 
         let skillsTool = try await SkillsTool.make(registry: registry)

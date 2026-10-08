@@ -9,16 +9,11 @@ import Testing
 /// `.selection`-mode `MetadataSearcher` that a real model session backs, not
 /// a scripted fake.
 ///
-/// The session is a plain `LanguageModelSession`, which
-/// `FoundationModelsRanker` makes conform to `AgentSession` and
-/// `FoundationModelsMetadataRegistry` re-exports. That conformer adapts
-/// Apple's own on-device `SystemLanguageModel` to the same `AgentSession`
-/// seam every other conformer implements, thus this suite needs no new
-/// dependency. `SelectionConfig.model`'s closure takes only the instructions
-/// text and returns the bare session, and the session then uses its own
-/// native guided generation instead of an externally supplied grammar (see
-/// `LanguageModelSessionSupport.swift`), thus this file never names `Grammar`
-/// and never imports `FoundationModelsRouter`.
+/// The model is Apple's own on-device `SystemLanguageModel.default`.
+/// `SelectionConfig` takes it directly. For each prompt, the selection tier
+/// makes a plain `LanguageModelSession` on that model, and the session uses
+/// its own native guided generation for the answer. Thus this suite needs no
+/// new dependency, and it never names a grammar.
 ///
 /// **One gate: `SystemLanguageModel.default.isAvailable`.** A host with no
 /// on-device Apple Intelligence model reports each test here as a Swift
@@ -49,9 +44,7 @@ struct HotReloadLiveTests {
         defer { try? FileManager.default.removeItem(at: root) }
         try Self.writeSkillFile(id: "toolA", in: root, descriptionSuffix: "reads a file from disk")
 
-        let config = SelectionConfig(model: { instructions in
-            LanguageModelSession(model: .default, instructions: instructions)
-        })
+        let config = SelectionConfig(model: SystemLanguageModel.default)
         // `watch: true` -- the twin's whole point is to drive a REAL reload
         // through the registry, not to read a catalog frozen at construction
         // time. `SkillsRegistry(roots:)` alone defaults to `watch: false`

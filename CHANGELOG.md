@@ -5,6 +5,51 @@ change is at the top.
 
 ## Unreleased
 
+### Changed (breaking): the selection tier takes a model, and the embedder is a `PooledEmbedding`
+
+`FoundationModelsRanker` and `FoundationModelsMetadataRegistry` removed their
+own session and embedding layers. This package follows them.
+
+**What changed.**
+
+- `SkillsTool.make(registry:session:embedder:followReloads:catalogCharacterLimit:visibilityPredicate:)`
+  is now `SkillsTool.make(registry:model:embedder:followReloads:catalogCharacterLimit:visibilityPredicate:)`.
+  The `model:` argument takes any FoundationModels `LanguageModel`, for
+  example `SystemLanguageModel.default` or a `PooledModel` of
+  FoundationModelsExtras. For each prompt, the selection tier makes a new
+  `LanguageModelSession` on that model, and asks for a `Selection` through
+  guided generation.
+- `SelectionSessionRequest` is removed. The guided generation of the session
+  holds the answer to the `{"ids": [...]}` shape, and the tier drops an id that
+  is not a candidate. An answer that does not decode, or a model that throws,
+  still gives the keyword rank, not a failed call.
+- Each `embedder:` argument takes an `any PooledEmbedding` of
+  FoundationModelsExtras, for example a `PooledEmbedder`, in place of an
+  `any TextEmbedding`.
+- `AgentSession`, `TextEmbedding`, `SelectionConfig`'s session sources and
+  `SelectionTier.idEnumSchema(ids:)` are not re-exported any more, because the
+  upstream packages removed them.
+- A span of `TracedCall` (the skill load span and the search span) has no
+  recorded error when the call throws. It has the error status and the
+  `error.type` attribute, and never the description of the error. This comes
+  from `FoundationModelsExtras`.
+
+**How to migrate.**
+
+```swift
+// Before:
+SkillsTool.make(registry: registry, session: { request in
+    LanguageModelSession(model: .default, instructions: request.instructions)
+})
+
+// After:
+SkillsTool.make(registry: registry, model: SystemLanguageModel.default)
+```
+
+A host that made its own `AgentSession` or `TextEmbedding` conforms its model
+to `LanguageModel`, and its embedder to `PooledEmbedding`
+(`func embed(texts: [String]) async throws -> [[Float]]`).
+
 ### Added: spans and metrics for skill search, skill load and catalog load
 
 This change breaks no source. The public API did not change.
@@ -19,8 +64,8 @@ This change breaks no source. The public API did not change.
   dimension `search.tier`, records the duration of each search that gives an
   answer.
 - `SkillsRegistry.call(id:arguments:)` runs in one span
-  `FoundationModelsSkills.skill.load` that holds `skill.id`. A thrown error is
-  recorded on the span.
+  `FoundationModelsSkills.skill.load` that holds `skill.id`. A thrown error
+  gives the span the error status and the `error.type` attribute.
 - The search and the skill load each write one "enter" record at level
   `info` when they start (`TracedCall` of `FoundationModelsExtras`): the
   logger `FoundationModelsSkills.search` for a search, and the logger

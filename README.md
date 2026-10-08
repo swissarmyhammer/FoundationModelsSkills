@@ -36,10 +36,8 @@ let stack = DotfolderStack(
 let registry = SkillsRegistry(stack: stack, watch: true)
 
 // One fused tool for the full catalog: search, list, use, resources, scripts.
-// The session you supply runs the selection tier. Nothing is hardcoded.
-let skillsTool = try await SkillsTool.make(
-    registry: registry,
-    session: { request in LanguageModelSession(model: .default, instructions: request.instructions) })
+// The model you supply runs the selection tier. Nothing is hardcoded.
+let skillsTool = try await SkillsTool.make(registry: registry, model: SystemLanguageModel.default)
 
 // A lean root session: one tool and the preloaded bodies. Other bodies load on use.
 // A body renders its shell commands, thus the render is async: read it first.
@@ -54,9 +52,12 @@ let session = LanguageModelSession(
 
 `SkillsTool.make` gives a `SkillsCatalogTool`, which conforms to the
 FoundationModels `Tool` protocol — it goes into any standard session with no
-adapter. The search tier runs on the session you pass, and this package makes
-no session of its own. Omit the `session:` argument and each search uses
-keyword retrieval, with no model at all.
+adapter. The selection tier runs on the model you pass: any FoundationModels
+`LanguageModel`, for example `SystemLanguageModel.default` or a `PooledModel`
+of FoundationModelsExtras. This package makes no model of its own. Omit the
+`model:` argument and each search uses keyword retrieval, with no model at all.
+The optional `embedder:` argument takes any `PooledEmbedding`, for example a
+`PooledEmbedder`, and adds the cosine signal to the keyword rank.
 
 The tool shows the catalog to the model before it plans. Its description lists
 each visible skill with its description, and tells the model to load each skill
@@ -67,12 +68,10 @@ session gets it in the description and in the enum. `catalogCharacterLimit`
 (8,000 characters by default) limits the list. See
 [`docs/operations.md`](docs/operations.md).
 
-The `session:` closure gets a `SelectionSessionRequest`. The request holds the
-instructions, the candidate skill ids, and `jsonSchema`: a JSON Schema that
-limits the answer to `{"ids": [...]}`, where each id is a candidate. A session
-whose model takes a JSON Schema grammar must apply `jsonSchema`. A
-`LanguageModelSession` constrains the answer shape with its own guided
-generation. If the selection answer does not decode, the search gives the
+For each prompt, the selection tier makes a new `LanguageModelSession` on the
+model, and the guided generation of that session holds the answer to the
+`{"ids": [...]}` shape. The tier drops an id that is not a candidate. If the
+selection answer does not decode, or the model throws, the search gives the
 keyword rank, and the `skills` call does not fail.
 
 [`Examples/skills-demo`](Examples/skills-demo) is the compiled, always-current
@@ -88,25 +87,21 @@ dependency:
 .package(url: "git@github.com:swissarmyhammer/FoundationModelsSkills.git", branch: "main")
 ```
 
-## Migration: the `session:` closure takes a request
+## Migration: `SkillsTool.make` takes a model, not a session
 
-The `session:` closure of `SkillsTool.make` took the instructions as a
-`String`. It now takes a `SelectionSessionRequest`. The overload that took one
-live `any AgentSession` is removed, because one live session cannot apply a
-new JSON Schema for each call. [`CHANGELOG.md`](CHANGELOG.md) has the full
-note. A host whose model takes a grammar changes its closure as follows:
+`SkillsTool.make(registry:session:)` is removed. Give a FoundationModels
+`LanguageModel` to `SkillsTool.make(registry:model:)`. `SelectionSessionRequest`
+is removed, and the `embedder:` argument takes a `PooledEmbedding` in place of
+a `TextEmbedding`. [`CHANGELOG.md`](CHANGELOG.md) has the full note.
 
 ```swift
 // Before:
-SkillsTool.make(registry: registry, session: { instructions in
-    SelectionAgentSession(session: profile.flash.makeSession(instructions: instructions))
+SkillsTool.make(registry: registry, session: { request in
+    LanguageModelSession(model: .default, instructions: request.instructions)
 })
 
 // After:
-SkillsTool.make(registry: registry, session: { request in
-    SelectionAgentSession(session: profile.flash.makeGuidedSession(
-        grammar: .jsonSchema(request.jsonSchema), instructions: request.instructions))
-})
+SkillsTool.make(registry: registry, model: SystemLanguageModel.default)
 ```
 
 ## Documentation

@@ -1,4 +1,5 @@
 import Foundation
+import FoundationModelsExtras
 import FoundationModelsMetadataRegistry
 import Synchronization
 
@@ -19,7 +20,7 @@ enum HotReloadTestSupport {
     }
 }
 
-/// A deterministic `TextEmbedding` test double, mirroring
+/// A deterministic `PooledEmbedding` test double, mirroring
 /// `FoundationModelsMetadataRegistryTests.FakeEmbedder`.
 ///
 /// Every text embeds to an all-zero vector. A test that uses it asserts on
@@ -31,14 +32,14 @@ enum HotReloadTestSupport {
 /// `HotReloadTests` and `MarketplaceEndToEndTests` both build a real
 /// `MetadataSearcher` with no GPU, thus the double is here and not in one of
 /// the two suites.
-final class FakeEmbedder: TextEmbedding {
+final class FakeEmbedder: PooledEmbedding {
     /// The length of every all-zero vector this embedder gives.
     private let vectorLength: Int
 
-    /// The running total of texts that reached ``embed(_:)``.
+    /// The running total of texts that reached ``embed(texts:)``.
     private let counter: EmbedCallCounter
 
-    /// The gate that holds every ``embed(_:)`` call, or `nil` to never hold
+    /// The gate that holds every ``embed(texts:)`` call, or `nil` to never hold
     /// one.
     private let gate: EmbedGate?
 
@@ -48,7 +49,7 @@ final class FakeEmbedder: TextEmbedding {
     /// - Parameters:
     ///   - vectorLength: The length of every all-zero vector this
     ///     embedder gives.
-    ///   - gate: Blocks every `embed(_:)` call until the gate is open,
+    ///   - gate: Blocks every `embed(texts:)` call until the gate is open,
     ///     or `nil` to never block. Defaults to `nil`.
     init(vectorLength: Int, gate: EmbedGate? = nil) {
         self.vectorLength = vectorLength
@@ -56,7 +57,7 @@ final class FakeEmbedder: TextEmbedding {
         self.gate = gate
     }
 
-    /// The total number of texts passed to `embed(_:)` across every call
+    /// The total number of texts passed to `embed(texts:)` across every call
     /// so far.
     var embeddedTextCount: Int { counter.count }
 
@@ -64,7 +65,7 @@ final class FakeEmbedder: TextEmbedding {
     ///
     /// - Parameter texts: The texts to embed.
     /// - Returns: One all-zero vector of `vectorLength` values for each text.
-    func embed(_ texts: [String]) async throws -> [[Float]] {
+    func embed(texts: [String]) async throws -> [[Float]] {
         if let gate { await gate.waitUntilOpen() }
         counter.increment(by: texts.count)
         return texts.map { _ in [Float](repeating: 0, count: vectorLength) }
@@ -90,7 +91,7 @@ final class EmbedCallCounter: Sendable {
     }
 }
 
-/// A gate that ``FakeEmbedder/embed(_:)`` can be told to block on, so a test
+/// A gate that ``FakeEmbedder/embed(texts:)`` can be told to block on, so a test
 /// can observe a deterministic window where the async embed catch-up is
 /// confirmed in flight (blocked awaiting this gate) but not yet complete --
 /// proving a concurrent keyword search still succeeds during that window,
@@ -108,12 +109,12 @@ actor EmbedGate {
     /// What to resume when ``open()`` runs.
     private var openWaiters: [CheckedContinuation<Void, Never>] = []
 
-    /// Whether some `embed(_:)` call is currently blocked on this gate.
+    /// Whether some `embed(texts:)` call is currently blocked on this gate.
     /// A test polls it, so no caller ever suspends on a continuation this
     /// gate might never resume.
     private(set) var isBlocked = false
 
-    /// Closes the gate: every subsequent `embed(_:)` call blocks in
+    /// Closes the gate: every subsequent `embed(texts:)` call blocks in
     /// ``waitUntilOpen()`` until ``open()`` runs.
     func close() {
         isOpen = false
@@ -130,7 +131,7 @@ actor EmbedGate {
         for continuation in waiting { continuation.resume() }
     }
 
-    /// Called by ``FakeEmbedder/embed(_:)``: returns immediately while the
+    /// Called by ``FakeEmbedder/embed(texts:)``: returns immediately while the
     /// gate is open; otherwise marks the gate blocked (so a poll of
     /// ``isBlocked`` observes it) and suspends until ``open()`` runs.
     func waitUntilOpen() async {

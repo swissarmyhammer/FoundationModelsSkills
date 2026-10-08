@@ -30,24 +30,20 @@ struct SingleImportTests {
 
     // MARK: - The selection seam
 
-    @Test func aSelectionConfigTakesASessionFactoryThroughTheSingleImport() {
-        let config = SelectionConfig(model: { instructions in
-            LanguageModelSession(model: .default, instructions: instructions)
-        })
+    @Test func aSelectionConfigTakesASystemLanguageModelThroughTheSingleImport() {
+        // The test makes a configuration only. It sends no prompt, thus the
+        // test needs no on-device model.
+        let config = SelectionConfig(model: SystemLanguageModel.default)
 
-        var buildsSessionsFromAFactory = false
-        if case .factory = config.sessionSource { buildsSessionsFromAFactory = true }
-        #expect(buildsSessionsFromAFactory)
+        #expect(config.model is SystemLanguageModel)
     }
 
-    @Test func aLanguageModelSessionIsAnAgentSessionThroughTheSingleImport() async throws {
-        // The test makes a session and forks it. Neither step sends a
-        // prompt, thus the test needs no on-device model.
-        let session: any AgentSession = LanguageModelSession(model: .default, instructions: "test")
+    @Test func aPooledEmbedderIsAPooledEmbeddingThroughTheSingleImport() {
+        // A `PooledEmbedder` made from a name loads nothing until its first
+        // embed, thus the test needs no model.
+        let embedder: any PooledEmbedding = PooledEmbedder(ref: "mlx-community/Qwen3-Embedding-0.6B-4bit-DWQ")
 
-        let forked = try await session.fork()
-
-        #expect(forked is LanguageModelSession)
+        #expect(embedder is PooledEmbedder)
     }
 
     // MARK: - The dotfolder stack

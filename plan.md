@@ -817,6 +817,26 @@ Revisit when Apple ships a supported per-process confinement API. *(decision #28
     (e) `skillDirectory`, `root` and `rootIndex` stay, and each names the layer of the
     winning `SKILL.md` alone.
 
+33. **The host gives a model, not a session.**
+    *(Decided 2026-10-08. Amends #30 and #31.)* `FoundationModelsRanker` and
+    `FoundationModelsMetadataRegistry` removed their own session and embedding layers.
+    `SelectionConfig` takes a FoundationModels `any LanguageModel`, and the selection
+    tier makes a new `LanguageModelSession` on that model for each prompt. It asks for a
+    `Selection` through the guided generation of the session. Each `embedder:` takes an
+    `any PooledEmbedding` of `FoundationModelsExtras`. `AgentSession`, `TextEmbedding`
+    and `SelectionTier.idEnumSchema(ids:)` do not exist any more.
+
+    Consequences: (a) `SkillsTool.make(registry:model:)` replaces
+    `SkillsTool.make(registry:session:)` as the one-call door (§10); the host gives a
+    model, for example `SystemLanguageModel.default` or a `PooledModel`, and this package
+    still makes no model of its own — this replaces #30 (c); (b) `SelectionSessionRequest`
+    is removed, because the guided generation of the session holds the answer to the
+    `{"ids": [String]}` shape, and the tier drops an id that is not a candidate — this
+    replaces #31 (a); (c) #31 (c) stays: an answer that does not decode, or a model that
+    throws, gives the rank of the retrieval searcher, not a failed call; (d) the
+    `embedder:` parameter of each factory takes an `any PooledEmbedding`, for example a
+    `PooledEmbedder`.
+
 **All open items resolved — the plan is decision-complete.**
 
 ## 10. Public API sketch (illustrative)
@@ -837,19 +857,15 @@ let registry = SkillsRegistry(
   watch: true                                     // watch every layer root; reload add/remove/edit
 )
 
-// Layer 4 — the host makes the selection session; this package makes none (#30).
-// The package owns the answer shape (#31): each request carries the id-enum
-// JSON Schema, and a session whose model takes a grammar applies it.
-// `FoundationModelsRanker` conforms `LanguageModelSession` to `AgentSession`,
-// and its guided generation constrains the shape, thus it reads only the instructions.
+// Layer 4 — the host gives the selection model; this package makes none (#30, #33).
+// For each prompt, the selection tier makes a `LanguageModelSession` on that model,
+// and its guided generation holds the answer to the `{"ids": [...]}` shape (#31, #33).
 
-// One call fuses the ops over one context: SkillsTool.make(registry:session:).
+// One call fuses the ops over one context: SkillsTool.make(registry:model:).
 // It is `async throws` — a non-nil `embedder` builds the index while it runs.
 let skillsTool = try await SkillsTool.make(
   registry: registry,                            // dereferenced live, per dispatch
-  session: { request in                          // SelectionSessionRequest; omit for keyword-only
-    LanguageModelSession(model: .default, instructions: request.instructions)
-  }
+  model: SystemLanguageModel.default             // any LanguageModel; omit for keyword-only
 )
 
 // Lean root session: one tool + preloaded bodies, NO full catalog inline:
