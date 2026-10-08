@@ -3,7 +3,7 @@ import FoundationModelsExtras
 import FoundationModelsSkills
 import Testing
 
-/// Tests for `ShellInjection`, pass 2 of the §5 render pipeline (plan.md §5, decision #25):
+/// Tests for `ShellInjection`, pass 2 of the render pipeline:
 /// the recognition grammar (inline vs. fenced vs. mid-word rejection), real execution (merged
 /// output, working directory, inherited environment), the `isShellExecutionDisabled` policy,
 /// re-execution with no caching, and the single-shot no-re-scan invariant end to end through
@@ -96,7 +96,7 @@ struct ShellInjectionTests {
         #expect(result == expected, "\(name)")
     }
 
-    // MARK: - Span-boundary grammar: the flattened text decides, not the span (^q1mywft)
+    // MARK: - Span-boundary grammar: the flattened text decides, not the span
 
     /// A pipeline of the REAL passes 1 and 2 -- pass 1 splits the body into
     /// `.original`/`.quarantined` spans around every `$ARGUMENTS` splice, so
@@ -292,7 +292,7 @@ struct ShellInjectionTests {
         #expect(result.contains("Shell says: \(sentinel)"))
     }
 
-    // MARK: - The limits the policy carries (^977h3a0)
+    // MARK: - The limits the policy carries
 
     /// The timeout the limit cases give the policy. Short, so a command that
     /// the timeout must kill gives its marker at once.

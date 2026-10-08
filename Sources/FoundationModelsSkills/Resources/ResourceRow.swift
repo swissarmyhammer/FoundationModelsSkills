@@ -1,4 +1,4 @@
-/// One resource file row `ListResource` returns (plan.md §7.3).
+/// One resource file row `ListResource` returns.
 public struct ResourceRow: Encodable, Sendable, Equatable {
     /// The file's path, relative to the skill directory.
     public let path: String
@@ -30,7 +30,7 @@ public struct ResourceRow: Encodable, Sendable, Equatable {
 }
 
 /// The result of a `list resource` operation: every resource row under a
-/// skill's directory, up to the 100-row cap (plan.md §7.3).
+/// skill's directory, up to the 100-row cap.
 public struct ListResourceResult: Encodable, Sendable, Equatable {
     /// The listed skill's canonical id.
     public let id: String
@@ -56,7 +56,7 @@ public struct ListResourceResult: Encodable, Sendable, Equatable {
 }
 
 /// The result of a `read resource` operation: one file's content, sliced by
-/// line (plan.md §7.3).
+/// line.
 public struct ReadResourceResult: Encodable, Sendable, Equatable {
     /// The resource's owning skill id.
     public let id: String
@@ -65,7 +65,7 @@ public struct ReadResourceResult: Encodable, Sendable, Equatable {
     public let path: String
 
     /// The verbatim content of lines `start` through `end`, joined by `\n`
-    /// -- never passed through the §5 render pipeline.
+    /// -- never passed through the render pipeline.
     public let content: String
 
     /// The first line returned (1-based).

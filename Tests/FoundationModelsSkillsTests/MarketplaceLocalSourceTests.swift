@@ -23,7 +23,7 @@ struct MarketplaceLocalSourceTests {
     /// The skill id that every fixture holds.
     private static let skillID = MarketplaceTestSupport.fixtureSkillID
 
-    // MARK: - The file:// layer (§5.1)
+    // MARK: - The file:// layer
 
     @Test func aLocalFolderSourceServesItsSkillsWithNoCacheFolderAndNoNetwork() async throws {
         let folder = try Self.makeLocalMarketplace(body: "local folder body")
@@ -69,7 +69,7 @@ struct MarketplaceLocalSourceTests {
             })
     }
 
-    // MARK: - The watched file:// root (§7.4)
+    // MARK: - The watched file:// root
 
     @Test func anEditUnderALocalFolderSourceGivesExactlyOneReload() async throws {
         let folder = try Self.makeLocalMarketplace(body: "local folder body")
@@ -126,7 +126,7 @@ struct MarketplaceLocalSourceTests {
         #expect(count == 0)
     }
 
-    // MARK: - The read-only seed folder (§7.5)
+    // MARK: - The read-only seed folder
 
     @Test func aSeedEntryServesTheLayerWhenTheCacheHasNone() async throws {
         let seed = try await SeedFixture()

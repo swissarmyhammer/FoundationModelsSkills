@@ -2,7 +2,7 @@ import Foundation
 import FoundationModelsSkills
 import Testing
 
-/// Table-driven tests for `ParameterInference` (plan.md §6.1): the merge
+/// Table-driven tests for `ParameterInference`: the merge
 /// matrix over `arguments:`, `argument-hint:`, and body inference (each
 /// source alone, and `arguments:` + `argument-hint:` together, including an
 /// arity mismatch), the `argument-hint:` grammar (`<a> [b] c...`), the
@@ -120,7 +120,7 @@ struct ParameterInferenceTests {
     }
 
     @Test func argumentsNameWinsOverHintInnerNameOnMerge() {
-        // arguments: is authoritative for names (plan.md §6.1) -- even though
+        // arguments: is authoritative for names -- even though
         // the hint token's own inner text ("msg") differs from the
         // arguments: name ("message"), the merged parameter keeps the
         // arguments: name and only borrows the hint's placeholder.
@@ -153,7 +153,7 @@ struct ParameterInferenceTests {
     @Test func hintLongerThanArgumentsProducesDiagnosticAndIgnoresExtraTokens() {
         // The sibling of the above: argument-hint: has MORE tokens than
         // arguments: this time, not fewer. arguments: is still authoritative
-        // for names/order (plan.md §6.1), so the merge stays truncated to
+        // for names/order, so the merge stays truncated to
         // arguments:'s single name -- the extra hint token is unused, not an
         // error.
         let frontmatter = SkillFrontmatter(

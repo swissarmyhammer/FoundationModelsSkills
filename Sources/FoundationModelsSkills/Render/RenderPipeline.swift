@@ -5,20 +5,20 @@ import FoundationModelsExtras
 ///
 /// Set once at `SkillsRegistry` construction so every render path --
 /// model-driven `use skill`, user-driven `/command`, and the CLI -- honors
-/// the same policy (plan.md decisions #25/#28). `ShellInjection` (pass 2)
+/// the same policy. `ShellInjection` (pass 2)
 /// reads `isShellExecutionDisabled`; `isScriptExecutionDisabled` is read by
-/// the M6 `run script` resource operation, outside this pipeline entirely.
+/// the `run script` resource operation, outside this pipeline entirely.
 public struct RenderPolicy: Sendable, Equatable {
     /// Asserts `` !`command` ``/fenced shell injection (pass 2) is disabled.
     ///
     /// When `true`, the pass substitutes an inert marker instead of running
-    /// anything (plan.md decision #25). Immutable: a `RenderPolicy` is a
+    /// anything. Immutable: a `RenderPolicy` is a
     /// construction-time invariant, never mutated after `SkillsRegistry`
     /// captures it.
     public let isShellExecutionDisabled: Bool
-    /// Asserts the M6 `run script` resource operation is disabled.
+    /// Asserts the `run script` resource operation is disabled.
     ///
-    /// Enforced downstream, not by this pipeline (plan.md decision #28).
+    /// Enforced downstream, not by this pipeline.
     /// Immutable for the same reason as `isShellExecutionDisabled`.
     public let isScriptExecutionDisabled: Bool
 
@@ -69,7 +69,7 @@ public struct RenderPolicy: Sendable, Equatable {
     ///
     /// - Parameters:
     ///   - isShellExecutionDisabled: Disables pass 2 when `true`.
-    ///   - isScriptExecutionDisabled: Disables the M6 `run script` operation
+    ///   - isScriptExecutionDisabled: Disables the `run script` operation
     ///     when `true`.
     ///   - shellCommandTimeout: How long one shell command of pass 2 can run.
     ///   - shellOutputByteLimit: The most bytes of output pass 2 holds for one
@@ -91,8 +91,7 @@ public struct RenderPolicy: Sendable, Equatable {
 ///
 /// Carries the text to render, the arguments supplied at call time, the
 /// skill's `arguments:` frontmatter names, the skill's own directory, the
-/// dotfolder layer that won the skill, and the policy every pass must honor
-/// (plan.md §5). Not mutated by
+/// dotfolder layer that won the skill, and the policy every pass must honor. Not mutated by
 /// `RenderPipeline` during a render call -- each pass receives the same
 /// `RenderRequest` and returns transformed text rather than writing back
 /// into the request; only the pipeline's local working text is rebound
@@ -100,8 +99,8 @@ public struct RenderPolicy: Sendable, Equatable {
 public struct RenderRequest: Sendable {
     /// The text to render.
     ///
-    /// A skill body, or one `description`/`metadata.*` value (plan.md §5's
-    /// "Templated: description, all metadata values, and the body").
+    /// A skill body, or one `description`/`metadata.*` value. The
+    /// description, all metadata values, and the body are templated.
     public var text: String
     /// The arguments supplied to `use skill`/`/command`/the CLI, in order.
     ///
@@ -111,8 +110,8 @@ public struct RenderRequest: Sendable {
     public var arguments: [String]
     /// The skill's `arguments:` frontmatter names, in declared order.
     ///
-    /// Pass 1's name->position table for `$name` substitution (plan.md §5:
-    /// "`$name` -- named arg from the `arguments:` frontmatter"). Position
+    /// Pass 1's name->position table for `$name` substitution: `$name` is a
+    /// named argument from the `arguments:` frontmatter. Position
     /// `i` in this array corresponds to position `i` of the shell-tokenized
     /// positional arguments that `$i`/`$ARGUMENTS[i]` also index (all of
     /// `arguments` joined as typed, then split by `ArgumentSubstitution`'s
@@ -123,7 +122,7 @@ public struct RenderRequest: Sendable {
     /// (rather than typing one raw command line) should quote any
     /// multi-word value it supplies, the same discipline `$N`/`$ARGUMENTS[N]`
     /// already require. Deliberately **not** `argument-hint:`- or
-    /// body-inferred names (`SkillParameter`'s broader §6.1 merge) --
+    /// body-inferred names (`SkillParameter`'s broader merge) --
     /// `$name` resolves only against the authoritative `arguments:` list, so
     /// a `$word` that isn't a declared argument name (e.g. `$HOME`) is left
     /// untouched rather than misread as a reference. Empty for a
@@ -137,14 +136,13 @@ public struct RenderRequest: Sendable {
     /// The dotfolder layer that won this skill.
     ///
     /// From `DotfolderStack` -- pass 3's trust mapping (defaults ->
-    /// `.trusted`, user/project -> `.untrusted`, plan.md §5, decision #29).
+    /// `.trusted`, user/project -> `.untrusted`).
     public var winningLayer: DotfolderStack.Layer
     /// The render policy every pass must honor.
     ///
     /// Threaded unchanged to every pass invocation in this render call --
-    /// gates pass 2 (`isShellExecutionDisabled`) and the M6 `run script`
-    /// operation outside this pipeline (`isScriptExecutionDisabled`), per
-    /// plan.md decisions #25/#28.
+    /// gates pass 2 (`isShellExecutionDisabled`) and the `run script`
+    /// operation outside this pipeline (`isScriptExecutionDisabled`).
     public var policy: RenderPolicy
 
     /// Creates a `RenderRequest`.
@@ -177,7 +175,7 @@ public struct RenderRequest: Sendable {
 
 /// One render-pipeline pass.
 ///
-/// A single-shot text transform over a render request (plan.md §5).
+/// A single-shot text transform over a render request.
 /// `RenderPipeline` invokes each pass at most once per `render` call, in a
 /// fixed order, feeding it the previous pass's output. Operates on
 /// `QuarantinedText`, not a plain `String`, so the no-re-scan contract is
@@ -230,7 +228,7 @@ public protocol ShellRenderPass: Sendable {
 
 /// A pass that returns its input unchanged.
 ///
-/// A testing/scaffold stand-in for any of the three §5 passes
+/// A testing/scaffold stand-in for any of the three render passes
 /// (`ArgumentSubstitution`, `ShellInjection`, `StencilPass`) -- used by
 /// `RenderPipeline.identity` and by tests that only care about a subset of
 /// the pass-set's behavior.
@@ -255,10 +253,10 @@ public struct IdentityRenderPass: RenderPass, ShellRenderPass {
     }
 }
 
-/// The §5 render pipeline: three ordered, single-shot passes.
+/// The render pipeline: three ordered, single-shot passes.
 ///
 /// Argument substitution, shell injection, and Stencil, assembled into the
-/// two pass-sets plan.md §5 defines (decision #25). `renderBody` runs all
+/// two pass-sets. `renderBody` runs all
 /// three passes; `renderMetadata` runs only passes 1 and 3, since shell
 /// execution must never fire while building `description`/`metadata.*`
 /// values (a watcher-driven reload path, not a per-call one). Both methods
@@ -266,17 +264,17 @@ public struct IdentityRenderPass: RenderPass, ShellRenderPass {
 /// into the next -- the single-shot, no-re-scan contract `RenderPass`
 /// documents.
 public struct RenderPipeline: Sendable {
-    /// Pass 1: argument + variable substitution (plan.md §5.1).
+    /// Pass 1: argument + variable substitution.
     ///
     /// `SkillsRegistry` wires this to a real `ArgumentSubstitution` instance;
     /// `IdentityRenderPass` remains available as a scaffold/testing default
     /// (`RenderPipeline.identity`).
     public var argumentSubstitution: any RenderPass
-    /// Pass 2: shell injection, body renders only (plan.md §5.2, decision #25).
+    /// Pass 2: shell injection, body renders only.
     ///
     /// `SkillsRegistry` wires this to a real `ShellInjection` instance.
     public var shellInjection: any ShellRenderPass
-    /// Pass 3: Stencil templating (plan.md §5.3).
+    /// Pass 3: Stencil templating.
     ///
     /// `SkillsRegistry` wires this to a real `StencilPass` instance.
     public var stencil: any RenderPass
@@ -295,7 +293,7 @@ public struct RenderPipeline: Sendable {
         self.stencil = stencil
     }
 
-    /// A pipeline wired with `IdentityRenderPass` for all three §5 passes.
+    /// A pipeline wired with `IdentityRenderPass` for all three render passes.
     ///
     /// A testing/scaffold default -- `SkillsRegistry` wires a real
     /// `RenderPipeline` (`ArgumentSubstitution`/`ShellInjection`/
@@ -309,7 +307,7 @@ public struct RenderPipeline: Sendable {
 
     /// Renders a skill body.
     ///
-    /// Runs passes 1, 2, then 3, in that fixed order (plan.md §5).
+    /// Runs passes 1, 2, then 3, in that fixed order.
     ///
     /// Suspends while pass 2 waits for the shell command of each injection
     /// site, thus the body pass-set runs its three passes by hand rather than
@@ -332,7 +330,7 @@ public struct RenderPipeline: Sendable {
     /// Pass 2 (shell injection) never runs here -- `description`/
     /// `metadata.*` values render at metadata-build/reload/list time, where
     /// shell execution would fire on every watcher event rather than once
-    /// per call (plan.md §5, decision #25).
+    /// per call.
     ///
     /// - Parameter request: The render request; `request.text` is the
     ///   `description`/`metadata.*` value's source text.
@@ -352,7 +350,7 @@ public struct RenderPipeline: Sendable {
     /// single `.original` `QuarantinedText` span, and flattens the last
     /// pass's output back to a plain `String` only once every pass has run,
     /// so a `.quarantined` span any pass produces stays invisible to every
-    /// later pass in `passes` (plan.md §5's no-re-scan contract).
+    /// later pass in `passes`.
     ///
     /// - Parameters:
     ///   - passes: The ordered pass-set to run, exactly once each.

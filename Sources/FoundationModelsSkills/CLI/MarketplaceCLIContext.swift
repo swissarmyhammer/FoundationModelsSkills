@@ -54,7 +54,7 @@ public struct MarketplaceCLIContext: Sendable {
     /// folder.
     ///
     /// The folder has no default: the caller names it. The loading boundary
-    /// of this package (plan.md §3) keeps the file system out, thus no type
+    /// of this package keeps the file system out, thus no type
     /// here asks the file system where this process stands. The three command
     /// entry points give ``currentProcess`` for that, and a test gives its own
     /// temporary folder.

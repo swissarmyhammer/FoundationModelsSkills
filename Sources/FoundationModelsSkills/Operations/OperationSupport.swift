@@ -107,9 +107,9 @@ public enum CorrectiveOutcome<Success: Encodable & Sendable & Equatable>: Encoda
     ///
     /// A `.success(_:)` outcome encodes `Success` inline; a
     /// `.corrective(_:)` outcome encodes the message as a bare JSON string
-    /// -- plan.md §7's own words: "corrective messages stay plain strings
-    /// per the return-don't-throw contract," matching upstream's own
-    /// resolver-level correctives.
+    /// -- a corrective message stays a plain string, because an operation
+    /// returns it and does not throw it. This matches the resolver-level
+    /// correctives of the upstream runtime.
     ///
     /// - Parameter encoder: The encoder to write the outcome into.
     /// - Throws: Whatever `encoder` throws while writing.

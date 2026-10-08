@@ -1,8 +1,8 @@
 /// The shared environment the three skill operations (`SearchSkill`,
 /// `ListSkill`, `UseSkill`) dispatch against once fused into one
-/// `OperationTool` (plan.md §7, §10).
+/// `OperationTool`.
 ///
-/// This is the assembly seam plan.md's "Assembly" section describes: the
+/// This is the assembly seam: the
 /// fused tool's action set is fixed by which operation structs are passed to
 /// `OperationTool.init`, while every remaining knob -- how `registry` was
 /// constructed (render policy, layer roots, watch) and how `searchAgent`'s
@@ -30,7 +30,7 @@ public struct SkillsToolContext: Sendable {
     /// surface every existing caller of this `init` already got before this
     /// property existed. `SkillsCLI` supplies a different predicate (`id`
     /// membership in `registry.commandListing()`) to present the
-    /// user-facing surface instead (plan.md §7.2's "Dual-use CLI").
+    /// user-facing surface instead.
     public let visibilityPredicate: @Sendable (SkillMetadata) -> Bool
 
     /// The follower that pumps `registry.onReload` into `searchAgent`, or

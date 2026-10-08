@@ -3,10 +3,10 @@ import Foundation
 import FoundationModelsSkills
 
 /// Drives `skills-demo --watch`: the human-driven twin of `HotReloadTests`,
-/// writing each reload event as it lands (plan.md §10, §11).
+/// writing each reload event as it lands.
 ///
 /// The tool `SkillsDemoAssembly.makeTool(registry:)` assembles follows
-/// `registry.onReload` itself, exactly as plan.md §10 shows, thus this mode
+/// `registry.onReload` itself, thus this mode
 /// forwards nothing by hand. It takes a second subscription of its own --
 /// `onReload` is a multicast stream, thus neither subscriber steals the
 /// other's events -- and writes what each reload carries.

@@ -3,7 +3,7 @@ import FoundationModelsExtras
 import FoundationModelsSkills
 import Testing
 
-/// Tests for the marketplace.md §6.5 (decision 9) partial scope: the Stencil
+/// Tests for the marketplace.md §6.5 partial scope: the Stencil
 /// partials stack of one render holds the marketplace layer that won plus the
 /// local layers, and no other marketplace layer.
 ///

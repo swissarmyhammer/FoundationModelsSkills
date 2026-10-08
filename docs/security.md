@@ -2,8 +2,8 @@
 
 ## Security
 
-- **No OS sandbox in v1.** `` !`shell` `` injection (plan.md §5) and `run
-  script` (plan.md §7.3) run as usual child processes with the host's own
+- **No OS sandbox in v1.** `` !`shell` `` injection and `run
+  script` run as usual child processes with the host's own
   privileges. They get the full environment. There is no filesystem or
   network restriction beyond the script's own working-directory
   discipline. `sandbox-exec` is deprecated API over a private profile

@@ -1,8 +1,9 @@
 /// A YAML scalar/collection value, used for `SkillFrontmatter.metadata`'s
 /// arbitrary-typed values and for `arguments:`'s dual spelling (a
 /// space-separated string or a YAML list) -- this package's own YAML-value
-/// tree (plan.md decision #27/#29: YAML decoding is ours, with Yams; Extras'
-/// `FrontmatterDocumentStack` only does the textual frontmatter/body split).
+/// tree. This package decodes the YAML, with Yams. The
+/// `FrontmatterDocumentStack` of Extras only does the textual
+/// frontmatter/body split.
 ///
 /// `indirect` because `.array`/`.dictionary` recursively contain
 /// `FrontmatterValue` -- an ordinary (non-indirect) enum cannot store itself.
@@ -67,9 +68,9 @@ extension FrontmatterValue {
     /// whitespace; `.array` takes each `.string` element verbatim (order
     /// preserved, non-string elements skipped); anything else tokenizes to
     /// empty. Used by `arguments:`, which accepts both a space-separated
-    /// string and a YAML list (plan.md §4/§5). `allowed-tools:` does **not**
-    /// use this helper -- the spec keeps it a space-separated string only
-    /// (plan.md §4), so `allowedToolsRaw` decodes as a plain `String` and
+    /// string and a YAML list. `allowed-tools:` does **not**
+    /// use this helper -- the spec keeps it a space-separated string only, so `allowedToolsRaw`
+    /// decodes as a plain `String` and
     /// `allowedTools` tokenizes it directly rather than through
     /// `FrontmatterValue`.
     var spaceSeparatedOrListTokens: [String] {
@@ -85,8 +86,7 @@ extension FrontmatterValue {
 }
 
 /// Decoded frontmatter for one skill -- every agentskills.io spec field plus
-/// every one of this package's Claude-compatible extension fields (plan.md
-/// §4, decision #27/#29).
+/// every one of this package's Claude-compatible extension fields.
 ///
 /// **Spec fields** (`name`, `description`, `license`, `compatibility`,
 /// `allowed-tools`, `metadata`) live only at the top level, per the spec.
@@ -101,7 +101,7 @@ extension FrontmatterValue {
 /// `DecodedSkill`).
 ///
 /// Unknown top-level keys are collected into `unknownTopLevelKeys`, never
-/// fatal -- lenient validation loads the skill anyway (plan.md §4).
+/// fatal -- lenient validation loads the skill anyway.
 ///
 /// This type only decodes; it enforces none of the spec's own rules (required
 /// `description`, `name == directoryName`, etc.) -- that is the downstream
@@ -110,7 +110,7 @@ public struct SkillFrontmatter: Sendable, Equatable {
     // MARK: - Spec fields (top-level only)
 
     /// The frontmatter `name:` -- compared against the directory name by the
-    /// validator (plan.md §4); never the canonical id itself.
+    /// validator; never the canonical id itself.
     public var name: String?
     /// The frontmatter `description:` -- required by the spec; its
     /// presence/length rules are enforced downstream.
@@ -142,7 +142,7 @@ public struct SkillFrontmatter: Sendable, Equatable {
     public var argumentsRaw: FrontmatterValue?
     /// `argument-hint:` -- resolved the same way as `preload`.
     public var argumentHint: String?
-    /// The retired `partial:` flag (plan.md decision #29) -- resolved the
+    /// The retired `partial:` flag -- resolved the
     /// same way as `preload`; still decoded (never fatal) so a diagnostic can
     /// be raised downstream.
     public var partial: Bool?
@@ -150,7 +150,7 @@ public struct SkillFrontmatter: Sendable, Equatable {
     // MARK: - Diagnostics
 
     /// Top-level keys this decoder does not recognize, sorted for
-    /// determinism -- collected, never fatal (plan.md §4).
+    /// determinism -- collected, never fatal.
     public var unknownTopLevelKeys: [String]
     /// Diagnostic-worthy notes accumulated while decoding this frontmatter,
     /// of two kinds: a `metadata.*` extension value present with the wrong
@@ -170,7 +170,7 @@ public struct SkillFrontmatter: Sendable, Equatable {
     }
 
     /// The tokenized `arguments:` value -- accepts both the space-separated
-    /// string and YAML-list spellings (plan.md §4), empty when
+    /// string and YAML-list spellings, empty when
     /// `argumentsRaw` is `nil`.
     public var arguments: [String] {
         argumentsRaw?.spaceSeparatedOrListTokens ?? []
@@ -232,7 +232,7 @@ extension SkillFrontmatter: Decodable {
         init?(intValue: Int) { nil }
     }
 
-    /// The spec fields (plan.md §4), decoded only at the top level -- the
+    /// The spec fields, decoded only at the top level -- the
     /// single source of truth `knownTopLevelKeys` builds from, so the two
     /// never drift.
     private static let specFieldKeys: Set<String> = [
@@ -290,7 +290,7 @@ extension SkillFrontmatter: Decodable {
     private static let booleanExtensionFieldTypeDescription = "a boolean"
 
     /// Whether `value` is one of the two shapes `arguments:` accepts: a
-    /// space-separated string or a YAML list (plan.md §4/§5).
+    /// space-separated string or a YAML list.
     private static func isStringOrArray(_ value: FrontmatterValue) -> Bool {
         switch value {
         case .string, .array: return true
@@ -303,8 +303,7 @@ extension SkillFrontmatter: Decodable {
     /// -- independent of whether a top-level value also exists for the same
     /// field (that conflict, when both coerce cleanly, is
     /// `resolvedExtensionField`'s own concern), so a mistyped-but-otherwise-
-    /// unused `metadata.*` entry is never silently dropped without a trace
-    /// (plan.md §4/#27).
+    /// unused `metadata.*` entry is never silently dropped without a trace.
     ///
     /// - Parameters:
     ///   - key: The extension field being checked.

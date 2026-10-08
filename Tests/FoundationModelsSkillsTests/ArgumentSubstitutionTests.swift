@@ -3,8 +3,8 @@ import FoundationModelsExtras
 import FoundationModelsSkills
 import Testing
 
-/// Table-driven tests for `ArgumentSubstitution`, pass 1 of the §5 render pipeline (plan.md
-/// §5): every `$`-token form, the shell-style quoting tokenizer that derives positional args,
+/// Table-driven tests for `ArgumentSubstitution`, pass 1 of the render pipeline: every
+/// `$`-token form, the shell-style quoting tokenizer that derives positional args,
 /// the `\$` escape, the `$ARGUMENTS` auto-append matrix, missing-reference handling, and the
 /// single-shot no-re-scan invariant -- plus an end-to-end render of the `commit` fixture.
 struct ArgumentSubstitutionTests {

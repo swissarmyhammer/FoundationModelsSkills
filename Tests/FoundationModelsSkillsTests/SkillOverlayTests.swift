@@ -4,7 +4,7 @@ import Testing
 @testable import FoundationModelsSkills
 
 /// Tests for `SkillOverlay`, the combined view of one skill over the layer
-/// directories that contribute to it (plan.md §3, §7.3): the union of the
+/// directories that contribute to it: the union of the
 /// paths, the copy of the highest directory, which directory gave the winning
 /// copy, and which paths the overlay confines.
 ///

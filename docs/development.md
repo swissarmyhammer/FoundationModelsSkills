@@ -1,13 +1,12 @@
 # Development notes and known deviations
 
-## Known deviations from plan.md
+## Known deviations
 
 - **A body render suspends, and the shell pass has a timeout and an output
-  limit.** Plan.md §5 states the three passes of the render, and decision #25
-  states that a shell command runs fresh on each render. It states no limit on
-  that command, and it shows a synchronous render. The implementation gives
-  the shell pass the same process control that §7.3.1 already gave `run
-  script`: the `ProcessRunner` of `FoundationModelsExtras` starts each command
+  limit.** The render has three passes, and a shell command runs fresh on
+  each render. The design gave no limit on that command, and it showed a
+  synchronous render. The implementation gives the shell pass the same
+  process control that `run script` has: the `ProcessRunner` of `FoundationModelsExtras` starts each command
   in a process group of its own, the pid stands in `ProcessRegistry.global`
   while it runs, the whole group dies with `SIGKILL` at
   `RenderPolicy.shellCommandTimeout`, and the read of the output stops at
@@ -21,8 +20,8 @@
   only, thus it stays synchronous and every catalog reader keeps its
   signature. The pass protocol splits in two for that reason: `RenderPass`
   for the synchronous passes 1 and 3, and `ShellRenderPass` for pass 2.
-- **`read resource` adds a per-call content byte budget.** Plan.md §7.3
-  states one cap: 500 lines maximum for each call, and `totalLines` tells
+- **`read resource` adds a per-call content byte budget.** The design
+  gives one cap: 500 lines maximum for each call, and `totalLines` tells
   the model to page with `start`/`end`. The implementation keeps that cap
   and adds a second one: 1,000,000 content bytes for each call. Thus the
   memory one call retains stays bounded for all line lengths. The
@@ -33,12 +32,11 @@
   reports that line. The model pages on from `end + 1` as before. If a
   single line alone exceeds the budget, the operation refuses with a
   corrective message that names the line, because no window can return
-  it. The §7.3 non-UTF-8 corrective is unchanged: the scan stops at the
+  it. The non-UTF-8 corrective is unchanged: the scan stops at the
   first invalid byte, and the reported byte size comes from `stat`, thus
   the operation never materializes a binary asset.
 - **Op-level correctives do not count toward upstream's retry cap.**
-  Plan.md §7 / decision #22 says: "upstream's retry cap (default 2) stops
-  loops." `OperationTool.call(arguments:)`, in the `Operations` module of
+  The design says: "upstream's retry cap (default 2) stops loops." `OperationTool.call(arguments:)`, in the `Operations` module of
   `FoundationModelsExtras`, only counts *resolver-level* failures —
   an unknown op, a missing required parameter, an unparseable value —
   through `recordCorrective`. When dispatch reaches an operation's own
@@ -64,8 +62,7 @@
 
 - **The loading boundary: the raw work of loading lives in
   `FoundationModelsExtras`** *(the user, 2026-09-20)*. This package keeps only
-  the work of the skill schema. One table states the rule, and plan.md §3
-  states it as well:
+  the work of the skill schema. One table states the rule:
 
   | # | where | what does the work |
   |---|---|---|

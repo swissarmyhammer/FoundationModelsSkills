@@ -3,9 +3,9 @@ import Testing
 
 @testable import FoundationModelsSkills
 
-/// The living contract test for `Examples/skills-demo` (plan.md §11):
+/// The living contract test for `Examples/skills-demo`:
 /// launches the built `skills-demo` executable as a subprocess and asserts
-/// on its stdout/exit codes for every `^spe0vvs` acceptance criterion.
+/// on its stdout/exit codes for each acceptance criterion of the demo.
 ///
 /// Mirrors `FoundationModelsExtras`'s own `ExtrasDemoIntegrationTests`
 /// subprocess-harness pattern. Deliberately spawns the real binary rather

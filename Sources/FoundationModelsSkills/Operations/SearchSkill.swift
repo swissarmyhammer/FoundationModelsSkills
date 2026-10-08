@@ -3,7 +3,7 @@ import FoundationModels
 import Operations
 
 /// The outcome of a `search skill` operation: either the plain text of the
-/// ranked matches or a corrective message (plan.md §7).
+/// ranked matches or a corrective message.
 ///
 /// `SearchSkill.execute(in:)` fails correctively on two conditions only: a
 /// blank or whitespace-only `query`, and a catalog in which the context's
@@ -15,7 +15,7 @@ import Operations
 public typealias SearchSkillOutput = CorrectiveOutcome<String>
 
 /// Searches the calling context's visible skill catalog by query, ranked
-/// best match first (plan.md §7, decision #26).
+/// best match first.
 ///
 /// Delegates to the shared `SkillSearchAgent`; a blank or whitespace-only
 /// `query` returns a corrective message instead of searching, since the

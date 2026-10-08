@@ -92,7 +92,7 @@ dependency:
 `SkillsTool.make(registry:session:)` is removed. Give a FoundationModels
 `LanguageModel` to `SkillsTool.make(registry:model:)`. `SelectionSessionRequest`
 is removed, and the `embedder:` argument takes a `PooledEmbedding` in place of
-a `TextEmbedding`. [`CHANGELOG.md`](CHANGELOG.md) has the full note.
+a `TextEmbedding`.
 
 ```swift
 // Before:
@@ -114,13 +114,10 @@ SkillsTool.make(registry: registry, model: SystemLanguageModel.default)
 - [`docs/security.md`](docs/security.md) — security posture, context
   compaction, and platform limits. Read this before you load skill directories
   that you do not control.
-- [`plan.md`](plan.md) — the full design: the layered architecture, each
-  resolved decision, and the render-pipeline and resource-operation
-  specification.
 - [`Examples/skill-library`](Examples/skill-library) — a three-layer fixture
   stack that uses each templating and visibility feature one time. The unit
   tests and the demo load these same directories, thus the documented behavior
   is the tested behavior.
 
-[`docs/development.md`](docs/development.md) records the known deviations from
-the plan, for anyone changing this package.
+[`docs/development.md`](docs/development.md) records the known deviations and
+the development rules, for anyone changing this package.

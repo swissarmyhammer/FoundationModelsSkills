@@ -1,7 +1,7 @@
 import Foundation
 import FoundationModelsExtras
 
-/// Pass 2 of the §5 render pipeline: shell-command injection, body renders only.
+/// Pass 2 of the render pipeline: shell-command injection, body renders only.
 ///
 /// Recognizes two forms, both single-shot over the *original* input text (never re-scanning
 /// substituted output, honoring the same no-re-scan contract that `RenderPass` documents and
@@ -19,13 +19,13 @@ import FoundationModelsExtras
 /// is spliced in after matching has already finished and can never trigger a second match.
 ///
 /// Each recognized command runs via `/bin/sh -c`, with `RenderRequest.skillDirectory` as its
-/// working directory and the host process's environment fully inherited (plan.md decision #28's
-/// "scrubbing... while `` !`env` `` runs unscrubbed would be theater" rationale, applied here to
-/// its own §5 shell). Merged stdout+stderr is captured and inlined as plain text at the
+/// working directory and the host process's environment fully inherited. A scrubbed
+/// environment would protect nothing while `` !`env` `` runs unscrubbed. Merged stdout+stderr is captured
+/// and inlined as plain text at the
 /// injection site, with trailing newlines trimmed (matching POSIX `$(...)` command-substitution
 /// semantics, the shell convention this syntax otherwise mirrors). Commands re-execute on every
 /// `render(_:request:)` call -- this pass holds no cache, so "dynamic at render, static in
-/// transcript" (plan.md §5) falls out of `ShellRenderPass`'s per-call contract with no extra
+/// transcript" falls out of `ShellRenderPass`'s per-call contract with no extra
 /// bookkeeping here.
 ///
 /// **The limits.** `FoundationModelsExtras.ProcessRunner` starts every command, thus each one
@@ -42,7 +42,7 @@ import FoundationModelsExtras
 /// by pipeline composition, since `RenderRequest` carries no body-vs-metadata flag for this pass
 /// to check itself.
 ///
-/// **macOS only** (plan.md §8) -- this package's platform floor already excludes iOS at the
+/// **macOS only** -- this package's platform floor already excludes iOS at the
 /// manifest level, so no `#if os(macOS)` guard is needed in this file itself.
 public struct ShellInjection: ShellRenderPass {
     /// The inert text an injection site is replaced with instead of the output of its command,
@@ -89,7 +89,7 @@ public struct ShellInjection: ShellRenderPass {
     ///
     /// Scans only `text`'s `.original` spans -- a `.quarantined` span (pass 1's substituted
     /// argument values, e.g.) is never scanned for `` !`command` ``/fenced injection, satisfying
-    /// plan.md §5's no-re-scan contract: a model-supplied argument containing `` !`echo pwned` ``
+    /// the no-re-scan contract: a model-supplied argument containing `` !`echo pwned` ``
     /// is inserted as inert text, never executed. Each command's own output becomes its own
     /// `.quarantined` span in turn, so a later pass (Stencil) never re-scans it either.
     ///
@@ -182,7 +182,7 @@ public struct ShellInjection: ShellRenderPass {
         preconditionFailure("ShellInjection.injectionPattern matched but no known alternative captured.")
     }
 
-    /// The single-pass injection grammar (plan.md §5.2).
+    /// The single-pass injection grammar.
     ///
     /// Two alternatives: inline `` !`command` `` -- whose leading `(?<![^\s])` lookbehind
     /// requires that no non-whitespace character precede the `!`, i.e. that it sit at the very
@@ -251,7 +251,7 @@ public struct ShellInjection: ShellRenderPass {
     /// - Parameters:
     ///   - command: The command string passed to `sh -c`.
     ///   - workingDirectory: The child process's working directory -- the skill's own directory,
-    ///     matching plan.md decision #28's cwd discipline for the sibling §7.3.1 script path.
+    ///     the same working directory rule as the sibling `run script` path.
     ///   - policy: The policy of the render, which carries the timeout and the byte limit.
     /// - Returns: The command's merged stdout+stderr, decoded as UTF-8 with trailing newlines
     ///   trimmed, or the marker of the limit the command passed.

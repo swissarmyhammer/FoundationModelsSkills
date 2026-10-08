@@ -5,7 +5,7 @@ import Operations
 
 /// Drives `skills-demo --chat`'s scripted, manual-run live-model validation:
 /// a root session over the fused `skills` tool, its `search skill` -> `use
-/// skill` round trip (plan.md §10, §11).
+/// skill` round trip.
 ///
 /// Manual-run only, never part of `swift test` for its live-model path --
 /// `SkillsDemoTests` instead exercises the deterministic
@@ -46,8 +46,7 @@ enum ChatMode {
         let expectedOpString: String
     }
 
-    /// The scripted prompt set: a `search skill` -> `use skill` round trip
-    /// (plan.md §11).
+    /// The scripted prompt set: a `search skill` -> `use skill` round trip.
     private static let scriptedPrompts: [ScriptedPrompt] = [
         ScriptedPrompt(
             prompt: "Search the skills library for something that helps commit my changes.",

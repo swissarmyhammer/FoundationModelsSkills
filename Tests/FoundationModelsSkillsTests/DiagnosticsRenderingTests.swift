@@ -3,7 +3,7 @@ import FoundationModelsSkills
 import Testing
 
 /// Tests for `SkillDiagnostic`'s single-line rendering and provenance
-/// carriage (M7, `^h9p1t54`): every severity renders consistently, and
+/// carriage: every severity renders consistently, and
 /// provenance is present even for a diagnostic raised before a skill ever
 /// decoded.
 struct DiagnosticsRenderingTests {

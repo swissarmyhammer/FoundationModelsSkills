@@ -4,10 +4,10 @@ import Logging
 import Operations
 import OperationsCLI
 
-/// The `skills-demo` executable's entry point: plan.md §11's worked example
-/// of the full stack, in four modes.
+/// The `skills-demo` executable's entry point: a worked example of the full
+/// stack, in four modes.
 ///
-/// - Default -- CLI (§7.2): `skills-demo skill list`, `skills-demo skill
+/// - Default -- CLI: `skills-demo skill list`, `skills-demo skill
 ///   search "commit my changes"`, `skills-demo skill use --id commit
 ///   --arguments "fix parser"`, over the fixture library.
 /// - `--chat` -- scripted live-model validation via `ChatMode`, gated on

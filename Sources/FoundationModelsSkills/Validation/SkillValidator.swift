@@ -1,17 +1,16 @@
 import Foundation
 
-/// One skill that passed through `SkillValidator`'s lenient rules (plan.md
-/// §4, decision #27) -- the frontmatter and body as decoded, unchanged by
-/// validation, plus the eligibility flags a downstream `SkillsRegistry`
+/// One skill that passed through `SkillValidator`'s lenient rules -- the
+/// frontmatter and body as decoded, unchanged by validation, plus the eligibility flags a downstream `SkillsRegistry`
 /// combines with a skill's own `disable-model-invocation`/`user-invocable`
-/// frontmatter (plan.md §6) to compute final surface visibility.
+/// frontmatter to compute final surface visibility.
 ///
 /// Produced only when the decode outcome was `.decoded` --
 /// `SkillValidator.Result.skill` is `nil` for the `.skipped` case
 /// (unparseable YAML), since there is no frontmatter/body to carry.
 public struct ValidatedSkill: Sendable, Equatable {
     /// The canonical id -- the directory name, never the frontmatter `name`
-    /// (plan.md §4), unaffected by any name irregularity a diagnostic may
+    ///, unaffected by any name irregularity a diagnostic may
     /// report.
     public var id: String
     /// The decoded frontmatter, unchanged by validation.
@@ -29,7 +28,7 @@ public struct ValidatedSkill: Sendable, Equatable {
     public var isUserInvocableEligible: Bool
     /// Whether this skill is hidden from every surface.
     ///
-    /// `true` only for the retired `partial: true` flag (decision #29).
+    /// `true` only for the retired `partial: true` flag.
     public var isHidden: Bool
 
     /// Creates a `ValidatedSkill` by directly assigning every field.
@@ -57,7 +56,7 @@ public struct ValidatedSkill: Sendable, Equatable {
 }
 
 /// Applies agentskills.io + Claude lenient domain validation to one
-/// discovered skill's decode result (plan.md §4, §7.1; decision #27),
+/// discovered skill's decode result,
 /// producing a `ValidatedSkill` plus every `SkillDiagnostic` raised along the
 /// way -- parity target the `skills-ref` reference validator.
 ///
@@ -260,7 +259,7 @@ public enum SkillValidator {
     // MARK: - name: rules
 
     /// One independent character-class/length/equality check applied to a
-    /// present frontmatter `name:` (plan.md §4) -- data-driven so adding or
+    /// present frontmatter `name:` -- data-driven so adding or
     /// adjusting a check never grows a parallel `if` branch.
     private struct NameCheck: Sendable {
         /// Whether `name` (compared against `directoryID` where relevant)
@@ -279,7 +278,7 @@ public enum SkillValidator {
         ("a"..."z").contains(scalar) || ("0"..."9").contains(scalar) || scalar == "-"
     }
 
-    /// agentskills.io's `name:` rules (plan.md §4): 1-64 characters,
+    /// agentskills.io's `name:` rules: 1-64 characters,
     /// `[a-z0-9-]` only, no leading/trailing hyphen, no consecutive `--`,
     /// and `name == directoryName`.
     private static let nameChecks: [NameCheck] = [
@@ -302,9 +301,9 @@ public enum SkillValidator {
 
     /// Rule: a present frontmatter `name:` that violates any `nameChecks`
     /// rule draws one combined `.warning` diagnostic -- the skill still
-    /// loads under the directory-name id regardless (plan.md §4).
+    /// loads under the directory-name id regardless.
     ///
-    /// An absent `name:` (Claude-style inputs, plan.md §4) draws no
+    /// An absent `name:` (Claude-style inputs) draws no
     /// diagnostic at all.
     ///
     /// - Parameter context: The rule context.
@@ -322,9 +321,9 @@ public enum SkillValidator {
 
     // MARK: - description: / compatibility: character limits
 
-    /// The spec's `description:` character limit (plan.md §4).
+    /// The spec's `description:` character limit.
     private static let descriptionCharacterLimit = 1024
-    /// The spec's `compatibility:` character limit (plan.md §4).
+    /// The spec's `compatibility:` character limit.
     private static let compatibilityCharacterLimit = 500
 
     /// Diagnoses a frontmatter string field exceeding a spec character limit
@@ -395,8 +394,7 @@ public enum SkillValidator {
     /// `.warning` diagnostic and excludes the skill from the model-facing
     /// surface (it cannot be disclosed without one) while keeping it
     /// user-invocable -- this package's one deliberate softening of the
-    /// client-implementation guide's skip-entirely rule (plan.md §4,
-    /// decision #27).
+    /// client-implementation guide's skip-entirely rule.
     ///
     /// Trims before testing emptiness so `description: "   "` -- whitespace
     /// a model could never usefully disclose -- draws the same diagnostic
@@ -419,7 +417,7 @@ public enum SkillValidator {
 
     // MARK: - partial: true (retired)
 
-    /// Rule: `partial: true` is retired (decision #29) -- shared building
+    /// Rule: `partial: true` is retired -- shared building
     /// blocks are now `_partials/*.md` files in the stack, not skill
     /// directories.
     ///
@@ -432,13 +430,13 @@ public enum SkillValidator {
         guard context.frontmatter.partial == true else { return nil }
         return SkillDiagnostic(
             severity: .warning, skillID: context.id, provenance: context.provenance,
-            message: "'partial: true' is retired (decision #29); hidden from every surface.")
+            message: "'partial: true' is retired; hidden from every surface.")
     }
 
     // MARK: - More than one layer directory of the id
 
     /// Rule: an id that a lower-precedence layer directory also holds draws
-    /// an `.advisory` diagnostic naming how many (plan.md §4), and then
+    /// an `.advisory` diagnostic naming how many, and then
     /// naming both sides of every lower directory that came from a
     /// marketplace (marketplace.md §9.1) -- informational only, no effect on
     /// eligibility.
@@ -486,8 +484,7 @@ public enum SkillValidator {
 
     // MARK: - Body line count
 
-    /// The spec's recommended maximum `SKILL.md` body line count (plan.md
-    /// §4).
+    /// The spec's recommended maximum `SKILL.md` body line count.
     private static let recommendedMaximumBodyLineCount = 500
 
     /// Counts `text`'s lines the way a line-oriented tool like `wc -l` would:
@@ -528,7 +525,7 @@ public enum SkillValidator {
     // MARK: - Unknown top-level keys
 
     /// Rule: any top-level frontmatter key `FrontmatterDecoder` did not
-    /// recognize draws an `.advisory` diagnostic naming them (plan.md §4) --
+    /// recognize draws an `.advisory` diagnostic naming them --
     /// informational only, never blocks loading.
     ///
     /// - Parameter context: The rule context.
@@ -548,7 +545,7 @@ public enum SkillValidator {
     /// extension value, a field spelled both top-level and under
     /// `metadata.*`, or a quoting-fallback retry on `description:` -- draws
     /// its own `.advisory` diagnostic carrying the note text verbatim, in
-    /// note order (plan.md §4/#27). Informational only: the decoder already
+    /// note order. Informational only: the decoder already
     /// applied the note's consequence (ignored the value, kept the top-level
     /// one, or retried), so eligibility is unaffected.
     ///

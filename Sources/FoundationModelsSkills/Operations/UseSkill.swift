@@ -3,7 +3,7 @@ import FoundationModels
 import Operations
 
 /// The outcome of a `use skill` operation: either the rendered body or a
-/// corrective message (plan.md §7).
+/// corrective message.
 ///
 /// An unusable id (unknown, stale, or model-hidden) is the one condition
 /// `UseSkill.execute(in:)` fails correctively on. No argument is required:
@@ -15,15 +15,15 @@ import Operations
 public typealias UseSkillOutput = CorrectiveOutcome<String>
 
 /// Renders and returns a skill's body by id, substituting the given
-/// arguments (plan.md §5, §7).
+/// arguments.
 ///
 /// Dereferences the *live* registry at dispatch time -- via `SkillsRegistry`'s
 /// shared, atomically-swappable catalog storage -- so hot-reload between
 /// turns is invisible to this operation: an id that only just appeared (or
 /// disappeared) is resolved correctly on the very next dispatch. An
 /// unknown, stale, or model-hidden id returns a corrective message rather
-/// than throwing (decision #22). No argument is required: a missing one
-/// renders as an empty string, and extra trailing arguments ride the §5
+/// than throwing. No argument is required: a missing one
+/// renders as an empty string, and extra trailing arguments ride the render
 /// `ARGUMENTS:` auto-append. Neither fails.
 public struct UseSkill: OperationDefinition {
     /// The shared context this operation dispatches against.
@@ -38,13 +38,13 @@ public struct UseSkill: OperationDefinition {
     /// `ListSkill`'s deliberately case-insensitive `filter`: `filter` is a
     /// fuzzy discovery aid, but `id` names a specific catalog entry, and
     /// every id agentskills.io validation accepts is already
-    /// lowercase-`[a-z0-9-]`-only (plan.md §4) -- there is no legitimate
+    /// lowercase-`[a-z0-9-]`-only -- there is no legitimate
     /// case-variant id to match loosely, so a mismatched-case `id` falls
     /// into the same "unusable id" corrective as an unknown one, which is
     /// itself actionable feedback.
     public var id: String
 
-    /// Positional arguments substituted into the rendered body (plan.md §5).
+    /// Positional arguments substituted into the rendered body.
     public var arguments: [String]?
 
     /// Creates a `UseSkill` operation by directly assigning its parameters,
@@ -150,7 +150,7 @@ public struct UseSkill: OperationDefinition {
 
     /// The corrective message for an id that is unknown, stale, or not
     /// visible on the calling context's surface, carrying the current
-    /// usable id list (decision #22).
+    /// usable id list.
     ///
     /// - Parameters:
     ///   - id: The id that could not be used.

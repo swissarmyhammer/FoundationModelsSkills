@@ -3,7 +3,7 @@ import Yams
 
 /// The result of successfully decoding one skill's raw text: the decoded
 /// frontmatter, its render-pipeline body (the text after the frontmatter
-/// fence, byte-for-byte as the Extras document stack gives it -- plan.md §5),
+/// fence, byte-for-byte as the Extras document stack gives it),
 /// and any diagnostic-worthy notes accumulated along the way. Notes combine
 /// `SkillFrontmatter.notes` (mistyped `metadata.*` values and
 /// top-level/`metadata.*` conflicts) with `FrontmatterDecoder`'s own
@@ -48,13 +48,12 @@ public struct DecodedSkill: Sendable, Equatable {
 /// The split of a document into its frontmatter and its body is the work of
 /// `FoundationModelsExtras`, which `SkillsRegistry` gets from the layer
 /// stack. This decoder gets the raw text between the fences only, and the
-/// Yams decode on top of it is the schema work of this package (plan.md §4,
-/// decision #27/#29).
+/// Yams decode on top of it is the schema work of this package.
 ///
 /// **Never throws.** A Yams parse failure runs the quoting-fallback retry for
 /// the common cross-client authoring mistake -- an unquoted colon inside
-/// `description:`, which a strict YAML parser reads as a nested mapping
-/// (plan.md §4). If the retry succeeds, the result is `.decoded` with a note
+/// `description:`, which a strict YAML parser reads as a nested mapping. If the retry succeeds, the
+/// result is `.decoded` with a note
 /// recording that a retry happened; if the retry cannot even be attempted (no
 /// `description:` line to requote, or it is already quoted) or still fails
 /// after being attempted, the result is `.skipped(reason:)` -- a value, never
@@ -176,7 +175,7 @@ public enum FrontmatterDecoder {
     }
 
     /// Quotes an unquoted-colon `description:` value -- the common
-    /// cross-client authoring mistake plan.md §4 calls out (a description
+    /// cross-client authoring mistake (a description
     /// like `Deploy to staging: verify...` reads as a nested YAML mapping to
     /// a strict parser without quoting). Operates textually, line by line,
     /// so it never depends on Yams having already told it *why* parsing

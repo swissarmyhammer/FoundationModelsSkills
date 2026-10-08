@@ -1,18 +1,17 @@
 import Foundation
 import FoundationModelsExtras
 
-/// `SkillsRegistry`'s conformance to Extras' harness delivery channel
-/// (plan.md §6, §7.1; decision #29): the user `/` menu's rows, translated
+/// `SkillsRegistry`'s conformance to Extras' harness delivery channel: the user `/` menu's rows, translated
 /// into `SlashCommand` values a host feeds to its own session/UI layer.
 ///
 /// Each command carries a `.rendered` body. When the user runs `/name
 /// text`, the body gives `text` to `call(id:arguments:)` as one argument,
-/// thus the §5 pipeline runs in full: `$ARGUMENTS` gets the text as typed,
+/// thus the render pipeline runs in full: `$ARGUMENTS` gets the text as typed,
 /// `$N` and `$name` get its shell-style tokens, shell injection runs, and
 /// Stencil runs. The harness feeds the result to the model as the prompt
 /// of the turn, the same as a `.prompt` template it rendered itself.
 extension SkillsRegistry: SlashCommandProviding {
-    /// This registry's user-invocable skills (plan.md §6.1), one
+    /// This registry's user-invocable skills, one
     /// `SlashCommand` per `commandListing()` row.
     ///
     /// Ignores `workingDirectory`: `commandListing()` already resolves
@@ -29,8 +28,7 @@ extension SkillsRegistry: SlashCommandProviding {
     }
 
     /// Republishes this registry's full command set after every
-    /// watcher-driven catalog rebuild, bridged from `onReload` (plan.md
-    /// §7, §7.1).
+    /// watcher-driven catalog rebuild, bridged from `onReload`.
     ///
     /// `nil` when this registry was constructed with `watch: false`, same
     /// as `onReload` itself. Accessing this property registers a fresh
@@ -108,8 +106,7 @@ extension SkillsRegistry: SlashCommandProviding {
     /// parameter's placeholder summary (`parameterSummary(parameter:)`), in
     /// position order, space-joined.
     ///
-    /// - Parameter parameters: The listing row's parsed parameters (plan.md
-    ///   §6.1).
+    /// - Parameter parameters: The listing row's parsed parameters.
     /// - Returns: The joined hint text, or `nil` when `parameters` is
     ///   empty -- `SlashCommand.argumentHint`'s own documented "no hint
     ///   worth showing" value.

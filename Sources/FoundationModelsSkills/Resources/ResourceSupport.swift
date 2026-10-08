@@ -10,7 +10,7 @@ internal let scriptsDirectoryPrefix = "scripts/"
 
 /// The rules of a skill-relative resource path that open no file: whether the
 /// path is well formed, and the text a resource operation gives for a path it
-/// denies (plan.md §7.3).
+/// denies.
 ///
 /// `ReadResource` and `RunScript` each read these, thus the two can never
 /// differ on what counts as a relative path, or on the wording of the refusal.
@@ -48,12 +48,12 @@ internal enum ResourcePathRules {
 
 /// Shared "resolve `id` against the calling context's visible catalog"
 /// lookup and corrective-message logic for `ListResource`, `ReadResource`,
-/// and `RunScript` (plan.md §7.3, decision #22).
+/// and `RunScript`.
 ///
-/// Resolves plan.md's own internal tension between §7.3 ("resource
-/// operations see only the model-visible catalog") and §7.2 ("the CLI
-/// respects the same visibility rules as the user surface -- it is a user,
-/// not a model") the same way `UseSkill`/`ListSkill`/`SearchSkill` already
+/// Resolves the conflict between two rules ("resource operations see only
+/// the model-visible catalog", and "the CLI respects the same visibility
+/// rules as the user surface -- it is a user, not a model") the same way
+/// `UseSkill`/`ListSkill`/`SearchSkill` already
 /// do: visibility comes from `context.visibilityPredicate`, not a hardcoded
 /// `isModelVisible` check. A host's model-facing context still defaults
 /// `visibilityPredicate` to `isModelVisible` (`SkillsToolContext`'s own
@@ -81,9 +81,8 @@ internal enum ResourceIDLookup {
     /// Two values stay outside the overlay, because the stack of
     /// `FoundationModelsExtras` gives neither one yet: the execute bit of a
     /// row of `ListResource`, and the execute bit with the shebang bytes of
-    /// `RunScript`. Card `^00nmjzg` of the `FoundationModelsExtras` board adds
-    /// both to the stack, and card `^yraq5xe` of this board then takes them up
-    /// here.
+    /// `RunScript`. When the stack of `FoundationModelsExtras` gives both,
+    /// this package can take them up here.
     ///
     /// - Parameters:
     ///   - id: The skill id to resolve.
@@ -131,7 +130,7 @@ internal enum ResourceIDLookup {
 
     /// The corrective message for an id that is unknown, stale, or not
     /// visible on this surface, carrying the current usable id list
-    /// (decision #22).
+    ///.
     ///
     /// - Parameters:
     ///   - id: The id that could not be resolved.

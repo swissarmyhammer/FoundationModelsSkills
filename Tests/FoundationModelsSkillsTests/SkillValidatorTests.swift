@@ -3,8 +3,8 @@ import FoundationModelsSkills
 import Testing
 
 /// Tests for `SkillValidator` and `SkillDiagnostic` -- lenient domain
-/// validation over a `DecodedSkill` (plan.md §4, §7.1; decision #27), parity
-/// target the `skills-ref` reference validator.
+/// validation over a `DecodedSkill`. The parity target is the `skills-ref`
+/// reference validator.
 ///
 /// Covers every rule in `SkillValidator`'s own table doc comment: `name`
 /// irregularities (load anyway), missing/empty `description` (excluded from

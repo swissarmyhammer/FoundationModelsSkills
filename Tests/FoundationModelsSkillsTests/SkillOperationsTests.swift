@@ -5,11 +5,10 @@ import FoundationModelsSkills
 import Operations
 import Testing
 
-/// Tests for the Layer-4 model surface (plan.md §7, §13; decisions
-/// #15-superseded/#20/#21/#22): dispatching `search skill` / `list skill` /
+/// Tests for the Layer-4 model surface: dispatching `search skill` / `list skill` /
 /// `use skill` through the fused `skills` `OperationTool` against a
-/// stub-searcher context, the full §7 corrective matrix, and the resolver's
-/// forgiving spellings including the decision #21 verb aliases.
+/// stub-searcher context, the full corrective matrix, and the resolver's
+/// forgiving spellings including the verb aliases.
 struct SkillOperationsTests {
     // MARK: - Fixture roots (mirrors SkillsRegistryTests)
 
@@ -17,7 +16,7 @@ struct SkillOperationsTests {
 
     // MARK: - Stub-searcher context construction
 
-    /// Builds a `SkillsToolContext` over the §11 fixture library's `commit` /
+    /// Builds a `SkillsToolContext` over the fixture library's `commit` /
     /// `deploy` / `lint` / … skills, with a real, GPU-free `.retrieval`-mode
     /// `MetadataSearcher` (no embedder, no session) standing in for the
     /// stub-searcher context the acceptance criteria call for.
@@ -102,7 +101,7 @@ struct SkillOperationsTests {
         }
     }
 
-    // MARK: - Dispatch table: typed outputs (§7)
+    // MARK: - Dispatch table: typed outputs
 
     @Test func searchSkillDispatchReturnsTheQueryLineAndTheLineOfEachMatch() async throws {
         let tool = try Self.makeFixtureTool()
@@ -135,7 +134,7 @@ struct SkillOperationsTests {
         #expect(json == (try await Self.renderedCommitBody()))
     }
 
-    // MARK: - Corrective matrix (§7)
+    // MARK: - Corrective matrix
 
     @Test func searchSkillWithBlankQueryReturnsACorrective() async throws {
         let output = try await SearchSkill(query: "   ", limit: nil).execute(in: Self.makeFixtureContext())
@@ -149,7 +148,7 @@ struct SkillOperationsTests {
 
     @Test func searchSkillNeverLeaksAModelHiddenSkillSeededDirectlyIntoTheSearcher() async throws {
         // Seeds the searcher directly (bypassing `SkillSearchAgent.update(
-        // items:)`'s own filtering, ^49at4v3), so this exercises
+        // items:)`'s own filtering), so this exercises
         // `SearchSkill.execute`'s own `context.visibilityPredicate` filter
         // as the last line of defense.
         let hidden = SkillMetadata(id: "hidden-tool", description: "A hidden diagnostic tool.", isModelVisible: false)
@@ -323,7 +322,7 @@ struct SkillOperationsTests {
         #expect(body.contains("Value: production"))
     }
 
-    // MARK: - No argument is required: a missing one renders empty (plan.md §6.1)
+    // MARK: - No argument is required: a missing one renders empty
 
     @Test(
         "use skill with no arguments renders the body whatever the parameter sources say",
@@ -348,13 +347,13 @@ struct SkillOperationsTests {
         #expect(body.contains("Value: \n"))
     }
 
-    // MARK: - Surplus arguments ride the §5 ARGUMENTS: auto-append, never an error
+    // MARK: - Surplus arguments ride the ARGUMENTS: auto-append, never an error
 
     @Test func useSkillWithMoreArgumentsThanDeclaredSucceedsAndAutoAppendsTheSurplus() async throws {
         // `widget` declares exactly one named parameter (`env`) and its body
         // references only `$0`, never a bare `$ARGUMENTS` -- so a second,
-        // undeclared argument has no named slot to land in. Per plan.md §7,
-        // the extra must still ride the pass-1 `ARGUMENTS: <value>`
+        // undeclared argument has no named slot to land in. The
+        // extra must still ride the pass-1 `ARGUMENTS: <value>`
         // no-data-loss fallback rather than causing an error.
         let (context, cleanup) = try Self.makeTempContext(
             argumentsLine: "arguments: env\n", body: "Value: $0\n")
@@ -367,7 +366,7 @@ struct SkillOperationsTests {
         #expect(body.contains("ARGUMENTS: production extra-flag"))
     }
 
-    // MARK: - Hot-reload race: the id vanishes between the lookup and the call (^xv4x99j)
+    // MARK: - Hot-reload race: the id vanishes between the lookup and the call
 
     /// How long the injected race hook waits for the watcher-driven rebuild
     /// to drop the deleted skill from the live catalog before it gives up.
@@ -504,12 +503,10 @@ struct SkillOperationsTests {
         // ...but the plural spelling `skills list` does not: there is no
         // noun-normalization lever in the shipped resolver to fold `skills`
         // (plural) onto our declared singular noun `skill`. This is the
-        // RESOLVED contract -- plan.md decision #21 was amended to say so
-        // explicitly, since the original text overstated what upstream's
-        // resolver actually does (no singularization). Pinned here so a
-        // future resolver change that adds plural tolerance is noticed
-        // (this test would then need updating to expect success, alongside
-        // another plan.md amendment).
+        // RESOLVED contract: the upstream resolver does no
+        // singularization. Pinned here so a future resolver change that
+        // adds plural tolerance is noticed (this test would then need
+        // updating to expect success).
         let tool = try Self.makeFixtureTool()
         let arguments = GeneratedContent(properties: ["op": "skills list"])
 
@@ -518,7 +515,7 @@ struct SkillOperationsTests {
         #expect(json.contains("Unknown operation"))
     }
 
-    // MARK: - Resolver: decision #21 verb aliases
+    // MARK: - Resolver: verb aliases
 
     @Test func findSkillAliasesToSearchSkill() async throws {
         let tool = try Self.makeFixtureTool()
@@ -551,15 +548,14 @@ struct SkillOperationsTests {
     }
 
     @Test func resolverDoesNotAcceptRunSkillNowThatRunIsClaimedByRunScript() async throws {
-        // M6's `RunScript` claims the `"run"` verb outright (`run script`),
-        // so the decision #21 `"run"` -> `use` alias was dropped from
+        // `RunScript` claims the `"run"` verb outright (`run script`),
+        // so the `"run"` -> `use` alias was dropped from
         // `SkillsTool.verbAliasOverrides` (see that table's doc comment):
         // keeping it would have rewritten a literal `"run script"` query to
         // `"use script"`, which doesn't exist, before it ever reached
         // `RunScript`. `"run skill"` therefore no longer resolves to `use
-        // skill` -- this is the RESOLVED contract (plan.md decision #21 was
-        // amended to say `run` is deliberately not a `use` alias, reserved
-        // for `run script`), not a workaround -- pinned here so a future
+        // skill` -- this is the RESOLVED contract (`run` is deliberately
+        // not a `use` alias, reserved for `run script`), not a workaround -- pinned here so a future
         // resolver/alias change that reintroduces the collision is caught
         // by a test.
         let tool = try Self.makeFixtureTool()

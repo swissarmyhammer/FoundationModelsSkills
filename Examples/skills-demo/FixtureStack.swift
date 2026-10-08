@@ -5,8 +5,8 @@ import FoundationModelsExtras
 ///
 /// Resolution walks up from the calling source file's own `#filePath`, so it
 /// never depends on -- and can never resolve into -- the real home directory
-/// or `$XDG_CONFIG_HOME`, matching plan.md §11's "explicit `defaultsDirectory`/
-/// `userDirectory` fixture URLs" requirement. Every file in this target lives
+/// or `$XDG_CONFIG_HOME`: the `defaultsDirectory` and `userDirectory` are
+/// explicit fixture URLs. Every file in this target lives
 /// directly under `Examples/skills-demo/`, so the two-levels-up derivation is
 /// identical regardless of which file calls it.
 enum FixtureStack {

@@ -5,7 +5,7 @@ import Testing
 @testable import FoundationModelsSkills
 
 /// Tests for `SkillSearchAgent`, the thin `MetadataSearcher<SkillMetadata>`
-/// wrapper (plan.md §7, §7.1, §13; decision #26): seeding filters to the
+/// wrapper: seeding filters to the
 /// model-visible subset, a keyword query over the fixture catalog ranks the
 /// expected ids, cosine joins fusion once an embedder is wired up, and
 /// `update(items:)` makes a catalog change's new id searchable while
@@ -25,7 +25,7 @@ struct SkillSearchAgentTests {
     private static let gammaSkill = SkillMetadata(
         id: "gamma", description: "Handles gamma workflow tasks.", isModelVisible: true)
 
-    // MARK: - `PooledEmbedding` test double (plan.md §13)
+    // MARK: - `PooledEmbedding` test double
 
     /// A deterministic `PooledEmbedding` test double: returns a caller-
     /// supplied vector for each registered text, falling back to an
@@ -97,7 +97,7 @@ struct SkillSearchAgentTests {
         #expect(matches.first?.id == "alpha")
     }
 
-    // MARK: - Surface-aware `update(items:)` (^49at4v3)
+    // MARK: - Surface-aware `update(items:)`
 
     @Test func aUserSurfaceAgentKeepsDeployAndDropsLintAfterUpdate() async throws {
         // `deploy` is model-hidden (`disable-model-invocation: true`) but

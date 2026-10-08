@@ -2,7 +2,7 @@ import Foundation
 import FoundationModelsExtras
 
 /// The combined view of one skill over the layer directories that contribute
-/// to it (plan.md §3, §7.3).
+/// to it.
 ///
 /// The unit of override is the file: for a path of the skill, the copy in the
 /// highest layer directory that holds it wins, and a file that only a lower

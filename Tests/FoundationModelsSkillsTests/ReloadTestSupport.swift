@@ -36,7 +36,7 @@ enum ReloadTestSupport {
     /// made inside the task registers only when the task first runs, and
     /// under a loaded cooperative pool that can be later than the watcher's
     /// first publication; the publication is then lost, and every wait on
-    /// it times out (^n89yw8p).
+    /// it times out.
     ///
     /// - Parameters:
     ///   - stream: The already-subscribed stream to iterate, or `nil` for a
@@ -53,8 +53,8 @@ enum ReloadTestSupport {
 
     /// Starts a background task that iterates `stream` (when non-`nil`),
     /// forwards each published metadata list into `agent.update(items:)`,
-    /// and records one event into `tally` for each forward -- the plan.md
-    /// §7.1 wiring a real host is responsible for.
+    /// and records one event into `tally` for each forward -- the wiring
+    /// that a real host is responsible for.
     ///
     /// The caller evaluates `stream` on its own thread, for the reason
     /// ``tally(_:into:)`` gives.

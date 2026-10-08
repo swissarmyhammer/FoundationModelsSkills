@@ -3,8 +3,8 @@ import FoundationModelsExtras
 import FoundationModelsSkills
 import Testing
 
-/// The full-real-pipeline composition matrix for plan.md §5's no-re-scan
-/// contract (`^r3bhwdp`): passes 1-3 wired to their REAL implementations,
+/// The full-real-pipeline composition matrix for the no-re-scan contract
+/// of the render pipeline: passes 1-3 wired to their REAL implementations,
 /// never `IdentityRenderPass` mocks, over both a model-supplied argument
 /// value and a shell command's own output.
 ///

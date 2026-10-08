@@ -7,8 +7,8 @@ import Testing
 // the well-known values of each render.
 @testable import FoundationModelsSkills
 
-/// Tests for `StencilPass`, pass 3 of the §5 render pipeline (plan.md §5.3,
-/// decision #29), as this package wires it: the variables of one render
+/// Tests for `StencilPass`, pass 3 of the render pipeline, as this
+/// package wires it: the variables of one render
 /// (the environment values, and the named arguments of the skill above
 /// them), the well-known values that the stenciled stack of Extras adds
 /// below them, and the layer that the stack takes the trust from.
@@ -197,7 +197,7 @@ struct StencilPassTests {
             "a .marketplace layer must render untrusted, so the 'now' tag must be rejected")
     }
 
-    // MARK: - Labeled roots (^1tb4h7f): `SkillsRegistry.init(layers:)` trust matrix
+    // MARK: - Labeled roots: `SkillsRegistry.init(layers:)` trust matrix
 
     /// A minimal body using `{% ifnot %}` -- a real Stencil tag that an
     /// untrusted render does not allow -- so it renders under a `.defaults`
@@ -243,7 +243,7 @@ struct StencilPassTests {
         try Self.writeMinimalSkillFile(id: "untrusted-tag", body: Self.nonWhitelistedTagBody, in: projectRoot)
 
         // The one sanctioned way to label a bare-`[URL]` root's trust
-        // (^1tb4h7f): `SkillsRegistry.init(layers:)`, not an override table.
+        //: `SkillsRegistry.init(layers:)`, not an override table.
         let registry = SkillsRegistry(
             layers: [
                 DotfolderStack.Layer(source: .defaults, root: defaultsRoot),

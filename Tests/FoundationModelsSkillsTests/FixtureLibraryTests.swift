@@ -26,8 +26,8 @@ private func loadBody(_ relativePath: String) throws -> String {
     try loadDecodedSkill(relativePath).body
 }
 
-/// The three-layer stack's happy-path fixtures (plan.md §11): every §5/§6
-/// feature in this slice, one fixture each.
+/// The three-layer stack's happy-path fixtures: one fixture for each
+/// render and visibility feature.
 private let happyPathFixtures = [
     "defaults/base-style/SKILL.md",
     "user/base-style/SKILL.md",
@@ -40,7 +40,7 @@ private let happyPathFixtures = [
 ]
 
 /// The lenient-validation `broken/` fixtures -- kept out of the three-layer
-/// stack so the happy-path tests above stay clean (plan.md §11 task note).
+/// stack so the happy-path tests above stay clean.
 private let brokenFixtures = [
     "broken/bad-colon-description/SKILL.md",
     "broken/missing-description/SKILL.md",
@@ -54,7 +54,7 @@ private let brokenFixtures = [
 }
 
 @Test func fixtureLibraryResolutionIsAPureFunctionOfTheCallingFileNotTheEnvironment() {
-    // Hermetic per plan.md §11: resolution walks up from the injectable
+    // Hermetic: resolution walks up from the injectable
     // `thisFile` (defaulting to the call site's `#filePath`), never from
     // `FileManager.default.homeDirectoryForCurrentUser`, `$HOME`, or
     // `$XDG_CONFIG_HOME` -- so it can never land on the real dotfolder
@@ -112,7 +112,7 @@ func fixtureLibraryResolvesBrokenFixture(_ relativePath: String) {
     #expect(frontmatter.description?.isEmpty == false)
 
     // Same id (directory name), different content -- the override of one file
-    // that this fixture pair demonstrates (decision #3, corrected by #32).
+    // that this fixture pair demonstrates.
     let userBody = try loadBody("user/base-style/SKILL.md")
     let defaultsBody = try loadBody("defaults/base-style/SKILL.md")
     #expect(userBody != defaultsBody)
@@ -148,7 +148,7 @@ func fixtureLibraryResolvesBrokenFixture(_ relativePath: String) {
     #expect(frontmatter.compatibility != nil)
     #expect(frontmatter.metadata.isEmpty == false)
 
-    // Pure-spec at the top level (decision #27): this fixture's own
+    // Pure-spec at the top level: this fixture's own
     // extension fields live only under `metadata.*` -- `disable-model-invocation`
     // and `preload` -- and still resolve onto `SkillFrontmatter`'s canonical
     // properties via the metadata fallback (no top-level value to conflict

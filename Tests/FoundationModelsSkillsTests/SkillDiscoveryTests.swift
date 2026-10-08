@@ -4,7 +4,7 @@ import FoundationModelsSkills
 import Testing
 
 /// Tests for `SkillDiscovery`, Layer 3's directory-shaped discovery over the
-/// combined view of the layers (plan.md §3, §4): the §11 fixture-root
+/// combined view of the layers: the fixture-root
 /// snapshot, the contributing layer directories of one id, the
 /// `user/_partials/` non-skill exclusion, a nonexistent root being skipped
 /// silently, `.git`/`node_modules` exclusion, and the equivalence of the three
@@ -14,10 +14,10 @@ struct SkillDiscoveryTests {
     private static let userRoot = FixtureLibrary.url(relativePath: "user")
     private static let projectSkillsRoot = FixtureLibrary.url(relativePath: "project/.skills")
 
-    /// The §11 fixture stack's three layer roots, lowest precedence first.
+    /// The fixture stack's three layer roots, lowest precedence first.
     private static let fixtureRoots = [defaultsRoot, userRoot, projectSkillsRoot]
 
-    /// Every id the §11 fixture stack's three layers structurally carry a
+    /// Every id the fixture stack's three layers structurally carry a
     /// `SKILL.md` for, whichever layer gives the file.
     private static let expectedFixtureIDs: Set<String> = [
         "base-style", "commit", "deploy", "env-report", "git-context", "lint", "release-notes", "spec-clean",
@@ -121,7 +121,7 @@ struct SkillDiscoveryTests {
 
     // MARK: - The contributing layer directories of one id
 
-    /// The layer example of plan.md §3: `defaults` gives the whole skill,
+    /// The layer example: `defaults` gives the whole skill,
     /// `user` gives its own `SKILL.md` and one script, and `project` gives one
     /// reference file only. The three layer directories all contribute, lowest
     /// precedence first.

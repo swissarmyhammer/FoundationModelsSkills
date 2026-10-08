@@ -9,7 +9,7 @@ import Testing
 
 /// The one end-to-end marketplace case (marketplace.md §13, the update
 /// cycle). It proves that the parts work together, in the same shape as the
-/// hot-reload case of plan.md §13.
+/// hot-reload case of `HotReloadTests`.
 ///
 /// The case is hermetic: two ``GitFixtureRepository`` marketplaces over
 /// `file://` URLs, read with the real libgit2 transport, thus it needs no

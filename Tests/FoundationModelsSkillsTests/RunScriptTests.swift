@@ -7,7 +7,7 @@ import Testing
 
 @testable import FoundationModelsSkills
 
-/// Tests for the `run script` operation (plan.md §7.3.1): the triple gate,
+/// Tests for the `run script` operation: the triple gate,
 /// unknown/model-hidden id correctives, the two path guards (`scripts/`
 /// prefix, then confinement), the direct-exec eligibility check
 /// (executable bit + shebang), process-group timeout kill, the
@@ -36,7 +36,7 @@ struct RunScriptTests {
     /// parameter.
     ///
     /// - Parameters:
-    ///   - roots: The registry roots to build over. Defaults to the §11
+    ///   - roots: The registry roots to build over. Defaults to the
     ///     fixture library.
     ///   - policy: The render policy the registry is constructed with.
     ///     Defaults to the permissive `RenderPolicy()`.
@@ -47,7 +47,7 @@ struct RunScriptTests {
         ResourceTestSupport.makeContext(roots: roots, policy: policy)
     }
 
-    // MARK: - Gate matrix (plan.md §13)
+    // MARK: - Gate matrix
 
     @Test func runScriptSucceedsWhenGranted() async throws {
         let output = try await RunScript(id: "release-notes", path: "scripts/build.sh").execute(in: Self.makeContext())
@@ -71,7 +71,7 @@ struct RunScriptTests {
         #expect(message.contains("disabled"))
     }
 
-    // MARK: - Policy-first ordering (^zbv0t4j): gate 1 precedes id lookup/path resolution
+    // MARK: - Policy-first ordering: gate 1 precedes id lookup/path resolution
 
     @Test(
         "with scripts disabled, ANY path (valid, unknown id, escaping) draws the identical policy corrective",
@@ -207,7 +207,7 @@ struct RunScriptTests {
         #expect(result.output == [Self.onlyOutputLine(of: Self.higherLayerWord)])
     }
 
-    // MARK: - Unknown / model-hidden id (decision #22)
+    // MARK: - Unknown / model-hidden id
 
     @Test func runScriptOnAnUnknownIDDrawsACorrective() async throws {
         let output = try await RunScript(id: "nonexistent", path: "scripts/build.sh").execute(in: Self.makeContext())

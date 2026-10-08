@@ -3,7 +3,7 @@ import FoundationModelsExtras
 import FoundationModelsSkills
 import Testing
 
-/// Skeleton tests for the §5 render pipeline (plan.md §5, decision #25):
+/// Skeleton tests for the render pipeline:
 /// fixed pass order, the body/metadata pass-set split, the single-shot
 /// no-re-scan invariant, and `RenderPolicy` plumbing -- all provable with
 /// identity and recording fakes, before any pass does real work.
@@ -77,7 +77,7 @@ struct RenderPipelineTests {
     // MARK: - No re-scan: a model-supplied argument can't drive execution/templating
 
     @Test func modelSuppliedArgumentContainingInjectionSyntaxNeverExecutesOrTemplates() async throws {
-        // The full CRITICAL-severity regression this task fixes (^r3bhwdp):
+        // The full CRITICAL-severity regression this task fixes:
         // wired with the REAL passes 1-3, a `$ARGUMENTS` value containing
         // `` !`...` `` and `{{ }}` syntax must render as inert literal text --
         // never spawn a process, never expand a template tag. `RenderPipelineNoRescanTests`

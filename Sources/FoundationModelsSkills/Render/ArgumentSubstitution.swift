@@ -1,9 +1,9 @@
 import Foundation
 
-/// Pass 1 of the §5 render pipeline: Claude-compatible argument and special-variable
+/// Pass 1 of the render pipeline: Claude-compatible argument and special-variable
 /// substitution.
 ///
-/// Resolves every `$`-token plan.md §5 defines -- `$ARGUMENTS`, `$ARGUMENTS[N]`, `$N` (0-based
+/// Resolves every `$`-token of the render pipeline -- `$ARGUMENTS`, `$ARGUMENTS[N]`, `$N` (0-based
 /// positional), `$name` (declared via the skill's `arguments:` frontmatter, threaded through
 /// `RenderRequest.argumentNames`), and `${SKILL_DIR}` (plus any future special variable added
 /// to `specialVariables`) -- in one left-to-right scan over the *original* input text. The scan
@@ -15,13 +15,13 @@ import Foundation
 /// A `$name` or `${VAR}` token this pass does not recognize -- not a declared argument name,
 /// not a known special variable -- is left untouched, verbatim. This is how a bare
 /// `$HOME`-style environment reference survives pass 1 for pass 3's `{{ env.* }}` templating
-/// (plan.md §5) to pick up later, and it means an unrecognized token is never mistaken for
+/// to pick up later, and it means an unrecognized token is never mistaken for
 /// "missing".
 ///
 /// A recognized-but-unsupplied reference -- a positional index or a declared name past the
 /// argument count actually supplied -- substitutes to an empty string. This pass raises no
-/// diagnostic for that case: plan.md §5 assigns corrective messaging (from the §6.1 `required`
-/// flags) to the ops layer built on top of this pipeline, not to the pass itself.
+/// diagnostic for that case: the corrective messaging (from the `required`
+/// flags) belongs to the ops layer built on top of this pipeline, not to the pass itself.
 ///
 /// `$ARGUMENTS`'s positional siblings (`$ARGUMENTS[N]`/`$N`) are derived by tokenizing all
 /// supplied arguments -- joined with a single space to reconstruct "as typed" -- through a
@@ -35,7 +35,7 @@ public struct ArgumentSubstitution: RenderPass {
     /// `RenderRequest` each `render(_:request:)` call receives.
     public init() {}
 
-    /// Substitutes every recognized `$`-token in `text` per plan.md §5's Claude-compatible
+    /// Substitutes every recognized `$`-token in `text` with the Claude-compatible
     /// grammar, then appends the `ARGUMENTS: <value>` no-data-loss fallback when warranted.
     ///
     /// Every substituted value -- a positional/named argument, `$ARGUMENTS`, a resolved special
@@ -134,7 +134,7 @@ public struct ArgumentSubstitution: RenderPass {
     /// One recognized `$`-token category, discriminated from a `tokenPattern` match by
     /// `classify(_:in:)`.
     ///
-    /// Mirrors the token forms plan.md §5 defines one-for-one; `render(_:request:)` switches
+    /// Mirrors the token forms of the render pipeline one-for-one; `render(_:request:)` switches
     /// over this type to decide each match's substitution, so every case here corresponds to
     /// exactly one branch there.
     private enum TokenKind {
@@ -251,7 +251,7 @@ public struct ArgumentSubstitution: RenderPass {
         preconditionFailure("ArgumentSubstitution.tokenPattern matched but no known alternative captured.")
     }
 
-    /// The single-pass `$`-token grammar (plan.md §5).
+    /// The single-pass `$`-token grammar.
     ///
     /// Six alternatives -- escape, `${VAR}`, `$ARGUMENTS[N]`, bare `$ARGUMENTS`, `$N`, then
     /// `$name` -- tried in this order via alternation, so `$ARGUMENTS`'s reserved spelling is
@@ -266,8 +266,7 @@ public struct ArgumentSubstitution: RenderPass {
 
     /// One `${NAME}` special variable pass 1 resolves.
     ///
-    /// A single table drives every `${...}` lookup -- plan.md §5's "leave room for more special
-    /// vars behind one table" -- so adding a future variable (e.g. an analog of Claude's
+    /// A single table drives every `${...}` lookup, so adding a future variable (e.g. an analog of Claude's
     /// `${CLAUDE_PROJECT_DIR}`) is one new table entry, never a new branch in `render(_:request:)`.
     private struct SpecialVariable {
         /// This variable's bare name, as it appears inside `${...}` (no braces, case-sensitive).
@@ -283,7 +282,7 @@ public struct ArgumentSubstitution: RenderPass {
 
     /// This pass's special-variable table, keyed by `SpecialVariable.name` for lookup.
     ///
-    /// Currently just `${SKILL_DIR}` (plan.md §5's analog of Claude's `${CLAUDE_SKILL_DIR}`); a
+    /// Currently just `${SKILL_DIR}`; a
     /// `${...}` token whose name is not a key here is left untouched, verbatim.
     private static let specialVariables: [String: SpecialVariable] = Dictionary(
         uniqueKeysWithValues: [
@@ -302,8 +301,7 @@ public struct ArgumentSubstitution: RenderPass {
     /// string (`""`/`''`) produces one empty-string token rather than being dropped, matching
     /// shell behavior. An unterminated quote at the end of `text` is read leniently -- whatever
     /// was accumulated so far becomes the final token. Package-visible (not `private`) so
-    /// `StencilPass` can derive the same positional values for pass 3's explicit Stencil context
-    /// (plan.md §5.3's "skill arguments land [in the explicit context] too") -- `$name`/`$N` and
+    /// `StencilPass` can derive the same positional values for pass 3's explicit Stencil context -- `$name`/`$N` and
     /// `{{ name }}` must index identical positions, so both passes share this one tokenizer
     /// rather than each maintaining its own.
     ///

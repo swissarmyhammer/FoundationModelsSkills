@@ -4,7 +4,7 @@ import Foundation
 /// match.
 ///
 /// Shared by every render pass that classifies a match by which alternative of a single
-/// combined pattern participated (plan.md §5) -- `ArgumentSubstitution`'s `$`-token grammar and
+/// combined pattern participated -- `ArgumentSubstitution`'s `$`-token grammar and
 /// `ShellInjection`'s injection grammar both follow this "one pattern, several named
 /// alternatives, discriminate by which group's range is populated" shape, so the group-text
 /// extraction step lives here once instead of twice.

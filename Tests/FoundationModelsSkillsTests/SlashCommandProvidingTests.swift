@@ -4,8 +4,8 @@ import FoundationModelsSkills
 import Testing
 
 /// Tests for `SkillsRegistry`'s `SlashCommandProviding` conformance
-/// (plan.md §6, §7.1; decision #29): `commands(workingDirectory:)`'s
-/// command snapshot over the §11 fixture stack, `argumentHint` assembly
+/// `commands(workingDirectory:)`'s
+/// command snapshot over the fixture stack, `argumentHint` assembly
 /// from `commandListing()`'s parsed parameters, and `commandUpdates`'s
 /// reload bridge.
 struct SlashCommandProvidingTests {
@@ -15,12 +15,11 @@ struct SlashCommandProvidingTests {
     private static let userRoot = FixtureLibrary.url(relativePath: "user")
     private static let projectSkillsRoot = FixtureLibrary.url(relativePath: "project/.skills")
 
-    /// The §11 fixture stack's three layer roots, lowest precedence first.
+    /// The fixture stack's three layer roots, lowest precedence first.
     private static let fixtureRoots = [defaultsRoot, userRoot, projectSkillsRoot]
 
-    /// Every id the §11 fixture stack lists on the user `/` menu -- every
-    /// structural skill except `lint` (`user-invocable: false`, plan.md
-    /// §6).
+    /// Every id the fixture stack lists on the user `/` menu -- every
+    /// structural skill except `lint` (`user-invocable: false`).
     private static let expectedCommandIDs: Set<String> = [
         "base-style", "commit", "deploy", "env-report", "git-context", "release-notes", "spec-clean",
     ]
@@ -48,7 +47,7 @@ struct SlashCommandProvidingTests {
                 == "Create a git commit for the currently staged changes using the given message.")
     }
 
-    // MARK: - The body renders through the §5 pipeline
+    // MARK: - The body renders through the render pipeline
 
     @Test func commandBodyRendersTheTypedTextAsTheOneArgumentOfCall() async throws {
         // The text after `/commit ` goes into the pipeline as one argument,
@@ -243,7 +242,7 @@ struct SlashCommandProvidingTests {
     ///
     /// - Parameters:
     ///   - name: The command name, which is the skill id.
-    ///   - registry: The registry over the §11 fixture stack to read.
+    ///   - registry: The registry over the fixture stack to read.
     /// - Returns: The one `SlashCommand` named `name`.
     /// - Throws: The `#require` failure when no command holds `name`.
     private static func command(named name: String, in registry: SkillsRegistry) async throws

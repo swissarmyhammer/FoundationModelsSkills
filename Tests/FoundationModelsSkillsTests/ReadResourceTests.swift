@@ -51,7 +51,7 @@ struct ReadResourceTests {
     /// The macOS temp directory. `SkillDiscovery` lists a root under it as
     /// `/private/var/...`, and a resolution of the symbolic links gives
     /// `/var/...` for a path that exists under it, so a missing path under
-    /// such a root is the case ^2dzxvms fixed in the confinement rule.
+    /// such a root is a case that the confinement rule must handle.
     private static let temporaryScratchParent = FileManager.default.temporaryDirectory
 
     /// Creates a fresh scratch root under `parent`.

@@ -3,7 +3,7 @@ import Testing
 @testable import FoundationModelsSkills
 
 /// Tests for `ResourcePathRules`, the two rules of a resource path that need no
-/// file (plan.md §7.3): the well-formed check of a path relative to a layer
+/// file: the well-formed check of a path relative to a layer
 /// directory, and the text a resource operation gives for a path it denies.
 ///
 /// The filesystem half of the confinement rule belongs to

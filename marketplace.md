@@ -21,7 +21,7 @@ This plan adds remote skill marketplaces to `FoundationModelsSkills`. It has two
   becomes a skill layer **below** the local skill folder stack. Thus a local file always wins
   over a marketplace file of the same path.
 
-This plan does not make kanban tasks yet. The phases in §12 are the input for those tasks.
+The phases in §12 are the order of the work.
 
 ---
 
@@ -225,7 +225,7 @@ override stays intentional.
 ### 4.1 Precedence
 
 Today the host gives an ordered list of layer roots, lowest precedence first. The last root
-wins (plan.md decision #29). The marketplace URLs go at the start of that list, left to right,
+wins. The marketplace URLs go at the start of that list, left to right,
 and the existing stack follows:
 
 ```
@@ -240,7 +240,7 @@ url[0]  <  url[1]  <  …  <  url[n]  <  defaults  <  user  <  project
    marketplace that lost.
  - **Inside one marketplace**, skill names must be unique. If two plugins list the same skill,
    the client records a diagnostic, and the plugin that is later in the catalog wins.
- - **The unit of override is the file** (decision #32). An id that more than one layer holds
+ - **The unit of override is the file**. An id that more than one layer holds
    gives one skill, and that skill is the combined view of the layer directories: for each
    path, the copy in the highest layer that holds it wins, and a file that only a lower layer
    holds stays visible. `DiscoveredSkill.contributingDirectories` names each layer directory
@@ -454,7 +454,7 @@ public enum MarketplaceEvent: Sendable {
 
 ### 6.3 Configuration
 
-The host gives the source list in code. This follows decision #29: no package of this
+The host gives the source list in code. No package of this
 family names a directory convention of its own. As a convenience (like `DotfolderStack`), the `Marketplace`
 product also gives `MarketplaceConfig`. This is a `Codable` file named `marketplaces.yaml`:
 
@@ -678,7 +678,7 @@ There is no correct hard-coded time. Thus the store has no built-in time value:
 ### 8.4 Running sessions
 
 Claude Code keeps the loaded version until `/reload-plugins`. This package already hot-reloads
-by design (plan.md §7). A skill body that a session already used stays in its transcript. A
+by design. A skill body that a session already used stays in its transcript. A
 reload changes only the catalog for later calls. Thus hot reload is the default. A host that
 wants a stable session sets `MarketplacePolicy.applyUpdates = .nextLaunch`. Then the store
 materializes the new snapshot but swaps `current` only at the next `start()`.
@@ -766,7 +766,7 @@ skills marketplace remove <id>
 
 ## 12. Phases
 
-Each phase ends with green tests. The phase ids continue after plan.md M7.
+Each phase ends with green tests.
 
 - **MK0 — Extras.** Add `DotfolderStack.Source.marketplace`. Confirm that a layer with
   that tag renders untrusted.
@@ -825,8 +825,8 @@ it libgit2.
   the shell. A local skill answers the same way.
 - **Update cycle.** Commit a change to the fixture repository. `check` reports
   `.updateAvailable`. `update` swaps `current`. The registry reloads once. The searcher gets
-  exactly one `update(items:)`. The new body shows. This is the same shape as the hot-reload
-  test in plan.md §13.
+  exactly one `update(items:)`. The new body shows. This is the same shape as the
+  `HotReloadTests` hot-reload test.
 - **Coalesced checks.** Two concurrent `check()` calls on one marketplace make one remote-head
   call.
 - **No time default.** With no `checkInterval`, the store makes no check after `start()`
@@ -925,7 +925,7 @@ it libgit2.
   https://github.com/mfcollins3/libgit2-apple
 - Model cache pattern: `../FoundationModelsACPAgent/Sources/FoundationModelsACPAgent/Doctor/ModelResolver.swift`
   (`HF_HUB_CACHE` → `HF_HOME/hub` → `~/.cache/huggingface/hub`, `snapshots/<revision>/`)
-- This package: plan.md (§3, §4, #29), `docs/security.md`,
+- This package: `docs/security.md`,
   `Sources/FoundationModelsSkills/Discovery/SkillDiscovery.swift`,
   `Sources/FoundationModelsSkills/Discovery/SkillMarketplaceLayout.swift`,
   `Sources/FoundationModelsSkills/Render/StencilPass.swift` (which renders through the

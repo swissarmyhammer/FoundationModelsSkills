@@ -4,8 +4,7 @@ import Logging
 import Tracing
 
 /// A thin wrapper over `MetadataSearcher<SkillMetadata>` that searches and
-/// hot-reloads a chosen surface's skill catalog (plan.md §7, §7.1, §7.2;
-/// decision #26).
+/// hot-reloads a chosen surface's skill catalog.
 ///
 /// Every retrieval/selection knob -- the selection model, `SearchMode`, and
 /// signal weights -- lives entirely in how the caller constructs the
@@ -17,7 +16,7 @@ import Tracing
 /// A caller can also give a second searcher in `.retrieval` mode, the
 /// retrieval fallback. Then an answer of the selection model that does not
 /// decode does not fail the search: the fallback ranks the same query, and
-/// the failure goes to the log (plan.md decision #31).
+/// the failure goes to the log.
 public struct SkillSearchAgent: Sendable {
     /// The wrapped searcher, already seeded and configured (selection
     /// model, mode, weights) by the caller before this wrapper ever sees
@@ -57,8 +56,7 @@ public struct SkillSearchAgent: Sendable {
     ///
     /// - Parameters:
     ///   - searcher: The `MetadataSearcher` to wrap, typically seeded with
-    ///     `SkillsRegistry.metadata()`'s `visibilityPredicate` subset
-    ///     (plan.md §10's public API sketch).
+    ///     `SkillsRegistry.metadata()`'s `visibilityPredicate` subset.
     ///   - retrievalFallback: A searcher in `.retrieval` mode over the same
     ///     subset, which ranks the query when `searcher` throws. Defaults to
     ///     `nil`, which gives every failure of `searcher` to the caller. The
@@ -67,7 +65,7 @@ public struct SkillSearchAgent: Sendable {
     ///   - visibilityPredicate: Which catalog entries `update(items:)`
     ///     forwards to `searcher`. Defaults to `SkillMetadata.isModelVisible`,
     ///     the model-facing surface -- a caller presenting a different
-    ///     surface (e.g. `SkillsCLI`'s user-facing one, plan.md §7.2) passes
+    ///     surface (e.g. `SkillsCLI`'s user-facing one) passes
     ///     the matching predicate so a later reload stays on that surface.
     public init(
         searcher: MetadataSearcher<SkillMetadata>,
@@ -221,8 +219,7 @@ public struct SkillSearchAgent: Sendable {
     ///
     /// - Parameter items: The catalog's refreshed metadata rows, in
     ///   first-seen-wins duplicate-id order -- typically a `SkillsRegistry`
-    ///   reload's full, unfiltered `metadata()` list (plan.md §7 "Reload &
-    ///   metadata injection").
+    ///   reload's full, unfiltered `metadata()` list.
     public func update(items: [SkillMetadata]) async {
         let visibleItems = items.filter(visibilityPredicate)
         await searcher.update(items: visibleItems)

@@ -4,7 +4,7 @@ import Testing
 @testable import FoundationModelsSkills
 
 /// Holds every document of this package to the override rule that the code
-/// realizes (plan.md §3, §4, decision #32).
+/// realizes.
 ///
 /// The unit of override is the file. For one path of a skill, the copy in the
 /// highest layer directory that holds it wins, and a file that only a lower
@@ -24,15 +24,8 @@ import Testing
 struct DocumentationTests {
     // MARK: - The documents
 
-    /// The design record, relative to the package root.
-    private static let planPath = "plan.md"
-
     /// The host guide of the operations, relative to the package root.
     private static let operationsPath = "docs/operations.md"
-
-    /// The record of each change to the public API, relative to the package
-    /// root.
-    private static let changelogPath = "CHANGELOG.md"
 
     /// The README of the package, relative to the package root.
     private static let readmePath = "README.md"
@@ -50,8 +43,8 @@ struct DocumentationTests {
     /// package root.
     private static let developmentPath = "docs/development.md"
 
-    /// The lower copy of the fixture skill that shows the override
-    /// (plan.md §11), relative to the package root.
+    /// The lower copy of the fixture skill that shows the override, relative
+    /// to the package root.
     private static let defaultsBaseStylePath =
         "Examples/skill-library/defaults/base-style/SKILL.md"
 
@@ -61,25 +54,15 @@ struct DocumentationTests {
 
     /// Every document that a reader takes the override rule from.
     private static let documents = [
-        planPath, operationsPath, changelogPath, readmePath, marketplaceDesignPath,
-        marketplaceGuidePath, securityPath, developmentPath, defaultsBaseStylePath,
-        userBaseStylePath,
+        operationsPath, readmePath, marketplaceDesignPath, marketplaceGuidePath, securityPath,
+        developmentPath, defaultsBaseStylePath, userBaseStylePath,
     ]
-
-    /// Every document that describes the behavior of today.
-    ///
-    /// `CHANGELOG.md` is the record of what changed, thus it alone names the
-    /// field that is gone.
-    private static let currentBehaviorDocuments = documents.filter { $0 != changelogPath }
 
     /// Every document that must state the override rule in its own words.
     ///
-    /// `CHANGELOG.md` records a change and not a rule, and
-    /// `docs/development.md` records the deviations from the plan. Neither
-    /// one describes the stack to a reader.
-    private static let ruleStatingDocuments = documents.filter {
-        $0 != changelogPath && $0 != developmentPath
-    }
+    /// `docs/development.md` tells how to change this package. It does not
+    /// describe the stack to a reader.
+    private static let ruleStatingDocuments = documents.filter { $0 != developmentPath }
 
     // MARK: - The rule that shipped before
 
@@ -104,8 +87,8 @@ struct DocumentationTests {
     /// today.
     private static let removedShadowedCandidatesFieldName = "shadowedCandidates"
 
-    /// The working-directory claim of plan.md §7.3 that is not exact any
-    /// more. One skill has more than one layer directory now.
+    /// A working-directory claim that is not exact any more. One skill has
+    /// more than one layer directory.
     private static let earlierWorkingDirectoryClaim = "cwd = the skill directory"
 
     // MARK: - The rule of today
@@ -122,7 +105,7 @@ struct DocumentationTests {
     private static let combinedViewPhrase = "combined view"
 
     /// The file paths of the layer example that the host guide of the
-    /// operations must give (card ^cw1z0q7).
+    /// operations must give.
     ///
     /// The example shows one file from each of the three layers, thus a
     /// reader sees that a lower layer still gives the files that no higher
@@ -132,10 +115,6 @@ struct DocumentationTests {
         "user/review/scripts/lint.sh",
         "project/review/references/house-style.md",
     ]
-
-    /// The heading of the decision that records the correction of decision #3
-    /// and decision #29.
-    private static let correctionDecisionHeading = "32. **Override → the file is the unit.**"
 
     // MARK: - The names the code gives
 
@@ -172,18 +151,11 @@ struct DocumentationTests {
         ruleStatingDocuments.map { DocumentClaim(document: $0, text: overrideRuleSentence) }
         + layerExamplePaths.map { DocumentClaim(document: operationsPath, text: $0) }
         + [
-            DocumentClaim(document: planPath, text: correctionDecisionHeading),
-            DocumentClaim(document: planPath, text: winningLayerWorkingDirectory),
             DocumentClaim(document: operationsPath, text: winningLayerWorkingDirectory),
             DocumentClaim(document: operationsPath, text: combinedViewPhrase),
-            DocumentClaim(
-                document: changelogPath, text: String(describing: DiscoveredSkill.self)),
-            DocumentClaim(document: changelogPath, text: contributingDirectoryTypeName),
-            DocumentClaim(
-                document: changelogPath, text: removedShadowedCandidatesFieldName),
         ]
         + (contributingDirectoriesFieldName.map { field in
-            [planPath, changelogPath].map { DocumentClaim(document: $0, text: field) }
+            [readmePath, operationsPath, marketplaceDesignPath].map { DocumentClaim(document: $0, text: field) }
         } ?? [])
 
     /// One row for each document and each wording of the rule that shipped
@@ -206,7 +178,7 @@ struct DocumentationTests {
             """)
     }
 
-    @Test(arguments: currentBehaviorDocuments)
+    @Test(arguments: documents)
     func noDocumentGivesTheRemovedFieldAsAFieldOfToday(document: String) throws {
         let text = try FixtureLibrary.readText(relativePath: document)
 
@@ -218,13 +190,14 @@ struct DocumentationTests {
             """)
     }
 
-    @Test func thePlanGivesTheWorkingDirectoryOfAScriptRun() throws {
-        let plan = try FixtureLibrary.readText(relativePath: Self.planPath)
+    @Test(arguments: documents)
+    func noDocumentGivesTheEarlierWorkingDirectoryOfAScriptRun(document: String) throws {
+        let text = try FixtureLibrary.readText(relativePath: document)
 
         #expect(
-            !plan.contains(Self.earlierWorkingDirectoryClaim),
+            !text.contains(Self.earlierWorkingDirectoryClaim),
             """
-            \(Self.planPath) must not say "\(Self.earlierWorkingDirectoryClaim)": one skill has \
+            \(document) must not say "\(Self.earlierWorkingDirectoryClaim)": one skill has \
             more than one layer directory, thus a script runs in \
             \(Self.winningLayerWorkingDirectory)
             """)

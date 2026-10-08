@@ -4,9 +4,8 @@ import Testing
 
 @testable import FoundationModelsSkills
 
-/// Tests for `SkillsRegistry`'s static core (plan.md §3, §6, §6.1, §7.1;
-/// decisions #13/#25/#28/#29): the fixture-root construction snapshot, the
-/// full plan.md §6 visibility matrix, `commandListing()`/`metadata()`'s
+/// Tests for `SkillsRegistry`'s static core: the fixture-root construction
+/// snapshot, the full visibility matrix, `commandListing()`/`metadata()`'s
 /// deliberate disagreement on the two visibility-split fixtures, `call(id:
 /// arguments:)` argument plumbing and its unknown/hidden-id error, `metadata.*`
 /// templating (rendered through pass 3, never pass 2), and the "no directory
@@ -19,10 +18,10 @@ struct SkillsRegistryTests {
     private static let projectSkillsRoot = FixtureLibrary.url(relativePath: "project/.skills")
     private static let brokenRoot = FixtureLibrary.url(relativePath: "broken")
 
-    /// The §11 fixture stack's three layer roots, lowest precedence first.
+    /// The fixture stack's three layer roots, lowest precedence first.
     private static let fixtureRoots = [defaultsRoot, userRoot, projectSkillsRoot]
 
-    /// Every id the §11 fixture stack's three layers structurally carry a
+    /// Every id the fixture stack's three layers structurally carry a
     /// `SKILL.md` for, regardless of visibility.
     private static let expectedFixtureIDs: Set<String> = [
         "base-style", "commit", "deploy", "env-report", "git-context", "lint", "release-notes", "spec-clean",
@@ -90,9 +89,9 @@ struct SkillsRegistryTests {
         #expect(rootsEntry.metadata["filtered-value"] == .string("will-fail={{ working_directory | uppercase }}"))
     }
 
-    // MARK: - Visibility matrix (plan.md §6's four-row table)
+    // MARK: - Visibility matrix (the four-row table)
 
-    /// One row of the plan.md §6 visibility table, expressed as a fixture
+    /// One row of the visibility table, expressed as a fixture
     /// id plus its expected surface flags and a distinguishing body snippet
     /// to probe `preloadedBodies()` with.
     private struct VisibilityCase: Sendable {
@@ -119,7 +118,7 @@ struct SkillsRegistryTests {
     ]
 
     @Test(
-        "visibility matrix (plan.md §6): default, disable-model-invocation, user-invocable:false, preload:true",
+        "visibility matrix: default, disable-model-invocation, user-invocable:false, preload:true",
         arguments: visibilityCases)
     private func visibilityMatrixMatchesPlanSectionSix(_ testCase: VisibilityCase) async {
         let registry = SkillsRegistry(roots: Self.fixtureRoots)
@@ -173,7 +172,7 @@ struct SkillsRegistryTests {
     }
 
     @Test func shellExecutionDisabledPolicyAppliesToCallIDArguments() async throws {
-        // §25 coverage gap (^zbv0t4j): the disable flag was previously only
+        // Coverage gap: the disable flag was previously only
         // proven on the preload path -- `call(id:arguments:)` is the exact
         // same path `use skill` and the CLI's `skill use` dispatch through.
         let registry = SkillsRegistry(
@@ -404,8 +403,7 @@ struct SkillsRegistryTests {
 
     /// Writes a `SKILL.md` under `root` whose `arguments:` names three
     /// parameters but `argument-hint:` only supplies two tokens -- an arity
-    /// mismatch `ParameterInference.infer` records as a diagnostic (plan.md
-    /// §6.1).
+    /// mismatch `ParameterInference.infer` records as a diagnostic.
     ///
     /// - Parameter root: The directory to write the skill's own subdirectory
     ///   and `SKILL.md` under.
@@ -751,7 +749,7 @@ struct SkillsRegistryTests {
     }
 
     @Test func aCatalogEntryCarriesTheLayerDirectoryOfEachLayerThatGivesTheSkillLowestPrecedenceFirst() {
-        // `base-style` is the one fixture id that two of the three §11 layer
+        // `base-style` is the one fixture id that two of the three layer
         // roots hold, so it is the two-directory case.
         let registry = SkillsRegistry(roots: Self.fixtureRoots)
 

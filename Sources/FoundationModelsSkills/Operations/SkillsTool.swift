@@ -3,12 +3,11 @@ import Operations
 
 /// Builds the fused `skills` tool: `SearchSkill`, `ListSkill`, `UseSkill`,
 /// and the three resource operations presented to a model (or the CLI) as
-/// one `SkillsCatalogTool` over one `OperationTool` (plan.md §7, decision
-/// #20).
+/// one `SkillsCatalogTool` over one `OperationTool`.
 ///
 /// The forgiving op/parameter resolution and the return-don't-throw retry
 /// cap are inherited from the upstream `Operations` runtime. This type
-/// supplies the operation set, the verb aliases decision #21 asks for, and
+/// supplies the operation set, the verb aliases, and
 /// the catalog: the tool description and the `id` enum of the schema.
 public enum SkillsTool {
     /// The fused tool's model- and CLI-facing name.
@@ -82,7 +81,7 @@ public enum SkillsTool {
     }
 
     /// The verb aliases this tool's operation set needs, layered onto
-    /// `OperationResolver.defaultVerbAliases`: decision #21's `find`/
+    /// `OperationResolver.defaultVerbAliases`: `find`/
     /// `discover` → `search` and `call`/`invoke`/`get` → `use`, plus a
     /// `"read"` self-mapping override (below) `ReadResource` needs to be
     /// reachable at all.
@@ -94,16 +93,10 @@ public enum SkillsTool {
     /// `OperationResolver.matchOpString` applies a verb alias
     /// unconditionally once one exists for a query's verb token -- it never
     /// falls back to trying the literal, unaliased verb against a
-    /// same-spelled real operation. Decision #21 originally listed `run` as
-    /// a fourth `use` synonym alongside `call`/`invoke`/`get`, and this
-    /// table carried a `"run": UseSkill.verb` entry through M4/M5 with a
-    /// documented forward-tension warning about the M6 `run script`
-    /// operation this exact unconditional-rewrite behavior would collide
-    /// with. M6 (`RunScript`) has now landed, and the collision is real: a
+    /// same-spelled real operation. Thus `run` is not a `use` synonym: a
     /// `"run": UseSkill.verb` entry would rewrite a literal `"run script"`
-    /// query to `"use script"` (which doesn't exist) before it ever reaches
-    /// `RunScript`. Resolved by dropping the `"run"` → `use` alias entirely
-    /// -- `"run skill"` no longer resolves (pinned by
+    /// query to `"use script"` (which does not exist) before it reaches
+    /// `RunScript`. `"run skill"` does not resolve (pinned by
     /// `SkillOperationsTests`' `resolverDoesNotAcceptRunSkillNowThatRunIsClaimedByRunScript`
     /// case), while `call`/`invoke`/`get` remain as non-colliding `use`
     /// synonyms.

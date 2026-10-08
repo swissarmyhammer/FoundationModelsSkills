@@ -5,16 +5,16 @@ import FoundationModelsSkills
 import Operations
 import Testing
 
-/// The explicit, named hot-reload end-to-end case (plan.md §13, an M4
-/// acceptance criterion, not incidental coverage).
+/// The explicit, named hot-reload end-to-end case (an acceptance criterion,
+/// not incidental coverage).
 ///
 /// Drives a REAL `MetadataSearcher` through `SkillSearchAgent` (never a
 /// searcher mock), GPU-free via a counting `FakeEmbedder` -- mirroring
 /// `FoundationModelsMetadataRegistry`'s own `HotReloadTests`/`FakeEmbedder`
 /// pattern (`../FoundationModelsMetadataRegistry/Tests/FoundationModelsMetadataRegistryTests/HotReloadTests.swift`).
 /// This wiring -- `SkillsRegistry.onReload` forwarded into
-/// `SkillSearchAgent.update(items:)` -- is exactly the seam plan.md §7.1
-/// documents as the *caller's* responsibility, not something either type
+/// `SkillSearchAgent.update(items:)` -- is exactly the seam that is the
+/// *caller's* responsibility, not something either type
 /// does automatically; this test is also the one place that seam is
 /// exercised end to end.
 ///
@@ -31,10 +31,9 @@ import Testing
 /// The count-only event tally, generic polling, "exactly one event" wait,
 /// and `SKILL.md` fixture-writing helpers all live in shared
 /// `ReloadTestSupport`, not reimplemented here -- `SkillsRegistryReloadTests`
-/// waits on the identical reload signal shape (review findings, 2026-07-29
-/// 21:57).
+/// waits on the identical reload signal shape.
 struct HotReloadTests {
-    // MARK: - The five §13 steps, in one deterministic scenario
+    // MARK: - The five hot-reload steps, in one deterministic scenario
 
     @Test
     func hotReloadEndToEndFiveStepScenario() async throws {
@@ -83,7 +82,7 @@ struct HotReloadTests {
 
     // MARK: - Selection tier: a scripted LanguageModel, GPU-free, post-reload
 
-    /// Closes the other §13 gap distinct from the deterministic scenario
+    /// Closes the other hot-reload gap distinct from the deterministic scenario
     /// above: that scenario's searcher is always `.retrieval`-mode (a
     /// `FakeEmbedder`, no model at all). This case gives the selection tier a
     /// `ScriptedLanguageModel` and drives one `.selection`-mode search before
@@ -329,7 +328,7 @@ struct HotReloadTests {
     /// empty because nothing was ever preloaded), and that the fused tool's
     /// schema is byte-identical to what it was before any of the four
     /// preceding steps ran -- the schema, with its `id` enum, is fixed when
-    /// the tool is made, and a hot reload never changes it (plan.md §7).
+    /// the tool is made, and a hot reload never changes it.
     ///
     /// - Parameters:
     ///   - registry: The registry under test.
@@ -353,7 +352,7 @@ struct HotReloadTests {
         #expect(listing.contains { $0.id == "bravo" })
         #expect(!listing.contains { $0.id == "alpha" })
 
-        // The §13 preload half, actually exercised: each snapshot below was
+        // The preload half, actually exercised: each snapshot below was
         // captured right after its own step's reload settled, proving
         // `preloadedBodies()` tracked `charlie`'s add, then edit, then
         // removal -- not merely that it's empty because nothing in the
@@ -377,14 +376,14 @@ struct HotReloadTests {
 
     /// Starts a background task that iterates `registry.onReload`,
     /// forwarding each published metadata list into `agent.update(items:)`
-    /// and tallying the forward into `recorder` -- the plan.md §7.1 wiring a
-    /// real host is responsible for, exercised here end to end.
+    /// and tallying the forward into `recorder` -- the wiring a real host is
+    /// responsible for, exercised here end to end.
     ///
     /// The stream is subscribed on the caller's thread, before the task is
     /// created. A subscription made inside the task registers only when the
     /// task first runs, and under a loaded cooperative pool that can be
     /// later than the watcher's first publication -- the publication is
-    /// then lost, and every wait on it times out (^n89yw8p).
+    /// then lost, and every wait on it times out.
     ///
     /// - Parameters:
     ///   - registry: The registry whose `onReload` stream to subscribe to.
@@ -457,7 +456,7 @@ struct HotReloadTests {
     /// A poll, not a suspended continuation raced against a sleep: a task
     /// group waits for every child before it returns, and a child parked on
     /// a continuation nothing resumes ignores cancellation. That shape kept
-    /// the whole test process alive after the timeout won (^n89yw8p).
+    /// the whole test process alive after the timeout won.
     ///
     /// - Parameters:
     ///   - gate: The gate to wait on.

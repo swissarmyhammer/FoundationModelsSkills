@@ -3,14 +3,13 @@ import FoundationModels
 import Operations
 
 /// The outcome of a `list resource` operation: either the resource listing
-/// or a corrective message (plan.md §7.3).
+/// or a corrective message.
 ///
 /// An unknown, stale, or model-hidden `id` is the one condition
 /// `ListResource.execute(in:)` fails correctively on.
 public typealias ListResourceOutput = CorrectiveOutcome<ListResourceResult>
 
-/// Lists every file of the combined view of a skill except `SKILL.md`
-/// (plan.md §7.3).
+/// Lists every file of the combined view of a skill except `SKILL.md`.
 ///
 /// A passive, ungated read: every file of the layer directories of the skill,
 /// sorted by path, capped at `rowCap` rows with `total` reporting the real
@@ -90,7 +89,7 @@ public struct ListResource: OperationDefinition {
     /// Lists `id`'s resource files, or returns a corrective message.
     ///
     /// The unit of override is the file, thus the rows come from the combined
-    /// view of the layer directories of the skill (plan.md §3): a file that
+    /// view of the layer directories of the skill: a file that
     /// only a lower layer holds is a row of its own, and a path that two
     /// layers hold is one row that carries the copy of the higher layer.
     ///

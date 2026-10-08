@@ -2,8 +2,7 @@ import Foundation
 import FoundationModelsSkills
 import Testing
 
-/// Tests for `SkillsRegistry`'s reloadable half (plan.md §7 "Reload &
-/// metadata injection"; decision #13): `watch: true` wires a
+/// Tests for `SkillsRegistry`'s reloadable half: `watch: true` wires a
 /// `DotfolderWatcher` of `FoundationModelsExtras` over every layer root and
 /// rebuilds the catalog on its coalesced signal, the rebuild swaps the
 /// catalog atomically so a concurrent reader never
@@ -15,7 +14,7 @@ import Testing
 /// The count-only event tally, generic polling, "exactly one event" wait,
 /// and `SKILL.md` fixture-writing helpers all live in shared
 /// `ReloadTestSupport`, not reimplemented here -- `HotReloadTests` waits on
-/// the identical reload signal shape (review findings, 2026-07-29 21:57).
+/// the identical reload signal shape.
 struct SkillsRegistryReloadTests {
     // MARK: - Editing triggers exactly one rebuild and one onReload publication
 
@@ -118,8 +117,8 @@ struct SkillsRegistryReloadTests {
 
     // MARK: - call(id:arguments:) reflects the post-reload catalog (TOCTOU regression)
 
-    /// Coverage motivated by the round-1 TOCTOU fix in `call(id:arguments:)`
-    /// (plan.md §7, review findings 2026-07-29 07:01): the earlier
+    /// Coverage motivated by the TOCTOU fix in `call(id:arguments:)`: the
+    /// earlier
     /// implementation read the catalog once to look up `id` and again to
     /// build `UnknownSkillError.validIDs`, so a reload racing between those
     /// two reads could observe two different catalog generations. That fix
@@ -302,7 +301,7 @@ struct SkillsRegistryReloadTests {
         #expect(!entry.description.contains("after edit"))
     }
 
-    // MARK: - Late root creation (^80kravf): end-to-end through the registry
+    // MARK: - Late root creation: end-to-end through the registry
 
     @Test func aRootThatDidNotExistAtConstructionSurfacesItsSkillOnceCreated() async throws {
         let privateDirectory = try WatcherTestSupport.makeTempDirectory()
@@ -321,7 +320,7 @@ struct SkillsRegistryReloadTests {
         #expect(registry.metadata().map(\.id) == ["late-arrival"])
     }
 
-    // MARK: - Multi-consumer fan-out (^321b23t): no shared-stream tick stealing
+    // MARK: - Multi-consumer fan-out: no shared-stream tick stealing
 
     @Test func twoConcurrentConsumersBothObserveEveryReloadInAFiveReloadBurst() async throws {
         let root = try WatcherTestSupport.makeTempDirectory()
@@ -497,7 +496,7 @@ struct SkillsRegistryReloadTests {
     /// The stream is subscribed on the caller's thread, before the task is
     /// created, for the reason `ReloadTestSupport.tally(_:into:)` states: a
     /// subscription made inside the task can register after the watcher's
-    /// first publication and lose it (^n89yw8p).
+    /// first publication and lose it.
     ///
     /// - Parameters:
     ///   - registry: The registry whose `onReload` stream to subscribe to.

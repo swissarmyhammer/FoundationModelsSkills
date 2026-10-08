@@ -11,7 +11,7 @@ internal enum ScriptGateResult {
 }
 
 /// The triple gate `run script` enforces at dispatch, before ever touching
-/// the filesystem for the requested script (plan.md §7.3.1, decision #28):
+/// the filesystem for the requested script:
 ///
 /// 1. **Host policy** -- `RenderPolicy.isScriptExecutionDisabled`, set once
 ///    at registry construction, so every dispatch path (model, `/command`,
@@ -21,7 +21,7 @@ internal enum ScriptGateResult {
 ///    path, or a bare `Script` token (grants everything under `scripts/`).
 ///    A skill without a matching grant has not pre-approved script
 ///    execution.
-/// 3. **Trust posture** -- plan.md §8's guidance that a host should not
+/// 3. **Trust posture** -- the guidance that a host should not
 ///    construct a script-enabled registry over an untrusted project root at
 ///    all. This is documentation-only: neither `evaluateHostPolicy(
 ///    isScriptExecutionDisabled:)` nor `evaluateGrant(path:allowedTools:)`
@@ -31,7 +31,7 @@ internal enum ScriptGateResult {
 ///    which roots to construct a registry over.
 ///
 /// The gate opens no file, thus it stands inside the loading boundary of
-/// plan.md §3 and `LoadingBoundaryTests` names it in no rule: the `fnmatch`
+/// this package, and `LoadingBoundaryTests` names it in no rule: the `fnmatch`
 /// call below matches a path against the glob of an `allowed-tools` grant,
 /// which is text work on two strings.
 internal enum ScriptGate {
@@ -42,8 +42,8 @@ internal enum ScriptGate {
     /// id or resolves its path, so a script-disabled registry returns the
     /// identical corrective for any path -- valid, bogus, or
     /// confinement-escaping alike -- rather than leaking a path-shaped
-    /// corrective ahead of the policy check (plan.md §7.3.1: "triple-gated,
-    /// every check at dispatch").
+    /// corrective ahead of the policy check ("triple-gated, every check at
+    /// dispatch").
     ///
     /// - Parameter isScriptExecutionDisabled: The host policy's kill switch.
     /// - Returns: `.granted` when script execution is enabled;

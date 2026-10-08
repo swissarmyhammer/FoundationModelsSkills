@@ -5,7 +5,7 @@ import FoundationModelsSkills
 /// Resolves paths into the fixture skill library at `Examples/skill-library`,
 /// relative to the calling test file's own location on disk.
 ///
-/// Hermetic by construction (plan.md §11): resolution walks up from the
+/// Hermetic by construction: resolution walks up from the
 /// calling source file's `#filePath`, so it never depends on -- and can never
 /// resolve into -- the real home directory or `$XDG_CONFIG_HOME`, regardless
 /// of the environment the test suite runs in. Mirrors the family's
@@ -35,7 +35,7 @@ enum FixtureLibrary {
     }
 
     /// The root of the fixture skill library: `Examples/skill-library`, the
-    /// three-layer `.skills` dotfolder stack (plan.md §11) plus its sibling
+    /// three-layer `.skills` dotfolder stack plus its sibling
     /// `broken/` fixtures for lenient-validation tests.
     ///
     /// - Parameter thisFile: Forwarded to `packageRoot(thisFile:)`.
@@ -53,7 +53,7 @@ enum FixtureLibrary {
     /// but from this test target, and with an empty environment. An empty
     /// environment keeps `SKILLS_DEFAULTS_DIR` and `XDG_CONFIG_HOME` from
     /// moving a layer onto a real host directory, thus the stack stays
-    /// hermetic (plan.md §11).
+    /// hermetic.
     ///
     /// - Parameter thisFile: Forwarded to `root(thisFile:)`.
     /// - Returns: The fixture stack, ready for `SkillsRegistry(stack:)`.

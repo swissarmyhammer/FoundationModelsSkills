@@ -1,6 +1,6 @@
 /// The result of a `run script` operation: the process's outcome, its exit
-/// code, timing, and a bounded tail of its merged stdout+stderr (plan.md
-/// §7.3, the Shelltool result shape).
+/// code, timing, and a bounded tail of its merged stdout+stderr (the
+/// Shelltool result shape).
 public struct RunScriptResult: Encodable, Sendable, Equatable {
     /// The run script's owning skill id.
     public let id: String

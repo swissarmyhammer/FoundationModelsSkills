@@ -1,7 +1,7 @@
 import FoundationModelsSkills
 
 /// Builds the registry and the fused `skills` tool every demo mode shares,
-/// over the `FixtureStack` fixture library (plan.md §10's assembly sketch).
+/// over the `FixtureStack` fixture library.
 enum SkillsDemoAssembly {
     /// Builds a `SkillsRegistry` over `FixtureStack.make()`.
     ///

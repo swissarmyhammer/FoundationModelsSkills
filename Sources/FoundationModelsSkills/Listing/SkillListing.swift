@@ -1,40 +1,38 @@
-/// One row of the `SkillsRegistry.commandListing()` user `/` menu surface
-/// (plan.md §6.1) -- structured, parsed parameters (via `ParameterInference`)
+/// One row of the `SkillsRegistry.commandListing()` user `/` menu surface --
+/// structured, parsed parameters (via `ParameterInference`)
 /// rather than the raw frontmatter strings `SkillFrontmatter` carries.
 ///
 /// Autocomplete, fuzzy search, and input validation are the UI's job, out of
 /// scope here -- this type is data only.
 public struct SkillListing: Sendable, Equatable {
-    /// The directory name -- the canonical id and the `/command` key (plan.md
-    /// §4), never the frontmatter `name`.
+    /// The directory name -- the canonical id and the `/command` key, never the frontmatter `name`.
     public var id: String
 
     /// The frontmatter `name:` -- optional because Claude-style inputs (a
     /// `.claude/commands/foo.md`, or a `SKILL.md` without `name:`) may omit
-    /// it (plan.md §4); agentskills.io-conforming skills always have one,
+    /// it; agentskills.io-conforming skills always have one,
     /// validated against `id` by the downstream `SkillsRegistry`.
     public var displayName: String?
 
-    /// The frontmatter `description:`, unrendered at this layer -- §5
-    /// passes 1+3 rendering is the registry/render-pipeline's job, not this
+    /// The frontmatter `description:`, unrendered at this layer -- render
+    /// passes 1+3 is the registry/render-pipeline's job, not this
     /// data model's.
     public var description: String?
 
-    /// The frontmatter `license:` -- free text, data only (plan.md §4).
+    /// The frontmatter `license:` -- free text, data only.
     public var license: String?
 
-    /// The frontmatter `compatibility:` -- free text, data only (plan.md
-    /// §4).
+    /// The frontmatter `compatibility:` -- free text, data only.
     public var compatibility: String?
 
     /// Parsed positional parameters, merged from up to three sources by
-    /// `ParameterInference` (plan.md §6.1).
+    /// `ParameterInference`.
     public var parameters: [SkillParameter]
 
     /// Whether the skill body references `$ARGUMENTS` -- a meaningful
     /// free-form tail the UI should prompt for.
     ///
-    /// `true` only on an actual `$ARGUMENTS` reference; the §5 auto-append
+    /// `true` only on an actual `$ARGUMENTS` reference; the auto-append
     /// fallback (`ARGUMENTS: <value>` when `$ARGUMENTS` is absent) never sets
     /// this.
     public var acceptsTrailingArguments: Bool
@@ -59,7 +57,7 @@ public struct SkillListing: Sendable, Equatable {
     /// frontmatter and body instead of supplying them directly.
     ///
     /// - Parameters:
-    ///   - id: The directory name -- the canonical id (plan.md §4).
+    ///   - id: The directory name -- the canonical id.
     ///   - displayName: The frontmatter `name:`, or `nil`.
     ///   - description: The frontmatter `description:`, unrendered.
     ///   - license: The frontmatter `license:`, or `nil`.
@@ -93,7 +91,7 @@ public struct SkillListing: Sendable, Equatable {
     /// straight from `frontmatter`; `parameters` and
     /// `acceptsTrailingArguments` are derived by
     /// `ParameterInference.infer(frontmatter:body:)` over `frontmatter` and
-    /// `body` (plan.md §6.1).
+    /// `body`.
     ///
     /// Inference diagnostics (source-mismatch notes) are not carried on this
     /// type -- callers that need them call `ParameterInference.infer`
@@ -102,7 +100,7 @@ public struct SkillListing: Sendable, Equatable {
     /// `SkillValidator`'s.
     ///
     /// - Parameters:
-    ///   - id: The directory name -- the canonical id (plan.md §4).
+    ///   - id: The directory name -- the canonical id.
     ///   - frontmatter: The skill's decoded frontmatter.
     ///   - body: The skill's render-pipeline body (`DecodedSkill.body`).
     public init(id: String, frontmatter: SkillFrontmatter, body: String) {
@@ -121,7 +119,7 @@ public struct SkillListing: Sendable, Equatable {
     /// (`FrontmatterDecoder`'s `.decoded` payload).
     ///
     /// - Parameters:
-    ///   - id: The directory name -- the canonical id (plan.md §4).
+    ///   - id: The directory name -- the canonical id.
     ///   - decodedSkill: The decoded frontmatter of one `SKILL.md`, with its
     ///     body and its notes.
     public init(id: String, decodedSkill: DecodedSkill) {

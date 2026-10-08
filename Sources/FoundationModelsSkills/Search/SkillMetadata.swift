@@ -3,7 +3,7 @@ import FoundationModelsMetadataRegistry
 /// Conforms `SkillsRegistry`'s `SkillMetadata` row to
 /// `FoundationModelsMetadataRegistry`'s `SearchableMetadata` protocol, so a
 /// `MetadataSearcher<SkillMetadata>` can index and retrieve it directly
-/// (plan.md §7, §7.1; decision #26).
+///.
 ///
 /// `SkillMetadata`'s own `id` already satisfies the protocol's stable-id
 /// requirement; only `renderBlock()` is new here.

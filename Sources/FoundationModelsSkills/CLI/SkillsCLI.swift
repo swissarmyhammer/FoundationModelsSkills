@@ -3,13 +3,13 @@ import Operations
 import OperationsCLI
 
 /// Assembles the dual-use CLI over the fused `skills` tool's user-facing
-/// surface (plan.md §7.2).
+/// surface.
 ///
 /// The model surface (`SkillsTool.make(context:)` over a
 /// `SkillMetadata.isModelVisible`-gated context) and this CLI surface share
 /// the exact same three operations, the exact same `OperationTool.call(
 /// arguments:)` dispatch path, and the exact same registry -- only which
-/// entries are visible differs, matching plan.md §6's visibility table:
+/// entries are visible differs:
 /// `disable-model-invocation: true` skills (model-hidden) are usable here;
 /// `user-invocable: false` skills (model-only) are not.
 public enum SkillsCLI {

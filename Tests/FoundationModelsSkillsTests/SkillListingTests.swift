@@ -2,15 +2,15 @@ import Foundation
 import FoundationModelsSkills
 import Testing
 
-/// Listing snapshot tests over the §11 fixture stack (plan.md §6.1): each
+/// Listing snapshot tests over the fixture stack: each
 /// fixture's `SKILL.md` is decoded via `FrontmatterDecoder` and wrapped in a
 /// `SkillListing`, asserting every field -- including `license`/
 /// `compatibility` (only `spec-clean` sets them) and the parsed
 /// `parameters`/`acceptsTrailingArguments` derived by `ParameterInference`.
 struct SkillListingTests {
     /// Decodes the named fixture's `SKILL.md` and builds its `SkillListing`,
-    /// using the fixture's own directory name as `id` (mirrors plan.md §4:
-    /// the directory name is the canonical id).
+    /// using the fixture's own directory name as `id` (the directory name
+    /// is the canonical id).
     private func listing(
         id: String, relativePath: String, sourceLocation: SourceLocation = #_sourceLocation
     ) throws -> SkillListing {

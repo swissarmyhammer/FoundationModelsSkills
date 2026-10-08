@@ -1,5 +1,5 @@
 /// One inferred or declared parameter of a skill, merged from up to three
-/// frontmatter/body sources by position (plan.md §6.1): `arguments:` (names +
+/// frontmatter/body sources by position: `arguments:` (names +
 /// order), `argument-hint:` (placeholders), and body inference
 /// (`$0`/`$N`/`$ARGUMENTS[N]` scanning) when neither frontmatter source is
 /// present.

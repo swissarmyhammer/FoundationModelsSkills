@@ -5,7 +5,7 @@ import FoundationModelsSkills
 import Operations
 import Testing
 
-/// Tests for the Layer-4 resource operations (plan.md §7.3).
+/// Tests for the Layer-4 resource operations.
 ///
 /// `list resource`/`read resource` dispatched through the fused `skills`
 /// `OperationTool`, over both the static `release-notes` fixture and
@@ -21,7 +21,7 @@ struct ResourceOpsTests {
     /// parameter.
     ///
     /// - Parameter roots: The registry roots to build over. Defaults to the
-    ///   §11 fixture library.
+    ///   fixture library.
     /// - Returns: The assembled context.
     private static func makeContext(roots: [URL] = [Self.projectSkillsRoot]) -> SkillsToolContext {
         ResourceTestSupport.makeContext(roots: roots)
@@ -32,8 +32,8 @@ struct ResourceOpsTests {
         try SkillsTool.make(context: Self.makeContext(roots: roots))
     }
 
-    /// Whether `json` is a corrective outcome -- a bare JSON string (plan.md
-    /// §7: "corrective messages stay plain strings"), never a `{...}`
+    /// Whether `json` is a corrective outcome -- a bare JSON string
+    /// (corrective messages stay plain strings), never a `{...}`
     /// object, which is what every successful `Encodable` result serializes
     /// as instead.
     ///
@@ -43,7 +43,7 @@ struct ResourceOpsTests {
         json.hasPrefix("\"")
     }
 
-    // MARK: - Listing snapshot (§7.3)
+    // MARK: - Listing snapshot
 
     @Test func listResourceOverReleaseNotesReturnsSortedKindedRowsWithRealTotal() async throws {
         let tool = try Self.makeTool()
@@ -69,7 +69,7 @@ struct ResourceOpsTests {
         #expect(json.contains("not currently usable"))
     }
 
-    // MARK: - Paging (§7.3)
+    // MARK: - Paging
 
     @Test func readResourcePagesA700LineReferenceInTwoCallsWithCorrectTotalLines() async throws {
         let tool = try Self.makeTool()
@@ -107,7 +107,7 @@ struct ResourceOpsTests {
         #expect(json.contains("building release notes"))
     }
 
-    // MARK: - Binary corrective (§7.3)
+    // MARK: - Binary corrective
 
     @Test func readResourceOnABinaryAssetDrawsTheNonUTF8CorrectiveWithItsByteSize() async throws {
         let tool = try Self.makeTool()
@@ -125,7 +125,7 @@ struct ResourceOpsTests {
         #expect(json.contains("\(byteSize) bytes"))
     }
 
-    // MARK: - Large text paging: streaming line scan, bounded memory (§7.3)
+    // MARK: - Large text paging: streaming line scan, bounded memory
 
     /// The line count of the large text fixture.
     private static let largeFixtureLineCount = 100_000
@@ -339,7 +339,7 @@ struct ResourceOpsTests {
         #expect(json.contains("\"totalLines\":\(Self.multiByteFixtureLineCount)"))
     }
 
-    // MARK: - Confinement matrix (plan.md §13)
+    // MARK: - Confinement matrix
 
     @Test func readResourceRejectsDotDotTraversal() async throws {
         let tool = try Self.makeTool()
@@ -429,7 +429,7 @@ struct ResourceOpsTests {
         #expect(json.components(separatedBy: "\"path\":").count - 1 == 100)
     }
 
-    // MARK: - Hidden files skipped (§7.3)
+    // MARK: - Hidden files skipped
 
     @Test func listResourceSkipsADotfile() async throws {
         let root = try HotReloadTestSupport.makeTempDirectory()
@@ -451,7 +451,7 @@ struct ResourceOpsTests {
         #expect(!json.contains(".hidden"))
     }
 
-    // MARK: - Surface visibility (plan.md §7.2/§7.3, ^kb2t82c)
+    // MARK: - Surface visibility
 
     /// Builds a context whose `visibilityPredicate` mirrors `SkillsCLI`'s
     /// own private `makeContext(registry:)`: the user-facing subset
@@ -464,7 +464,7 @@ struct ResourceOpsTests {
     /// `SkillsTool.make(context:)` dispatch.
     ///
     /// - Parameter roots: The registry roots to build over. Defaults to the
-    ///   §11 fixture library.
+    ///   fixture library.
     /// - Returns: The assembled user-surface context.
     private static func makeUserSurfaceContext(roots: [URL] = [Self.projectSkillsRoot]) -> SkillsToolContext {
         let registry = SkillsRegistry(roots: roots)
@@ -540,7 +540,7 @@ struct ResourceOpsTests {
     }
 
 
-    // MARK: - The combined view of the layer directories (plan.md §3, §7.3)
+    // MARK: - The combined view of the layer directories
 
     /// The id of the skill that the layer directories of the combined-view
     /// tests give.

@@ -1,8 +1,8 @@
 import Foundation
 
 /// One diagnostic-worthy finding `SkillValidator` raised while applying
-/// lenient domain validation to a discovered skill (plan.md §4, decision
-/// #27) -- never fatal to the surrounding load in isolation; the practical
+/// lenient domain validation to a discovered skill -- never fatal to the
+/// surrounding load in isolation; the practical
 /// consequence (load anyway, exclude from a surface, hide entirely, or skip)
 /// is a property of which rule raised it, not of this type.
 public struct SkillDiagnostic: Sendable, Equatable {
@@ -22,7 +22,7 @@ public struct SkillDiagnostic: Sendable, Equatable {
     }
 
     /// Where a diagnostic's skill was loaded from -- the discovery layer
-    /// that won full-replace precedence (plan.md §4, decision #3), carried
+    /// that won full-replace precedence, carried
     /// so a diagnostic surface can report provenance even for a skill that
     /// failed to decode at all.
     public struct Provenance: Sendable, Equatable {

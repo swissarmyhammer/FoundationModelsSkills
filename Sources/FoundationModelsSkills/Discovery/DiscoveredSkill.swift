@@ -1,7 +1,6 @@
 import Foundation
 
-/// One skill of the combined view `SkillDiscovery` reads over its layers
-/// (plan.md §3, §4).
+/// One skill of the combined view `SkillDiscovery` reads over its layers.
 ///
 /// Purely structural: `id` is the directory name, taken verbatim with no
 /// agentskills.io/Claude validation applied -- that judgment belongs to the
@@ -42,8 +41,7 @@ public struct DiscoveredSkill: Sendable, Equatable {
 
     /// The canonical id: the skill directory's name, verbatim.
     ///
-    /// Never the frontmatter `name` -- discovery does no YAML parsing at all
-    /// (plan.md §4).
+    /// Never the frontmatter `name` -- discovery does no YAML parsing at all.
     public var id: String
 
     /// The directory of the winning `SKILL.md`, `root/<id>/`.

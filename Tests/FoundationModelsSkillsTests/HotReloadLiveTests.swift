@@ -4,7 +4,7 @@ import FoundationModelsMetadataRegistry
 import FoundationModelsSkills
 import Testing
 
-/// The live-model twin of `HotReloadTests` (plan.md §13's last paragraph):
+/// The live-model twin of `HotReloadTests`:
 /// the same MCP-style add and remove burst, this time against a
 /// `.selection`-mode `MetadataSearcher` that a real model session backs, not
 /// a scripted fake.
@@ -30,7 +30,7 @@ import Testing
 /// environment -- `.github/workflows/ci.yml` holds this suite out of the unit
 /// job with `test-skip`, and runs it, and only it, in the integration job
 /// with `integration-filter`.
-@Suite("Gated live-model hot-reload twin (plan.md §13)")
+@Suite("Gated live-model hot-reload twin")
 struct HotReloadLiveTests {
     @Test(
         "an MCP-style add/remove burst stays searchable through a real .selection MetadataSearcher backed by the on-device model",
@@ -49,10 +49,8 @@ struct HotReloadLiveTests {
         // through the registry, not to read a catalog frozen at construction
         // time. `SkillsRegistry(roots:)` alone defaults to `watch: false`
         // (`metadata()` never changes after `init`, regardless of later
-        // filesystem writes); this was the M4 regression the removal
-        // assertion below silently passed against -- `toolA` was still in
-        // the frozen catalog the whole time, so its "removal" was never
-        // actually exercised.
+        // filesystem writes). With a frozen catalog, `toolA` stays in the
+        // catalog, and the removal assertion below proves nothing.
         let registry = SkillsRegistry(roots: [root], watch: true)
         let searcher = MetadataSearcher(items: registry.metadata().filter(\.isModelVisible), mode: .selection, selection: config)
         let agent = SkillSearchAgent(searcher: searcher)

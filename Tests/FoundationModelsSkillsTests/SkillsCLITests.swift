@@ -5,16 +5,16 @@ import Operations
 import OperationsCLI
 import Testing
 
-/// Tests for the dual-use CLI (plan.md §7.2): driving the fused `skills`
+/// Tests for the dual-use CLI: driving the fused `skills`
 /// tool's `search`/`list`/`use` verbs through `OperationCLIDriver` against
-/// the §11 fixture registry, its user-facing (`commandListing()`) visibility
+/// the fixture registry, its user-facing (`commandListing()`) visibility
 /// matrix, and its round trip back to the model-facing dispatch path.
 struct SkillsCLITests {
     // MARK: - Fixture root (mirrors SkillOperationsTests)
 
     private static let projectSkillsRoot = FixtureLibrary.url(relativePath: "project/.skills")
 
-    /// Builds a fresh registry over the §11 fixture library's `commit` /
+    /// Builds a fresh registry over the fixture library's `commit` /
     /// `deploy` / `lint` / … skills.
     private static func makeFixtureRegistry() -> SkillsRegistry {
         SkillsRegistry(roots: [Self.projectSkillsRoot])
@@ -25,7 +25,7 @@ struct SkillsCLITests {
         try SkillsCLI.makeDriver(registry: Self.makeFixtureRegistry())
     }
 
-    // MARK: - Invocation table (§7.2)
+    // MARK: - Invocation table
 
     @Test func listVerbListsTheUserVisibleCatalog() async throws {
         let driver = try Self.makeFixtureDriver()
@@ -56,17 +56,16 @@ struct SkillsCLITests {
                 == Self.makeFixtureRegistry().call(id: "commit", arguments: ["fix parser"]))
     }
 
-    // MARK: - CLI syntax: positional id vs --id flag (§7.2, resolved contract)
+    // MARK: - CLI syntax: positional id vs --id flag
 
     @Test func useVerbWithABarePositionalIDIsSilentlyDroppedNotDispatched() async throws {
-        // §7.2's originally-drafted example (`use deploy --arguments
+        // The originally-drafted example (`use deploy --arguments
         // production`) never actually worked: the macro-less fallback CLI
         // leaf (`FallbackOperationCommand`/`FallbackPayloadBuilder` in
         // `../FoundationModelsOperationTool`) recognizes only `--name
         // value`/`-short` flags -- a bare positional token right after the
         // verb is silently dropped, never populating `id`. This is the
-        // RESOLVED contract (plan.md §7.2 was amended to require `--id`),
-        // pinned here so a future upstream positional-parameter change is
+        // RESOLVED contract (the CLI requires `--id`), pinned here so a future upstream positional-parameter change is
         // noticed.
         let driver = try Self.makeFixtureDriver()
 
@@ -91,7 +90,7 @@ struct SkillsCLITests {
     }
 
     @Test func useVerbHonorsShellExecutionDisabledPolicy() async throws {
-        // §25 coverage gap (^zbv0t4j): the disable flag was previously never
+        // Coverage gap: the disable flag was previously never
         // proven on the CLI path -- `skill use` dispatches through the exact
         // same `call(id:arguments:)` render call the model surface uses.
         let registry = SkillsRegistry(
@@ -105,7 +104,7 @@ struct SkillsCLITests {
         #expect(!result.output.contains("on branch main, working tree clean"))
     }
 
-    // MARK: - Visibility matrix (plan.md §6)
+    // MARK: - Visibility matrix
 
     @Test func listVerbIncludesDeployWhichIsHiddenFromTheModelSurface() async throws {
         let driver = try Self.makeFixtureDriver()
@@ -159,14 +158,14 @@ struct SkillsCLITests {
         let usableIDsList = try #require(result.output.components(separatedBy: "Currently usable ids: ").last)
 
         // The corrective's "currently usable ids" list is this surface's own
-        // (§6 user-facing) visible set, not the model-facing one: it must
+        // (user-facing) visible set, not the model-facing one: it must
         // name `deploy` (user-visible, model-hidden) but never the
         // model-only `lint` that was just refused.
         #expect(usableIDsList.contains("deploy"))
         #expect(!usableIDsList.contains("lint"))
     }
 
-    // MARK: - Resource op invocations (§7.2/§7.3, ^kb2t82c)
+    // MARK: - Resource op invocations
 
     @Test func resourceListVerbListsReleaseNotesResources() async throws {
         let driver = try Self.makeFixtureDriver()
@@ -216,13 +215,12 @@ struct SkillsCLITests {
         let result = await driver.run(arguments: ["resource", "list", "--id", "deploy"])
 
         #expect(result.exitCode == 0)
-        // A corrective outcome serializes as a bare JSON string (plan.md
-        // §7); a successful `ListResourceResult` serializes as a `{...}`
+        // A corrective outcome serializes as a bare JSON string; a successful `ListResourceResult` serializes as a `{...}`
         // object, so a non-corrective result never starts with `"`.
         #expect(!result.output.hasPrefix("\""))
     }
 
-    // MARK: - Round trip: CLI payload == model payload (§7.2)
+    // MARK: - Round trip: CLI payload == model payload
 
     @Test func searchVerbRoundTripsToTheIdenticalModelDispatchOutput() async throws {
         let registry = Self.makeFixtureRegistry()

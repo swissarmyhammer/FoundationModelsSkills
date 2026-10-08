@@ -3,7 +3,7 @@ import FoundationModels
 import Operations
 
 /// The outcome of a `read resource` operation: either the sliced content or
-/// a corrective message (plan.md §7.3).
+/// a corrective message.
 ///
 /// An unknown/stale/model-hidden `id`, a path confinement violation, an
 /// unreadable file, non-UTF-8 content, or a single line larger than the
@@ -12,7 +12,7 @@ import Operations
 public typealias ReadResourceOutput = CorrectiveOutcome<ReadResourceResult>
 
 /// Returns one skill resource file's content verbatim, sliced by line
-/// (plan.md §7.3).
+///.
 ///
 /// Never renders: no `$args` substitution, no shell injection, no Stencil --
 /// resources are read exactly as they sit on disk.
@@ -152,7 +152,7 @@ public struct ReadResource: OperationDefinition {
     /// message.
     ///
     /// The unit of override is the file, thus the bytes come from the overlay
-    /// of the layer directories of the skill (plan.md §3): a file that only a
+    /// of the layer directories of the skill: a file that only a
     /// lower layer holds is read, and the copy of the highest layer that holds
     /// the path wins.
     ///

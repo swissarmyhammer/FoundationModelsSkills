@@ -2,7 +2,7 @@ import Foundation
 import FoundationModelsExtras
 
 /// Directory-shaped skill discovery over the ordered layers of a
-/// `DotfolderStack` (plan.md §3, §4).
+/// `DotfolderStack`.
 ///
 /// An id is the name of a child directory of the union of the layer roots,
 /// and it is a skill when a minimum of one layer gives that directory a

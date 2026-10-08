@@ -1,7 +1,7 @@
 import Foundation
 import FoundationModelsExtras
 
-/// Pass 3 of the §5 render pipeline: Stencil, which the stenciled stack of
+/// Pass 3 of the render pipeline: Stencil, which the stenciled stack of
 /// `FoundationModelsExtras` runs.
 ///
 /// This pass holds no Stencil work of its own. For each render it makes a
@@ -19,7 +19,7 @@ import FoundationModelsExtras
 /// here: the process environment, and above it the named arguments of the
 /// `arguments:` frontmatter list. The stack puts both above its own
 /// well-known values (`working_directory`, `date`, `hostname` and
-/// `dotfolder_name`), which gives the §5.3 ladder of plan.md.
+/// `dotfolder_name`), which gives the lookup ladder of a render.
 public struct StencilPass: RenderPass {
     /// Makes the stenciled stack of one render, over the layers of this pass
     /// and the variables of that render.
@@ -33,8 +33,8 @@ public struct StencilPass: RenderPass {
     /// The host-supplied layer roots that an `{% include %}` of a render
     /// resolves a partial against, ordered lowest precedence first.
     ///
-    /// The SAME roots the skill itself was discovered over (plan.md decision
-    /// #29), thus a later root's `_partials/<name>` shadows an earlier root's
+    /// The SAME roots the skill itself was discovered over, thus a later root's `_partials/<name>`
+    /// shadows an earlier root's
     /// copy.
     public var layers: [DotfolderStack.Layer]
 
@@ -134,7 +134,7 @@ public struct StencilPass: RenderPass {
     /// exactly as `ArgumentSubstitution` substitutes `$name` in that case --
     /// each declared name is always a variable of the render, thus none can
     /// fall through to an environment value or a well-known value of the
-    /// same key (the ladder of plan.md §5.3 would otherwise give out host
+    /// same key (the lookup ladder would otherwise give out host
     /// state that a skill author never supplied).
     ///
     /// - Parameter request: The render request that gives `arguments` and

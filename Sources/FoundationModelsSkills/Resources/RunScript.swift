@@ -4,7 +4,7 @@ import FoundationModelsExtras
 import Operations
 
 /// The outcome of a `run script` operation: either the process's result or
-/// a corrective message (plan.md §7.3.1).
+/// a corrective message.
 ///
 /// An unknown/stale/model-hidden `id`, a path confinement violation, a path
 /// not under `scripts/`, a triple-gate refusal, or a missing executable
@@ -13,12 +13,12 @@ import Operations
 public typealias RunScriptOutput = CorrectiveOutcome<RunScriptResult>
 
 /// The noun `run script` acts on -- distinct from `resourceOperationNoun`
-/// (`"resource"`, shared by `list resource`/`read resource`): plan.md §7.3
-/// names this op's canonical spelling `run script`, not `run resource`.
+/// (`"resource"`, shared by `list resource`/`read resource`): the canonical
+/// spelling of this op is `run script`, not `run resource`.
 internal let scriptOperationNoun = "script"
 
-/// Exec's a skill's script file directly, under the triple gate (plan.md
-/// §7.3.1), in its own process group, capturing merged stdout+stderr.
+/// Exec's a skill's script file directly, under the triple gate, in its own
+/// process group, capturing merged stdout+stderr.
 ///
 /// Sees only the model-visible catalog, like `ListResource`/`ReadResource`.
 /// Never guesses an interpreter: the target file must already carry both
@@ -127,14 +127,14 @@ public struct RunScript: OperationDefinition {
     /// message.
     ///
     /// The unit of override is the file, thus the script comes from the
-    /// overlay of the layer directories of the skill (plan.md §3): a script
+    /// overlay of the layer directories of the skill: a script
     /// that only a lower layer holds runs, and the copy of the highest layer
     /// that holds the path wins. The working directory of the run is the
     /// layer directory that gave the winning copy, thus a script reaches the
     /// files beside it with a relative path.
     ///
     /// Evaluates gate 1 (host policy) first, before any id lookup or path
-    /// resolution (plan.md §7.3.1: "triple-gated, every check at dispatch"):
+    /// resolution ("triple-gated, every check at dispatch"):
     /// a script-disabled registry returns the identical policy corrective
     /// for any `path` -- valid, unknown-id, or confinement-escaping alike --
     /// never a path-shaped corrective ahead of the policy check.
@@ -189,7 +189,7 @@ public struct RunScript: OperationDefinition {
 
     /// One run's terminal state -- mirrors `RunScriptResult.status`'s three
     /// literal values, but as an enum internally so a typo'd status string
-    /// can never compile, matching plan.md §7.3's spelling exactly via
+    /// can never compile, with the exact spelling of each value in
     /// `rawValue`.
     private enum Status: String {
         /// The process exited on its own, before the timeout.
@@ -203,7 +203,7 @@ public struct RunScript: OperationDefinition {
     }
 
     /// The number of trailing output lines a run's `output` tail carries
-    /// (plan.md §7.3, the Shelltool shape).
+    /// (the Shelltool shape).
     private static let tailLineCount = 32
 
     /// The most bytes of merged output one run holds at a time.

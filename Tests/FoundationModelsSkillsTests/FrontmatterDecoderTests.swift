@@ -3,13 +3,13 @@ import Testing
 
 @testable import FoundationModelsSkills
 
-/// Table-driven tests for `FrontmatterDecoder` and its `SkillFrontmatter` model
-/// (plan.md §4, decision #27/#29): every spec + extension field spelling (both
+/// Table-driven tests for `FrontmatterDecoder` and its `SkillFrontmatter` model:
+/// every spec + extension field spelling (both
 /// top-level and `metadata.*`), both `arguments:` spellings, the
 /// quoting-fallback retry (success and failure), and unknown-key collection.
 ///
-/// `FrontmatterDecoder.decode(frontmatter:)` never throws (plan.md §4's
-/// lenient posture) -- every case here asserts on its `MetadataOutcome`, not
+/// `FrontmatterDecoder.decode(frontmatter:)` never throws (a lenient
+/// posture) -- every case here asserts on its `MetadataOutcome`, not
 /// on a caught error.
 ///
 /// The entry point takes the text between the `---` fences only. The split
@@ -96,7 +96,7 @@ struct FrontmatterDecoderTests {
     // Yams reads every scalar shape it cannot classify as a string, so a
     // bare timestamp lands on `.string`, never on `FrontmatterValue`'s
     // "unrecognized YAML shape" throw -- that branch has no reachable input
-    // through Yams (see ^bqjkrpc).
+    // through Yams.
     @Test func metadataBareTimestampDecodesAsString() throws {
         let frontmatter = try decodeFrontmatter(
             "name: x\ndescription: d\nmetadata:\n  when: 2026-08-26T00:00:00Z")
@@ -153,8 +153,7 @@ struct FrontmatterDecoderTests {
 
     // `arguments` and `argument-hint` aren't `Bool`, so they can't join the
     // table above -- covered individually here, same both-present-wins-with-
-    // a-note contract (plan.md §4: every extension field is resolved the
-    // same way).
+    // a-note contract (every extension field is resolved the same way).
 
     @Test func topLevelArgumentsWinsOverMetadataOnConflictAndRecordsANote() throws {
         let frontmatter = try decodeFrontmatter(

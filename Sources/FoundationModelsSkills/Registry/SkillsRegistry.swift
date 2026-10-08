@@ -5,19 +5,18 @@ import Tracing
 /// One catalog row `SkillsRegistry.metadata()` returns: a skill's id, its
 /// rendered description and `metadata.*` values, parameter placeholder
 /// summaries, and whether it is currently eligible for the model-facing
-/// surface (plan.md §6, §7.1).
+/// surface.
 ///
 /// Seeds `SkillSearchAgent`'s `MetadataSearcher<SkillMetadata>` --
-/// a caller building that catalog filters on `isModelVisible` itself
-/// (plan.md §10's public API sketch), since `metadata()` returns every
+/// a caller building that catalog filters on `isModelVisible` itself, since `metadata()` returns every
 /// catalog entry regardless of surface, model-hidden ones included.
 /// `description` and every string scalar inside `metadata` (at any depth)
-/// are rendered through `RenderPipeline.renderMetadata` (§5 passes 1 and 3
+/// are rendered through `RenderPipeline.renderMetadata` (render passes 1 and 3
 /// only -- shell injection never runs while building this catalog, since
 /// it would otherwise fire on every watcher-driven rebuild rather than
 /// once per `use skill`/`/command`/CLI call).
 public struct SkillMetadata: Sendable, Equatable {
-    /// The canonical id -- the directory name (plan.md §4).
+    /// The canonical id -- the directory name.
     public var id: String
 
     /// The rendered `description:`, or an empty string when the skill's
@@ -26,7 +25,7 @@ public struct SkillMetadata: Sendable, Equatable {
 
     /// Every frontmatter `metadata.*` entry, with every string scalar --
     /// at the top level or nested inside an `.array`/`.dictionary` value --
-    /// rendered through the same §5 pass 1+3 rules as `description`.
+    /// rendered through the same render pass 1+3 rules as `description`.
     ///
     /// Every non-string YAML shape (bool, number, null) is carried through
     /// unchanged, since only a string scalar is meaningful
@@ -34,11 +33,11 @@ public struct SkillMetadata: Sendable, Equatable {
     public var metadata: [String: FrontmatterValue]
 
     /// Placeholder summaries of this skill's parameters, e.g. `"<message>"`,
-    /// `"[env]"` (the placeholder shape of plan.md §6.1).
+    /// `"[env]"`.
     public var parameters: [String]
 
     /// Whether this skill is currently eligible for the model-facing
-    /// surface: `search skill`/`list skill`/`use skill` (plan.md §6).
+    /// surface: `search skill`/`list skill`/`use skill`.
     public var isModelVisible: Bool
 
     /// The marketplace this skill came from, for example
@@ -81,7 +80,7 @@ public struct SkillMetadata: Sendable, Equatable {
 /// not currently callable.
 ///
 /// Covers both an id the catalog never had at all and one a skill is fully
-/// hidden under (plan.md §6's bottom row) -- `SkillsRegistry` never adds a
+/// hidden under -- `SkillsRegistry` never adds a
 /// fully hidden skill to its catalog in the first place, so the two cases
 /// collapse into the same lookup miss here.
 public struct UnknownSkillError: Error, Sendable, Equatable {
@@ -91,8 +90,8 @@ public struct UnknownSkillError: Error, Sendable, Equatable {
     /// Every id currently callable, sorted.
     ///
     /// Lets a caller retry against the live catalog or build its own
-    /// corrective message (plan.md §7's "carrying the current id list",
-    /// realized generically here -- the model-facing operations in
+    /// corrective message that carries the current id list (generic
+    /// here -- the model-facing operations in
     /// `Operations/` convert this into their own corrective text).
     public var validIDs: [String]
 
@@ -109,13 +108,12 @@ public struct UnknownSkillError: Error, Sendable, Equatable {
 
 /// The Layer-3 source of truth: composes discovery, decoding, validation,
 /// and the render pipeline into a catalog, built once at construction and
-/// optionally kept fresh thereafter (plan.md §3, §6, §7, §7.1; decisions
-/// #13/#25/#28/#29).
+/// optionally kept fresh thereafter.
 ///
 /// `SkillsRegistry` holds no opinion about where skills live: `roots` is
 /// entirely the caller's choice, ordered from lowest to highest precedence,
 /// the same contract `SkillDiscovery` and `DotfolderWatcher` already follow
-/// (decision #29, amended). A skill `SkillValidator` hides entirely (the
+/// (amended). A skill `SkillValidator` hides entirely (the
 /// retired `partial: true` flag) never enters the catalog at all -- every
 /// method below only ever sees the skills that survived validation
 /// un-hidden.
@@ -130,8 +128,8 @@ public struct UnknownSkillError: Error, Sendable, Equatable {
 /// a partially-rebuilt one, regardless of how many readers query
 /// concurrently with a rebuild. `onReload` publishes the refreshed
 /// `[SkillMetadata]` once per rebuild -- the seam a future
-/// `SkillSearchAgent`'s `update(items:)` and preload refresh hang off
-/// (plan.md §7.1). The watcher this registry wires is owned by it: every
+/// `SkillSearchAgent`'s `update(items:)` and preload refresh hang off. The watcher this registry wires
+/// is owned by it: every
 /// copy of a `watch: true` registry shares one underlying watcher, stopped
 /// (and `onReload` finished) once the last copy is deinitialized.
 public struct SkillsRegistry: Sendable {
@@ -139,14 +137,13 @@ public struct SkillsRegistry: Sendable {
     /// precedence first -- exactly as given to `init(roots:policy:watch:)`,
     /// or derived from a `DotfolderStack` by `init(stack:policy:watch:)`.
     ///
-    /// A construction-time invariant (plan.md decisions #25/#28): fixed for
+    /// A construction-time invariant: fixed for
     /// this registry's lifetime, so no holder can silently repoint it at a
     /// different set of roots after the catalog and every render pass
     /// (`StencilPass`'s partials stack) have already captured it.
     public let roots: [URL]
 
-    /// The render policy every render call this registry makes honors
-    /// (plan.md decisions #25/#28).
+    /// The render policy every render call this registry makes honors.
     ///
     /// A construction-time invariant: fixed for this registry's lifetime, so
     /// a script/shell-disabled registry can never be re-enabled by a holder
@@ -165,9 +162,8 @@ public struct SkillsRegistry: Sendable {
     }
 
     /// A fresh subscription to this registry's refreshed metadata list, one
-    /// publication per watcher-driven rebuild (plan.md §7's reload seam,
-    /// §7.1's "one registry, four simultaneous consumers"; `commandUpdates`
-    /// is another).
+    /// publication per watcher-driven rebuild. One registry can have more
+    /// than one consumer at the same time; `commandUpdates` is another.
     ///
     /// Each access registers an independent subscriber stream against the
     /// shared `ReloadCoordinator`, so any number of concurrent readers --
@@ -248,7 +244,7 @@ public struct SkillsRegistry: Sendable {
     ///
     /// A bare `URL` carries no signal about whether it roots a trusted,
     /// consumer-shipped directory or an editable one, so every root here
-    /// renders under Stencil's untrusted rule (plan.md §5.3) -- there is no
+    /// renders under Stencil's untrusted rule -- there is no
     /// "shipped defaults" concept this initializer can recognize on its
     /// own. A host that already tracks that distinction (e.g. by way of a
     /// `DotfolderStack`) uses `init(stack:policy:)` instead, which
@@ -262,7 +258,7 @@ public struct SkillsRegistry: Sendable {
     ///   - policy: The render policy every render call this registry makes
     ///     honors. Defaults to the permissive `RenderPolicy()`.
     ///   - watch: Whether to watch every root and rebuild the catalog on
-    ///     change (plan.md §7). Defaults to `false` -- a static catalog,
+    ///     change. Defaults to `false` -- a static catalog,
     ///     matching this initializer's prior behavior.
     public init(roots: [URL], policy: RenderPolicy = RenderPolicy(), watch: Bool = false) {
         self.init(layers: Self.untrustedLayers(for: roots), policy: policy, watch: watch)
@@ -276,15 +272,14 @@ public struct SkillsRegistry: Sendable {
     /// this one preserves each layer's real trust tag rather than
     /// assuming every root is untrusted: the layer the host tagged as its
     /// shipped-defaults directory renders trusted, every other layer
-    /// renders untrusted, exactly Stencil's default trust rule (plan.md
-    /// §5.3, decision #29).
+    /// renders untrusted, exactly Stencil's default trust rule.
     ///
     /// - Parameters:
     ///   - stack: The dotfolder stack to build the catalog over.
     ///   - policy: The render policy every render call this registry makes
     ///     honors. Defaults to the permissive `RenderPolicy()`.
     ///   - watch: Whether to watch every layer root and rebuild the catalog
-    ///     on change (plan.md §7). Defaults to `false` -- a static catalog,
+    ///     on change. Defaults to `false` -- a static catalog,
     ///     matching this initializer's prior behavior.
     public init(stack: DotfolderStack, policy: RenderPolicy = RenderPolicy(), watch: Bool = false) {
         self.init(layers: stack.layers, policy: policy, watch: watch)
@@ -296,7 +291,7 @@ public struct SkillsRegistry: Sendable {
     /// The general constructor `init(roots:policy:watch:)` and
     /// `init(stack:policy:watch:)` both funnel through: a host that wants a
     /// bare-`[URL]` root labeled `.defaults` (so its skills render Stencil-
-    /// trusted, plan.md decision #29) without going through a full
+    /// trusted) without going through a full
     /// `DotfolderStack` builds its own `[DotfolderStack.Layer]` and calls
     /// this initializer directly -- the one sanctioned way to influence
     /// `StencilPass`'s trust mapping; there is no separate override
@@ -309,7 +304,7 @@ public struct SkillsRegistry: Sendable {
     ///   - policy: The render policy every render call this registry makes
     ///     honors. Defaults to the permissive `RenderPolicy()`.
     ///   - watch: Whether to watch every layer root and rebuild the catalog
-    ///     on change (plan.md §7). Defaults to `false` -- a static catalog.
+    ///     on change. Defaults to `false` -- a static catalog.
     public init(layers: [DotfolderStack.Layer], policy: RenderPolicy = RenderPolicy(), watch: Bool = false) {
         self.init(layers: layers, policy: policy, watch: watch, telemetry: SkillsTracing.Telemetry())
     }
@@ -340,7 +335,7 @@ public struct SkillsRegistry: Sendable {
 
     /// Creates a `SkillsRegistry` over a marketplace provider's layers in
     /// front of a `DotfolderStack`'s own layers, building its catalog once,
-    /// immediately (marketplace.md §4.1, §4.2, §7.4).
+    /// immediately (marketplace.md §4.1).
     ///
     /// The layer order is `url[0] < … < url[n] < defaults < user <
     /// project`: a local skill always wins over a marketplace copy of the
@@ -363,7 +358,7 @@ public struct SkillsRegistry: Sendable {
     ///     honors. Defaults to the permissive `RenderPolicy()`.
     ///   - watch: Whether to watch every local layer root, and the root of
     ///     each marketplace layer that a folder on this computer backs, and
-    ///     rebuild the catalog on change (plan.md §7, marketplace.md §7.4).
+    ///     rebuild the catalog on change (marketplace.md §7.4).
     ///     Defaults to `false`; a provider update still rebuilds, and a
     ///     cache-backed marketplace root rebuilds on that update only.
     public init(
@@ -385,8 +380,7 @@ public struct SkillsRegistry: Sendable {
     /// building its catalog once, immediately -- the one designated
     /// initializer every other one funnels through.
     ///
-    /// `roots` and the render pipeline are construction-time invariants
-    /// (plan.md decisions #25/#28), thus they come from the first plan and
+    /// `roots` and the render pipeline are construction-time invariants, thus they come from the first plan and
     /// never move; a later rebuild changes only the catalog and its
     /// diagnostics.
     ///
@@ -628,14 +622,14 @@ public struct SkillsRegistry: Sendable {
     }
 
     /// Derived model/user/preload visibility for one validated, un-hidden
-    /// skill (plan.md §6's table).
+    /// skill.
     ///
     /// Each axis independently combines the validator's own eligibility
     /// flag (whether the skill can appear on that surface at all -- e.g. an
     /// excluded-for-missing-description skill) with the skill's own
     /// frontmatter opt-out/opt-in for that axis:
     ///
-    /// | plan.md §6 row | `isModelVisible` | `isUserInvocable` | `isPreloaded` |
+    /// | Frontmatter | `isModelVisible` | `isUserInvocable` | `isPreloaded` |
     /// |---|---|---|---|
     /// | default | `true` | `true` | `false` |
     /// | `disable-model-invocation: true` | `false` | `true` | `false` |
@@ -727,8 +721,8 @@ public struct SkillsRegistry: Sendable {
     /// Runs `ParameterInference` over `validated` and converts every
     /// resulting source-mismatch note (e.g. `arguments:`/`argument-hint:`
     /// arity disagreement) into a `SkillDiagnostic`, carrying `discovered`'s
-    /// winning-root provenance (plan.md §6.1: "Diagnostics flag mismatches
-    /// between sources").
+    /// winning-root provenance. A diagnostic flags a mismatch between
+    /// sources.
     ///
     /// - Parameters:
     ///   - validated: The validated skill to infer parameters for.
@@ -904,7 +898,7 @@ public struct SkillsRegistry: Sendable {
         }
     }
 
-    /// Infers `entry`'s structured parameters (plan.md §6.1).
+    /// Infers `entry`'s structured parameters.
     ///
     /// - Parameter entry: The catalog entry to infer parameters for.
     /// - Returns: One `SkillParameter` per inferred parameter, in position
@@ -932,10 +926,9 @@ public struct SkillsRegistry: Sendable {
     ///
     /// Includes model-hidden entries (e.g. `disable-model-invocation:
     /// true`) alongside model-visible ones -- a caller filters on
-    /// `SkillMetadata.isModelVisible` itself (plan.md §10's public API
-    /// sketch), rather than this method pre-filtering. `description` and
+    /// `SkillMetadata.isModelVisible` itself, rather than this method pre-filtering. `description` and
     /// every string scalar inside `metadata.*` (at any depth) are rendered
-    /// through §5 passes 1 and 3 only, via `RenderPipeline.renderMetadata`
+    /// through render passes 1 and 3 only, via `RenderPipeline.renderMetadata`
     /// -- never pass 2.
     ///
     /// - Returns: One `SkillMetadata` per catalog entry, sorted by id.
@@ -956,12 +949,12 @@ public struct SkillsRegistry: Sendable {
     // MARK: - commandListing()
 
     /// The user `/` menu's rows: every catalog entry eligible for the user
-    /// surface (plan.md §6.1).
+    /// surface.
     ///
     /// Includes a model-hidden-but-user-invocable entry (e.g. `deploy`,
     /// `disable-model-invocation: true`); excludes a `user-invocable:
     /// false` entry (e.g. `lint`) entirely. Each row's `description` is
-    /// rendered the same §5 pass 1+3 way `metadata()` renders its own.
+    /// rendered the same render pass 1+3 way `metadata()` renders its own.
     ///
     /// - Returns: One `SkillListing` per user-invocable catalog entry,
     ///   sorted by id.
@@ -986,7 +979,7 @@ public struct SkillsRegistry: Sendable {
     }
 
     /// The maximum `description` length `commandListing()` shows in the
-    /// user `/` menu (plan.md §6.1: "rendered, truncated for the menu").
+    /// user `/` menu (truncated for the menu").
     /// `metadata()` renders the same description full-length -- this cap
     /// applies only to the menu surface and to the shortened step of the
     /// `skills` tool description (`SkillsToolDescription`).
@@ -1013,13 +1006,12 @@ public struct SkillsRegistry: Sendable {
     // MARK: - preloadedBodies()
 
     /// The rendered bodies of every `preload: true` catalog entry, joined
-    /// for injection into a root session's `Instructions` at startup
-    /// (plan.md §6, §7.1).
+    /// for injection into a root session's `Instructions` at startup.
     ///
-    /// Each body renders through all three §5 passes (`RenderPipeline.renderBody`),
+    /// Each body renders through all three render passes (`RenderPipeline.renderBody`),
     /// so a `` !`command` `` in a preloaded skill's body re-executes on
     /// every call to this method, exactly as it would on a `use skill`
-    /// dispatch -- "dynamic at render, static in transcript" (plan.md §5)
+    /// dispatch -- "dynamic at render, static in transcript"
     /// applies here too, not just to `call(id:arguments:)`.
     ///
     /// - Returns: Every preloaded entry's rendered body, sorted by id and
@@ -1032,7 +1024,7 @@ public struct SkillsRegistry: Sendable {
         return bodies.joined(separator: "\n\n")
     }
 
-    /// Renders `entry`'s body through all three §5 passes, falling back to
+    /// Renders `entry`'s body through all three render passes, falling back to
     /// the unrendered body if rendering fails -- the same lenient posture
     /// `renderedMetadataText(text:entry:)` uses, since `preloadedBodies()`
     /// is not declared `throws` either.
@@ -1048,7 +1040,7 @@ public struct SkillsRegistry: Sendable {
     // MARK: - call(id:arguments:)
 
     /// Dereferences the catalog by `id` and renders that skill's body
-    /// through all three §5 passes with `arguments`.
+    /// through all three render passes with `arguments`.
     ///
     /// The call runs in one ``SkillsTracing/SpanName/skillLoad`` span that
     /// holds the skill id, and never the arguments or the rendered body. The
@@ -1059,13 +1051,12 @@ public struct SkillsRegistry: Sendable {
     ///
     /// - Parameters:
     ///   - id: The skill id to call -- the directory name.
-    ///   - arguments: The arguments to substitute into the rendered body
-    ///     (plan.md §5 pass 1: `$ARGUMENTS`/`$N`/`$name`). Defaults to
+    ///   - arguments: The arguments to substitute into the rendered body. Defaults to
     ///     empty.
     /// - Returns: The fully rendered body.
     /// - Throws: `UnknownSkillError` when `id` is not in the catalog --
     ///   unknown outright, or fully hidden from every surface. Otherwise,
-    ///   any error a render pass raises (plan.md §5's three passes).
+    ///   any error a render pass raises.
     public func call(id: String, arguments: [String] = []) async throws -> String {
         try await TracedCall.run(
             SkillsTracing.SpanName.skillLoad, tracer: telemetry.tracer,
@@ -1100,7 +1091,7 @@ public struct SkillsRegistry: Sendable {
     }
 
     /// The absolute directory `id`'s current catalog entry lives in --
-    /// where the resource operations (plan.md §7.3) enumerate and read
+    /// where the resource operations enumerate and read
     /// under.
     ///
     /// - Parameter id: The skill id to look up.
@@ -1125,8 +1116,8 @@ public struct SkillsRegistry: Sendable {
         catalogBox.snapshot.catalog[id]?.contributingDirectories ?? []
     }
 
-    /// `id`'s current catalog entry's tokenized `allowed-tools:` frontmatter
-    /// -- the `run script` operation's grant source (plan.md §7.3.1).
+    /// `id`'s current catalog entry's tokenized `allowed-tools:` frontmatter -- the `run script`
+    /// operation's grant source.
     ///
     /// - Parameter id: The skill id to look up.
     /// - Returns: The skill's tokenized `allowed-tools:` grants, or `nil`
@@ -1154,7 +1145,7 @@ public struct SkillsRegistry: Sendable {
         SkillsRegistry(catalogBox: catalogBox, pipeline: pipeline, policy: policy, roots: roots, telemetry: telemetry)
     }
 
-    // MARK: - Reload (plan.md §7)
+    // MARK: - Reload
 
     /// The atomically-swappable holder for one catalog generation and its
     /// diagnostics, shared by every copy of a `SkillsRegistry`.

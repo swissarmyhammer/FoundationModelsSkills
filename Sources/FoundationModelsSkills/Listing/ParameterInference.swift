@@ -2,8 +2,7 @@ import Foundation
 
 /// Merges a skill's three parameter sources -- `arguments:`, `argument-hint:`,
 /// and body inference -- into the structured `[SkillParameter]` list
-/// `SkillListing` carries, plus the `acceptsTrailingArguments` flag (plan.md
-/// §6.1).
+/// `SkillListing` carries, plus the `acceptsTrailingArguments` flag.
 ///
 /// Precedence: `arguments:` (authoritative names/order) > `argument-hint:`
 /// (placeholders, merged by position when `arguments:` is also present) >
@@ -16,9 +15,9 @@ public enum ParameterInference {
     ///
     /// A mismatch (e.g. `argument-hint:`'s token count disagreeing with
     /// `arguments:`'s name count) is recorded in `diagnostics` but **never**
-    /// fails the merge -- plan.md §6.1's "diagnostics flag mismatches
-    /// between sources" is advisory, matching this package's lenient
-    /// validation posture (plan.md §4) elsewhere.
+    /// fails the merge -- a diagnostic of a mismatch between sources is
+    /// advisory, matching this package's lenient
+    /// validation posture elsewhere.
     public struct Result: Sendable, Equatable {
         /// The merged, position-ordered parameters.
         public var parameters: [SkillParameter]
@@ -49,7 +48,7 @@ public enum ParameterInference {
 
     /// Merges `frontmatter`'s `arguments:`/`argument-hint:` and `body`'s
     /// `$0`/`$N`/`$ARGUMENTS[N]` references into a `Result`, following the
-    /// plan.md §6.1 precedence: `arguments:` > `argument-hint:` > body
+    /// precedence: `arguments:` > `argument-hint:` > body
     /// inference.
     ///
     /// - Parameters:
@@ -119,8 +118,8 @@ public enum ParameterInference {
     /// Parses `argument-hint:`'s space-separated token grammar: `<x>` and
     /// `[x]` are display text whose inner `x` is the name, and a trailing
     /// `...` (on either bracket form, or on a bare unbracketed token) sets
-    /// `variadic`. The trailing `...` is the one token shape plan.md §6.1
-    /// gives a meaning.
+    /// `variadic`. The trailing `...` is the one token shape that has a
+    /// meaning.
     ///
     /// A token with neither bracket form -- a bare word such as `env`, or a
     /// malformed placeholder such as `[env` (unclosed bracket) -- keeps its
@@ -200,14 +199,14 @@ public enum ParameterInference {
     /// **Known limitation:** this matches any literal `$<digits>` token, so a
     /// body that mentions a dollar amount in prose (e.g. "costs $5") is
     /// misread as a positional reference and synthesizes spurious
-    /// parameters. This follows plan.md §6.1's grammar literally (`$N`
+    /// parameters. This follows the grammar literally (`$N`
     /// scanning has no further disambiguation rule); accepted for now since
     /// disambiguating "looks like a price" from "looks like an argument" has
     /// no reliable heuristic without author intent.
     private static let positionalReferencePattern = try! NSRegularExpression(
         pattern: #"\$(\d+)\b|\$ARGUMENTS\[(\d+)\]"#)
 
-    /// The `$ARGUMENTS` bare-reference regex (plan.md §5) -- the negative
+    /// The `$ARGUMENTS` bare-reference regex -- the negative
     /// lookahead on `[` excludes `$ARGUMENTS[N]`.
     private static let argumentsReferencePattern = try! NSRegularExpression(
         pattern: #"\$ARGUMENTS\b(?!\[)"#)

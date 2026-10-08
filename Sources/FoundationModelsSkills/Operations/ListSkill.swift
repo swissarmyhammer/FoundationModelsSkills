@@ -2,8 +2,7 @@ import Foundation
 import FoundationModels
 import Operations
 
-/// Lists the calling context's visible skill catalog, optionally filtered
-/// (plan.md §7).
+/// Lists the calling context's visible skill catalog, optionally filtered.
 ///
 /// The answer is plain text: one `- <id>: <description>` line for each skill
 /// in catalog order, and then the same load instruction as `search skill`
@@ -13,7 +12,7 @@ import Operations
 /// ranking, no tokens. Which entries count as visible is
 /// `context.visibilityPredicate`'s call, not this operation's -- model
 /// dispatch and `SkillsCLI` supply different predicates over the same
-/// registry (plan.md §7.2).
+/// registry.
 public struct ListSkill: OperationDefinition {
     /// The shared context this operation dispatches against.
     public typealias Context = SkillsToolContext

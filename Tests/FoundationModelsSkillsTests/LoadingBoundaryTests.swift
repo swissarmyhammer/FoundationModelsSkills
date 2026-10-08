@@ -1,6 +1,6 @@
 import Testing
 
-/// Guards the loading boundary of this package (plan.md §3): the raw work of
+/// Guards the loading boundary of this package: the raw work of
 /// loading a skill lives in `FoundationModelsExtras`, and this package keeps
 /// only the work of the skill schema.
 ///
