@@ -73,8 +73,8 @@ enum MarketplaceTestSupport {
 
     /// Makes the tree of one fixture commit: one skill under `skills`.
     ///
-    /// `MarketplaceCLITests` and `MarketplaceLocalSourceTests` both build
-    /// this tree, thus the helper is here.
+    /// `MarketplaceLocalSourceTests` builds this tree in more than one case,
+    /// thus the helper is here.
     ///
     /// - Parameter body: The body of the skill.
     /// - Returns: The tree, one entry for each path.
@@ -87,6 +87,9 @@ enum MarketplaceTestSupport {
 }
 
 extension MarketplaceStoreFixture {
+    /// The dotfolder name of the stack that ``makeRegistry(watch:)`` builds.
+    private var dotfolderName: String { "skills" }
+
     /// Makes a registry over the layers of the store and one empty local
     /// project layer.
     ///
@@ -99,7 +102,7 @@ extension MarketplaceStoreFixture {
     /// - Returns: The registry.
     func makeRegistry(watch: Bool = false) -> SkillsRegistry {
         var stack = DotfolderStack(
-            name: MarketplaceCLIContext.dotfolderName, workingDirectory: localRoot,
+            name: dotfolderName, workingDirectory: localRoot,
             environment: [:])
         stack.layers = [DotfolderStack.Layer(source: .project, root: localRoot)]
         return SkillsRegistry(marketplaces: store, stack: stack, watch: watch)

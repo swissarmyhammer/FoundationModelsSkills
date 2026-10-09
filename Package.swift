@@ -55,9 +55,9 @@ let commonDependencies: [Target.Dependency] = [
     // The whole marketplace (marketplace.md): `MarketplaceStore`,
     // `MarketplaceSource`, `MarketplacePolicy`, `MarketplaceConfig` and the
     // git transport below them. This package keeps only the skill knowledge
-    // around that product: the registry hookup, the provenance in the
-    // diagnostics, and the `skills marketplace` command group. The product
-    // links libgit2 itself, thus no manifest entry here names a git package.
+    // around that product: the registry hookup and the provenance in the
+    // diagnostics. The product links libgit2 itself, thus no manifest entry
+    // here names a git package.
     .product(name: "Marketplace", package: "FoundationModelsExtras"),
     // The three telemetry APIs: spans, log records and metrics. Each one is
     // an API only, with no backend. Until a host application bootstraps a

@@ -23,10 +23,9 @@ struct DocumentClaim: Sendable {
 /// The suite reads the documentation files from the disk, found from this
 /// file's `#filePath`, and asserts that each one names what a host must know.
 /// Every name of the host guide comes from the code: the environment
-/// variables are the constants that the cache and the policy read, and the
-/// subcommand names are the names in the `MarketplaceCLI` configuration. Thus
-/// a new environment variable, or a new subcommand, makes this suite fail
-/// until the host guide describes it.
+/// variables are the constants that the cache and the policy read. Thus a new
+/// environment variable makes this suite fail until the host guide describes
+/// it.
 @Suite("Marketplace docs")
 struct MarketplaceDocsTests {
     /// The host guide of the marketplaces, relative to the package root.
@@ -103,52 +102,12 @@ struct MarketplaceDocsTests {
     /// `git@github.com:owner/repo.git`.
     private static let sshURLPrefix = "git@"
 
-    /// A URL of no supported form: the reader takes `https`, `github:` and
-    /// `file://` only (marketplace.md §5.1).
-    private static let unsupportedURL = "ftp://example.invalid/owner/repo.git"
-
-    /// A cache folder that does not exist, thus a listing made over it holds
-    /// only what the source itself says.
-    private static let absentCacheDirectory = URL(
-        fileURLWithPath: NSTemporaryDirectory(), isDirectory: true
-    ).appendingPathComponent("marketplace-docs-absent-cache", isDirectory: true)
-
-    /// Each text that recommends a URL form to the user: the message of a URL
-    /// that is not a supported form, and the help of the `add` command.
-    private static let urlFormAdvice = [
-        unsupportedFormMessage(),
-        MarketplaceCLI.Add.helpMessage(),
-    ]
-
-    /// The message that `marketplace add` gives for ``unsupportedURL``.
-    ///
-    /// The reader of the `Marketplace` module owns that sentence, and the
-    /// listing of a source that the reader refuses carries it. Thus the test
-    /// reads the text that a user sees, and holds no copy of it.
-    ///
-    /// - Returns: The message.
-    private static func unsupportedFormMessage() -> String {
-        let listing = MarketplaceStore.listings(
-            of: [MarketplaceSource(unsupportedURL)], cacheDirectory: absentCacheDirectory
-        ).first
-        return MarketplaceCLIError.unusableSource(reason: listing?.lastError).description
-    }
-
-    /// The name of each subcommand of the `marketplace` command group, taken
-    /// from the configuration of the group itself.
-    private static let subcommandNames = MarketplaceCLI.configuration.subcommands
-        .compactMap { $0.configuration.commandName }
-
     /// Every claim that the documentation must make: the host guide names
-    /// each environment variable and each subcommand, the security document
-    /// has its marketplace section, the README points to the host guide, and
-    /// each document names the package that holds the marketplace now.
+    /// each environment variable, the security document has its marketplace
+    /// section, the README points to the host guide, and each document names
+    /// the package that holds the marketplace now.
     private static let claims =
         environmentVariables.map { DocumentClaim(document: hostGuidePath, text: $0) }
-        + subcommandNames.map {
-            DocumentClaim(
-                document: hostGuidePath, text: "\(MarketplaceCLI.commandName) \($0)")
-        }
         + [
             DocumentClaim(document: hostGuidePath, text: sshDiagnostic),
             DocumentClaim(document: securityPath, text: securityHeading),
@@ -203,22 +162,5 @@ struct MarketplaceDocsTests {
         #expect(
             !text.contains(Self.sshURLPrefix),
             "\(Self.hostGuidePath) must give each example URL in the HTTPS form")
-    }
-
-    @Test(arguments: urlFormAdvice)
-    func theURLFormAdviceNamesNoSSHForm(advice: String) {
-        #expect(!advice.isEmpty)
-        #expect(
-            !advice.contains(Self.sshURLPrefix),
-            "The advice must not recommend an SSH URL: \(advice)")
-    }
-
-    @Test func theCommandGroupGivesItsSubcommandNames() {
-        #expect(
-            !Self.subcommandNames.isEmpty,
-            """
-            The marketplace command group named no subcommand, thus the test of the host guide \
-            proves nothing
-            """)
     }
 }

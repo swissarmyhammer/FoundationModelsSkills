@@ -202,8 +202,8 @@ skill` show it with no change. A `search skill` or `list skill` line gives the
 id and the description only. The `/` command listing
 (`registry.commandListing()`) names the marketplace that the skill came from,
 for example `swissarmyhammer-skills@1.2.0`. The model cannot add, remove, pin,
-or update a marketplace: that work belongs to the host and to the
-`skills marketplace` commands. See [marketplaces.md](marketplaces.md).
+or update a marketplace: that work belongs to the host. See
+[marketplaces.md](marketplaces.md).
 
 ## Verb aliases
 

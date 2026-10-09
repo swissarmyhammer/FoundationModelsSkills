@@ -2,14 +2,13 @@ import Foundation
 
 /// One standard stream of this process, as a writer of whole lines.
 ///
-/// Every line that this package, its command groups, and its example write to
-/// a standard stream goes through this type. Thus the line break that ends a
-/// line is stated one time, and no caller builds the bytes of a line itself.
+/// Every line that this package and its example write to a standard stream
+/// goes through this type. Thus the line break that ends a line is stated one
+/// time, and no caller builds the bytes of a line itself.
 ///
-/// A command group that collects its output instead of writing it -- as
-/// ``MarketplaceCLISession`` does -- still builds its text with
-/// ``text(of:)``, thus a collected run and a written run end each line the
-/// same way.
+/// A caller that collects its output instead of writing it still builds its
+/// text with ``text(of:)``, thus a collected run and a written run end each
+/// line the same way.
 public enum StandardStream: Sendable {
     /// The standard output stream, where a run writes its answer.
     case output

@@ -14,7 +14,7 @@ product, thus the example below needs one import only. A host that uses
 the same types.
 
 This page is the host guide. It tells you how to add a marketplace, what the
-store does with it, and what the `skills marketplace` commands do. Read
+store does with it, and how a host controls it. Read
 [`security.md`](security.md) for the security posture of a marketplace.
 
 ## Add a marketplace in code
@@ -157,7 +157,7 @@ that folder as it watches a local layer.
 - The name of the cache folder is `<pre-fetch key>-<first 8 hex digits of the
   SHA-256 of the normalized URL>`. Thus a changed URL never uses a stale cache.
 - After a fetch, the `name` field of the catalog is the **display id** of the
-  marketplace. The commands and the diagnostics show that id.
+  marketplace. The `/` command listing and the diagnostics show that id.
 
 ## Catalog formats
 
@@ -246,7 +246,7 @@ commit with the commit of the snapshot.
 The store has no built-in time value. A check runs:
 
 - **At start.** `store.start()` checks each marketplace one time.
-- **On request.** `check()`, `update()`, and the commands below check at once.
+- **On request.** `check()` and `update()` check at once.
 - **On a schedule, only when the host asks.** `MarketplacePolicy.checkInterval`
   is `nil` by default. A long-running host, such as an agent server or an
   editor, can give a value. A short command-line run does not need one.
@@ -258,8 +258,8 @@ The update rules are:
 
 - `autoUpdate: true` is the default. A new commit starts an install, and the
   store then publishes `.updated`.
-- `autoUpdate: false` publishes `.updateAvailable`. The host, or the
-  `marketplace update` command, installs the commit.
+- `autoUpdate: false` publishes `.updateAvailable`. The host installs the
+  commit.
 - `SKILLS_MARKETPLACE_AUTOUPDATE=0` stops every automatic update. Checks
   continue. `MarketplacePolicy.autoUpdate = false` does the same.
 - `MarketplacePolicy.checkOnly = true` is a dry run. The store checks and
@@ -345,35 +345,13 @@ and the description only. The text never holds the URL. A
 shadow diagnostic names both sides, thus a user can see that a local skill
 shadows a marketplace skill.
 
-## The `skills marketplace` commands
+## Marketplace control
 
 Marketplace control is a host function. The model surface gets no marketplace
-operation; see [`operations.md`](operations.md).
-
-```
-skills marketplace list                      the marketplaces in order, with the id, the URL,
-                                             the commit, the catalog version, the last check,
-                                             and the status
-skills marketplace check [<id>]              asks each remote for its head; downloads no content
-skills marketplace update [<id>] [--force]   brings a marketplace to its remote head
-skills marketplace pin <id> <sha>            holds a marketplace at one commit
-skills marketplace unpin <id>                drops the pin
-skills marketplace add <url> [--ref <ref>] [--alias <alias>]
-                                             puts a source at the end of the user file
-skills marketplace remove <id>               takes a source out of the user file
-```
-
-Each command reads the `marketplaces.yaml` of the user layer. A command reads
-the file of the project layer only with `--include-project`, which is the trust
-gate of a cloned repository. `add` and `remove` write the user file only,
-because a source of the project layer belongs to the repository, and not to
-this user.
-
-`add` parses the URL before it writes. Thus a URL that holds a credential never
-reaches the file, and no message shows it.
-
-The `--marketplace` mode of `Examples/skills-demo` runs this same command group
-over the fixture library, for example `skills-demo --marketplace list`.
+operation; see [`operations.md`](operations.md). This package has no
+marketplace command group. A host lists, checks, updates, and pins its
+marketplaces through the `MarketplaceStore` of `FoundationModelsExtras`, and it
+edits `marketplaces.yaml` itself.
 
 ## Publish a marketplace
 

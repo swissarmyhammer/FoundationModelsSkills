@@ -69,7 +69,6 @@ hold for every marketplace:
    store makes no cache folder and opens no connection for it.
 3. **A project `marketplaces.yaml` can add a remote source.** A repository that
    you cloned can carry that file. Load it only for a folder that you trust.
-   The `skills marketplace` commands read it only with `--include-project`.
 4. **No package of this family starts the `git` binary.** Git work goes
    through libgit2, which runs no hooks, fetches no submodules, and runs no
    large file storage filters. HTTPS uses the system trust store. SSH URLs are
@@ -82,8 +81,8 @@ hold for every marketplace:
 5. **A credential stays out of every record.** A credential never appears in a
    stored URL, in a log line, in a diagnostic, or in an error message. An HTTPS
    URL that holds a user name or a password is refused when the store parses
-   it, thus no such URL reaches `marketplaces.yaml`, `state.json`, a command
-   line of output, or a message. A credential comes only from
+   it, thus no such URL reaches `marketplaces.yaml`, `state.json`, a line of
+   output, or a message. A credential comes only from
    `MarketplacePolicy.credentials`, and the transport sends it only to the
    origin of that one source.
 6. **The materializer validates every file that it writes.** It refuses a path
@@ -92,8 +91,8 @@ hold for every marketplace:
    policy. A snapshot that fails validation is deleted, and the last good
    snapshot stays.
 7. **The model cannot change the source list.** The model surface gets no
-   marketplace operation. Only the host and the command line add, remove, pin,
-   or update a marketplace.
+   marketplace operation. Only the host adds, removes, pins, or updates a
+   marketplace.
 8. **A marketplace file can never win over a local file of the same path.**
    The order is `url[0] < … < url[n] < defaults < user < project`.
    **The unit of override is the file**: for each path of a skill, the copy in

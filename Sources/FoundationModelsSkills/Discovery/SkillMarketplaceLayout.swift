@@ -10,9 +10,8 @@ import Marketplace
 /// a local layer hold the same shape, and one skill moves between the two
 /// with no edit.
 ///
-/// The value stands one time, here. The registry, the `skills marketplace`
-/// command group and a host all read it, thus no two of them can name a
-/// different document.
+/// The value stands one time, here. The registry and a host both read it,
+/// thus the two of them cannot name a different document.
 ///
 /// ```swift
 /// let store = MarketplaceStore(

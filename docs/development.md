@@ -116,5 +116,5 @@
   change to the behavior of a marketplace — the store, the cache, the git
   transport, the catalog read, the snapshot writer, or `marketplaces.yaml` —
   goes to that repository. What stays here is the skill knowledge around the
-  product: `SkillMarketplaceLayout`, the registry hookup, the provenance in the
-  diagnostics, and the `skills marketplace` command group.
+  product: `SkillMarketplaceLayout`, the registry hookup, and the provenance in
+  the diagnostics.
