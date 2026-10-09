@@ -1,7 +1,6 @@
 import Marketplace
 
-/// The shape of a skill marketplace tree, as this package names it
-/// (marketplace.md §5.2).
+/// The shape of a skill marketplace tree, as this package names it.
 ///
 /// The `Marketplace` module of `FoundationModelsExtras` knows no skill: it
 /// reads whichever document the host names. This package names `SKILL.md`,

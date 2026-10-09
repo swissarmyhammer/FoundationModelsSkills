@@ -142,7 +142,7 @@ public struct RunScript: OperationDefinition {
     /// The value gate 1 reads is the host `RenderPolicy` of the registry,
     /// which gates every layer: a skill of a marketplace layer is refused,
     /// and permitted, exactly as a skill of a `user` or a `project` layer
-    /// is (marketplace.md §6.6).
+    /// is.
     ///
     /// - Parameter context: The shared context supplying the model-visible
     ///   registry.

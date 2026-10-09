@@ -1,6 +1,5 @@
-# The marketplace source list of the user layer of the fixture library
-# (marketplace.md §6.3). It shows the format of the file that
-# `MarketplaceConfig` reads.
+# The marketplace source list of the user layer of the fixture library. It
+# shows the format of the file that `MarketplaceConfig` reads.
 #
 # The entry is a `github:owner/repo` form. `autoUpdate` is off, thus a store
 # made from this file fetches this marketplace only when a host asks.

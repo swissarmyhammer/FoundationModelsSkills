@@ -41,8 +41,7 @@ public struct SkillMetadata: Sendable, Equatable {
     public var isModelVisible: Bool
 
     /// The marketplace this skill came from, for example
-    /// `swissarmyhammer-skills@1.2.0`, or `nil` for a local skill
-    /// (marketplace.md §9.1).
+    /// `swissarmyhammer-skills@1.2.0`, or `nil` for a local skill.
     ///
     /// Display only, for a host that reads `SkillsRegistry.metadata()`. The
     /// model-facing `list skill` and `search skill` lines do not show it. It
@@ -175,8 +174,8 @@ public struct SkillsRegistry: Sendable {
     /// false` and no marketplace provider, since a registry that never
     /// reloads has nothing to publish; a marketplace-backed registry
     /// publishes on every provider update, thus `onReload` is never `nil`
-    /// for `init(marketplaces:stack:policy:watch:)`, whatever `watch` is
-    /// (marketplace.md §7.4). Every subscription finishes once this
+    /// for `init(marketplaces:stack:policy:watch:)`, whatever `watch` is.
+    /// Every subscription finishes once this
     /// registry (and every copy sharing its coordinator) is deinitialized.
     public var onReload: AsyncStream<[SkillMetadata]>? {
         reloadCoordinator?.subscribe()
@@ -335,7 +334,7 @@ public struct SkillsRegistry: Sendable {
 
     /// Creates a `SkillsRegistry` over a marketplace provider's layers in
     /// front of a `DotfolderStack`'s own layers, building its catalog once,
-    /// immediately (marketplace.md §4.1).
+    /// immediately.
     ///
     /// The layer order is `url[0] < … < url[n] < defaults < user <
     /// project`: a local skill always wins over a marketplace copy of the
@@ -358,7 +357,7 @@ public struct SkillsRegistry: Sendable {
     ///     honors. Defaults to the permissive `RenderPolicy()`.
     ///   - watch: Whether to watch every local layer root, and the root of
     ///     each marketplace layer that a folder on this computer backs, and
-    ///     rebuild the catalog on change (marketplace.md §7.4).
+    ///     rebuild the catalog on change.
     ///     Defaults to `false`; a provider update still rebuilds, and a
     ///     cache-backed marketplace root rebuilds on that update only.
     public init(
@@ -438,7 +437,7 @@ public struct SkillsRegistry: Sendable {
 
         /// The roots that a `watch: true` registry watches: every local root,
         /// and the root of each marketplace layer that a folder on this
-        /// computer backs (marketplace.md §7.4).
+        /// computer backs.
         ///
         /// A cache-backed marketplace root is not here: its snapshot swap
         /// sends no reliable file-system event, thus it rebuilds on a value of
@@ -454,8 +453,7 @@ public struct SkillsRegistry: Sendable {
             watchedRoots = localLayers.map(\.root)
         }
 
-        /// Creates a plan of marketplace layers in front of local layers
-        /// (marketplace.md §4.1).
+        /// Creates a plan of marketplace layers in front of local layers.
         ///
         /// - Parameters:
         ///   - marketplaceLayers: The marketplace layers, lowest precedence
@@ -581,7 +579,7 @@ public struct SkillsRegistry: Sendable {
         /// file at all, that one included.
         let contributingDirectories: [ContributingDirectory]
         /// The marketplace `winningLayer` came from, or `nil` for a local
-        /// skill (marketplace.md §9.1).
+        /// skill.
         let marketplace: MarketplaceProvenance?
         let isModelVisible: Bool
         let isUserInvocable: Bool
@@ -728,7 +726,7 @@ public struct SkillsRegistry: Sendable {
     ///   - validated: The validated skill to infer parameters for.
     ///   - discovered: Its discovery record, for provenance.
     ///   - marketplaces: Which marketplace each layer came from, so the
-    ///     provenance names it (marketplace.md §9.1).
+    ///     provenance names it.
     /// - Returns: One advisory `SkillDiagnostic` per inference note; empty
     ///   when the sources agree.
     private static func inferenceDiagnostics(
@@ -783,7 +781,7 @@ public struct SkillsRegistry: Sendable {
     ///   - document: The winning `SKILL.md` of this id, or `nil` when the
     ///     stack could not read it.
     ///   - marketplaces: Which marketplace each layer came from, so every
-    ///     diagnostic names it (marketplace.md §9.1).
+    ///     diagnostic names it.
     ///   - diagnostics: Accumulates every diagnostic raised.
     /// - Returns: The validated skill, or `nil` for unparseable YAML
     ///   (`SkillValidator`'s own `.skipped` outcome) or an unreadable

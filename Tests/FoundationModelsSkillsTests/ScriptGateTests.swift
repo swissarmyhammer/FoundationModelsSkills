@@ -6,7 +6,7 @@ import Testing
 
 /// Tests that the gates of `run script` read the host `RenderPolicy` and the
 /// `allowed-tools` grant of the skill, and no property of the layer that
-/// gives the script (marketplace.md §6.6).
+/// gives the script.
 ///
 /// The grant of a marketplace is gone. A marketplace layer is untrusted like
 /// a `user` layer or a `project` layer, thus `ScriptGate` takes no

@@ -30,9 +30,6 @@ struct DocumentationTests {
     /// The README of the package, relative to the package root.
     private static let readmePath = "README.md"
 
-    /// The design record of the marketplaces, relative to the package root.
-    private static let marketplaceDesignPath = "marketplace.md"
-
     /// The host guide of the marketplaces, relative to the package root.
     private static let marketplaceGuidePath = "docs/marketplaces.md"
 
@@ -54,7 +51,7 @@ struct DocumentationTests {
 
     /// Every document that a reader takes the override rule from.
     private static let documents = [
-        operationsPath, readmePath, marketplaceDesignPath, marketplaceGuidePath, securityPath,
+        operationsPath, readmePath, marketplaceGuidePath, securityPath,
         developmentPath, defaultsBaseStylePath, userBaseStylePath,
     ]
 
@@ -155,7 +152,7 @@ struct DocumentationTests {
             DocumentClaim(document: operationsPath, text: combinedViewPhrase),
         ]
         + (contributingDirectoriesFieldName.map { field in
-            [readmePath, operationsPath, marketplaceDesignPath].map { DocumentClaim(document: $0, text: field) }
+            [readmePath, operationsPath].map { DocumentClaim(document: $0, text: field) }
         } ?? [])
 
     /// One row for each document and each wording of the rule that shipped

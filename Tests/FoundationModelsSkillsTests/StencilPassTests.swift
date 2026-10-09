@@ -169,7 +169,7 @@ struct StencilPassTests {
         #expect(rendered == "/Users/fixture")
     }
 
-    // MARK: - Marketplace layers render untrusted (marketplace.md §4.3, decision 8)
+    // MARK: - Marketplace layers render untrusted
 
     /// A body made of one bare `{% now %}` -- a real Stencil tag that an
     /// untrusted render does not allow. So it renders the current date under

@@ -7,8 +7,7 @@ import MarketplaceFixtures
 import Operations
 import Testing
 
-/// The one end-to-end marketplace case (marketplace.md §13, the update
-/// cycle). It proves that the parts work together, in the same shape as the
+/// The one end-to-end marketplace case: the update cycle. It proves that the parts work together, in the same shape as the
 /// hot-reload case of `HotReloadTests`.
 ///
 /// The case is hermetic: two ``GitFixtureRepository`` marketplaces over
@@ -381,8 +380,7 @@ struct MarketplaceEndToEndTests {
                 ])
         }
 
-        /// One marketplace tree in our own format (marketplace.md §3.2 and
-        /// §3.3): a Claude catalog with one plugin, one folder for each
+        /// One marketplace tree in our own format: a Claude catalog with one plugin, one folder for each
         /// skill under `skills/`, and one partial beside them.
         ///
         /// - Parameters:
