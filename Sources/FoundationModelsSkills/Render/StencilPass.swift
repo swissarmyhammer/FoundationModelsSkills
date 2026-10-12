@@ -15,20 +15,28 @@ import FoundationModelsExtras
 /// pass 1 or pass 2 spliced in comes out as it stands, and the whole text is
 /// still ONE template, under ONE set of the limits of an untrusted render.
 ///
+/// An `{% include %}` can also name a file of the skill. This pass gives the
+/// include resolver of `SkillFileInclude` to the include hook of the
+/// stenciled stack: the stack asks it first, and runs the `_partials/` search
+/// when it gives no text. The resolver reads the file through a
+/// `DotfolderStack`, thus this pass opens no file and resolves no link.
+///
 /// The variables are the schema work of the skill format, thus they stay
 /// here: the process environment, and above it the named arguments of the
 /// `arguments:` frontmatter list. The stack puts both above its own
 /// well-known values (`working_directory`, `date`, `hostname` and
 /// `dotfolder_name`), which gives the lookup ladder of a render.
 public struct StencilPass: RenderPass {
-    /// Makes the stenciled stack of one render, over the layers of this pass
-    /// and the variables of that render.
+    /// Makes the stenciled stack of one render, over the layers of this pass,
+    /// the variables of that render and the include resolver of that render.
     ///
     /// The public initializer gives the plain factory, which reads the
     /// well-known values of the machine at the time of each render. A test
     /// gives a factory that pins those values, so that `{{ date }}` and
     /// `{{ hostname }}` do not depend on the clock or on the machine.
-    typealias StackFactory = @Sendable (DotfolderStack, [String: String]) -> StenciledDotfolderStack
+    typealias StackFactory =
+        @Sendable (DotfolderStack, [String: String], StenciledDotfolderStack.IncludeResolver?) ->
+        StenciledDotfolderStack
 
     /// The host-supplied layer roots that an `{% include %}` of a render
     /// resolves a partial against, ordered lowest precedence first.
@@ -58,8 +66,8 @@ public struct StencilPass: RenderPass {
     ///   - environment: The environment values to interpolate, below the
     ///     named arguments. Defaults to empty.
     public init(layers: [DotfolderStack.Layer] = [], environment: [String: String] = [:]) {
-        self.init(layers: layers, environment: environment) { base, variables in
-            StenciledDotfolderStack(base: base, variables: variables)
+        self.init(layers: layers, environment: environment) { base, variables, includeResolver in
+            StenciledDotfolderStack(base: base, variables: variables, includeResolver: includeResolver)
         }
     }
 
@@ -90,8 +98,10 @@ public struct StencilPass: RenderPass {
     ///     and the output of pass 1 for a metadata render, since this pass
     ///     always runs last in both pass-sets.
     ///   - request: The render request this pass runs under. `winningLayer`
-    ///     gives the trust and the partial scope, and `arguments` with
-    ///     `argumentNames` give the named arguments of the skill.
+    ///     gives the trust and the partial scope, `arguments` with
+    ///     `argumentNames` give the named arguments of the skill, and
+    ///     `contributingDirectories` gives the files of the skill that an
+    ///     `{% include %}` can name.
     /// - Returns: The rendered text as one `.quarantined` span: each byte of
     ///   it is the output of this pass, which no later pass may scan.
     /// - Throws: The render failure of the stenciled stack, when Stencil
@@ -99,7 +109,8 @@ public struct StencilPass: RenderPass {
     ///   untrusted render refuse it, or when a `.quarantined` span sits
     ///   inside an open Stencil delimiter.
     public func render(_ text: QuarantinedText, request: RenderRequest) throws -> QuarantinedText {
-        let stack = makeStack(DotfolderStack(layers: layers), variables(for: request))
+        let stack = makeStack(
+            DotfolderStack(layers: layers), variables(for: request), SkillFileInclude.resolver(for: request))
         let rendered = try stack.render(text, in: request.winningLayer)
         return QuarantinedText(spans: [.quarantined(rendered)])
     }

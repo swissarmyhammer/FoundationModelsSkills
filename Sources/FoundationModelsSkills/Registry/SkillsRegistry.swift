@@ -553,14 +553,28 @@ public struct SkillsRegistry: Sendable {
     /// when the winning `SKILL.md` is in another layer -- which is why the
     /// layer of each directory is here, and not the layer of `SKILL.md`
     /// alone.
-    internal struct ContributingDirectory: Sendable {
+    ///
+    /// The type is public because `RenderRequest` carries a list of it: pass
+    /// 3 finds the file that an `{% include %}` names in these directories.
+    public struct ContributingDirectory: Sendable {
         /// The layer directory itself, the directory of the skill's id
         /// under `layer.root`.
-        internal let directory: URL
+        public let directory: URL
 
         /// The layer that gives `directory`. A resource operation reads its
-        /// source to say which layer a file comes from.
-        internal let layer: DotfolderStack.Layer
+        /// source to say which layer a file comes from, and pass 3 reads it
+        /// to keep an include in the partial scope of the winning layer.
+        public let layer: DotfolderStack.Layer
+
+        /// Creates a `ContributingDirectory`.
+        ///
+        /// - Parameters:
+        ///   - directory: The directory of the skill's id under `layer.root`.
+        ///   - layer: The layer that gives `directory`.
+        public init(directory: URL, layer: DotfolderStack.Layer) {
+            self.directory = directory
+            self.layer = layer
+        }
     }
 
     /// One skill that survived validation un-hidden, with everything a
@@ -817,10 +831,19 @@ public struct SkillsRegistry: Sendable {
 
     /// Builds a `RenderRequest` for `text` rendered under `entry`.
     ///
-    /// Threads `entry.skillDirectory`/`entry.winningLayer` and this
-    /// registry's own `policy` -- the fields every render call site shares
-    /// -- so a call site only ever supplies what actually varies for it
-    /// (`text`, and, where relevant, `arguments`/`argumentNames`).
+    /// Threads `entry.skillDirectory`/`entry.winningLayer`,
+    /// `entry.contributingDirectories` and this registry's own `policy` --
+    /// the fields every render call site shares -- so a call site only ever
+    /// supplies what actually varies for it (`text`, and, where relevant,
+    /// `arguments`/`argumentNames`).
+    ///
+    /// The body render of `call(id:arguments:)` and the render of each
+    /// `description`/`metadata.*` value both get the contributing
+    /// directories. Thus an `{% include %}` of a file of the skill gives the
+    /// same text in each templated value of the skill, with the same name
+    /// rules and the same scope rule. The metadata render reads that file
+    /// through the Extras stack and runs no shell command, thus it keeps the
+    /// rule that a reload never starts a process.
     ///
     /// - Parameters:
     ///   - text: The text to render.
@@ -837,7 +860,8 @@ public struct SkillsRegistry: Sendable {
     ) -> RenderRequest {
         RenderRequest(
             text: text, arguments: arguments, argumentNames: argumentNames, skillDirectory: entry.skillDirectory,
-            winningLayer: entry.winningLayer, policy: policy)
+            winningLayer: entry.winningLayer, contributingDirectories: entry.contributingDirectories,
+            policy: policy)
     }
 
     /// Renders `text` (a `description`/`metadata.*` value) through passes 1

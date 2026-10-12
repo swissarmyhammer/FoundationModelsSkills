@@ -97,6 +97,62 @@ struct RenderPipelineTests {
         #expect(result == "Argument: \(maliciousArgument)")
     }
 
+    // MARK: - An include of a file of the skill, end to end
+
+    /// The id of the skill that includes its own reference file.
+    private static let includingSkillID = "release-notes"
+
+    /// The path of the reference file, relative to the directory of the
+    /// skill.
+    private static let referencePath = "references/changelog.md"
+
+    /// The text of the reference file.
+    private static let referenceText = "the changelog of the skill"
+
+    /// The newline that `ReloadTestSupport.skillFileContents` puts after the
+    /// body, and that the render keeps after the included text.
+    private static let bodyTrailingNewline = "\n"
+
+    /// A registry over one project layer that holds a skill whose
+    /// `description:` or body includes its own reference file.
+    ///
+    /// - Parameters:
+    ///   - descriptionSuffix: The text after the fixed start of the
+    ///     `description:` value.
+    ///   - body: The body of the skill.
+    /// - Returns: The registry, and its temporary root for clean-up.
+    /// - Throws: The error of a folder or file write.
+    private static func makeIncludingRegistry(
+        descriptionSuffix: String = "", body: String
+    ) throws -> (registry: SkillsRegistry, root: URL) {
+        let root = try MarketplaceTestSupport.makeTempDirectory(withFiles: [
+            "\(includingSkillID)/\(referencePath)": referenceText
+        ])
+        try ReloadTestSupport.writeSkillFile(
+            id: includingSkillID, in: root, descriptionSuffix: descriptionSuffix, body: body)
+        let registry = SkillsRegistry(layers: [DotfolderStack.Layer(source: .project, root: root)])
+        return (registry: registry, root: root)
+    }
+
+    @Test func aSkillBodyIncludesItsOwnReferenceFile() async throws {
+        let fixture = try Self.makeIncludingRegistry(body: "{% include \"\(Self.referencePath)\" %}")
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+
+        let rendered = try await fixture.registry.call(id: Self.includingSkillID)
+
+        #expect(rendered == Self.referenceText + Self.bodyTrailingNewline)
+    }
+
+    @Test func aSkillDescriptionIncludesItsOwnReferenceFile() throws {
+        let fixture = try Self.makeIncludingRegistry(
+            descriptionSuffix: "{% include \"\(Self.referencePath)\" %}", body: "Body.")
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+
+        let metadata = try #require(fixture.registry.metadata().first { $0.id == Self.includingSkillID })
+
+        #expect(metadata.description.contains(Self.referenceText))
+    }
+
     // MARK: - RenderPolicy plumbing
 
     @Test func renderPolicyIsPlumbedToEveryBodyPassInvocation() async throws {

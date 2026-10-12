@@ -34,6 +34,19 @@
   straddle a `$N` splice, a spliced value can never become template
   syntax, and a splice *inside* a variable, tag, or comment (`{{ $1 }}`,
   `{% if $1 %}`, `{# $1 #}`) is a rendering error.
+- **An include reads only files in the scope of the skill.** An
+  `{% include %}` can name a file of the skill, such as
+  `references/changelog.md`, before the `_partials/` search. The name must be
+  relative, must hold a minimum of one `/`, must not be `SKILL.md`, and must
+  not hold `..` or a hidden component (a component that starts with `.`). The
+  `DotfolderStack` of `FoundationModelsExtras` reads the file, and it refuses
+  a symbolic link that goes out of the directory of the skill. The search
+  reads only the layer directories in the partial scope of the layer that won
+  the skill: a marketplace skill reads its own marketplace and the local
+  layers, and a local skill reads the local layers only. Thus a trusted
+  `.defaults` skill never renders text that only a marketplace gives. The
+  included file renders with the trust and the budgets of the skill that
+  includes it.
 - **Server-side providers see the transcript.** A rendered skill body —
   with all environment variables exposed and shell output inlined — goes
   off-device if a session routes to a cloud provider. The search agent

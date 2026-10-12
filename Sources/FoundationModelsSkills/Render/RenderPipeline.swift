@@ -91,7 +91,8 @@ public struct RenderPolicy: Sendable, Equatable {
 ///
 /// Carries the text to render, the arguments supplied at call time, the
 /// skill's `arguments:` frontmatter names, the skill's own directory, the
-/// dotfolder layer that won the skill, and the policy every pass must honor. Not mutated by
+/// dotfolder layer that won the skill, the layer directories of the skill,
+/// and the policy every pass must honor. Not mutated by
 /// `RenderPipeline` during a render call -- each pass receives the same
 /// `RenderRequest` and returns transformed text rather than writing back
 /// into the request; only the pipeline's local working text is rebound
@@ -138,6 +139,16 @@ public struct RenderRequest: Sendable {
     /// From `DotfolderStack` -- pass 3's trust mapping (defaults ->
     /// `.trusted`, user/project -> `.untrusted`).
     public var winningLayer: DotfolderStack.Layer
+    /// Every layer directory of the skill, lowest precedence first, each
+    /// with the layer that gives it.
+    ///
+    /// Pass 3 finds the file that an `{% include %}` names in these
+    /// directories, before the `_partials/` search. It keeps only the
+    /// directories whose layer is in the partial scope of `winningLayer`.
+    /// `SkillsRegistry` gives this list to the body render and to each
+    /// `description`/`metadata.*` render. Empty by default: a request with
+    /// no directory searches the `_partials/` locations only.
+    public var contributingDirectories: [SkillsRegistry.ContributingDirectory]
     /// The render policy every pass must honor.
     ///
     /// Threaded unchanged to every pass invocation in this render call --
@@ -155,6 +166,8 @@ public struct RenderRequest: Sendable {
     ///     declared order. Defaults to empty.
     ///   - skillDirectory: The skill's own directory.
     ///   - winningLayer: The dotfolder layer that won this skill.
+    ///   - contributingDirectories: Every layer directory of the skill,
+    ///     lowest precedence first, each with its layer. Defaults to empty.
     ///   - policy: The render policy every pass must honor.
     public init(
         text: String,
@@ -162,6 +175,7 @@ public struct RenderRequest: Sendable {
         argumentNames: [String] = [],
         skillDirectory: URL,
         winningLayer: DotfolderStack.Layer,
+        contributingDirectories: [SkillsRegistry.ContributingDirectory] = [],
         policy: RenderPolicy
     ) {
         self.text = text
@@ -169,6 +183,7 @@ public struct RenderRequest: Sendable {
         self.argumentNames = argumentNames
         self.skillDirectory = skillDirectory
         self.winningLayer = winningLayer
+        self.contributingDirectories = contributingDirectories
         self.policy = policy
     }
 }

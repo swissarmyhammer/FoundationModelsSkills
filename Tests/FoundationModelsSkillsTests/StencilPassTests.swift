@@ -56,8 +56,10 @@ struct StencilPassTests {
         let wellKnownValues = WellKnownValues(
             workingDirectory: fixtureWorkingDirectory, date: fixtureDate, hostname: hostname,
             dotfolderName: dotfolderName)
-        return StencilPass(layers: layers, environment: environment) { base, variables in
-            StenciledDotfolderStack(base: base, variables: variables, wellKnownValues: wellKnownValues)
+        return StencilPass(layers: layers, environment: environment) { base, variables, includeResolver in
+            StenciledDotfolderStack(
+                base: base, variables: variables, wellKnownValues: wellKnownValues,
+                includeResolver: includeResolver)
         }
     }
 
@@ -77,7 +79,8 @@ struct StencilPassTests {
         text: String,
         arguments: [String] = [],
         argumentNames: [String] = [],
-        winningLayer: DotfolderStack.Layer = StencilPassTests.defaultWinningLayer
+        winningLayer: DotfolderStack.Layer = StencilPassTests.defaultWinningLayer,
+        contributingDirectories: [SkillsRegistry.ContributingDirectory] = []
     ) -> RenderRequest {
         RenderRequest(
             text: text,
@@ -85,6 +88,7 @@ struct StencilPassTests {
             argumentNames: argumentNames,
             skillDirectory: Self.defaultSkillDirectory,
             winningLayer: winningLayer,
+            contributingDirectories: contributingDirectories,
             policy: RenderPolicy())
     }
 
@@ -349,5 +353,268 @@ struct StencilPassTests {
         #expect(rendered.contains("WORKING_DIRECTORY=\(Self.fixtureWorkingDirectory)"))
         #expect(rendered.contains("fixture-dotfolder Shared Header"))
         #expect(rendered.contains("Literal token follows: $0"))
+    }
+
+    // MARK: - An include of a file of the skill
+
+    /// The id of the skill whose directories each case below makes.
+    private static let includingSkillID = "release-notes"
+
+    /// The path of the reference file, relative to a directory of the skill.
+    private static let changelogPath = "references/changelog.md"
+
+    /// A body of one include of the reference file.
+    private static let changelogInclude = "{% include \"\(changelogPath)\" %}"
+
+    /// The text of the copy of the reference file in the lower layer.
+    private static let lowerChangelogText = "changelog of the lower layer"
+
+    /// The text of the copy of the reference file in the higher layer.
+    private static let higherChangelogText = "changelog of the higher layer"
+
+    /// The folder of the lower layer inside the temporary root.
+    private static let lowerFolder = "lower"
+
+    /// The folder of the higher layer inside the temporary root.
+    private static let higherFolder = "higher"
+
+    /// The path of a file of the skill, relative to the temporary root.
+    ///
+    /// - Parameters:
+    ///   - relativePath: The path of the file, relative to the directory of
+    ///     the skill.
+    ///   - folder: The folder of the layer inside the temporary root.
+    /// - Returns: The path `<folder>/<skill id>/<relativePath>`.
+    private static func skillFile(_ relativePath: String, inLayerFolder folder: String) -> String {
+        "\(folder)/\(includingSkillID)/\(relativePath)"
+    }
+
+    /// A layer whose root is `folder` inside `root`.
+    ///
+    /// - Parameters:
+    ///   - source: The source of the layer.
+    ///   - folder: The folder of the layer inside `root`.
+    ///   - root: The temporary root.
+    /// - Returns: The layer.
+    private static func layer(_ source: DotfolderStack.Source, folder: String, in root: URL) -> DotfolderStack.Layer {
+        DotfolderStack.Layer(source: source, root: root.appendingPathComponent(folder, isDirectory: true))
+    }
+
+    /// The directory of the skill in `layer`, with that layer.
+    ///
+    /// - Parameter layer: The layer that gives the directory.
+    /// - Returns: The contributing directory.
+    private static func skillDirectory(in layer: DotfolderStack.Layer) -> SkillsRegistry.ContributingDirectory {
+        SkillsRegistry.ContributingDirectory(
+            directory: layer.root.appendingPathComponent(includingSkillID, isDirectory: true), layer: layer)
+    }
+
+    /// Renders `body` as the body of the skill in `layers`, which `winningLayer`
+    /// won.
+    ///
+    /// - Parameters:
+    ///   - body: The text to render.
+    ///   - layers: The layers that hold a directory of the skill, lowest
+    ///     precedence first.
+    ///   - winningLayer: The layer that gives `SKILL.md`.
+    ///   - pass: The pass to render with. Defaults to a pass with no partial
+    ///     layer.
+    /// - Returns: The rendered text.
+    /// - Throws: The render failure of the pass.
+    private func renderSkillBody(
+        _ body: String, layers: [DotfolderStack.Layer], winningLayer: DotfolderStack.Layer,
+        using pass: StencilPass = StencilPassTests.pinnedPass()
+    ) throws -> String {
+        try render(
+            body, using: pass,
+            request: request(
+                text: body, winningLayer: winningLayer,
+                contributingDirectories: layers.map(Self.skillDirectory(in:))))
+    }
+
+    @Test func anIncludeOfAFileOfTheSkillRendersTheTextOfThatFile() throws {
+        let root = try MarketplaceTestSupport.makeTempDirectory(withFiles: [
+            Self.skillFile(Self.changelogPath, inLayerFolder: Self.higherFolder): Self.higherChangelogText
+        ])
+        defer { try? FileManager.default.removeItem(at: root) }
+        let project = Self.layer(.project, folder: Self.higherFolder, in: root)
+
+        let rendered = try renderSkillBody(Self.changelogInclude, layers: [project], winningLayer: project)
+
+        #expect(rendered == Self.higherChangelogText)
+    }
+
+    @Test func theCopyOfTheHigherLayerWinsWhenTwoLayersHoldTheFile() throws {
+        let root = try MarketplaceTestSupport.makeTempDirectory(withFiles: [
+            Self.skillFile(Self.changelogPath, inLayerFolder: Self.lowerFolder): Self.lowerChangelogText,
+            Self.skillFile(Self.changelogPath, inLayerFolder: Self.higherFolder): Self.higherChangelogText,
+        ])
+        defer { try? FileManager.default.removeItem(at: root) }
+        let user = Self.layer(.user, folder: Self.lowerFolder, in: root)
+        let project = Self.layer(.project, folder: Self.higherFolder, in: root)
+
+        let rendered = try renderSkillBody(Self.changelogInclude, layers: [user, project], winningLayer: project)
+
+        #expect(rendered == Self.higherChangelogText)
+    }
+
+    @Test func aFileThatOnlyALowerLayerHoldsIsFound() throws {
+        let root = try MarketplaceTestSupport.makeTempDirectory(withFiles: [
+            Self.skillFile(Self.changelogPath, inLayerFolder: Self.lowerFolder): Self.lowerChangelogText
+        ])
+        defer { try? FileManager.default.removeItem(at: root) }
+        let user = Self.layer(.user, folder: Self.lowerFolder, in: root)
+        let project = Self.layer(.project, folder: Self.higherFolder, in: root)
+
+        let rendered = try renderSkillBody(Self.changelogInclude, layers: [user, project], winningLayer: project)
+
+        #expect(rendered == Self.lowerChangelogText)
+    }
+
+    @Test func aMarketplaceSkillIncludesItsOwnFile() throws {
+        let root = try MarketplaceTestSupport.makeTempDirectory(withFiles: [
+            Self.skillFile(Self.changelogPath, inLayerFolder: Self.lowerFolder): Self.lowerChangelogText
+        ])
+        defer { try? FileManager.default.removeItem(at: root) }
+        let marketplace = Self.layer(.marketplace, folder: Self.lowerFolder, in: root)
+
+        let rendered = try renderSkillBody(Self.changelogInclude, layers: [marketplace], winningLayer: marketplace)
+
+        #expect(rendered == Self.lowerChangelogText)
+    }
+
+    @Test func aFileThatAMarketplaceSkillIncludesRendersWithTheUntrustedLimits() throws {
+        let root = try MarketplaceTestSupport.makeTempDirectory(withFiles: [
+            Self.skillFile(Self.changelogPath, inLayerFolder: Self.lowerFolder): Self.nowTagBody
+        ])
+        defer { try? FileManager.default.removeItem(at: root) }
+        let marketplace = Self.layer(.marketplace, folder: Self.lowerFolder, in: root)
+
+        let error = try #require(throws: TemplateEngineError.self) {
+            try renderSkillBody(Self.changelogInclude, layers: [marketplace], winningLayer: marketplace)
+        }
+
+        #expect(error.description.contains(Self.nowTagUntrustedRejection))
+    }
+
+    // MARK: - The name rules of a skill-file include
+
+    /// The name of the `_partials/` partial, which has no `/`.
+    private static let barePartialName = "header"
+
+    /// The text of the `_partials/` copy of the partial.
+    private static let partialHeaderText = "header of the partials folder"
+
+    /// The text of each file of the skill that an include must not read.
+    private static let forbiddenText = "text that the include must not read"
+
+    @Test func aFileOfTheSkillDoesNotChangeTheIncludeOfABarePartialName() throws {
+        let root = try MarketplaceTestSupport.makeTempDirectory(withFiles: [
+            "\(Self.higherFolder)/_partials/\(Self.barePartialName).md": Self.partialHeaderText,
+            Self.skillFile(Self.barePartialName, inLayerFolder: Self.higherFolder): Self.forbiddenText,
+            Self.skillFile("partials/\(Self.barePartialName).md", inLayerFolder: Self.higherFolder): Self.forbiddenText,
+        ])
+        defer { try? FileManager.default.removeItem(at: root) }
+        let project = Self.layer(.project, folder: Self.higherFolder, in: root)
+
+        let rendered = try renderSkillBody(
+            "{% include \"\(Self.barePartialName)\" %}", layers: [project], winningLayer: project,
+            using: Self.pinnedPass(layers: [project]))
+
+        #expect(rendered == Self.partialHeaderText)
+    }
+
+    /// Include names that must never read a file of the skill, each with the
+    /// path of the file that the fixture writes for it, relative to the
+    /// folder of the layer.
+    private static let refusedIncludeNames: [(name: String, file: String)] = [
+        (name: "SKILL.md", file: "\(includingSkillID)/SKILL.md"),
+        (name: "SKILL.md/", file: "\(includingSkillID)/SKILL.md"),
+        (name: "./SKILL.md", file: "\(includingSkillID)/SKILL.md"),
+        (name: "../other-skill/SKILL.md", file: "other-skill/SKILL.md"),
+        (name: ".hidden/secret.md", file: "\(includingSkillID)/.hidden/secret.md"),
+        (name: "references/.secret.md", file: "\(includingSkillID)/references/.secret.md"),
+    ]
+
+    @Test(arguments: StencilPassTests.refusedIncludeNames.map(\.name))
+    func aRefusedNameDoesNotReadAFileOfTheSkill(name: String) throws {
+        let file = try #require(Self.refusedIncludeNames.first { $0.name == name }?.file)
+        let root = try MarketplaceTestSupport.makeTempDirectory(withFiles: [
+            "\(Self.higherFolder)/\(file)": Self.forbiddenText
+        ])
+        defer { try? FileManager.default.removeItem(at: root) }
+        let project = Self.layer(.project, folder: Self.higherFolder, in: root)
+
+        let error = try #require(throws: TemplateEngineError.self) {
+            try renderSkillBody("{% include \"\(name)\" %}", layers: [project], winningLayer: project)
+        }
+
+        #expect(!error.description.contains(Self.forbiddenText))
+    }
+
+    @Test func anAbsoluteNameDoesNotReadAFileOfTheSkill() throws {
+        let root = try MarketplaceTestSupport.makeTempDirectory(withFiles: [
+            Self.skillFile(Self.changelogPath, inLayerFolder: Self.higherFolder): Self.forbiddenText
+        ])
+        defer { try? FileManager.default.removeItem(at: root) }
+        let project = Self.layer(.project, folder: Self.higherFolder, in: root)
+        let absoluteName = root.appendingPathComponent(
+            Self.skillFile(Self.changelogPath, inLayerFolder: Self.higherFolder)
+        ).path
+
+        let error = try #require(throws: TemplateEngineError.self) {
+            try renderSkillBody("{% include \"\(absoluteName)\" %}", layers: [project], winningLayer: project)
+        }
+
+        #expect(!error.description.contains(Self.forbiddenText))
+    }
+
+    // MARK: - The scope of a skill-file include
+
+    @Test func aDefaultsSkillCannotIncludeAFileThatOnlyAMarketplaceLayerGives() throws {
+        let root = try MarketplaceTestSupport.makeTempDirectory(withFiles: [
+            Self.skillFile(Self.changelogPath, inLayerFolder: Self.lowerFolder): Self.forbiddenText
+        ])
+        defer { try? FileManager.default.removeItem(at: root) }
+        let marketplace = Self.layer(.marketplace, folder: Self.lowerFolder, in: root)
+        let defaults = Self.layer(.defaults, folder: Self.higherFolder, in: root)
+
+        let error = try #require(throws: TemplateEngineError.self) {
+            try renderSkillBody(Self.changelogInclude, layers: [marketplace, defaults], winningLayer: defaults)
+        }
+
+        #expect(!error.description.contains(Self.forbiddenText))
+    }
+
+    @Test func aMarketplaceSkillCannotIncludeAFileOfAnotherMarketplace() throws {
+        let root = try MarketplaceTestSupport.makeTempDirectory(withFiles: [
+            Self.skillFile(Self.changelogPath, inLayerFolder: Self.higherFolder): Self.forbiddenText
+        ])
+        defer { try? FileManager.default.removeItem(at: root) }
+        let winningMarketplace = Self.layer(.marketplace, folder: Self.lowerFolder, in: root)
+        let otherMarketplace = Self.layer(.marketplace, folder: Self.higherFolder, in: root)
+
+        let error = try #require(throws: TemplateEngineError.self) {
+            try renderSkillBody(
+                Self.changelogInclude, layers: [winningMarketplace, otherMarketplace],
+                winningLayer: winningMarketplace)
+        }
+
+        #expect(!error.description.contains(Self.forbiddenText))
+    }
+
+    @Test func aMarketplaceSkillIncludesTheLocalCopyOfItsFile() throws {
+        let root = try MarketplaceTestSupport.makeTempDirectory(withFiles: [
+            Self.skillFile(Self.changelogPath, inLayerFolder: Self.lowerFolder): Self.lowerChangelogText,
+            Self.skillFile(Self.changelogPath, inLayerFolder: Self.higherFolder): Self.higherChangelogText,
+        ])
+        defer { try? FileManager.default.removeItem(at: root) }
+        let marketplace = Self.layer(.marketplace, folder: Self.lowerFolder, in: root)
+        let project = Self.layer(.project, folder: Self.higherFolder, in: root)
+
+        let rendered = try renderSkillBody(
+            Self.changelogInclude, layers: [marketplace, project], winningLayer: marketplace)
+
+        #expect(rendered == Self.higherChangelogText)
     }
 }

@@ -20,11 +20,27 @@ comments:
     - evidence: `swift test` gives 602 tests in 56 suites, all pass. No compiler warning; the one SwiftPM "missing creator" line about the mlx bundle existed before this change. RED was seen first: 12 issues in 3 suites. Files: Sources/FoundationModelsSkills/Operations/SkillCatalogText.swift, Sources/FoundationModelsSkills/Operations/SkillsToolDescription.swift, Sources/FoundationModelsSkills/Resources/ReadResource.swift, Sources/FoundationModelsSkills/Resources/ResourceSupport.swift, Tests/FoundationModelsSkillsTests/SkillsToolDescriptionTests.swift, Tests/FoundationModelsSkillsTests/SkillsCatalogToolTests.swift, Tests/FoundationModelsSkillsTests/ResourceOpsTests.swift, Tests/FoundationModelsSkillsTests/SearchListPlainTextTests.swift, docs/operations.md
     - next: /review. Not committed.
   timestamp: 2026-10-12T14:09:02.670554+00:00
+- actor: claude-code
+  id: 01m4r795phnn4xzkg280wn4126
+  text: |-
+    ### review — clean
+    - evidence: review sha HEAD~1..HEAD (a799f8e). 0 findings, 0 confirmed, 1 refuted. 8 files reviewed. The review did not examine docs/operations.md, because no validator matches it. An ignore rule excluded the .kanban/ files.
+    - next: none. The task is in done.
+  timestamp: 2026-10-12T14:11:49.585068+00:00
+- actor: claude-code
+  id: 01m4r79d8y2bkz4we5aesxjp7j
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 9 files
+    - test: green — swift test, 602 passed in 56 suites
+    - commit: a799f8e
+    - review: clean — 0 findings
+  timestamp: 2026-10-12T14:11:57.342812+00:00
 depends_on:
 - 01M4R0BGFCECWZYT3BWRFXG8ZA
 - 01M4R0B0XATW46VEWB0CDTJWZ9
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: ff9e80
 title: 'Tool description: tell the model to get the files of a skill with read resource and a relative path'
 ---
 ## What

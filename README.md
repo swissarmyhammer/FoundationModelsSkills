@@ -23,6 +23,18 @@ only a lower layer holds stays visible. Thus a project layer can override the
 file of the lower layers. `DiscoveredSkill.contributingDirectories` names every
 layer directory of an id, lowest precedence first.
 
+The Stencil pass of the pipeline can put a file of the skill into the body.
+Write `{% include "references/house-style.md" %}` in `SKILL.md`, and the render
+puts the winning copy of that file in place of the tag. An include searches the
+files of the skill first, and then the `_partials/` folders. The name of a file
+of the skill must be relative, must hold a minimum of one `/`, must not be
+`SKILL.md`, and must not hold `..` or a hidden component (a component that
+starts with `.`). Thus a bare partial name such as `"header"` always finds the
+`_partials/` copy. The search reads only the layer directories in the partial
+scope of the layer that won the skill. The included file renders as a partial
+does: the same variables, the same trust and the same limits. To include text
+with no template change, put it in `{% raw %}` in that file.
+
 ```swift
 import FoundationModels
 import FoundationModelsSkills

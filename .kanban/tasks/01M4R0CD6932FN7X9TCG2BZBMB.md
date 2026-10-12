@@ -1,11 +1,40 @@
 ---
 assignees:
 - claude-code
+comments:
+- actor: claude-code
+  id: 01m4r7c3ve9g4b4hw9yy980ges
+  text: |-
+    Research:
+    - Extras 6ac66c1 gives `StenciledDotfolderStack.IncludeResolver = @Sendable (String) -> String?` and the `includeResolver:` init parameter. The resolver must give the TEXT. Thus the resolver reads the file through a `DotfolderStack` over the skill directories in scope (`content(_:)`), which applies the Extras text check and the symlink confinement. This package opens no file.
+    - `StencilPass.StackFactory` takes `(DotfolderStack, [String: String])`. It must also take the resolver, so the test seam `pinnedPass` in StencilPassTests forwards it.
+    - `RenderRequest` has one call site in the registry: `SkillsRegistry.renderRequest(text:entry:arguments:argumentNames:)`, shared by `call` and the metadata render. Plan: the metadata render gets the directories too (one scope rule for each templated text).
+    - `SkillsRegistry.ContributingDirectory` (directory + layer) is internal. Plan: make it public, and add `contributingDirectories` to `RenderRequest` (default empty).
+    - `DotfolderStack.Layer` is not Equatable. The scope rule compares `source` and `root`, the same values the registry puts on the catalog entry.
+  timestamp: 2026-10-12T14:13:25.998544+00:00
+- actor: claude-code
+  id: 01m4rawg67b0ftvsqkg22gq4yd
+  text: |-
+    Implementation landed (TDD; work resumed after an API usage limit stopped the first session).
+    - New `Sources/FoundationModelsSkills/Render/SkillFileInclude.swift`: it gives the resolver to the Extras `includeResolver` hook. The name rules are in `isSkillFileName(_:)`: `ResourcePathRules.isWellFormedRelativePath`, a minimum of one `/`, the components are not `["SKILL.md"]` (so `SKILL.md/` is also refused), and no component starts with `.`. The scope rule: a marketplace directory is in scope only when the winning layer is that same marketplace (source and standardized root). The resolver reads through `DotfolderStack.content(_:)` over the skill directories in scope. Thus there is no file access and no symlink resolution in this package.
+    - `SkillsRegistry.ContributingDirectory` is now public, with a public init, because the public `RenderRequest.contributingDirectories` (default `[]`) carries it.
+    - Decision: `SkillsRegistry.renderRequest(...)` gives the directories to the body render AND to the metadata render (written in its doc comment). A description can include a file of the skill. The metadata render runs no shell.
+    - `StencilPass.StackFactory` now takes the resolver as a third argument. The test seam `pinnedPass` forwards it.
+    - RED evidence: (1) compile failure for the missing API; (2) after the naive resolver, 8 issues: the bare `header` name, `SKILL.md`, `SKILL.md/`, `./SKILL.md`, `.hidden/...`, `references/.secret.md`, defaults-vs-marketplace, other marketplace; (3) with the registry wiring taken out, the body and description end-to-end tests failed. `../other-skill/SKILL.md` and the absolute name are already refused by the Extras stack text check. Those tests are guards.
+    - Docs: README (a paragraph after the override text), docs/marketplaces.md "Partial scope", docs/security.md (a new bullet).
+  timestamp: 2026-10-12T15:14:48.647765+00:00
+- actor: claude-code
+  id: 01m4rawkfh6ky9rd7fef841e8j
+  text: |-
+    ### implement — changed
+    - evidence: `swift test`: 616 tests in 56 suites passed, 0 failures (LoadingBoundaryTests, MarketplacePartialScopeTests, RenderPipelineNoRescanTests included). No compiler warning. One SwiftPM build-graph warning ("missing creator for mutated node" for the mlx-swift_Cmlx bundle) comes from a dependency, not from this change. 10 files: Sources/FoundationModelsSkills/Render/SkillFileInclude.swift (new), Render/StencilPass.swift, Render/RenderPipeline.swift, Registry/SkillsRegistry.swift, Tests/FoundationModelsSkillsTests/StencilPassTests.swift (+16 cases), RenderPipelineTests.swift (+2), MarketplacePartialScopeTests.swift (+1), README.md, docs/marketplaces.md, docs/security.md. Not committed.
+    - next: /review
+  timestamp: 2026-10-12T15:14:52.017899+00:00
 depends_on:
 - 01M4R0NQVS6M1G3SBMXHH71NX8
 - 01M4R0BGFCECWZYT3BWRFXG8ZA
-position_column: todo
-position_ordinal: '8480'
+position_column: doing
+position_ordinal: '80'
 title: 'Stencil: let {% include %} put a file of the skill into the body'
 ---
 ## What

@@ -328,6 +328,18 @@ Thus a skill never reads a partial of a different marketplace, and a local
 only the local layers: an include of a name that only a marketplace has is a
 render error, and not the text of that marketplace.
 
+An include can also name a file of the skill, for example
+`{% include "references/changelog.md" %}`. The render searches the files of
+the skill first, and then the `_partials/` folders. The name of a file of the
+skill must be relative, must hold a minimum of one `/`, must not be
+`SKILL.md`, and must not hold `..` or a hidden component (a component that
+starts with `.`). The same scope applies to this search: a skill of a
+marketplace layer reads the directories of the skill in that marketplace and
+in the local layers, and a skill of a local layer reads the directories of
+the skill in the local layers only. Thus a trusted `.defaults` skill never
+includes a file that only a marketplace gives. A file that no directory in
+scope holds, and no `_partials/` folder holds, is a render error.
+
 ## The allow-list and the block-list
 
 `MarketplacePolicy` holds two lists of `SourcePattern` values:

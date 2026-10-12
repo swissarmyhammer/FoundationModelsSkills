@@ -117,4 +117,44 @@ struct MarketplacePartialScopeTests {
             "a local skill must get a render error, not the text of a marketplace partial")
         #expect(!error.description.contains(Self.headerFromMarketplaceB))
     }
+
+    /// The id of the skill that a marketplace layer and the `.defaults`
+    /// layer both hold.
+    private static let sharedSkillID = "shared-skill"
+
+    /// The path of the reference file that only the marketplace layer holds,
+    /// relative to the directory of the skill.
+    private static let marketplaceOnlyReference = "references/notes.md"
+
+    /// The text of the reference file of the marketplace layer.
+    private static let marketplaceReferenceText = "notes from the marketplace"
+
+    /// The folder of the `.defaults` layer inside the temporary root.
+    private static let defaultsFolder = "defaults"
+
+    @Test func aDefaultsSkillCannotIncludeAFileThatOnlyAMarketplaceLayerGives() async throws {
+        let root = try MarketplaceTestSupport.makeTempDirectory(withFiles: [
+            "\(Self.marketplaceAFolder)/\(Self.sharedSkillID)/\(Self.marketplaceOnlyReference)":
+                Self.marketplaceReferenceText
+        ])
+        defer { try? FileManager.default.removeItem(at: root) }
+        let marketplaceRoot = root.appendingPathComponent(Self.marketplaceAFolder, isDirectory: true)
+        let defaultsRoot = root.appendingPathComponent(Self.defaultsFolder, isDirectory: true)
+        try ReloadTestSupport.writeSkillFile(id: Self.sharedSkillID, in: marketplaceRoot)
+        try ReloadTestSupport.writeSkillFile(
+            id: Self.sharedSkillID, in: defaultsRoot, body: "{% include \"\(Self.marketplaceOnlyReference)\" %}")
+        let registry = SkillsRegistry(
+            layers: [
+                DotfolderStack.Layer(source: .marketplace, root: marketplaceRoot),
+                DotfolderStack.Layer(source: .defaults, root: defaultsRoot),
+            ])
+
+        let error = try await #require(throws: TemplateEngineError.self) {
+            try await registry.call(id: Self.sharedSkillID)
+        }
+
+        #expect(
+            !error.description.contains(Self.marketplaceReferenceText),
+            "a trusted .defaults skill must get a render error, not the text of a marketplace file")
+    }
 }
