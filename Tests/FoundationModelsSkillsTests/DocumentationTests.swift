@@ -122,6 +122,16 @@ struct DocumentationTests {
         "each other absolute path is refused",
     ]
 
+    /// The phrase that says what `read resource` gives for a file that is not
+    /// UTF-8 text. The host guide of the operations and the development notes
+    /// each state it.
+    private static let binaryResultPhrase = "a binary file gives its absolute path and its size"
+
+    /// The name of the refusal that `read resource` gave for a binary file
+    /// before. The operation gives the binary result now, thus no document
+    /// names that refusal.
+    private static let removedNonUTF8CorrectiveName = "non-UTF-8 corrective"
+
     // MARK: - The names the code gives
 
     /// A `DiscoveredSkill` that stands for nothing, read for the names of its
@@ -160,6 +170,8 @@ struct DocumentationTests {
         + [
             DocumentClaim(document: operationsPath, text: winningLayerWorkingDirectory),
             DocumentClaim(document: operationsPath, text: combinedViewPhrase),
+            DocumentClaim(document: operationsPath, text: binaryResultPhrase),
+            DocumentClaim(document: developmentPath, text: binaryResultPhrase),
         ]
         + (contributingDirectoriesFieldName.map { field in
             [readmePath, operationsPath].map { DocumentClaim(document: $0, text: field) }
@@ -196,6 +208,12 @@ struct DocumentationTests {
                     one skill has more than one layer directory, thus a script runs in \
                     \(Self.winningLayerWorkingDirectory)
                     """)
+    }
+
+    @Test(arguments: documents)
+    func noDocumentGivesTheRemovedNonUTF8Corrective(document: String) throws {
+        try DocumentClaim(document: document, text: Self.removedNonUTF8CorrectiveName)
+            .expectAbsent(because: "read resource gives the binary result for a file that is not UTF-8 text")
     }
 
     @Test(arguments: claims)

@@ -7,7 +7,8 @@ import Testing
 /// Tests for `ReadResource` that call the operation directly, without the
 /// fused `skills` tool in front of it: the memberwise initializer, the
 /// `generatedContent` round trip, the unreadable-file corrective, the
-/// denied-path corrective, the absolute paths, and the empty window.
+/// denied-path corrective, the absolute paths, the binary files, and the
+/// empty window.
 /// `ResourceOpsTests` covers the same operation through the tool's dispatch.
 struct ReadResourceTests {
     /// The skill id every direct-construction test names.
@@ -276,6 +277,61 @@ struct ReadResourceTests {
         let output = try await ReadResource(id: Self.sampleID, path: path).execute(in: context)
 
         #expect(output == .corrective(ResourcePathRules.deniedMessage(path: path)))
+    }
+
+    // MARK: - Binary files
+
+    /// The path of the binary asset of the `release-notes` fixture skill.
+    private static let binaryAssetPath = "assets/logo.bin"
+
+    /// The path of the binary file of the layered binary test.
+    private static let layeredBinaryPath = "assets/logo.png"
+
+    /// The read of a binary file gives the absolute path of the winning copy.
+    /// That path, given back as `path`, gives the same binary result.
+    @Test func theAbsolutePathOfABinaryReadGivesTheSameBinaryResult() async throws {
+        let context = ResourceTestSupport.makeContext(roots: [ResourceTestSupport.projectSkillsRoot])
+
+        let firstOutput = try await ReadResource(id: Self.sampleID, path: Self.binaryAssetPath).execute(in: context)
+        let firstResult = try #require(ResourceTestSupport.successResult(of: firstOutput))
+        let absolutePath = try #require(firstResult.absolutePath)
+        let secondOutput = try await ReadResource(id: Self.sampleID, path: absolutePath).execute(in: context)
+
+        let secondResult = try #require(ResourceTestSupport.successResult(of: secondOutput))
+        #expect(firstResult.binary)
+        #expect(
+            absolutePath
+                == ResourceTestSupport.absoluteSkillFilePath(
+                    root: ResourceTestSupport.projectSkillsRoot, id: Self.sampleID, path: Self.binaryAssetPath))
+        #expect(secondResult == firstResult)
+    }
+
+    /// A binary file that only a lower layer holds gives the absolute path of
+    /// the copy of that lower layer.
+    @Test func aBinaryFileOfALowerLayerOnlyGivesTheAbsolutePathOfTheLowerCopy() async throws {
+        let roots = try LayerFixtureSupport.makeLayerDirectories(count: 2)
+        defer { LayerFixtureSupport.removeDirectories(roots) }
+        let skillDirectories = try roots.map {
+            try ResourceTestSupport.writeMinimalSkillFile(id: Self.layeredSkillID, in: $0)
+        }
+        let lowerCopy = try LayerFixtureSupport.writeBytesFile(at: Self.layeredBinaryPath, in: skillDirectories[0])
+        let byteSize = try #require(
+            FileManager.default.attributesOfItem(atPath: lowerCopy.path)[.size] as? Int)
+
+        let output = try await ReadResource(id: Self.layeredSkillID, path: Self.layeredBinaryPath)
+            .execute(in: ResourceTestSupport.makeContext(roots: roots))
+
+        let result = try #require(ResourceTestSupport.successResult(of: output))
+        let absolutePath = try #require(result.absolutePath)
+        let lowerCopySuffix = "\(roots[0].lastPathComponent)/\(Self.layeredSkillID)/\(Self.layeredBinaryPath)"
+        #expect(result.binary)
+        #expect(result.byteSize == byteSize)
+        #expect(result.path == Self.layeredBinaryPath)
+        #expect(absolutePath.hasSuffix(lowerCopySuffix))
+        #expect(FileManager.default.fileExists(atPath: absolutePath))
+        #expect(result.content.contains(absolutePath))
+        #expect(result.content.contains("\(byteSize) bytes"))
+        #expect(result.start == 0 && result.end == 0 && result.totalLines == 0)
     }
 
     // MARK: - Empty window

@@ -2,13 +2,14 @@ import Foundation
 import FoundationModels
 import Operations
 
-/// The outcome of a `read resource` operation: either the sliced content or
-/// a corrective message.
+/// The outcome of a `read resource` operation: either the sliced content,
+/// the binary result, or a corrective message.
 ///
 /// An unknown/stale/model-hidden `id`, a path confinement violation, an
-/// unreadable file, non-UTF-8 content, or a single line larger than the
-/// per-call content byte budget are the conditions
-/// `ReadResource.execute(in:)` fails correctively on.
+/// unreadable file, or a single line larger than the per-call content byte
+/// budget are the conditions `ReadResource.execute(in:)` fails correctively
+/// on. A file that is not UTF-8 text is not a failure: it gives the binary
+/// result.
 public typealias ReadResourceOutput = CorrectiveOutcome<ReadResourceResult>
 
 /// Returns one skill resource file's content verbatim, sliced by line
@@ -30,17 +31,22 @@ public typealias ReadResourceOutput = CorrectiveOutcome<ReadResourceResult>
 /// the same rule that `RunScript` gets from the output tail of the Extras
 /// `ProcessRunner`.
 ///
-/// Two conditions refuse the read with a corrective instead of paging: a
-/// single line that alone exceeds the content byte budget (named by line
-/// number), and content that is not valid UTF-8 (reported with the byte size
-/// the combined view gives; the scan stops at the first invalid byte, so a
-/// binary asset is never materialized).
+/// A single line that alone exceeds the content byte budget refuses the read
+/// with a corrective that names the line number.
+///
+/// **Binary files.** A file that is not valid UTF-8 text is binary. The read
+/// of a binary file is a success: the result gives `binary == true`, the
+/// absolute path of the winning copy, and the byte size that the combined
+/// view gives. It does not give the bytes. The model can give the absolute
+/// path to a different tool, or to `read resource` again, which then gives the
+/// same result. The scan stops at the first byte that is not valid UTF-8, thus
+/// the operation never loads the whole binary file.
 public struct ReadResource: OperationDefinition {
     /// The shared context this operation dispatches against.
     public typealias Context = SkillsToolContext
 
-    /// This operation's result: the sliced content, or a corrective
-    /// message.
+    /// This operation's result: the sliced content, the binary result, or a
+    /// corrective message.
     public typealias Output = ReadResourceOutput
 
     /// The skill id owning the resource.
@@ -82,7 +88,8 @@ public struct ReadResource: OperationDefinition {
 
     /// A human- and model-facing summary of what this operation does.
     public static let operationDescription =
-        "Return a skill resource file's content verbatim, sliced by line."
+        "Return a skill resource file's content verbatim, sliced by line. "
+        + "A binary file gives its absolute path and its size, not its content."
 
     /// This operation's parameters, as the resolver and schema fusion need
     /// them: `id`/`path` (required), `start`/`end` (optional).
@@ -167,10 +174,10 @@ public struct ReadResource: OperationDefinition {
     ///
     /// - Parameter context: The shared context supplying the model-visible
     ///   registry.
-    /// - Returns: `.success(_:)` carrying the sliced content on success;
-    ///   `.corrective(_:)` for an unusable id, a confinement violation, an
-    ///   unreadable file, non-UTF-8 content, or a single line over the
-    ///   content byte budget.
+    /// - Returns: `.success(_:)` carrying the sliced content, or the binary
+    ///   result for a file that is not UTF-8 text; `.corrective(_:)` for an
+    ///   unusable id, a confinement violation, an unreadable file, or a single
+    ///   line over the content byte budget.
     /// - Throws: Nothing; the signature carries `throws` to satisfy the
     ///   `OperationDefinition` protocol requirement.
     public func execute(in context: SkillsToolContext) async throws -> ReadResourceOutput {
@@ -187,11 +194,12 @@ public struct ReadResource: OperationDefinition {
     ///     directory of the skill. The result and each corrective message
     ///     name it.
     ///   - overlay: The combined view of the layer directories of the skill.
-    /// - Returns: `.success(_:)` carrying the sliced content;
-    ///   `.corrective(_:)` for a confinement violation, an unreadable file,
-    ///   non-UTF-8 content, or a single line over the content byte budget.
+    /// - Returns: `.success(_:)` carrying the sliced content, or the binary
+    ///   result for a file that is not UTF-8 text; `.corrective(_:)` for a
+    ///   confinement violation, an unreadable file, or a single line over the
+    ///   content byte budget.
     private func read(_ relativePath: String, in overlay: SkillOverlay) -> ReadResourceOutput {
-        guard overlay.resolve(relativePath) != nil else {
+        guard let winningCopy = overlay.resolve(relativePath) else {
             return .corrective(Self.unresolvedMessage(path: relativePath, in: overlay))
         }
         guard let statedSize = overlay.size(of: relativePath) else {
@@ -205,7 +213,8 @@ public struct ReadResource: OperationDefinition {
         case .unreadable:
             return .corrective(Self.unreadableMessage(path: relativePath))
         case .nonUTF8:
-            return .corrective(Self.nonUTF8Message(path: relativePath, byteSize: statedSize))
+            return .success(
+                binaryResult(path: relativePath, absolutePath: winningCopy.url.path, byteSize: statedSize))
         case .oversizedLine(let lineNumber):
             return .corrective(Self.oversizedLineMessage(path: relativePath, lineNumber: lineNumber))
         case .window(let lines, let totalLines):
@@ -230,6 +239,42 @@ public struct ReadResource: OperationDefinition {
         ReadResourceResult(
             id: id, path: path, content: lines.joined(separator: "\n"), start: window.first,
             end: window.first + lines.count - 1, totalLines: totalLines)
+    }
+
+    /// The `start`, `end` and `totalLines` of the binary result: a binary file
+    /// has no lines.
+    private static let binaryLineValue = 0
+
+    /// Assembles the successful result for a file that is not UTF-8 text.
+    ///
+    /// The result gives no bytes of the file. It gives the absolute path of
+    /// the winning copy and the size, thus the model can give the path to a
+    /// different tool.
+    ///
+    /// - Parameters:
+    ///   - path: The path of the resource, relative to a layer directory of
+    ///     the skill.
+    ///   - absolutePath: The absolute path of the winning copy, as the
+    ///     combined view gives it.
+    ///   - byteSize: The size of the winning copy in bytes.
+    /// - Returns: The result, with `binary == true`.
+    private func binaryResult(path: String, absolutePath: String, byteSize: Int) -> ReadResourceResult {
+        ReadResourceResult(
+            id: id, path: path, content: Self.binaryContent(absolutePath: absolutePath, byteSize: byteSize),
+            start: Self.binaryLineValue, end: Self.binaryLineValue, totalLines: Self.binaryLineValue,
+            binary: true, absolutePath: absolutePath, byteSize: byteSize)
+    }
+
+    /// The `content` sentence of the binary result.
+    ///
+    /// - Parameters:
+    ///   - absolutePath: The absolute path of the winning copy.
+    ///   - byteSize: The size of the winning copy in bytes.
+    /// - Returns: The sentence that says the file is binary, and gives its
+    ///   absolute path and its size.
+    private static func binaryContent(absolutePath: String, byteSize: Int) -> String {
+        "This file is binary. It is not shown as text. Its absolute path is `\(absolutePath)` "
+            + "and its size is \(byteSize) bytes."
     }
 
     /// The corrective message for a `path` the combined view gave no copy of.
@@ -266,17 +311,6 @@ public struct ReadResource: OperationDefinition {
     private static func oversizedLineMessage(path: String, lineNumber: Int) -> String {
         "Line \(lineNumber) of `\(path)` is longer than \(Self.maxContentBytesPerCall) bytes, exceeding the "
             + "\(Self.maxContentBytesPerCall)-byte content budget this operation returns per call."
-    }
-
-    /// The corrective message for a confined, readable `path` whose content
-    /// is not valid UTF-8.
-    ///
-    /// - Parameters:
-    ///   - path: The non-UTF-8 resource's path.
-    ///   - byteSize: The size of the resource in bytes.
-    /// - Returns: The corrective message.
-    private static func nonUTF8Message(path: String, byteSize: Int) -> String {
-        "The resource `\(path)` is not valid UTF-8 text (\(byteSize) bytes) and cannot be returned as transcript content."
     }
 }
 

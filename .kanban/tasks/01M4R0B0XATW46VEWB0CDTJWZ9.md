@@ -1,10 +1,38 @@
 ---
 assignees:
 - claude-code
+comments:
+- actor: claude-code
+  id: 01m4r5fqn44v7hdvdm4h61h2z9
+  text: |-
+    Research done.
+    - `ReadResource.read(_:in:)` maps `LineWindowScanner.Outcome.nonUTF8` to the corrective `nonUTF8Message`. The scan already stops at the first invalid byte, so the binary result can keep the scan and use `overlay.size(of:)` for `byteSize` and `overlay.resolve(_:)?.url.path` for `absolutePath`.
+    - `ReadResourceResult` uses synthesized `Encodable`. Optional fields with `nil` are not encoded, so a text read gives the JSON of now plus `"binary":false`.
+    - `ResourceIDLookup.withResolvedPath` gives the absolute-path rule; the round trip goes through it.
+    - Two ResourceOpsTests hold the non-UTF-8 corrective: the `logo.bin` test and the late-binary test. No other test names `not valid UTF-8`.
+    - Docs to update: docs/operations.md (read resource row) and docs/development.md.
+  timestamp: 2026-10-12T13:40:27.428995+00:00
+- actor: claude-code
+  id: 01m4r5rn3q4bgsqzf46e0st179
+  text: |-
+    Implementation landed (TDD).
+    - RED: the new binary tests did not compile (no `binary`/`absolutePath`/`byteSize` on `ReadResourceResult`). After the new fields, the binary tests, the description test and the doc-claim tests failed on the old corrective and the old text.
+    - GREEN: `ReadResource.read(_:in:)` binds the winning copy from `overlay.resolve(_:)` and maps the `.nonUTF8` scan outcome to `.success(binaryResult(...))`. `absolutePath` is `winningCopy.url.path` with no change; no `resolvingSymlinksInPath`. `nonUTF8Message` is deleted. `start`/`end`/`totalLines` are the named constant `binaryLineValue` (0).
+    - Discovery: the absolute path of a temp-directory fixture can be `/private/var/...` while the test URL is `/var/...`. Thus the lower-layer test checks the suffix `<layer dir>/<id>/<path>` and that the file exists, and does not compare the full path text.
+    - Discovery: `DocumentClaim` matches a phrase on one line only. The first wrap of docs/development.md broke the phrase over two lines and failed `theDocumentationMakesEveryClaim`; the paragraph is rewrapped.
+    - Added: `DocumentationTests` claims that docs/operations.md and docs/development.md say "a binary file gives its absolute path and its size", and that no document names the "non-UTF-8 corrective"; `ResourceOpsTests.theReadDescriptionSaysThatABinaryFileGivesItsAbsolutePathAndSize`.
+  timestamp: 2026-10-12T13:45:19.735412+00:00
+- actor: claude-code
+  id: 01m4r5rr2488w91vvd5we4m19z
+  text: |-
+    ### implement — changed
+    - evidence: `swift test` — 586 tests in 55 suites passed, 0 failures (LoadingBoundaryTests included). The only `warning:` line is the SwiftPM build-graph note on the dependency product `mlx-swift_Cmlx.bundle`, not from a changed file. 7 files: Sources/FoundationModelsSkills/Resources/ReadResource.swift, Sources/FoundationModelsSkills/Resources/ResourceRow.swift, Tests/FoundationModelsSkillsTests/ResourceOpsTests.swift, Tests/FoundationModelsSkillsTests/ReadResourceTests.swift, Tests/FoundationModelsSkillsTests/DocumentationTests.swift, docs/operations.md, docs/development.md. Not committed.
+    - next: /review
+  timestamp: 2026-10-12T13:45:22.756712+00:00
 depends_on:
 - 01M4R0ANACQ08YDG539AAJ8FA4
-position_column: todo
-position_ordinal: '8180'
+position_column: doing
+position_ordinal: '80'
 title: 'read resource: give the absolute path of a binary file, not an error'
 ---
 ## What
@@ -16,17 +44,17 @@ Now, `read resource` of a file that is not UTF-8 text (for example `assets/logo.
 - Docs: `docs/operations.md` (the `read resource` row) and `docs/development.md` (where it describes the non-UTF-8 corrective).
 
 ## Acceptance Criteria
-- [ ] `read resource` of `assets/logo.bin` in the `release-notes` fixture gives `.success` with `binary == true`, the correct `byteSize`, an `absolutePath` of the winning copy, and a `content` sentence that says the file is binary.
-- [ ] The `absolutePath`, when given as the `path` of a second `read resource` call, gives the same binary result again.
-- [ ] A text read gives the JSON fields and values of now, plus `"binary":false`.
-- [ ] A binary copy in a lower layer, with no copy in a higher layer, gives the absolute path of the lower-layer copy.
-- [ ] `LoadingBoundaryTests` passes.
+- [x] `read resource` of `assets/logo.bin` in the `release-notes` fixture gives `.success` with `binary == true`, the correct `byteSize`, an `absolutePath` of the winning copy, and a `content` sentence that says the file is binary.
+- [x] The `absolutePath`, when given as the `path` of a second `read resource` call, gives the same binary result again.
+- [x] A text read gives the JSON fields and values of now, plus `"binary":false`.
+- [x] A binary copy in a lower layer, with no copy in a higher layer, gives the absolute path of the lower-layer copy.
+- [x] `LoadingBoundaryTests` passes.
 
 ## Tests
-- [ ] `Tests/FoundationModelsSkillsTests/ResourceOpsTests.swift`: change the non-UTF-8 corrective tests to the binary-success result.
-- [ ] `Tests/FoundationModelsSkillsTests/ReadResourceTests.swift`: add the absolute-path round-trip test and the lower-layer binary test. The existing memberwise-init tests compile with no change.
-- [ ] Search `Tests/` for `not valid UTF-8` and update each other match.
-- [ ] `swift test` passes with no failure.
+- [x] `Tests/FoundationModelsSkillsTests/ResourceOpsTests.swift`: change the non-UTF-8 corrective tests to the binary-success result.
+- [x] `Tests/FoundationModelsSkillsTests/ReadResourceTests.swift`: add the absolute-path round-trip test and the lower-layer binary test. The existing memberwise-init tests compile with no change.
+- [x] Search `Tests/` for `not valid UTF-8` and update each other match.
+- [x] `swift test` passes with no failure.
 
 ## Workflow
 - Use `/tdd` — write failing tests first, then implement to make them pass.

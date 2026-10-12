@@ -73,10 +73,26 @@ comments:
     - evidence: `swift test` — 581 tests in 55 suites passed, 0 failures (LoadingBoundaryTests included). The one SwiftPM warning `missing creator for mutated node: ... mlx-swift_Cmlx.bundle` was there before this change. 8 files: Sources/FoundationModelsSkills/Resources/ResourceSupport.swift, ReadResource.swift, RunScript.swift; Tests/FoundationModelsSkillsTests/ResourceTestSupport.swift, ResourceIDLookupTests.swift, ReadResourceTests.swift, RunScriptTests.swift, SkillOverlayTests.swift. Not committed. 5/5 review findings checked.
     - next: /review
   timestamp: 2026-10-12T13:36:15.890315+00:00
+- actor: claude-code
+  id: 01m4r5cpxsdmzkqc8qtf7tc62x
+  text: |-
+    ### review — clean
+    - evidence: review sha HEAD~1..HEAD (3830ace): 0 findings, 0 confirmed, 0 refuted; 8 files reviewed. The 5 prior findings are checked and fixed in the code: one shared path guard in ResourceSupport.swift; one ResourceTestSupport.systemFilePath; one ResourceTestSupport.absoluteSkillFilePath(root:id:path:).
+    - next: none. The task is in done.
+  timestamp: 2026-10-12T13:38:48.377395+00:00
+- actor: claude-code
+  id: 01m4r5czxwhke8hxm5kpwn0ty5
+  text: |-
+    ### finish iteration 2 — clean
+    - implement: changed — 8 files (shared withResolvedPath guard, shared test helpers)
+    - test: green — swift test, 581 passed in 55 suites
+    - commit: 3830ace
+    - review: clean — 0 findings
+  timestamp: 2026-10-12T13:38:57.596355+00:00
 depends_on:
 - 01M4R0NQVS6M1G3SBMXHH71NX8
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: ff9b80
 title: 'Resource paths: accept an absolute path that is in a layer directory of the skill'
 ---
 ## What

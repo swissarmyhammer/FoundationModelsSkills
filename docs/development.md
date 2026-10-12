@@ -32,9 +32,12 @@
   reports that line. The model pages on from `end + 1` as before. If a
   single line alone exceeds the budget, the operation refuses with a
   corrective message that names the line, because no window can return
-  it. The non-UTF-8 corrective is unchanged: the scan stops at the
-  first invalid byte, and the reported byte size comes from `stat`, thus
-  the operation never materializes a binary asset.
+  it. A file that is not UTF-8 text is not refused:
+  a binary file gives its absolute path and its size, not its content.
+  The scan stops at the first invalid byte, and the byte size comes from
+  `stat`, thus the operation never loads the whole binary file. The
+  absolute path is the path of the winning copy, and `read resource`
+  accepts that path again through the absolute-path rule.
 - **Op-level correctives do not count toward upstream's retry cap.**
   The design says: "upstream's retry cap (default 2) stops loops." `OperationTool.call(arguments:)`, in the `Operations` module of
   `FoundationModelsExtras`, only counts *resolver-level* failures —

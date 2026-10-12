@@ -107,9 +107,9 @@ struct ResourceOpsTests {
         #expect(json.contains("building release notes"))
     }
 
-    // MARK: - Binary corrective
+    // MARK: - Binary result
 
-    @Test func readResourceOnABinaryAssetDrawsTheNonUTF8CorrectiveWithItsByteSize() async throws {
+    @Test func readResourceOnABinaryAssetGivesTheBinaryResultWithItsByteSize() async throws {
         let tool = try Self.makeTool()
         let assetURL = Self.projectSkillsRoot
             .appendingPathComponent("release-notes/assets/logo.bin")
@@ -120,9 +120,28 @@ struct ResourceOpsTests {
             properties: ["op": "read resource", "id": "release-notes", "path": "assets/logo.bin"])
         let json = try await tool.call(arguments: arguments)
 
-        #expect(Self.isCorrective(json))
-        #expect(json.contains("not valid UTF-8"))
-        #expect(json.contains("\(byteSize) bytes"))
+        #expect(!Self.isCorrective(json))
+        #expect(json.contains("\"binary\":true"))
+        #expect(json.contains("\"byteSize\":\(byteSize)"))
+        #expect(json.contains("\"absolutePath\":"))
+        #expect(json.contains("This file is binary."))
+        #expect(json.contains("\"totalLines\":0"))
+    }
+
+    /// A text read gives the fields of a text read, and `binary` is `false`.
+    /// The two fields of a binary read are not in the JSON.
+    @Test func readResourceOnATextFileGivesBinaryFalseAndNoBinaryFields() async throws {
+        let tool = try Self.makeTool()
+        let arguments = GeneratedContent(
+            properties: ["op": "read resource", "id": "release-notes", "path": "scripts/build.sh"])
+
+        let json = try await tool.call(arguments: arguments)
+
+        #expect(json.contains("\"binary\":false"))
+        #expect(json.contains("\"start\":1"))
+        #expect(json.contains("\"totalLines\":"))
+        #expect(!json.contains("\"absolutePath\""))
+        #expect(!json.contains("\"byteSize\""))
     }
 
     // MARK: - Large text paging: streaming line scan, bounded memory
@@ -307,7 +326,7 @@ struct ResourceOpsTests {
         #expect(json.contains("\(Self.contentByteBudget)-byte"))
     }
 
-    @Test func readResourceRefusesNonUTF8BytesFoundAfterTheFirstChunkWithTheStatedSize() async throws {
+    @Test func readResourceGivesTheBinaryResultForNonUTF8BytesFoundAfterTheFirstChunk() async throws {
         var bytes = Data()
         for _ in 1...Self.lateBinaryPrefixLineCount {
             bytes.append(Data(repeating: 0x61, count: Self.lateBinaryPrefixLineWidth - 1))
@@ -320,9 +339,11 @@ struct ResourceOpsTests {
 
         let json = try await Self.readResource(roots: [root], id: "late-binary", path: "mixed.bin", start: 1)
 
-        #expect(Self.isCorrective(json))
-        #expect(json.contains("not valid UTF-8"))
+        #expect(!Self.isCorrective(json))
+        #expect(json.contains("\"binary\":true"))
+        #expect(json.contains("\"byteSize\":\(bytes.count)"))
         #expect(json.contains("\(bytes.count) bytes"))
+        #expect(!json.contains("aaaa"))
     }
 
     @Test func readResourceKeepsMultiByteCharactersThatStraddleReadChunks() async throws {
@@ -418,6 +439,19 @@ struct ResourceOpsTests {
         let pathParameter = try #require(parameters.first { $0.name == "path" })
 
         #expect(pathParameter.description == Self.pathParameterText)
+    }
+
+    // MARK: - The description of read resource
+
+    /// The text that the model reads for the `read resource` operation.
+    private static let readDescriptionText =
+        "Return a skill resource file's content verbatim, sliced by line. "
+        + "A binary file gives its absolute path and its size, not its content."
+
+    /// The model must know before the call that a binary file gives its
+    /// absolute path and its size, and not its content.
+    @Test func theReadDescriptionSaysThatABinaryFileGivesItsAbsolutePathAndSize() {
+        #expect(ReadResource.operationDescription == Self.readDescriptionText)
     }
 
     // MARK: - >100-file cap (over a generated temp skill)
