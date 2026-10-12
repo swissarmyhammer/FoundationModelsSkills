@@ -39,13 +39,25 @@ extension DocumentClaim {
             sourceLocation: sourceLocation)
     }
 
+    /// Tells whether a document text holds ``text`` in any case.
+    ///
+    /// This is the comparison of the absence check. It reads no file, thus a
+    /// test can give it a text and assert the result.
+    ///
+    /// - Parameter documentText: The text of a document.
+    /// - Returns: `true` when `documentText` holds ``text``, in any case.
+    func isHeld(in documentText: String) -> Bool {
+        documentText.lowercased().contains(text.lowercased())
+    }
+
     /// Records an issue when the document holds ``text``.
     ///
     /// This is the one check of a removed wording. Each suite gives its rows
     /// and the reason. The read, the comparison and the message are only
     /// here, thus a change to the check is one change.
     ///
-    /// The comparison ignores case. A removed wording is false in each case.
+    /// The comparison is ``isHeld(in:)``, which ignores case. A removed
+    /// wording is false in each case.
     ///
     /// - Parameters:
     ///   - reason: Why the wording is false now. The issue gives it to the
@@ -56,10 +68,10 @@ extension DocumentClaim {
     func expectAbsent(
         because reason: String, sourceLocation: SourceLocation = #_sourceLocation
     ) throws {
-        let documentText = try FixtureLibrary.readText(relativePath: document).lowercased()
+        let documentText = try FixtureLibrary.readText(relativePath: document)
 
         #expect(
-            !documentText.contains(text.lowercased()),
+            !isHeld(in: documentText),
             "\(document) must not hold \"\(text)\": \(reason)",
             sourceLocation: sourceLocation)
     }
@@ -179,16 +191,26 @@ struct MarketplaceDocsTests {
         try claim.expectPresent()
     }
 
-    /// The README names the host guide, thus the absence check of that path,
-    /// in capital letters, must record an issue. A check that records no
-    /// issue here would let each removed wording through.
-    @Test func theAbsenceCheckRecordsAnIssueForAWordingInAnyCase() {
-        let heldWording = DocumentClaim(
-            document: Self.readmePath, text: Self.hostGuidePath.uppercased())
+    /// The absence check finds a wording in a text that holds it in a
+    /// different case. A check that does not find it here would let each
+    /// removed wording through.
+    @Test(arguments: [
+        "See DOCS/MARKETPLACES.MD for the host guide.",
+        "See docs/marketplaces.md for the host guide.",
+        "See Docs/Marketplaces.md for the host guide.",
+    ])
+    func theAbsenceCheckFindsAWordingInAnyCase(documentText: String) {
+        let wording = DocumentClaim(document: Self.readmePath, text: Self.hostGuidePath)
 
-        withKnownIssue {
-            try heldWording.expectAbsent(because: "the check must find a held wording")
-        }
+        #expect(wording.isHeld(in: documentText))
+    }
+
+    /// The absence check finds no wording in a text that does not hold it.
+    /// A check that finds it here would fail on each document.
+    @Test func theAbsenceCheckFindsNoWordingThatTheTextDoesNotHold() {
+        let wording = DocumentClaim(document: Self.readmePath, text: Self.hostGuidePath)
+
+        #expect(!wording.isHeld(in: "See docs/security.md for the security posture."))
     }
 
     @Test(arguments: marketplaceDocuments)
