@@ -141,7 +141,7 @@ struct ReadResourceTests {
     @Test func readResourceOnAMissingFileDrawsTheUnreadableCorrective() async throws {
         // No file at all is what fails the `fileSize(at:)` stat guard; a
         // dangling link stats to the link's own size and fails at the open.
-        let context = ResourceTestSupport.makeContext(roots: [FixtureLibrary.url(relativePath: "project/.skills")])
+        let context = ResourceTestSupport.makeContext(roots: [ResourceTestSupport.projectSkillsRoot])
 
         let output = try await ReadResource(id: Self.sampleID, path: "references/missing.md").execute(in: context)
 
@@ -216,12 +216,6 @@ struct ReadResourceTests {
 
     // MARK: - Absolute paths
 
-    /// The fixture root that holds the `release-notes` skill.
-    private static let fixtureSkillsRoot = FixtureLibrary.url(relativePath: "project/.skills")
-
-    /// A file outside each skill, which each Mac holds.
-    private static let systemFilePath = "/etc/hosts"
-
     /// The id of the skill that the two layer directories of the layered
     /// test give.
     private static let layeredSkillID = "layered"
@@ -234,14 +228,15 @@ struct ReadResourceTests {
 
     /// The absolute path of `samplePath` in the `release-notes` fixture skill.
     private static var absoluteSamplePath: String {
-        fixtureSkillsRoot.appendingPathComponent(sampleID).appendingPathComponent(samplePath).path
+        ResourceTestSupport.absoluteSkillFilePath(
+            root: ResourceTestSupport.projectSkillsRoot, id: sampleID, path: samplePath)
     }
 
     /// The model can give the absolute path of a file of the skill. The read
     /// gives the same content as the relative read, and the result names the
     /// relative path.
     @Test func anAbsoluteReadGivesTheResultOfTheRelativeRead() async throws {
-        let context = ResourceTestSupport.makeContext(roots: [Self.fixtureSkillsRoot])
+        let context = ResourceTestSupport.makeContext(roots: [ResourceTestSupport.projectSkillsRoot])
 
         let relativeOutput = try await ReadResource(id: Self.sampleID, path: Self.samplePath).execute(in: context)
         let absoluteOutput = try await ReadResource(id: Self.sampleID, path: Self.absoluteSamplePath)
@@ -275,11 +270,12 @@ struct ReadResourceTests {
 
     /// The denied corrective names the path that the model gave.
     @Test func anAbsolutePathOutsideTheSkillDrawsTheDeniedCorrective() async throws {
-        let context = ResourceTestSupport.makeContext(roots: [Self.fixtureSkillsRoot])
+        let context = ResourceTestSupport.makeContext(roots: [ResourceTestSupport.projectSkillsRoot])
+        let path = ResourceTestSupport.systemFilePath
 
-        let output = try await ReadResource(id: Self.sampleID, path: Self.systemFilePath).execute(in: context)
+        let output = try await ReadResource(id: Self.sampleID, path: path).execute(in: context)
 
-        #expect(output == .corrective(ResourcePathRules.deniedMessage(path: Self.systemFilePath)))
+        #expect(output == .corrective(ResourcePathRules.deniedMessage(path: path)))
     }
 
     // MARK: - Empty window

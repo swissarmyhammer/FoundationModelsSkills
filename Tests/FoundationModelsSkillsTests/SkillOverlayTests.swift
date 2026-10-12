@@ -176,9 +176,6 @@ struct SkillOverlayTests {
     /// The prefix that macOS puts before `/tmp` when it resolves the link.
     private static let privatePrefix = "/private"
 
-    /// A file outside each skill, which each Mac holds.
-    private static let systemFilePath = "/etc/hosts"
-
     @Test func aRelativePathComesBackWithNoChange() throws {
         let directories = try Self.makeTwoLayerFixture()
         defer { LayerFixtureSupport.removeDirectories(directories) }
@@ -249,7 +246,7 @@ struct SkillOverlayTests {
         let directories = try Self.makeTwoLayerFixture()
         defer { LayerFixtureSupport.removeDirectories(directories) }
 
-        #expect(SkillOverlay(directories: directories).relativePath(for: Self.systemFilePath) == nil)
+        #expect(SkillOverlay(directories: directories).relativePath(for: ResourceTestSupport.systemFilePath) == nil)
     }
 
     /// The name of the skill directory of the sibling tests.

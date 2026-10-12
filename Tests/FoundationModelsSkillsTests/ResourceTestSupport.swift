@@ -12,6 +12,12 @@ import FoundationModelsSkills
 /// The readers of one operation outcome are here for the same reason: more
 /// than one test file unwraps a `RunScriptOutput` or a `ReadResourceOutput`,
 /// thus no file keeps a copy of that reader.
+///
+/// The fixture values of the absolute-path tests are here too: the root of the
+/// `project` layer, the absolute path of a file of a skill, and a system file
+/// outside each skill. `ReadResourceTests`, `RunScriptTests`,
+/// `SkillOverlayTests` and `ResourceIDLookupTests` use them, thus no file keeps
+/// a copy.
 enum ResourceTestSupport {
     /// Builds a `SkillsToolContext` over `roots`, under `policy`.
     ///
@@ -42,6 +48,27 @@ enum ResourceTestSupport {
 
     /// The `allowed-tools:` value that pre-approves every script of a skill.
     static let everyScriptGrant = "Script(scripts/*)"
+
+    /// The fixture root that holds the `project` layer of the example skill
+    /// library, for example the `release-notes` skill.
+    static let projectSkillsRoot = FixtureLibrary.url(relativePath: "project/.skills")
+
+    /// A file outside each skill, which each Mac holds.
+    ///
+    /// A test gives it as an absolute path that no layer directory of a skill
+    /// holds.
+    static let systemFilePath = "/etc/hosts"
+
+    /// The absolute path of one file of a skill under a layer root.
+    ///
+    /// - Parameters:
+    ///   - root: The layer root that holds the skill directory.
+    ///   - id: The skill id, which is the name of the skill directory.
+    ///   - path: The path of the file, relative to the skill directory.
+    /// - Returns: The absolute path of the file, as the model can give it.
+    static func absoluteSkillFilePath(root: URL, id: String, path: String) -> String {
+        root.appendingPathComponent(id, isDirectory: true).appendingPathComponent(path).path
+    }
 
     /// The result of a success outcome of `run script` or `read resource`, or
     /// `nil` for a corrective outcome.

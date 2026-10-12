@@ -79,10 +79,11 @@ internal enum ResourceIDLookup {
     /// shape, so none of the three repeats the visibility check, the
     /// directory lookup and the message construction as its own inline guard.
     ///
-    /// Each of the three calls this one time, in its own `execute(in:)`:
-    /// `ListResource.execute(in:)` takes the paths of its rows from
-    /// `SkillOverlay.entries()`, and `ReadResource.execute(in:)` and
-    /// `RunScript.execute(in:)` each find one file with
+    /// Each of the three reaches this one time, in its own `execute(in:)`:
+    /// `ListResource.execute(in:)` calls it and takes the paths of its rows
+    /// from `SkillOverlay.entries()`, and `ReadResource.execute(in:)` and
+    /// `RunScript.execute(in:)` each call it through
+    /// `withResolvedPath(_:id:context:whenResolved:)` and find one file with
     /// `SkillOverlay.resolve(_:)`. No operation makes a URL of its own.
     ///
     /// The unit of override is the file, thus an operation that reads a file
@@ -109,6 +110,42 @@ internal enum ResourceIDLookup {
             return .corrective(Self.unusableIDMessage(id: id, context: context))
         }
         return await whenGranted(Self.overlay(id: id, context: context))
+    }
+
+    /// Resolves `id`, then finds the path of `path` relative to a layer
+    /// directory of the skill, then runs `whenResolved` with that relative
+    /// path and the overlay of the skill.
+    ///
+    /// `ReadResource` and `RunScript` each read one file of the skill, and the
+    /// model can give the path of that file as an absolute path. This is the
+    /// one place where the two find the relative path, thus the two can never
+    /// differ on which absolute path they accept, or on the refusal.
+    ///
+    /// `SkillOverlay.relativePath(for:)` gives the relative path: a path
+    /// with no leading `/` comes back with no change, and an absolute path
+    /// gives its path relative to the highest layer directory that holds it.
+    /// An absolute path that no layer directory of the skill holds gives the
+    /// denied corrective, which names `path` as the model gave it.
+    ///
+    /// - Parameters:
+    ///   - path: The path of the file, as the model gave it.
+    ///   - id: The skill id to resolve.
+    ///   - context: The shared context supplying the registry.
+    ///   - whenResolved: Runs with the relative path and the overlay of the
+    ///     skill; never runs when `id` does not resolve, or when no layer
+    ///     directory of the skill holds an absolute `path`.
+    /// - Returns: `whenResolved`'s result, the corrective message for an id
+    ///   that did not resolve, or the denied corrective for `path`.
+    internal static func withResolvedPath<Success: Encodable & Sendable & Equatable>(
+        _ path: String, id: String, context: SkillsToolContext,
+        whenResolved: (String, SkillOverlay) async -> CorrectiveOutcome<Success>
+    ) async -> CorrectiveOutcome<Success> {
+        await withResolvedOverlay(id: id, context: context) { overlay in
+            guard let relativePath = overlay.relativePath(for: path) else {
+                return .corrective(ResourcePathRules.deniedMessage(path: path))
+            }
+            return await whenResolved(relativePath, overlay)
+        }
     }
 
     /// Whether `id` names a skill of the catalog that

@@ -159,10 +159,11 @@ public struct ReadResource: OperationDefinition {
     /// the path wins.
     ///
     /// `path` can be absolute, for example the absolute path that an earlier
-    /// operation gave the model. `SkillOverlay.relativePath(for:)` then gives
-    /// the path relative to a layer directory of the skill, and the read and
-    /// the result use that relative path. An absolute path that no layer
-    /// directory of the skill holds is denied.
+    /// operation gave the model.
+    /// `ResourceIDLookup.withResolvedPath(_:id:context:whenResolved:)` then
+    /// gives the path relative to a layer directory of the skill, and the
+    /// read and the result use that relative path. An absolute path that no
+    /// layer directory of the skill holds is denied.
     ///
     /// - Parameter context: The shared context supplying the model-visible
     ///   registry.
@@ -173,11 +174,8 @@ public struct ReadResource: OperationDefinition {
     /// - Throws: Nothing; the signature carries `throws` to satisfy the
     ///   `OperationDefinition` protocol requirement.
     public func execute(in context: SkillsToolContext) async throws -> ReadResourceOutput {
-        await ResourceIDLookup.withResolvedOverlay(id: id, context: context) { overlay in
-            guard let relativePath = overlay.relativePath(for: path) else {
-                return .corrective(ResourcePathRules.deniedMessage(path: path))
-            }
-            return read(relativePath, in: overlay)
+        await ResourceIDLookup.withResolvedPath(path, id: id, context: context) { relativePath, overlay in
+            read(relativePath, in: overlay)
         }
     }
 

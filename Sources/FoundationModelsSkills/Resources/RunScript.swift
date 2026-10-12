@@ -161,11 +161,8 @@ public struct RunScript: OperationDefinition {
             return .corrective(message)
         }
 
-        return await ResourceIDLookup.withResolvedOverlay(id: id, context: context) { overlay in
-            guard let relativePath = overlay.relativePath(for: path) else {
-                return .corrective(ResourcePathRules.deniedMessage(path: path))
-            }
-            return await run(relativePath, in: overlay, context: context)
+        return await ResourceIDLookup.withResolvedPath(path, id: id, context: context) { relativePath, overlay in
+            await run(relativePath, in: overlay, context: context)
         }
     }
 
@@ -173,9 +170,9 @@ public struct RunScript: OperationDefinition {
     /// grant gate and the direct-exec check, or returns a corrective message.
     ///
     /// The host policy gate ran before this, and `relativePath` is the path
-    /// that `SkillOverlay.relativePath(for:)` gave, thus an absolute path in
-    /// a layer directory of the skill goes through the same gates, in the same
-    /// order, as a relative path.
+    /// that `ResourceIDLookup.withResolvedPath(_:id:context:whenResolved:)`
+    /// gave, thus an absolute path in a layer directory of the skill goes
+    /// through the same gates, in the same order, as a relative path.
     ///
     /// - Parameters:
     ///   - relativePath: The script's path, relative to a layer directory of

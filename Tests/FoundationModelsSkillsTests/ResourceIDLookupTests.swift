@@ -1,11 +1,15 @@
 import Foundation
-import FoundationModelsSkills
+@testable import FoundationModelsSkills
 import Testing
 
 /// Tests for the corrective `ResourceIDLookup` draws when the calling
 /// context's catalog holds no usable skill at all. `ResourceOpsTests` and
 /// `RunScriptTests` always hold at least one usable skill, so they reach
 /// only the "Currently usable ids: ..." branch of that message.
+///
+/// The tests of `ResourceIDLookup.withResolvedPath(_:id:context:whenResolved:)`
+/// are here too: that lookup gives the relative path of a path that the
+/// model gives, or the denied corrective.
 struct ResourceIDLookupTests {
     /// The skill id every empty-catalog test asks for. No catalog holds it.
     private static let missingID = "missing"
@@ -72,5 +76,46 @@ struct ResourceIDLookupTests {
 
         #expect(message == Self.emptyCatalogMessage(id: Self.missingID))
         #expect(!message.contains(Self.usableIDsPrefix))
+    }
+
+    // MARK: - The relative path of a path that the model gives
+
+    /// The id of the fixture skill that the path tests use.
+    private static let fixtureSkillID = "release-notes"
+
+    /// The path of a file of the fixture skill, relative to the skill
+    /// directory.
+    private static let fixtureFilePath = "references/changelog.md"
+
+    /// Runs `ResourceIDLookup.withResolvedPath(_:id:context:whenResolved:)`
+    /// for `path` of the fixture skill. The closure gives the relative path
+    /// that it got as its success value.
+    ///
+    /// - Parameter path: The path that the model gives.
+    /// - Returns: The relative path that the closure got, or the corrective
+    ///   message of the lookup.
+    private static func resolvedPath(of path: String) async -> CorrectiveOutcome<String> {
+        let context = ResourceTestSupport.makeContext(roots: [ResourceTestSupport.projectSkillsRoot])
+        return await ResourceIDLookup.withResolvedPath(path, id: Self.fixtureSkillID, context: context) {
+            relativePath, _ in
+            .success(relativePath)
+        }
+    }
+
+    @Test func anAbsolutePathInTheSkillReachesTheClosureAsItsRelativePath() async {
+        let absolutePath = ResourceTestSupport.absoluteSkillFilePath(
+            root: ResourceTestSupport.projectSkillsRoot, id: Self.fixtureSkillID, path: Self.fixtureFilePath)
+
+        let output = await Self.resolvedPath(of: absolutePath)
+
+        #expect(output == .success(Self.fixtureFilePath))
+    }
+
+    /// The closure does not run, and the denied corrective names the path that
+    /// the model gave.
+    @Test func anAbsolutePathOutsideTheSkillDrawsTheDeniedCorrective() async {
+        let output = await Self.resolvedPath(of: ResourceTestSupport.systemFilePath)
+
+        #expect(output == .corrective(ResourcePathRules.deniedMessage(path: ResourceTestSupport.systemFilePath)))
     }
 }
