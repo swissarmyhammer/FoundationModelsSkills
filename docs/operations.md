@@ -137,6 +137,7 @@ calls that read a file or run a script. For the call
 Files of this skill:
 - assets/logo.bin (asset)
 - references/changelog.md (reference)
+- references/style.md (reference)
 - scripts/build.sh (script)
 
 To read a file, call the `skills` tool with {"op": "read resource", "id": "release-notes", "path": "<path>"}. Give the path as it is in this list.

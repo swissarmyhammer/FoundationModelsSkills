@@ -107,16 +107,34 @@ struct UseSkillPlainTextTests {
 
     // MARK: - The list of the files of the skill follows the body
 
-    /// The fixture skill with one asset, one reference and one script.
+    /// The fixture skill with one asset, two references and one script.
     private static let releaseNotesSkillID = "release-notes"
 
+    /// The exact relative path of each file that the body of `release-notes`
+    /// names.
+    private static let releaseNotesBodyPaths = ["references/changelog.md", "scripts/build.sh", "assets/logo.bin"]
+
+    /// The name of the deleted design document that the body must not name.
+    private static let deletedPlanDocument = "plan.md"
+
+    /// A line of `references/style.md`, the reference that the body of
+    /// `release-notes` includes.
+    private static let includedStyleLine = "Write one line for each change."
+
+    /// The text of the include tag, which the render replaces.
+    private static let includeTagText = "{% include"
+
+    /// The first line of the list of the files.
+    private static let filesHeading = "Files of this skill:"
+
     /// The text that follows the body of `release-notes` under a host policy
-    /// that permits scripts: the three rows in path order, the read call and
+    /// that permits scripts: the four rows in path order, the read call and
     /// the run call.
     private static let releaseNotesFilesText = """
         Files of this skill:
         - assets/logo.bin (asset)
         - references/changelog.md (reference)
+        - references/style.md (reference)
         - scripts/build.sh (script)
 
         To read a file, call the `skills` tool with {"op": "read resource", "id": "release-notes", "path": "<path>"}. \
@@ -130,6 +148,7 @@ struct UseSkillPlainTextTests {
         Files of this skill:
         - assets/logo.bin (asset)
         - references/changelog.md (reference)
+        - references/style.md (reference)
         - scripts/build.sh (script)
 
         To read a file, call the `skills` tool with {"op": "read resource", "id": "release-notes", "path": "<path>"}. \
@@ -173,6 +192,25 @@ struct UseSkillPlainTextTests {
 
         #expect(renderedBody.hasSuffix("\n"))
         #expect(answer == renderedBody + Self.bodySeparator + Self.releaseNotesFilesText)
+    }
+
+    @Test func useSkillOfReleaseNotesGivesTheIncludedReferenceTextThenTheFourFileRows() async throws {
+        let answer = try await Self.useAnswer(id: Self.releaseNotesSkillID, registry: Self.makeFixtureRegistry())
+
+        let includedLine = try #require(answer.range(of: Self.includedStyleLine))
+        let heading = try #require(answer.range(of: Self.filesHeading))
+        #expect(includedLine.upperBound < heading.lowerBound)
+        #expect(!answer.contains(Self.includeTagText))
+        #expect(answer.hasSuffix(Self.releaseNotesFilesText))
+    }
+
+    @Test func theBodyOfReleaseNotesNamesEachFileByItsExactRelativePath() async throws {
+        let renderedBody = try await Self.makeFixtureRegistry().call(id: Self.releaseNotesSkillID, arguments: [])
+
+        for path in Self.releaseNotesBodyPaths {
+            #expect(renderedBody.contains("`\(path)`"), "the body must name `\(path)`")
+        }
+        #expect(!renderedBody.contains(Self.deletedPlanDocument))
     }
 
     @Test func aDisabledScriptPolicyGivesNoRunCall() async throws {

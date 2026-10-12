@@ -173,7 +173,7 @@ struct SkillsCLITests {
         let result = await driver.run(arguments: ["resource", "list", "--id", "release-notes"])
 
         #expect(result.exitCode == 0)
-        #expect(result.output.contains("\"total\":3"))
+        #expect(result.output.contains("\"total\":4"))
     }
 
     @Test func resourceReadVerbReadsTheBuildScript() async throws {

@@ -51,10 +51,11 @@ struct ResourceOpsTests {
 
         let json = try await tool.call(arguments: arguments)
 
-        #expect(json.contains("\"total\":3"))
+        #expect(json.contains("\"total\":4"))
         #expect(!json.contains("\"path\":\"SKILL.md\""))
         #expect(json.contains("\"kind\":\"asset\",\"path\":\"assets\\/logo.bin\""))
         #expect(json.contains("\"kind\":\"reference\",\"path\":\"references\\/changelog.md\""))
+        #expect(json.contains("\"kind\":\"reference\",\"path\":\"references\\/style.md\""))
         #expect(json.contains("\"kind\":\"script\",\"path\":\"scripts\\/build.sh\""))
         #expect(json.contains("\"executable\":true"))
     }

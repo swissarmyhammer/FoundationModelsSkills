@@ -63,11 +63,27 @@ comments:
     - evidence: `swift test`: 618 tests in 56 suites passed, 0 failures (was 616; +2 parameterized tests). No compiler warning. The one SwiftPM warning ("missing creator for mutated node" for the mlx-swift_Cmlx bundle) comes from a dependency. 4 files: Sources/FoundationModelsSkills/Resources/ResourceSupport.swift, Sources/FoundationModelsSkills/Resources/ListResource.swift, Sources/FoundationModelsSkills/Render/SkillFileInclude.swift, Tests/FoundationModelsSkillsTests/ResourcePathRulesTests.swift. Not committed. The finding is `- [x]`.
     - next: /review
   timestamp: 2026-10-12T15:20:15.895003+00:00
+- actor: claude-code
+  id: 01m4rba3rv87zhte1pdqzbngea
+  text: |-
+    ### review — clean
+    - evidence: review sha HEAD~1..HEAD (e93fc66): 0 findings, 0 confirmed, 1 refuted, 4 files reviewed. The prior finding (SkillFileInclude.swift reuse) is checked and fixed: `ResourcePathRules.hasHiddenComponent(_:)` holds the one hidden-path rule. `ListResource.isListed(_:)` and `SkillFileInclude.isSkillFileName(_:)` both call it. The local `hiddenComponentPrefix` constant is not in SkillFileInclude.swift.
+    - next: none. The task is in done.
+  timestamp: 2026-10-12T15:22:14.683517+00:00
+- actor: claude-code
+  id: 01m4rbadkskyr66w0jd83505s9
+  text: |-
+    ### finish iteration 2 — clean
+    - implement: changed — 4 files (shared hasHiddenComponent)
+    - test: green — swift test, 618 passed in 56 suites
+    - commit: e93fc66
+    - review: clean — 0 findings
+  timestamp: 2026-10-12T15:22:24.761646+00:00
 depends_on:
 - 01M4R0NQVS6M1G3SBMXHH71NX8
 - 01M4R0BGFCECWZYT3BWRFXG8ZA
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: ff9f80
 title: 'Stencil: let {% include %} put a file of the skill into the body'
 ---
 ## What
