@@ -445,12 +445,14 @@ struct ResourceOpsTests {
 
     /// The text that the model reads for the `read resource` operation.
     private static let readDescriptionText =
-        "Return a skill resource file's content verbatim, sliced by line. "
+        "Read a file of a skill. Give the path relative to the skill directory, "
+        + "as the `use skill` answer lists it. "
         + "A binary file gives its absolute path and its size, not its content."
 
-    /// The model must know before the call that a binary file gives its
-    /// absolute path and its size, and not its content.
-    @Test func theReadDescriptionSaysThatABinaryFileGivesItsAbsolutePathAndSize() {
+    /// The model must know before the call that the path is relative to the
+    /// skill, and that a binary file gives its absolute path and its size,
+    /// and not its content.
+    @Test func theReadDescriptionSaysThatThePathIsRelativeAndABinaryFileGivesItsAbsolutePathAndSize() {
         #expect(ReadResource.operationDescription == Self.readDescriptionText)
     }
 

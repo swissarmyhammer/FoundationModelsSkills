@@ -2,9 +2,10 @@
 ///
 /// A model reads the description of a tool before it plans, thus the
 /// description is where the model learns which skills exist. The text has
-/// two fixed sentences: what a skill is, and the rule to load each skill that
-/// helps with the task. A list of the visible skills follows them, one skill
-/// on each line with its description.
+/// three fixed parts: what a skill is, the rule to load each skill that helps
+/// with the task, and the sentence that tells the model that a skill can have
+/// files and how to read one with a path relative to the skill. A list of the
+/// visible skills follows them, one skill on each line with its description.
 ///
 /// The list has a character limit. The limit counts the list alone, thus a
 /// longer rule takes no character from the room of the skill lines. The
@@ -31,6 +32,10 @@ internal enum SkillsToolDescription {
     /// task, with the exact `use skill` call.
     private static let useRule = SkillCatalogText.descriptionUseRule
 
+    /// The sentence that tells the model that a skill can have files, with
+    /// the exact `read resource` call that reads one.
+    private static let filesRule = SkillCatalogText.descriptionFilesRule
+
     /// The line that replaces the list when no skill is visible.
     private static let noSkillsLine = "No skills are installed now."
 
@@ -56,7 +61,7 @@ internal enum SkillsToolDescription {
         guard !catalog.isEmpty else {
             return purpose + lineBreak + noSkillsLine
         }
-        let header = "\(purpose) \(guidance)" + lineBreak + useRule + lineBreak + lineBreak
+        let header = "\(purpose) \(guidance)" + lineBreak + useRule + lineBreak + filesRule + lineBreak + lineBreak
         return header + list(for: catalog, characterLimit: characterLimit)
     }
 

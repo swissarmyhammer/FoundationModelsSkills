@@ -5,7 +5,7 @@ import Testing
 /// Tests for `SkillsToolDescription`, the text that the `skills` tool gives
 /// the model as its description.
 ///
-/// The text has two fixed sentences, then a list of the visible skills. The
+/// The text has fixed sentences, then a list of the visible skills. The
 /// list has a character limit. The text tries four steps in order and stops
 /// at the first one that fits: (a) each skill with its full description,
 /// (b) each description shortened to the menu length, (c) the ids only on
@@ -45,15 +45,40 @@ struct SkillsToolDescriptionTests {
     /// A limit that cannot hold each id of the huge catalog.
     private static let dropLimit = 700
 
-    /// The two fixed sentences and the blank line after them, word for word
-    /// from the card.
+    /// The fixed sentence that tells the model that a skill can have files,
+    /// and how to read one, word for word from the card.
+    private static let filesSentence =
+        "A skill can have files, such as references/guide.md. "
+        + #"To read one, call the `skills` tool with {"op": "read resource", "id": "<id>", "#
+        + #""path": "<path relative to the skill>"}. "#
+        + "The answer of `use skill` lists the files of the skill."
+
+    /// The fixed sentences and the blank line after them, word for word from
+    /// the card.
     private static let header =
         "Skills are procedures for kinds of work. Each one tells you how to do the work and which tools to use.\n"
         + "Read the skills below before you start. If a skill helps with any part of your task, "
         + #"load it now: call this tool with {"op": "use skill", "id": "<id>"}. "#
         + "Load each skill that helps. More than one can apply. "
         + "The answer is the text of the skill. Do the work the way it says. "
-        + "Read this list again when the work changes.\n\n"
+        + "Read this list again when the work changes.\n"
+        + filesSentence + "\n\n"
+
+    /// The host guide of the operations, relative to the package root.
+    private static let operationsPath = "docs/operations.md"
+
+    /// How many times the host guide shows the files sentence: the one example
+    /// of the tool description.
+    private static let filesSentenceCountInOperations = 1
+
+    /// One case for each of the four steps of the limit: the size of the
+    /// catalog and the limit that stops the list at that step.
+    private static let limitSteps = [
+        (skillCount: fewSkillCount, characterLimit: generousLimit),
+        (skillCount: fewSkillCount, characterLimit: shortenLimit),
+        (skillCount: manySkillCount, characterLimit: idOnlyLimit),
+        (skillCount: hugeSkillCount, characterLimit: dropLimit),
+    ]
 
     /// The words of the step (d) note, after the count.
     private static let notListedNote = "more skills are not listed. Find them with `search skill`."
@@ -133,6 +158,45 @@ struct SkillsToolDescriptionTests {
         let shown = try #require(lines.first).components(separatedBy: ", ")
         #expect(shown == Array(catalog.map(\.id).prefix(shown.count)))
         #expect(lines.last == "\(catalog.count - shown.count) \(Self.notListedNote)")
+    }
+
+    // MARK: - The files sentence
+
+    @Test(arguments: limitSteps)
+    func theFilesSentenceFollowsTheUseRuleAtEachStepOfTheLimit(
+        step: (skillCount: Int, characterLimit: Int)
+    ) throws {
+        let catalog = Self.longCatalog(count: step.skillCount)
+
+        let text = SkillsToolDescription.make(catalog: catalog, characterLimit: step.characterLimit)
+
+        #expect(try Self.list(in: text).count <= step.characterLimit)
+    }
+
+    @Test func theFilesSentenceUsesNoCharacterOfTheListLimit() throws {
+        let catalog = Self.longCatalog(count: Self.hugeSkillCount)
+
+        let text = SkillsToolDescription.make(catalog: catalog, characterLimit: Self.dropLimit)
+
+        let list = try Self.list(in: text)
+        #expect(list.count + Self.filesSentence.count > Self.dropLimit, "the list fills the limit by itself")
+    }
+
+    @Test func anEmptyCatalogHasNoFilesSentence() {
+        let text = SkillsToolDescription.make(catalog: [], characterLimit: Self.generousLimit)
+
+        #expect(!text.contains(Self.filesSentence))
+    }
+
+    @Test func theFilesSentenceHoldsNoTag() {
+        #expect(!Self.filesSentence.contains("</"))
+    }
+
+    @Test func theHostGuideShowsTheFilesSentence() throws {
+        let guide = try FixtureLibrary.readText(relativePath: Self.operationsPath)
+
+        let count = guide.components(separatedBy: Self.filesSentence).count - 1
+        #expect(count == Self.filesSentenceCountInOperations)
     }
 
     // MARK: - Fixtures

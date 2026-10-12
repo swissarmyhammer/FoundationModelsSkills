@@ -45,6 +45,10 @@ internal enum ResourcePathRules {
         "The path `\(path)` is not accessible: it must resolve to a location inside the skill directory."
     }
 
+    /// The example of a path relative to the skill directory that the texts
+    /// for the model give, thus each text names the same example.
+    internal static let examplePath = "references/guide.md"
+
     /// The description of the `path` parameter of each resource operation
     /// that reads one file of the skill (`ReadResource`, `RunScript`), thus
     /// the two can never differ on it.
@@ -53,7 +57,7 @@ internal enum ResourcePathRules {
     /// accepts one that is in a layer directory of the skill, thus the text
     /// says so.
     internal static let pathParameterDescription =
-        "The path of the file, relative to the skill directory, for example `references/guide.md`. "
+        "The path of the file, relative to the skill directory, for example `\(examplePath)`. "
         + "An absolute path in the skill directory also works."
 }
 

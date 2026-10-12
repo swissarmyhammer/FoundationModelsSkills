@@ -155,7 +155,7 @@ struct SearchListPlainTextTests {
     @Test func theToolDescriptionHoldsTheNewUseRuleWordForWord() async throws {
         let tool = try await SkillsTool.make(registry: Self.makeFixtureRegistry())
 
-        #expect(tool.description.hasPrefix(Self.descriptionPurpose + "\n" + Self.descriptionUseRule + "\n\n"))
+        #expect(tool.description.hasPrefix(Self.descriptionPurpose + "\n" + Self.descriptionUseRule + "\n"))
     }
 
     // MARK: - The host guide

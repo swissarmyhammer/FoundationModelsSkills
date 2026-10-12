@@ -19,15 +19,19 @@ struct SkillsCatalogToolTests {
     private static let modelHiddenSkillID = "deploy"
 
     /// The fixed text at the start of the description, word for word from
-    /// the card: what a skill is, and the rule to load each skill that helps
-    /// with the task.
+    /// the card: what a skill is, the rule to load each skill that helps
+    /// with the task, and how to read a file of a skill.
     private static let fixedSentences =
         "Skills are procedures for kinds of work. Each one tells you how to do the work and which tools to use.\n"
         + "Read the skills below before you start. If a skill helps with any part of your task, "
         + #"load it now: call this tool with {"op": "use skill", "id": "<id>"}. "#
         + "Load each skill that helps. More than one can apply. "
         + "The answer is the text of the skill. Do the work the way it says. "
-        + "Read this list again when the work changes."
+        + "Read this list again when the work changes.\n"
+        + "A skill can have files, such as references/guide.md. "
+        + #"To read one, call the `skills` tool with {"op": "read resource", "id": "<id>", "#
+        + #""path": "<path relative to the skill>"}. "#
+        + "The answer of `use skill` lists the files of the skill."
 
     /// The line the description gives when no skill is visible.
     private static let noSkillsLine = "No skills are installed now."

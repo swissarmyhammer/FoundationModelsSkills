@@ -99,6 +99,21 @@ internal enum SkillCatalogText {
         + "The answer is the text of the skill. Do the work the way it says. "
         + "Read this list again when the work changes."
 
+    /// The path placeholder of the read call in the tool description: a path
+    /// relative to the skill.
+    private static let relativePathPlaceholder = "<path relative to the skill>"
+
+    /// The sentence of the tool description, on one line, that follows the
+    /// use rule: a skill can have files, the exact `read resource` call that
+    /// reads one, and the answer that lists them.
+    ///
+    /// The op names come from the operation types, thus the sentence cannot
+    /// name an op that the tool does not have.
+    internal static let descriptionFilesRule =
+        "A skill can have files, such as \(ResourcePathRules.examplePath). To read one, "
+        + callTheTool(with: call(op: ReadResource.opString, id: idPlaceholder, path: relativePathPlaceholder))
+        + ". The answer of `\(UseSkill.opString)` lists the files of the skill."
+
     /// Gives the arguments of the `skills` call that loads `id`, as the model
     /// writes them.
     ///

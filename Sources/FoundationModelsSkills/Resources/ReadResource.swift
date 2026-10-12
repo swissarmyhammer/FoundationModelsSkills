@@ -88,7 +88,8 @@ public struct ReadResource: OperationDefinition {
 
     /// A human- and model-facing summary of what this operation does.
     public static let operationDescription =
-        "Return a skill resource file's content verbatim, sliced by line. "
+        "Read a file of a skill. Give the path relative to the skill directory, "
+        + "as the `\(UseSkill.opString)` answer lists it. "
         + "A binary file gives its absolute path and its size, not its content."
 
     /// This operation's parameters, as the resolver and schema fusion need

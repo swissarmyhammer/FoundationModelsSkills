@@ -32,11 +32,27 @@ comments:
     - evidence: `swift test` — 597 tests in 56 suites passed, 0 failures (one SwiftPM build-system line "missing creator for mutated node" for the mlx bundle, not from source). Files: Sources/FoundationModelsSkills/Operations/SkillFilesText.swift (new), Sources/FoundationModelsSkills/Operations/UseSkill.swift, Sources/FoundationModelsSkills/Operations/SkillCatalogText.swift, Sources/FoundationModelsSkills/Resources/ListResource.swift, Sources/FoundationModelsSkills/Resources/ResourceSupport.swift, docs/operations.md, Tests/FoundationModelsSkillsTests/UseSkillPlainTextTests.swift, Tests/FoundationModelsSkillsTests/SkillFilesTextTests.swift (new).
     - next: /review
   timestamp: 2026-10-12T14:00:52.190754+00:00
+- actor: claude-code
+  id: 01m4r6v3mdb1nhfcqhb25g35rk
+  text: |-
+    ### review — clean
+    - evidence: review sha HEAD~1..HEAD (3d6cbb1). 0 findings, 0 confirmed, 2 refuted. 7 files reviewed. 5 files not reviewed: 4 .kanban files (ignore rule), docs/operations.md (no validator matches).
+    - next: none. The task is in done.
+  timestamp: 2026-10-12T14:04:08.717041+00:00
+- actor: claude-code
+  id: 01m4r6vayq4jjdb334pqvsda72
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 8 files
+    - test: green — swift test, 597 passed in 56 suites
+    - commit: 3d6cbb1
+    - review: clean — 0 findings
+  timestamp: 2026-10-12T14:04:16.215768+00:00
 depends_on:
 - 01M4R0ANACQ08YDG539AAJ8FA4
 - 01M4R0B0XATW46VEWB0CDTJWZ9
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: ff9d80
 title: 'use skill: add the list of the skill''s files and the read call to the answer'
 ---
 ## What

@@ -13,19 +13,23 @@ plans. Thus `SkillsTool.make` puts the catalog in the description and in the
 schema. It reads `registry.metadata()` one time, keeps the skills that the
 visibility predicate accepts, and keeps the catalog order.
 
-The description has two fixed sentences, then one line for each skill:
+The description has three fixed lines, then one line for each skill. The
+first line tells what a skill is. The second line is the use rule. The third
+line tells the model that a skill can have files, and that `read resource`
+reads one with a path relative to the skill:
 
 ```text
 Skills are procedures for kinds of work. Each one tells you how to do the work and which tools to use.
 Read the skills below before you start. If a skill helps with any part of your task, load it now: call this tool with {"op": "use skill", "id": "<id>"}. Load each skill that helps. More than one can apply. The answer is the text of the skill. Do the work the way it says. Read this list again when the work changes.
+A skill can have files, such as references/guide.md. To read one, call the `skills` tool with {"op": "read resource", "id": "<id>", "path": "<path relative to the skill>"}. The answer of `use skill` lists the files of the skill.
 
 - explore: Understand how unfamiliar code works before planning or changing it.
 - code-context: Find symbols, callers, and the blast radius of a change.
 ```
 
 The list has a limit, `catalogCharacterLimit`. The default is 8,000
-characters (`SkillsTool.defaultCatalogCharacterLimit`). The fixed sentences
-do not count against it and are never cut. The tool tries these steps in
+characters (`SkillsTool.defaultCatalogCharacterLimit`). The three fixed
+lines do not count against it and are never cut. The tool tries these steps in
 order, and stops at the first one that fits:
 
 1. Each skill with its full description.

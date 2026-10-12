@@ -1,11 +1,30 @@
 ---
 assignees:
 - claude-code
+comments:
+- actor: claude-code
+  id: 01m4r73yc13q26y0q6pdrfc4ax
+  text: |-
+    Research and implementation notes:
+    - The new sentence is `SkillCatalogText.descriptionFilesRule`, beside `descriptionUseRule`. It is made from `callTheTool(with:)`, `call(op:id:path:)`, `ReadResource.opString`, and `UseSkill.opString`. No op name is a literal.
+    - The sentence is on its own line after the use rule. `SkillsToolDescription.make` puts it in the header only, thus the empty catalog text does not change and the sentence does not count against `characterLimit`.
+    - The example path `references/guide.md` is now one constant, `ResourcePathRules.examplePath`. The `path` parameter description and the new sentence both use it. The text of the parameter description did not change.
+    - `ReadResource.operationDescription` now starts "Read a file of a skill. Give the path relative to the skill directory, as the `use skill` answer lists it." The binary-file sentence from ^cdtjwz9 stays.
+    - `SearchListPlainTextTests.theToolDescriptionHoldsTheNewUseRuleWordForWord` expected a blank line after the use rule. The use rule is now followed by one line break and the files sentence, thus the test now expects one line break.
+    - `DocumentationTests` has no test that compares the example block of `docs/operations.md`. A new test in `SkillsToolDescriptionTests` checks that the guide holds the files sentence one time.
+  timestamp: 2026-10-12T14:08:58.241875+00:00
+- actor: claude-code
+  id: 01m4r742pej5ee21jqadn4tw8x
+  text: |-
+    ### implement — changed
+    - evidence: `swift test` gives 602 tests in 56 suites, all pass. No compiler warning; the one SwiftPM "missing creator" line about the mlx bundle existed before this change. RED was seen first: 12 issues in 3 suites. Files: Sources/FoundationModelsSkills/Operations/SkillCatalogText.swift, Sources/FoundationModelsSkills/Operations/SkillsToolDescription.swift, Sources/FoundationModelsSkills/Resources/ReadResource.swift, Sources/FoundationModelsSkills/Resources/ResourceSupport.swift, Tests/FoundationModelsSkillsTests/SkillsToolDescriptionTests.swift, Tests/FoundationModelsSkillsTests/SkillsCatalogToolTests.swift, Tests/FoundationModelsSkillsTests/ResourceOpsTests.swift, Tests/FoundationModelsSkillsTests/SearchListPlainTextTests.swift, docs/operations.md
+    - next: /review. Not committed.
+  timestamp: 2026-10-12T14:09:02.670554+00:00
 depends_on:
 - 01M4R0BGFCECWZYT3BWRFXG8ZA
 - 01M4R0B0XATW46VEWB0CDTJWZ9
-position_column: todo
-position_ordinal: '8380'
+position_column: doing
+position_ordinal: '80'
 title: 'Tool description: tell the model to get the files of a skill with read resource and a relative path'
 ---
 ## What
