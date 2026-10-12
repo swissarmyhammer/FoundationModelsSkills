@@ -41,7 +41,7 @@ public struct SkillMetadata: Sendable, Equatable {
     public var isModelVisible: Bool
 
     /// The marketplace this skill came from, for example
-    /// `swissarmyhammer-skills@1.2.0`, or `nil` for a local skill.
+    /// `swissarmyhammer-skills@1a2b3c4`, or `nil` for a local skill.
     ///
     /// Display only, for a host that reads `SkillsRegistry.metadata()`. The
     /// model-facing `list skill` and `search skill` lines do not show it. It
@@ -498,7 +498,7 @@ public struct SkillsRegistry: Sendable {
     private struct LayerSource: Sendable {
         /// Computes the layers of the next catalog generation. Called once
         /// at construction, and again for every rebuild, because a
-        /// marketplace's commit and catalog version change between calls.
+        /// marketplace's commit changes between calls.
         let plan: @Sendable () -> LayerPlan
 
         /// One value for each marketplace update, or `nil` when no provider

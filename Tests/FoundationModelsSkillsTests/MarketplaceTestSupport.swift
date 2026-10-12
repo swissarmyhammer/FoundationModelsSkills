@@ -50,23 +50,13 @@ enum MarketplaceTestSupport {
     ///   - root: The stable layer root of the marketplace.
     ///   - id: The display id of the marketplace.
     ///   - sha: The commit of the snapshot.
-    ///   - catalogVersion: The `version` field of the catalog, or `nil` for
-    ///     a catalog with no version. The default is
-    ///     ``defaultCatalogVersion``.
     /// - Returns: The layer.
-    static func makeMarketplaceLayer(
-        root: URL, id: String, sha: String, catalogVersion: String? = defaultCatalogVersion
-    ) -> MarketplaceLayer {
+    static func makeMarketplaceLayer(root: URL, id: String, sha: String) -> MarketplaceLayer {
         MarketplaceLayer(
             layer: DotfolderStack.Layer(source: .marketplace, root: root),
             provenance: MarketplaceProvenance(
-                id: id, url: "https://example.invalid/\(id).git", sha: sha,
-                catalogVersion: catalogVersion))
+                id: id, url: "https://example.invalid/\(id).git", sha: sha))
     }
-
-    /// The `version` field ``makeMarketplaceLayer(root:id:sha:catalogVersion:)``
-    /// gives a catalog when the caller names none.
-    static let defaultCatalogVersion = "1.0.0"
 
     /// The skill id that a fixture repository holds.
     static let fixtureSkillID = "alpha"

@@ -23,11 +23,11 @@ struct MarketplaceEndToEndTests {
     /// asserts on no vector, thus the shortest usable length is enough.
     private static let embeddingVectorLength = 2
 
-    /// The display id of marketplace A, which is the `name` field of its
-    /// catalog.
+    /// The display id of marketplace A. The display id is the pre-fetch key
+    /// of the source, thus the fixture gives this value as the alias.
     private static let marketplaceAID = "marketplace-a"
 
-    /// The display id of marketplace B.
+    /// The display id of marketplace B, and the alias of its source.
     private static let marketplaceBID = "marketplace-b"
 
     /// The id of the skill that only marketplace A holds.
@@ -288,8 +288,8 @@ struct MarketplaceEndToEndTests {
 
             cache = try MarketplaceStoreFixture(
                 sources: [
-                    MarketplaceSource(marketplaceA.url, alias: "a"),
-                    MarketplaceSource(marketplaceB.url, alias: "b"),
+                    MarketplaceSource(marketplaceA.url, alias: marketplaceAID),
+                    MarketplaceSource(marketplaceB.url, alias: marketplaceBID),
                 ])
             try ReloadTestSupport.writeSkillFile(id: betaID, in: cache.localRoot, body: localBetaBody)
 
@@ -352,14 +352,14 @@ struct MarketplaceEndToEndTests {
             try FileManager.default.moveItem(at: marketplaceA.directory, to: away)
         }
 
-        /// The whole tree of marketplace A: the catalog, the three skills,
-        /// and the partial of A.
+        /// The whole tree of marketplace A: the three skills and the partial
+        /// of A.
         ///
         /// - Parameter alphaBody: The body of the `alpha` skill.
         /// - Returns: The tree, one entry for each path.
         private static func treeOfMarketplaceA(alphaBody: String) -> [String: GitFixtureRepository.Entry] {
             tree(
-                name: marketplaceAID, header: headerFromMarketplaceA,
+                header: headerFromMarketplaceA,
                 skills: [
                     (id: alphaID, body: "\(includePartialBody)\n\(alphaBody)"),
                     (id: betaID, body: includePartialBody),
@@ -367,35 +367,30 @@ struct MarketplaceEndToEndTests {
                 ])
         }
 
-        /// The whole tree of marketplace B: the catalog, the two skills, and
-        /// the partial of B.
+        /// The whole tree of marketplace B: the two skills and the partial of
+        /// B.
         ///
         /// - Returns: The tree, one entry for each path.
         private static func treeOfMarketplaceB() -> [String: GitFixtureRepository.Entry] {
             tree(
-                name: marketplaceBID, header: headerFromMarketplaceB,
+                header: headerFromMarketplaceB,
                 skills: [
                     (id: gammaID, body: includePartialBody),
                     (id: untrustedBID, body: nowTagBody),
                 ])
         }
 
-        /// One marketplace tree in our own format: a Claude catalog with one plugin, one folder for each
-        /// skill under `skills/`, and one partial beside them.
+        /// One marketplace tree: one folder for each skill under `skills/`,
+        /// and one partial beside them. The store finds each skill with a
+        /// folder scan, thus the tree holds no catalog file.
         ///
         /// - Parameters:
-        ///   - name: The `name` field of the catalog, which becomes the
-        ///     display id of the marketplace.
         ///   - header: The text of the partial of this marketplace.
-        ///   - skills: The id and the body of each skill, in catalog order.
+        ///   - skills: The id and the body of each skill.
         /// - Returns: The tree, one entry for each path.
         private static func tree(
-            name: String, header: String, skills: [(id: String, body: String)]
+            header: String, skills: [(id: String, body: String)]
         ) -> [String: GitFixtureRepository.Entry] {
-            let paths = skills.lazy.map { #""./skills/\#($0.id)""# }.joined(separator: ", ")
-            let catalog = #"""
-                {"name": "\#(name)", "plugins": [{"name": "skills", "source": "./", "skills": [\#(paths)]}]}
-                """#
             let skillFiles = skills.lazy.map { skill in
                 (
                     "skills/\(skill.id)/SKILL.md",
@@ -404,8 +399,7 @@ struct MarketplaceEndToEndTests {
                 )
             }
             return Dictionary(uniqueKeysWithValues: skillFiles).merging([
-                ".claude-plugin/marketplace.json": .file(catalog),
-                partialTreePath: .file(header),
+                partialTreePath: .file(header)
             ]) { _, later in later }
         }
     }

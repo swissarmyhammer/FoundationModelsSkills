@@ -8,8 +8,9 @@ import Testing
 /// Tests for the marketplace source text of a display row.
 ///
 /// A `commandListing()` row names the marketplace that a skill came from. A
-/// local skill names no marketplace. When the catalog of the marketplace has
-/// no version, the row shows the short commit.
+/// local skill names no marketplace. The source text of a marketplace row is
+/// `<id>@<short commit>`: the display id and the first characters of the
+/// commit of the snapshot.
 ///
 /// The model-facing `list skill` answer gives one line for each skill:
 /// `- <id>: <description>`. That line does not show the source, and it never
@@ -18,14 +19,11 @@ struct MarketplaceProvenanceDisplayTests {
     /// The display id of the marketplace every case here builds.
     private static let marketplaceID = "swissarmyhammer-skills"
 
-    /// The catalog version of the marketplace, when the case gives it one.
-    private static let catalogVersion = "1.2.0"
-
     /// The commit of the snapshot of the marketplace.
     private static let commit = "abc1234def5678"
 
-    /// The first characters of ``commit``: the text a row shows when the
-    /// catalog carries no version.
+    /// The first seven characters of ``commit``: the short commit that a
+    /// marketplace row shows after the display id.
     private static let shortCommit = "abc1234"
 
     /// The id of the skill that only the marketplace root holds.
@@ -53,13 +51,13 @@ struct MarketplaceProvenanceDisplayTests {
 
     // MARK: - commandListing()
 
-    @Test func theCommandListingRowOfAMarketplaceSkillNamesTheMarketplaceAndTheCatalogVersion() throws {
+    @Test func theCommandListingRowOfAMarketplaceSkillNamesTheMarketplaceAndTheShortCommit() throws {
         let fixture = try Fixture()
 
         let listing = fixture.makeRegistry().commandListing()
 
         let row = try #require(listing.first { $0.id == Self.marketplaceSkillID })
-        #expect(row.source == "\(Self.marketplaceID)@\(Self.catalogVersion)")
+        #expect(row.source == "\(Self.marketplaceID)@\(Self.shortCommit)")
     }
 
     @Test func theCommandListingRowOfALocalSkillNamesNoSource() throws {
@@ -69,15 +67,6 @@ struct MarketplaceProvenanceDisplayTests {
 
         let row = try #require(listing.first { $0.id == Self.localSkillID })
         #expect(row.source == nil)
-    }
-
-    @Test func theCommandListingRowFallsBackToTheShortCommitWhenTheCatalogHasNoVersion() throws {
-        let fixture = try Fixture(catalogVersion: nil)
-
-        let listing = fixture.makeRegistry().commandListing()
-
-        let row = try #require(listing.first { $0.id == Self.marketplaceSkillID })
-        #expect(row.source == "\(Self.marketplaceID)@\(Self.shortCommit)")
     }
 
     // MARK: - Fixture
@@ -96,12 +85,8 @@ struct MarketplaceProvenanceDisplayTests {
 
         /// Writes the two roots and builds the provider.
         ///
-        /// - Parameter catalogVersion: The `version` field of the catalog of
-        ///   the marketplace, or `nil` for a catalog with no version. The
-        ///   default is
-        ///   ``MarketplaceProvenanceDisplayTests/catalogVersion``.
         /// - Throws: The error of a folder or file write.
-        init(catalogVersion: String? = MarketplaceProvenanceDisplayTests.catalogVersion) throws {
+        init() throws {
             marketplaceRoot = try MarketplaceTestSupport.makeTempDirectory()
             localRoot = try MarketplaceTestSupport.makeTempDirectory()
 
@@ -113,7 +98,7 @@ struct MarketplaceProvenanceDisplayTests {
             provider = FakeMarketplaceProvider(layers: [
                 MarketplaceTestSupport.makeMarketplaceLayer(
                     root: marketplaceRoot, id: MarketplaceProvenanceDisplayTests.marketplaceID,
-                    sha: MarketplaceProvenanceDisplayTests.commit, catalogVersion: catalogVersion)
+                    sha: MarketplaceProvenanceDisplayTests.commit)
             ])
         }
 

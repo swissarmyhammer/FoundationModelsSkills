@@ -156,8 +156,9 @@ that folder as it watches a local layer.
   sources an alias.
 - The name of the cache folder is `<pre-fetch key>-<first 8 hex digits of the
   SHA-256 of the normalized URL>`. Thus a changed URL never uses a stale cache.
-- After a fetch, the `name` field of the catalog is the **display id** of the
-  marketplace. The `/` command listing and the diagnostics show that id.
+- The pre-fetch key is also the **display id** of the marketplace. The `/`
+  command listing, the events, and the diagnostics show that id. To pin,
+  unpin, or update one marketplace, give that id.
 
 ## Catalog formats
 
@@ -337,9 +338,9 @@ refused source gets a diagnostic, and it has no layer.
 ## Provenance
 
 `MarketplaceProvenance` names the marketplace of each skill: the display id,
-the URL of the source, the commit, and the version of the catalog. The `/`
-command listing shows the text of that provenance, for example
-`swissarmyhammer-skills@1.2.0`, and `SkillMetadata.source` holds the same text
+the URL of the source, and the commit. The `/` command listing shows the text
+of that provenance, `<id>@<short commit>`, for example
+`swissarmyhammer-skills@1a2b3c4`, and `SkillMetadata.source` holds the same text
 for a host. The model-facing `search skill` and `list skill` lines give the id
 and the description only. The text never holds the URL. A
 shadow diagnostic names both sides, thus a user can see that a local skill

@@ -1,0 +1,1 @@
+{"id":"01M4R0ANAD6NYRCYAYXXCJFE41","timestamp":"2026-10-12T12:10:18.317576Z","op":"create","item_id":"01M4R0ANACBE5M5SPDGA3M76EB","forward_patch":"--- original\n+++ modified\n@@ -0,0 +1,2 @@\n+color: '5319e7'\n+tag_name: skill-resources\n","reverse_patch":"--- original\n+++ modified\n@@ -1,2 +0,0 @@\n-color: '5319e7'\n-tag_name: skill-resources\n","transaction_id":null}
