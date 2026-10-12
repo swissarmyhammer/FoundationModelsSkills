@@ -62,10 +62,26 @@ comments:
     - evidence: `swift test` — 588 tests in 55 suites passed, 0 failures. The only `warning:` line is the old SwiftPM build-graph note on the dependency product `mlx-swift_Cmlx.bundle`, not from a changed file. 3 files: Sources/FoundationModelsSkills/Resources/ResourceRow.swift, Sources/FoundationModelsSkills/Resources/ReadResource.swift, Tests/FoundationModelsSkillsTests/ReadResourceTests.swift. The `swift/state-modeling` finding is set to `- [x]`. Not committed.
     - next: /review
   timestamp: 2026-10-12T13:51:45.525100+00:00
+- actor: claude-code
+  id: 01m4r68d3vgs9abyjrbtryfr4s
+  text: |-
+    ### review — clean
+    - evidence: `review sha HEAD~1..HEAD` (dd25d35). 0 findings, 0 confirmed, 1 refuted, 7 attempted. 3 files reviewed. The prior finding `ResourceRow.swift:96` `swift/state-modeling` is checked. The fix is correct: `ReadResourceResult` now has one `Kind` enum (`case text`, `case binary(absolutePath:byteSize:)`). A custom `encode(to:)` keeps the flat JSON shape.
+    - next: none. The task is in `done`.
+  timestamp: 2026-10-12T13:53:55.835671+00:00
+- actor: claude-code
+  id: 01m4r68nc3mmpjcbhytgjvpscr
+  text: |-
+    ### finish iteration 2 — clean
+    - implement: changed — 3 files (one Kind value, binaryFile factory)
+    - test: green — swift test, 588 passed in 55 suites
+    - commit: dd25d35
+    - review: clean — 0 findings
+  timestamp: 2026-10-12T13:54:04.291221+00:00
 depends_on:
 - 01M4R0ANACQ08YDG539AAJ8FA4
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: ff9c80
 title: 'read resource: give the absolute path of a binary file, not an error'
 ---
 ## What

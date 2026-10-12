@@ -9,9 +9,12 @@ import Operations
 /// `UseSkill.execute(in:)` fails correctively on. No argument is required:
 /// a reference with no value renders as an empty string.
 ///
-/// The success value is the rendered body and nothing else. Both cases
-/// encode as one JSON string, and `SkillsCatalogTool` gives the model that
-/// string as plain text: the body, or the corrective sentence.
+/// The success value is the rendered body. When the skill has files other
+/// than `SKILL.md`, a plain-text list of the files follows the body, with the
+/// calls that read a file or run a script (`SkillFilesText`). The list holds
+/// no tag or wrapper. Both cases encode as one JSON string, and
+/// `SkillsCatalogTool` gives the model that string as plain text: the body
+/// with the list, or the corrective sentence.
 public typealias UseSkillOutput = CorrectiveOutcome<String>
 
 /// Renders and returns a skill's body by id, substituting the given
@@ -29,7 +32,8 @@ public struct UseSkill: OperationDefinition {
     /// The shared context this operation dispatches against.
     public typealias Context = SkillsToolContext
 
-    /// This operation's result: the rendered body, or a corrective message.
+    /// This operation's result: the rendered body with the list of the files
+    /// of the skill, or a corrective message.
     public typealias Output = UseSkillOutput
 
     /// The skill id to use -- the directory name.
@@ -121,7 +125,8 @@ public struct UseSkill: OperationDefinition {
     ///
     /// - Parameter context: The shared context supplying the live registry
     ///   and which entries `context.visibilityPredicate` accepts.
-    /// - Returns: `.success(_:)` carrying the rendered body on success;
+    /// - Returns: `.success(_:)` carrying the rendered body, then the list of
+    ///   the files of the skill when it has files other than `SKILL.md`;
     ///   `.corrective(_:)` for an unusable id.
     /// - Throws: Nothing recoverable; the signature carries `throws` to
     ///   satisfy the `OperationDefinition` protocol requirement. Rethrows
@@ -136,7 +141,8 @@ public struct UseSkill: OperationDefinition {
         }
 
         do {
-            return .success(try await context.registry.call(id: id, arguments: arguments ?? []))
+            let body = try await context.registry.call(id: id, arguments: arguments ?? [])
+            return .success(SkillFilesText.appending(filesText(in: context), to: body))
         } catch is UnknownSkillError {
             // The live catalog changed between the lookup above and this
             // call (a race with a hot reload) -- report it the same way as
@@ -144,6 +150,26 @@ public struct UseSkill: OperationDefinition {
             return .corrective(
                 Self.unusableIDMessage(id: id, catalog: catalog, visibilityPredicate: context.visibilityPredicate))
         }
+    }
+
+    // MARK: - The files of the skill
+
+    /// The list of the files of the skill named by `id`, and the calls that
+    /// read them, or `nil` when the skill has no file other than `SKILL.md`.
+    ///
+    /// The rows come from the combined view of the layer directories of the
+    /// skill, through `ListResource.listedRows(in:)`, thus a file that only a
+    /// lower layer holds is in the list. The overlay reads the disk, thus this
+    /// operation opens no file.
+    ///
+    /// - Parameter context: The shared context supplying the registry and the
+    ///   host policy.
+    /// - Returns: The text of `SkillFilesText.text(id:rows:isScriptExecutionDisabled:)`.
+    private func filesText(in context: SkillsToolContext) -> String? {
+        let overlay = ResourceIDLookup.overlay(id: id, context: context)
+        return SkillFilesText.text(
+            id: id, rows: ListResource.listedRows(in: overlay),
+            isScriptExecutionDisabled: context.registry.policy.isScriptExecutionDisabled)
     }
 
     // MARK: - Unusable id (unknown, stale, or not visible on this surface)

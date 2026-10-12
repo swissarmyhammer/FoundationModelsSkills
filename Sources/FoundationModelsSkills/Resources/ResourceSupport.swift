@@ -168,11 +168,16 @@ internal enum ResourceIDLookup {
     /// the directory that gives its `SKILL.md` -- thus the overlay of an id
     /// that resolved holds a minimum of one directory.
     ///
+    /// `UseSkill.execute(in:)` also reads this overlay, after it renders the
+    /// body, to list the files of the skill. That operation does its own
+    /// visibility check before it renders, thus it does not come through
+    /// `withResolvedOverlay(id:context:whenGranted:)`.
+    ///
     /// - Parameters:
     ///   - id: The skill id, already resolved.
     ///   - context: The shared context supplying the registry.
     /// - Returns: The overlay over the layer directories of the skill.
-    private static func overlay(id: String, context: SkillsToolContext) -> SkillOverlay {
+    internal static func overlay(id: String, context: SkillsToolContext) -> SkillOverlay {
         SkillOverlay(directories: context.registry.contributingDirectories(id: id).map(\.directory))
     }
 

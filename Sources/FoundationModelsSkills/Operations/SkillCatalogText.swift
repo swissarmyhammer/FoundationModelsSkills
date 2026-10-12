@@ -71,7 +71,7 @@ internal enum SkillCatalogText {
     /// - Returns: The instruction.
     private static func loadInstruction(exampleID: String) -> String {
         [
-            "To load a skill, call the `\(SkillsTool.toolName)` tool with \(useCall(id: idPlaceholder)).",
+            "To load a skill, \(callTheTool(with: useCall(id: idPlaceholder))).",
             "For example: \(useCall(id: exampleID))",
             "The answer is the text of the skill: the steps of the work and the tools to use.",
             loadInstructionLastLine,
@@ -105,7 +105,35 @@ internal enum SkillCatalogText {
     /// - Parameter id: The id of the skill, or the id placeholder.
     /// - Returns: The call, for example `{"op": "use skill", "id": "explore"}`.
     private static func useCall(id: String) -> String {
-        #"{"op": "\#(UseSkill.opString)", "id": "\#(id)"}"#
+        call(op: UseSkill.opString, id: id)
+    }
+
+    /// Gives the arguments of one `skills` call, as the model writes them.
+    ///
+    /// The load call of this type and the calls of `SkillFilesText` each come
+    /// from here, thus the texts cannot differ on the shape of a call.
+    ///
+    /// - Parameters:
+    ///   - op: The op of the operation, for example `ReadResource.opString`.
+    ///   - id: The id of the skill, or the id placeholder.
+    ///   - path: The path of a file of the skill, or a placeholder for it.
+    ///     `nil` gives a call with no `path` field.
+    /// - Returns: The call, for example
+    ///   `{"op": "read resource", "id": "release-notes", "path": "<path>"}`.
+    internal static func call(op: String, id: String, path: String? = nil) -> String {
+        let pathField = path.map { #", "path": "\#($0)""# } ?? ""
+        return #"{"op": "\#(op)", "id": "\#(id)"\#(pathField)}"#
+    }
+
+    /// Gives the words that tell the model to call the `skills` tool with
+    /// `call`.
+    ///
+    /// - Parameter call: The arguments of the call, from
+    ///   `call(op:id:path:)`.
+    /// - Returns: The words. For the load call, the words are: call the
+    ///   `skills` tool with `{"op": "use skill", "id": "<id>"}`.
+    internal static func callTheTool(with call: String) -> String {
+        "call the `\(SkillsTool.toolName)` tool with \(call)"
     }
 
     /// Puts `text` on one line: each run of white space, line breaks too,

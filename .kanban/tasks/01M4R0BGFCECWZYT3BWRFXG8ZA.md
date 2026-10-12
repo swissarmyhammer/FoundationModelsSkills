@@ -1,11 +1,42 @@
 ---
 assignees:
 - claude-code
+comments:
+- actor: claude-code
+  id: 01m4r6cqj6w020tv0v44zgndan
+  text: |-
+    Research done.
+    - ListResource has the row logic as private static `resourceRows(in:)`, `isListed`, `kind(forRelativePath:)` and `rowCap = 100`. Plan: make one internal entry `ListResource.listedRows(in:)` (sorted rows) and an internal `rowCap`, and call it from ListResource.execute and from the new SkillFilesText. No second copy.
+    - UseSkill needs the overlay of the skill. `ResourceIDLookup.overlay(id:context:)` is private; plan: make it internal and call it from UseSkill.execute(in:) after the render. UseSkill opens no file itself, thus LoadingBoundaryTests stays green.
+    - SkillCatalogText.useCall is private and writes `{"op": ..., "id": ...}`. Plan: add one internal call builder in SkillCatalogText (op, id, optional path) and let useCall use it, so the call text of SkillFilesText comes from `ReadResource.opString`, `RunScript.opString`, `ListResource.opString` and `SkillsTool.toolName`.
+    - Host policy: `context.registry.policy.isScriptExecutionDisabled`.
+    - The `run script` line reads all rows of the skill (not only the first 100), thus a script that sorts after row 100 still gets the line.
+    - Docs to change: the `UseSkillOutput` doc comment and "The `use skill` answer" in docs/operations.md.
+  timestamp: 2026-10-12T13:56:17.606348+00:00
+- actor: claude-code
+  id: 01m4r6n0gdx67e9qbdtxe1x7xe
+  text: |-
+    Implementation landed (TDD: RED run showed 5 failures in UseSkillPlainTextTests, then GREEN).
+    - Discovery: the rendered body of each fixture ends with a line break. Body + "\n\n" gave two blank lines, not the one blank line of the card example. `SkillFilesText.appending(_:to:)` adds one line break after a body that ends with a line break, and two after a body that does not. The body itself does not change. SkillFilesTextTests holds both cases.
+    - ListResource: the private `resourceRows(in:)` is now internal `listedRows(in:)` (sorted). `rowCap` and the new `scriptKind` are internal. ListResource.execute and UseSkill both call `listedRows(in:)`; there is no second copy of the row logic.
+    - SkillCatalogText: new internal `call(op:id:path:)` and `callTheTool(with:)`; the load call uses them too. SkillFilesText makes its calls from `ReadResource.opString`, `RunScript.opString`, `ListResource.opString` and `SkillsTool.toolName`.
+    - ResourceIDLookup.overlay(id:context:) is internal now; UseSkill reads the overlay after the render. UseSkill opens no file, and LoadingBoundaryTests passes.
+    - The `run script` check reads all rows, also the rows after row 100.
+    - The CLI `skills skill use` goes through UseSkill.execute, thus it prints the list too. `SkillsRegistry.call` and the `/` command path did not change.
+    - No existing test compared the full `use skill` answer of a skill with files; the full suite passed with no test edit other than the new tests.
+  timestamp: 2026-10-12T14:00:48.909489+00:00
+- actor: claude-code
+  id: 01m4r6n3pyqjkwzey7c3ykm8gb
+  text: |-
+    ### implement — changed
+    - evidence: `swift test` — 597 tests in 56 suites passed, 0 failures (one SwiftPM build-system line "missing creator for mutated node" for the mlx bundle, not from source). Files: Sources/FoundationModelsSkills/Operations/SkillFilesText.swift (new), Sources/FoundationModelsSkills/Operations/UseSkill.swift, Sources/FoundationModelsSkills/Operations/SkillCatalogText.swift, Sources/FoundationModelsSkills/Resources/ListResource.swift, Sources/FoundationModelsSkills/Resources/ResourceSupport.swift, docs/operations.md, Tests/FoundationModelsSkillsTests/UseSkillPlainTextTests.swift, Tests/FoundationModelsSkillsTests/SkillFilesTextTests.swift (new).
+    - next: /review
+  timestamp: 2026-10-12T14:00:52.190754+00:00
 depends_on:
 - 01M4R0ANACQ08YDG539AAJ8FA4
 - 01M4R0B0XATW46VEWB0CDTJWZ9
-position_column: todo
-position_ordinal: '8280'
+position_column: doing
+position_ordinal: '80'
 title: 'use skill: add the list of the skill''s files and the read call to the answer'
 ---
 ## What

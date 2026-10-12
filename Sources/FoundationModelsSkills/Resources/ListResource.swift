@@ -77,7 +77,10 @@ public struct ListResource: OperationDefinition {
     }
 
     /// The maximum number of rows a successful listing returns.
-    private static let rowCap = 100
+    ///
+    /// The list of files in the answer of `use skill` gives the same number
+    /// of rows, thus `SkillFilesText` reads this value too.
+    internal static let rowCap = 100
 
     /// The skill definition file every listing excludes.
     private static let skillFileName = "SKILL.md"
@@ -101,22 +104,27 @@ public struct ListResource: OperationDefinition {
     ///   `OperationDefinition` protocol requirement.
     public func execute(in context: SkillsToolContext) async throws -> ListResourceOutput {
         await ResourceIDLookup.withResolvedOverlay(id: id, context: context) { overlay in
-            let rows = Self.resourceRows(in: overlay).sorted { $0.path < $1.path }
+            let rows = Self.listedRows(in: overlay)
             return .success(ListResourceResult(id: id, resources: Array(rows.prefix(Self.rowCap)), total: rows.count))
         }
     }
 
-    /// One row for each file of the combined view that a listing shows.
+    /// One row for each file of the combined view that a listing shows,
+    /// sorted by path.
     ///
     /// The overlay gives each column that reads the disk -- the size of the
     /// file and its execute bit -- thus this operation opens no file, and each
     /// column speaks of the copy of the highest layer directory that holds the
     /// path.
     ///
+    /// The answer of `use skill` lists the files of the skill from these same
+    /// rows, thus the two lists cannot differ on which files they show or on
+    /// the kind of a file.
+    ///
     /// - Parameter overlay: The combined view of the layer directories of the
     ///   skill.
-    /// - Returns: One row per listed file, unsorted.
-    private static func resourceRows(in overlay: SkillOverlay) -> [ResourceRow] {
+    /// - Returns: One row per listed file, sorted by path, with no row limit.
+    internal static func listedRows(in overlay: SkillOverlay) -> [ResourceRow] {
         overlay.entries().keys
             .filter { Self.isListed($0) }
             .map { path in
@@ -125,6 +133,7 @@ public struct ListResource: OperationDefinition {
                     bytes: overlay.size(of: path) ?? Self.unknownByteCount,
                     executable: overlay.isExecutable(path))
             }
+            .sorted { $0.path < $1.path }
     }
 
     /// Whether a listing shows the file at `relativePath`.
@@ -147,9 +156,15 @@ public struct ListResource: OperationDefinition {
         relativePath.split(separator: "/").contains { $0.hasPrefix(".") }
     }
 
+    /// The kind of a file under `scripts/`.
+    ///
+    /// `SkillFilesText` gives the `run script` call only when a row of this
+    /// kind is in the list, thus it reads this value too.
+    internal static let scriptKind = "script"
+
     /// Maps a top-level resource folder name to its kind string.
     private static let kindsByTopLevelFolder = [
-        "scripts": "script",
+        "scripts": scriptKind,
         "references": "reference",
         "assets": "asset",
     ]

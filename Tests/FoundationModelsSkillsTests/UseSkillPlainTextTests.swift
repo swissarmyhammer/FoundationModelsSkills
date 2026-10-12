@@ -8,7 +8,9 @@ import Testing
 ///
 /// The model reads the answer as the procedure to follow. Thus the answer is
 /// the rendered body of the skill as plain text: no JSON object, no `body`
-/// key, no `id` key, and no escape sequences. An error is a plain sentence.
+/// key, no `id` key, and no escape sequences. When the skill has files other
+/// than `SKILL.md`, a plain-text list of the files and the calls that read
+/// them follow the body. An error is a plain sentence.
 ///
 /// Each alias of `use skill` gives the same answer. Thus each test runs once
 /// for each op spelling in `useSkillOps`.
@@ -103,7 +105,176 @@ struct UseSkillPlainTextTests {
         #expect(answer.contains("using the message: \n"))
     }
 
+    // MARK: - The list of the files of the skill follows the body
+
+    /// The fixture skill with one asset, one reference and one script.
+    private static let releaseNotesSkillID = "release-notes"
+
+    /// The text that follows the body of `release-notes` under a host policy
+    /// that permits scripts: the three rows in path order, the read call and
+    /// the run call.
+    private static let releaseNotesFilesText = """
+        Files of this skill:
+        - assets/logo.bin (asset)
+        - references/changelog.md (reference)
+        - scripts/build.sh (script)
+
+        To read a file, call the `skills` tool with {"op": "read resource", "id": "release-notes", "path": "<path>"}. \
+        Give the path as it is in this list.
+        To run a script, call the `skills` tool with {"op": "run script", "id": "release-notes", "path": "scripts/<name>"}.
+        """
+
+    /// The text that follows the body of `release-notes` when the host policy
+    /// disables scripts: the same rows and the read call, with no run call.
+    private static let releaseNotesFilesTextWithNoRunCall = """
+        Files of this skill:
+        - assets/logo.bin (asset)
+        - references/changelog.md (reference)
+        - scripts/build.sh (script)
+
+        To read a file, call the `skills` tool with {"op": "read resource", "id": "release-notes", "path": "<path>"}. \
+        Give the path as it is in this list.
+        """
+
+    /// The id of the skill that each temporary-layer test writes.
+    private static let generatedSkillID = "generated"
+
+    /// The path of the one reference of the skill with no script.
+    private static let generatedReferencePath = "references/guide.md"
+
+    /// The text that follows the body of a skill whose one file other than
+    /// `SKILL.md` is `generatedReferencePath`.
+    private static let generatedReferenceFilesText = """
+        Files of this skill:
+        - references/guide.md (reference)
+
+        To read a file, call the `skills` tool with {"op": "read resource", "id": "generated", "path": "<path>"}. \
+        Give the path as it is in this list.
+        """
+
+    /// The text between the body and the list of the files.
+    ///
+    /// The body of each fixture skill ends with a line break, thus one more
+    /// line break makes the one blank line between the body and the list.
+    private static let bodySeparator = "\n"
+
+    /// The number of rows that the list gives at most.
+    private static let rowLimit = 100
+
+    /// The number of files of the skill that the row-limit test writes.
+    private static let manyFileCount = 102
+
+    @Test func useSkillOfReleaseNotesGivesTheBodyThenTheFilesAndTheCalls() async throws {
+        let registry = Self.makeFixtureRegistry()
+        let tool = try Self.makeTool(registry: registry)
+        let renderedBody = try await registry.call(id: Self.releaseNotesSkillID, arguments: [])
+
+        let answer = try await tool.call(arguments: Self.useArguments(id: Self.releaseNotesSkillID))
+
+        #expect(renderedBody.hasSuffix("\n"))
+        #expect(answer == renderedBody + Self.bodySeparator + Self.releaseNotesFilesText)
+    }
+
+    @Test func aDisabledScriptPolicyGivesNoRunCall() async throws {
+        let registry = SkillsRegistry(
+            roots: [ResourceTestSupport.projectSkillsRoot], policy: RenderPolicy(isScriptExecutionDisabled: true))
+        let tool = try Self.makeTool(registry: registry)
+        let renderedBody = try await registry.call(id: Self.releaseNotesSkillID, arguments: [])
+
+        let answer = try await tool.call(arguments: Self.useArguments(id: Self.releaseNotesSkillID))
+
+        #expect(answer == renderedBody + Self.bodySeparator + Self.releaseNotesFilesTextWithNoRunCall)
+    }
+
+    @Test func aSkillWithNoScriptGivesNoRunCall() async throws {
+        let directories = try LayerFixtureSupport.makeLayerDirectories(count: 1)
+        defer { LayerFixtureSupport.removeDirectories(directories) }
+        try ResourceTestSupport.writeMinimalSkillFile(id: Self.generatedSkillID, in: directories[0])
+        try LayerFixtureSupport.writeTextFile(
+            at: Self.generatedReferencePath,
+            in: directories[0].appendingPathComponent(Self.generatedSkillID, isDirectory: true))
+        let registry = SkillsRegistry(roots: directories)
+
+        let answer = try await Self.useAnswer(id: Self.generatedSkillID, registry: registry)
+
+        let renderedBody = try await registry.call(id: Self.generatedSkillID, arguments: [])
+        #expect(answer == renderedBody + Self.bodySeparator + Self.generatedReferenceFilesText)
+    }
+
+    @Test func aFileThatOnlyALowerLayerHoldsIsInTheList() async throws {
+        let directories = try LayerFixtureSupport.makeLayerDirectories(count: 2)
+        defer { LayerFixtureSupport.removeDirectories(directories) }
+        let (lower, higher) = (directories[0], directories[1])
+        try LayerFixtureSupport.writeTextFile(
+            at: Self.generatedReferencePath, in: lower.appendingPathComponent(Self.generatedSkillID, isDirectory: true))
+        try ResourceTestSupport.writeMinimalSkillFile(id: Self.generatedSkillID, in: higher)
+        let registry = SkillsRegistry(roots: [lower, higher])
+
+        let answer = try await Self.useAnswer(id: Self.generatedSkillID, registry: registry)
+
+        let renderedBody = try await registry.call(id: Self.generatedSkillID, arguments: [])
+        #expect(answer == renderedBody + Self.bodySeparator + Self.generatedReferenceFilesText)
+    }
+
+    @Test func aSkillWithMoreFilesThanTheLimitListsTheLimitAndCountsTheRest() async throws {
+        let directories = try LayerFixtureSupport.makeLayerDirectories(count: 1)
+        defer { LayerFixtureSupport.removeDirectories(directories) }
+        try ResourceTestSupport.writeMinimalSkillFile(id: Self.generatedSkillID, in: directories[0])
+        let skillDirectory = directories[0].appendingPathComponent(Self.generatedSkillID, isDirectory: true)
+        let paths = (0..<Self.manyFileCount).map { String(format: "references/file-%03d.md", $0) }
+        for path in paths {
+            try LayerFixtureSupport.writeTextFile(at: path, in: skillDirectory)
+        }
+        let registry = SkillsRegistry(roots: directories)
+
+        let answer = try await Self.useAnswer(id: Self.generatedSkillID, registry: registry)
+
+        let renderedBody = try await registry.call(id: Self.generatedSkillID, arguments: [])
+        let rows = paths.prefix(Self.rowLimit).map { "- \($0) (reference)" }
+        let expected =
+            ["Files of this skill:"] + rows + [
+                #"2 more files are not listed. See them with {"op": "list resource", "id": "generated"}."#,
+                "",
+                #"To read a file, call the `skills` tool with {"op": "read resource", "id": "generated", "#
+                    + #""path": "<path>"}. Give the path as it is in this list."#,
+            ]
+        #expect(answer == renderedBody + Self.bodySeparator + expected.joined(separator: "\n"))
+    }
+
+    @Test func theAddedTextHoldsNoTag() async throws {
+        let registry = Self.makeFixtureRegistry()
+        let renderedBody = try await registry.call(id: Self.releaseNotesSkillID, arguments: [])
+
+        let answer = try await Self.useAnswer(id: Self.releaseNotesSkillID, registry: registry)
+
+        let addedText = try #require(
+            answer.hasPrefix(renderedBody) ? String(answer.dropFirst(renderedBody.count)) : nil,
+            "the answer must start with the rendered body")
+        #expect(!addedText.isEmpty)
+        #expect(!addedText.contains("</"))
+        #expect(addedText.firstMatch(of: /<(\w+)>[\s\S]*<\/\1>/) == nil)
+    }
+
     // MARK: - Fixtures
+
+    /// Gives the answer of the fused tool to the `use skill` call of `id`.
+    ///
+    /// - Parameters:
+    ///   - id: The skill id to load.
+    ///   - registry: The registry the tool dispatches against.
+    /// - Returns: The plain-text answer.
+    /// - Throws: Whatever `makeTool(registry:)` or `call(arguments:)` throws.
+    private static func useAnswer(id: String, registry: SkillsRegistry) async throws -> String {
+        try await makeTool(registry: registry).call(arguments: useArguments(id: id))
+    }
+
+    /// The payload that loads `id` with no arguments.
+    ///
+    /// - Parameter id: The skill id to load.
+    /// - Returns: The payload.
+    private static func useArguments(id: String) -> GeneratedContent {
+        GeneratedContent(properties: ["op": useSkillOps[0], "id": id])
+    }
 
     /// Builds a registry over the `project/.skills` fixture root.
     ///

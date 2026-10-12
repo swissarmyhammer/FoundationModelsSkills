@@ -62,7 +62,7 @@ reload does not rebuild the tool:
 |---|---|---|
 | `search skill` | `query` (req), `limit?` | Finds the skills for the kind of work that the model will do next. Search by the kind of work, not by the topic of the task. The answer is plain text: one line for each match from `SkillSearchAgent` over the model-visible catalog, in rank order, and the instruction that names the exact `use skill` call. See [The `search skill` and `list skill` answers](#the-search-skill-and-list-skill-answers). |
 | `list skill` | `filter?` | Lists each skill with its description: the model-visible catalog (with an optional filter), in catalog order, with no ranking. The answer is the same plain lines and the same instruction as `search skill`. |
-| `use skill` | `id` (req), `arguments?` | Loads the instructions of a skill for the model to follow: renders the pipeline with `arguments`. The answer is the rendered body as plain text. An unknown or hidden `id` returns a corrective sentence that contains the current id list. See [The `use skill` answer](#the-use-skill-answer). |
+| `use skill` | `id` (req), `arguments?` | Loads the instructions of a skill for the model to follow: renders the pipeline with `arguments`. The answer is the rendered body as plain text. When the skill has files other than `SKILL.md`, the list of the files and the calls that read them follow the body. An unknown or hidden `id` returns a corrective sentence that contains the current id list. See [The `use skill` answer](#the-use-skill-answer). |
 | `list resource` | `id` (req) | Lists each file of the combined view of the skill except `SKILL.md`. The list stops at 100 rows. |
 | `read resource` | `id` (req), `path` (req), `start?`, `end?` | Returns the winning copy of a file verbatim, in a line window: 500 lines maximum and 1,000,000 content bytes maximum for each call. The tool never renders the file. It streams the file in 64 KiB parts and never loads the full file. `totalLines` is exact. See [development.md](development.md) for the exact byte-budget rules. `path` is relative to the skill directory. The tool also accepts an absolute path in a layer directory of the skill, and the result gives the relative path; each other absolute path is refused. A file that is not UTF-8 text is binary, and a binary file gives its absolute path and its size, not its content: the result has `binary: true`, `absolutePath` (the winning copy) and `byteSize`, and `start`, `end` and `totalLines` are `0`. Give that absolute path to a different tool, or to `read resource` again. A text read gives `binary: false`. |
 | `run script` | `id` (req), `path` (req, in `scripts/`), `arguments?`, `timeout?` | Runs the winning copy of the file directly, in the layer directory that gave the winning copy. The file must have the executable bit and a shebang. Three gates apply: the host policy, the skill's `allowed-tools: Script(<glob>)` grant, and the host trust posture. The process runs in its own process group. A timeout sends `SIGKILL`. The tool also accepts an absolute path in a layer directory of the skill, and the result gives the relative path; each other absolute path is refused. The host policy gate applies before the path check. |
@@ -109,9 +109,10 @@ from that one file, and never from the layer that gives the script.
 ## The `use skill` answer
 
 The model reads the answer of `use skill` as the procedure to follow. Thus
-the answer is the rendered body of the skill, and nothing else. It is plain
-text: no JSON object, no `body` key, no `id` key, and no escape sequences.
-The tool adds no tag, marker, or wrapper.
+the answer starts with the rendered body of the skill. It is plain text: no
+JSON object, no `body` key, no `id` key, and no escape sequences. The tool
+adds no tag, marker, or wrapper. We cannot be sure that each model knows a
+tag that we make.
 
 For the call `{"op": "use skill", "id": "explore"}`, the answer is the text of
 the skill, with its line breaks, as the render pipeline gives it:
@@ -119,6 +120,35 @@ the skill, with its line breaks, as the render pipeline gives it:
 ```text
 …the rendered body of explore, line for line…
 ```
+
+When the skill has files other than `SKILL.md`, the list of the files follows
+the body, after one blank line. The list is plain text too. It gives the same
+rows as `list resource`, in path order, with the same kind, and the exact
+calls that read a file or run a script. For the call
+`{"op": "use skill", "id": "release-notes"}`, the answer is:
+
+```text
+…the rendered body of release-notes, line for line…
+
+Files of this skill:
+- assets/logo.bin (asset)
+- references/changelog.md (reference)
+- scripts/build.sh (script)
+
+To read a file, call the `skills` tool with {"op": "read resource", "id": "release-notes", "path": "<path>"}. Give the path as it is in this list.
+To run a script, call the `skills` tool with {"op": "run script", "id": "release-notes", "path": "scripts/<name>"}.
+```
+
+- The list gives 100 rows at most, the same limit as `list resource`. When
+  the skill has more files, the line
+  `<N> more files are not listed. See them with {"op": "list resource", "id": "<id>"}.`
+  follows the rows.
+- The `run script` line is in the answer only when a file of the skill is a
+  `script` and the host policy permits scripts
+  (`RenderPolicy.isScriptExecutionDisabled` is `false`).
+- A skill with no file other than `SKILL.md` gets no list. Its answer is the
+  rendered body alone.
+- The `/` command of the user gives the rendered body alone.
 
 Before, the answer was a JSON object:
 `{"body": "…the rendered body, with \n escapes…", "id": "explore"}`.
