@@ -42,6 +42,23 @@ comments:
     - review: not run
     - next: finish ^nw738g3 first, then resume this card at the test step
   timestamp: 2026-10-12T12:39:08.822252+00:00
+- actor: claude-code
+  id: 01m4r2ggkgpk4qhck7d2pykjj4
+  text: |-
+    ### review — stuck
+    - evidence: The review target is Extras commit 6ac66c1 in /Users/wballard/github/swissarmyhammer/FoundationModelsExtras. The repository root of this session is /Users/wballard/github/swissarmyhammer/FoundationModelsSkills (`git rev-parse --show-toplevel`). The `review` skill has a written rule: "Review only the repository that contains the current working directory. If the user gives a target outside the root, do not review it. Tell the user that the target is outside this repository, and stop. Do not change the working directory." The task assignment tells the reviewer to review the sibling repository. The two instructions cannot both be correct. The reviewer did not run the review engine.
+    - next: A person must decide. Run `/review ^hh71nx8 6ac66c1~1..6ac66c1` in a session whose working directory is /Users/wballard/github/swissarmyhammer/FoundationModelsExtras, or change the scope rule of the `review` skill.
+  timestamp: 2026-10-12T12:48:27.248508+00:00
+- actor: claude-code
+  id: 01m4r2gyps5htvgkprc7wd5vqc
+  text: |-
+    ### finish iteration 2 — stuck
+    - implement: (from iteration 1) Extras 6ac66c1 pushed; blocker ^nw738g3 now done (aff9035)
+    - test: green — Skills swift test 560 passed; Extras swift test 987 passed (11 known issues, pre-existing withKnownIssue); resolved Extras 6ac66c1
+    - commit: a3da4ae (kanban files only)
+    - review: stuck — the review skill refuses a target outside the repository root; the code is in ../FoundationModelsExtras 6ac66c1
+    - next: a person runs `/review ^hh71nx8 6ac66c1~1..6ac66c1` in a session rooted at FoundationModelsExtras, or changes the scope rule. Tasks ^aaj8fa4 and ^g2bzbmb depend on this card.
+  timestamp: 2026-10-12T12:48:41.689152+00:00
 position_column: doing
 position_ordinal: '80'
 title: 'FoundationModelsExtras: add the path helper and the include resolver for skill files'

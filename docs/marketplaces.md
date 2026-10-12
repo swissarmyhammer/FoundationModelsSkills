@@ -60,7 +60,7 @@ await store.start()
 | `sha` | A commit pin. It wins over `ref`, and it stops the automatic update. |
 | `path` | A subfolder of the repository. The store reads only that path. |
 | `alias` | A local name. When you set it, it is the pre-fetch key. |
-| `select` | The skills to take: `.all`, `.plugins([…])`, or `.skills([…])`. |
+| `select` | The skills to take: `.all` or `.skills([…])`. |
 | `autoUpdate` | Whether the store installs a new commit when it finds one. The default is `true`. |
 
 ## Add a marketplace in `marketplaces.yaml`
@@ -160,31 +160,41 @@ that folder as it watches a local layer.
   command listing, the events, and the diagnostics show that id. To pin,
   unpin, or update one marketplace, give that id.
 
-## Catalog formats
+## How the store finds the skills
 
-The store looks for these, in order, and it uses the first that it finds:
+A marketplace is only a folder. The store reads no catalog file, and a catalog
+file in the tree has no effect. The store scans the tree from the root, with no
+depth limit. It does not go into a folder that the layout excludes: `.git` and
+`node_modules`.
 
-1. `.claude-plugin/marketplace.json`.
-2. `.agents/plugins/marketplace.json`, the Codex mirror. The same rules apply.
-3. No catalog: a scan of the repository for `SKILL.md` files, to a depth of
-   three path components. The more shallow `SKILL.md` wins.
+- A folder that holds `SKILL.md` is a skill. The folder name is the skill name.
+- A folder that holds `AGENT.md` is an agent. The folder name is the agent
+  name.
+- The scan does not go into a skill folder or an agent folder. The other files
+  of that folder are its resources.
+- A folder that holds both `SKILL.md` and `AGENT.md` gets one diagnostic. It is
+  not a skill, and it is not an agent.
+- When two skills, or two agents, have the same name, the one that is nearer to
+  the root wins. At the same depth, the first one in path order wins. Each one
+  that loses gets one diagnostic.
+- The name `agents` is reserved at the layer root. A skill folder with that name
+  gets one diagnostic, and the store skips it.
+- A `SKILL.md` at the root of the tree makes the whole tree one skill. The
+  `name` of its frontmatter is the skill name.
 
-The skills of a plugin are the entries of its `skills` array. When the plugin
-has no such array, they are the folders of `<plugin source>/skills/` that hold
-a `SKILL.md` file. A plugin with a remote source gets a diagnostic, and the
-store skips it. The store also reads the `renames` map of a catalog: a selected
-name that the catalog renamed maps to the new name, and a name that the catalog
-removed selects nothing.
+Thus a tree in the plugin layout, `plugins/<name>/skills/<skill>/SKILL.md`,
+loads with no other file. This package reads the skills of each layer. A host
+that uses agents reads `agents/<name>/AGENT.md` of each layer itself.
 
 ## Skill selection
 
-- `.all` is the default. It takes every skill of the catalog.
-- `.skills([…])` takes only the named skills.
-- `.plugins([…])` takes only the skills of the named plugins.
+- `.all` is the default. It takes every skill and every agent of the
+  marketplace.
+- `.skills([…])` takes only the named skills, and no agent.
 
 The store copies only the selected skills into the snapshot. Thus a skill that
 you did not select does not exist for the registry. A name that is not in the
-catalog gets a diagnostic. It is not an error.
+marketplace gets a diagnostic. It is not an error.
 
 ## The cache
 
@@ -210,11 +220,11 @@ Each marketplace has one folder in the cache:
     └── lock                                one writer at a time
 ```
 
-The store writes the selected skill folders and the `_partials/` folder of the
-marketplace into `snapshots/<commit>.tmp/`, directly from the objects of the
-commit. There is no checkout and no work tree. The store refuses a tree entry
-name that holds `..` or `/`, a symlink that points out of the skill folder, a
-submodule entry, and content above the limits of
+The store writes the selected skill folders, the agent folders, and the merged
+`_partials/` folder into `snapshots/<commit>.tmp/`, directly from the objects
+of the commit. There is no checkout and no work tree. The store refuses a tree
+entry name that holds `..` or `/`, a symlink that points out of the skill
+folder, a submodule entry, and content above the limits of
 `MarketplacePolicy.snapshotLimits`. Then it renames the folder, makes a new
 `current` symlink, and renames that symlink over the old one. That last step is
 atomic: a reader sees the old snapshot or the new snapshot, and never a part of
@@ -356,24 +366,27 @@ edits `marketplaces.yaml` itself.
 
 ## Publish a marketplace
 
-Use the layout of the `swissarmyhammer/skills` repository:
+A marketplace needs no catalog file. Put each skill in its own folder, with a
+`SKILL.md` file in that folder. The scan finds each skill at each depth. Use the
+layout of the `swissarmyhammer/skills` repository:
 
 ```
-skills/                                   repository root
-├── .claude-plugin/marketplace.json       the primary catalog
-├── .agents/plugins/marketplace.json      the Codex mirror, generated
-├── .well-known/agent-skills/index.json   the discovery index, generated
-└── skills/                               ONE layer root
-    ├── _partials/                        the Stencil partials of this marketplace
+skills/                       repository root
+├── _partials/                the Stencil partials of the whole marketplace
+├── agents/                   one folder for each agent
+│   └── committer/AGENT.md
+└── skills/                   one folder for each skill
     ├── commit/SKILL.md
     └── …
 ```
 
-Each skill is a direct child of one `skills/` folder, and the `_partials/`
-folder is in that folder too. Thus `skills/` is a valid layer root, and
-discovery skips `_partials/`, because that folder holds no `SKILL.md` file.
+The snapshot is flat. Each skill is at `<snapshot>/<skill>/`, and the folders
+between the root of the tree and a skill, for example `skills/`, are not in the
+snapshot. Thus the store merges the `_partials/` folder of each folder from the
+root down to a selected skill into `<snapshot>/_partials/`. A partial in a more
+specific folder wins over a partial with the same name in a less specific
+folder. A `_partials/` folder in a skill folder stays in that skill folder, and
+it wins for that skill.
 
-Use one plugin that lists every skill, with `"source": "./"` and an explicit
-`skills` array. Generate the array from the folders, and do not write it by
-hand. Give the catalog a `metadata.version`, and make each release tag `vX.Y.Z`
-equal to that version.
+A release is a git tag, for example `v1.0.0`. To hold the marketplace at one
+release, a host gives that tag in the `ref` field or in a `#ref` suffix.

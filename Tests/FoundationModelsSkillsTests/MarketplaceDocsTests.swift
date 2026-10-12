@@ -37,7 +37,7 @@ struct MarketplaceDocsTests {
     private static let readmePath = "README.md"
 
     /// The package that holds the marketplace: the store, the cache, the
-    /// transport, the catalog read, the snapshot writer and the
+    /// transport, the folder scan, the snapshot writer and the
     /// configuration file. A host document must name it, so that a reader
     /// knows which repository a change of the behavior goes to.
     private static let marketplacePackageName = "FoundationModelsExtras"
@@ -74,6 +74,22 @@ struct MarketplaceDocsTests {
     private static let marketplaceDocuments = [
         hostGuidePath, securityPath, readmePath,
     ]
+
+    /// Every document of the package: the README and each file of `docs/`.
+    private static let packageDocuments = [
+        readmePath, hostGuidePath, securityPath, "docs/operations.md", "docs/development.md",
+    ]
+
+    /// The wordings of the catalog read that Extras removed. A marketplace is
+    /// only a folder now: the store scans the tree and reads no catalog file,
+    /// and a selection names skills only. Thus no document may name the
+    /// catalog file or the plugin selection.
+    private static let removedCatalogWordings = ["marketplace.json", ".plugins("]
+
+    /// One row for each document and each removed catalog wording.
+    private static let removedCatalogRows: [DocumentClaim] = packageDocuments.flatMap { document in
+        removedCatalogWordings.map { DocumentClaim(document: document, text: $0) }
+    }
 
     /// The heading of the marketplace section of the security document.
     private static let securityHeading = "## Marketplaces"
@@ -126,6 +142,18 @@ struct MarketplaceDocsTests {
         #expect(
             !text.contains(Self.removedGrantsTypeName),
             "\(document) must not name \"\(Self.removedGrantsTypeName)\"")
+    }
+
+    @Test(arguments: removedCatalogRows)
+    func noDocumentSaysTheStoreReadsACatalogFile(row: DocumentClaim) throws {
+        let text = try FixtureLibrary.readText(relativePath: row.document)
+
+        #expect(
+            !text.contains(row.text),
+            """
+            \(row.document) must not name "\(row.text)": the store scans the folder of a \
+            marketplace and reads no catalog file
+            """)
     }
 
     @Test(arguments: implementationDocuments)
