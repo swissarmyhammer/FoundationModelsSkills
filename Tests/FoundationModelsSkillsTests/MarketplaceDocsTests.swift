@@ -13,8 +13,56 @@ struct DocumentClaim: Sendable {
     /// The path of the document, from the package root.
     let document: String
 
-    /// The text that the document must hold.
+    /// The text that the document must hold, or must not hold.
     let text: String
+}
+
+extension DocumentClaim {
+    /// Records an issue when the document does not hold ``text``.
+    ///
+    /// This is the one check of a claim that a document must make. Each
+    /// suite gives its rows. The read, the comparison and the message are
+    /// only here, thus a change to the check is one change.
+    ///
+    /// The comparison is exact, because a claim names a heading, a path or a
+    /// name of the code as the code spells it.
+    ///
+    /// - Parameter sourceLocation: The test line that the issue points to.
+    /// - Throws: An error when the document is not there, or is not UTF-8
+    ///   text.
+    func expectPresent(sourceLocation: SourceLocation = #_sourceLocation) throws {
+        let documentText = try FixtureLibrary.readText(relativePath: document)
+
+        #expect(
+            documentText.contains(text),
+            "\(document) must hold \"\(text)\"",
+            sourceLocation: sourceLocation)
+    }
+
+    /// Records an issue when the document holds ``text``.
+    ///
+    /// This is the one check of a removed wording. Each suite gives its rows
+    /// and the reason. The read, the comparison and the message are only
+    /// here, thus a change to the check is one change.
+    ///
+    /// The comparison ignores case. A removed wording is false in each case.
+    ///
+    /// - Parameters:
+    ///   - reason: Why the wording is false now. The issue gives it to the
+    ///     reader.
+    ///   - sourceLocation: The test line that the issue points to.
+    /// - Throws: An error when the document is not there, or is not UTF-8
+    ///   text.
+    func expectAbsent(
+        because reason: String, sourceLocation: SourceLocation = #_sourceLocation
+    ) throws {
+        let documentText = try FixtureLibrary.readText(relativePath: document).lowercased()
+
+        #expect(
+            !documentText.contains(text.lowercased()),
+            "\(document) must not hold \"\(text)\": \(reason)",
+            sourceLocation: sourceLocation)
+    }
 }
 
 /// Holds the marketplace documentation to the behavior that shipped.
@@ -128,32 +176,31 @@ struct MarketplaceDocsTests {
 
     @Test(arguments: claims)
     func theDocumentationMakesEveryClaim(claim: DocumentClaim) throws {
-        let text = try FixtureLibrary.readText(relativePath: claim.document)
+        try claim.expectPresent()
+    }
 
-        #expect(
-            text.contains(claim.text),
-            "\(claim.document) must name \"\(claim.text)\"")
+    /// The README names the host guide, thus the absence check of that path,
+    /// in capital letters, must record an issue. A check that records no
+    /// issue here would let each removed wording through.
+    @Test func theAbsenceCheckRecordsAnIssueForAWordingInAnyCase() {
+        let heldWording = DocumentClaim(
+            document: Self.readmePath, text: Self.hostGuidePath.uppercased())
+
+        withKnownIssue {
+            try heldWording.expectAbsent(because: "the check must find a held wording")
+        }
     }
 
     @Test(arguments: marketplaceDocuments)
     func noDocumentNamesTheRemovedGrantsType(document: String) throws {
-        let text = try FixtureLibrary.readText(relativePath: document)
-
-        #expect(
-            !text.contains(Self.removedGrantsTypeName),
-            "\(document) must not name \"\(Self.removedGrantsTypeName)\"")
+        try DocumentClaim(document: document, text: Self.removedGrantsTypeName)
+            .expectAbsent(because: "the host RenderPolicy gates every layer")
     }
 
     @Test(arguments: removedCatalogRows)
     func noDocumentSaysTheStoreReadsACatalogFile(row: DocumentClaim) throws {
-        let text = try FixtureLibrary.readText(relativePath: row.document)
-
-        #expect(
-            !text.contains(row.text),
-            """
-            \(row.document) must not name "\(row.text)": the store scans the folder of a \
-            marketplace and reads no catalog file
-            """)
+        try row.expectAbsent(
+            because: "the store scans the folder of a marketplace and reads no catalog file")
     }
 
     @Test(arguments: implementationDocuments)
@@ -174,10 +221,7 @@ struct MarketplaceDocsTests {
     }
 
     @Test func theHostGuideGivesNoSSHURLAsAnExample() throws {
-        let text = try FixtureLibrary.readText(relativePath: Self.hostGuidePath)
-
-        #expect(
-            !text.contains(Self.sshURLPrefix),
-            "\(Self.hostGuidePath) must give each example URL in the HTTPS form")
+        try DocumentClaim(document: Self.hostGuidePath, text: Self.sshURLPrefix)
+            .expectAbsent(because: "each example URL must have the HTTPS form")
     }
 }

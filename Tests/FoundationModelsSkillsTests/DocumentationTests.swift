@@ -66,8 +66,8 @@ struct DocumentationTests {
     /// Each wording of the rule that shipped before: a higher layer hid every
     /// file of a lower layer of the same skill.
     ///
-    /// Each entry is lower case, because the comparison reads the lower case
-    /// of the document.
+    /// The comparison ignores case, thus each wording also stops the same
+    /// words with a capital letter.
     private static let earlierRuleWordings = [
         "full-replace",
         "full replace",
@@ -165,48 +165,32 @@ struct DocumentationTests {
 
     @Test(arguments: earlierRuleRows)
     func noDocumentStatesTheRuleThatShippedBefore(row: DocumentClaim) throws {
-        let text = try FixtureLibrary.readText(relativePath: row.document).lowercased()
-
-        #expect(
-            !text.contains(row.text),
-            """
-            \(row.document) must not say "\(row.text)": the unit of override is the file, thus a \
-            lower layer still gives each file that no higher layer holds
-            """)
+        try row.expectAbsent(
+            because: """
+                the unit of override is the file, thus a lower layer still gives each file \
+                that no higher layer holds
+                """)
     }
 
     @Test(arguments: documents)
     func noDocumentGivesTheRemovedFieldAsAFieldOfToday(document: String) throws {
-        let text = try FixtureLibrary.readText(relativePath: document)
-
-        #expect(
-            !text.contains(Self.removedShadowedCandidatesFieldName),
-            """
-            \(document) must not name "\(Self.removedShadowedCandidatesFieldName)": \
-            DiscoveredSkill has no such field any more
-            """)
+        try DocumentClaim(document: document, text: Self.removedShadowedCandidatesFieldName)
+            .expectAbsent(because: "DiscoveredSkill has no such field any more")
     }
 
     @Test(arguments: documents)
     func noDocumentGivesTheEarlierWorkingDirectoryOfAScriptRun(document: String) throws {
-        let text = try FixtureLibrary.readText(relativePath: document)
-
-        #expect(
-            !text.contains(Self.earlierWorkingDirectoryClaim),
-            """
-            \(document) must not say "\(Self.earlierWorkingDirectoryClaim)": one skill has \
-            more than one layer directory, thus a script runs in \
-            \(Self.winningLayerWorkingDirectory)
-            """)
+        try DocumentClaim(document: document, text: Self.earlierWorkingDirectoryClaim)
+            .expectAbsent(
+                because: """
+                    one skill has more than one layer directory, thus a script runs in \
+                    \(Self.winningLayerWorkingDirectory)
+                    """)
     }
 
     @Test(arguments: claims)
     func theDocumentationMakesEveryClaim(claim: DocumentClaim) throws {
-        let text = try FixtureLibrary.readText(relativePath: claim.document)
-
-        #expect(
-            text.contains(claim.text),
-            "\(claim.document) must state \"\(claim.text)\"")
+        try claim.expectPresent()
     }
 
     @Test func theDiscoveredSkillTypeCarriesItsLayerDirectories() {
