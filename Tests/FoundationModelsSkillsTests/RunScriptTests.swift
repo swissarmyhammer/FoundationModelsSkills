@@ -9,8 +9,8 @@ import Testing
 
 /// Tests for the `run script` operation: the triple gate,
 /// unknown/model-hidden id correctives, the two path guards (`scripts/`
-/// prefix, then confinement), the direct-exec eligibility check
-/// (executable bit + shebang), process-group timeout kill, the
+/// prefix, then confinement), the absolute paths, the direct-exec
+/// eligibility check (executable bit + shebang), process-group timeout kill, the
 /// failed-to-start branch of `RunScript`, the `generatedContent`
 /// round trip, and a golden result against the static `release-notes`
 /// fixture.
@@ -80,6 +80,11 @@ struct RunScriptTests {
             (name: "an unknown id", id: "does-not-exist", path: "scripts/build.sh"),
             (name: "a path not under scripts/", id: "release-notes", path: "references/changelog.md"),
             (name: "a path confinement escape", id: "release-notes", path: "../../etc/passwd"),
+            (name: "an absolute path outside the skill", id: "release-notes", path: RunScriptTests.systemFilePath),
+            (
+                name: "an absolute path in the skill", id: "release-notes",
+                path: RunScriptTests.absoluteFixtureScriptPath
+            ),
         ])
     func hostPolicyGateFiresBeforeAnyIDOrPathResolution(name: String, id: String, path: String) async throws {
         let context = Self.makeContext(policy: RenderPolicy(isScriptExecutionDisabled: true))
@@ -265,6 +270,45 @@ struct RunScriptTests {
             return
         }
         #expect(message == expected, "\(name)")
+    }
+
+    // MARK: - Absolute paths
+
+    /// The id of the fixture skill that holds a script.
+    private static let fixtureSkillID = "release-notes"
+
+    /// The path of the script of the fixture skill, relative to the skill
+    /// directory.
+    private static let fixtureScriptPath = "scripts/build.sh"
+
+    /// The absolute path of the script of the fixture skill.
+    private static var absoluteFixtureScriptPath: String {
+        projectSkillsRoot.appendingPathComponent(fixtureSkillID).appendingPathComponent(fixtureScriptPath).path
+    }
+
+    /// A file outside each skill, which each Mac holds.
+    private static let systemFilePath = "/etc/hosts"
+
+    /// The model can give the absolute path of a script of the skill. The
+    /// script runs, and the result names the relative path.
+    @Test func anAbsoluteScriptPathInTheSkillRuns() async throws {
+        let output = try await RunScript(id: Self.fixtureSkillID, path: Self.absoluteFixtureScriptPath)
+            .execute(in: Self.makeContext())
+
+        let result = try #require(
+            ResourceTestSupport.successResult(of: output), "expected a success outcome, got \(output)")
+        #expect(result.status == "completed")
+        #expect(result.path == Self.fixtureScriptPath)
+    }
+
+    /// The denied corrective names the path that the model gave.
+    @Test func anAbsolutePathOutsideTheSkillDrawsTheDeniedCorrective() async throws {
+        let output = try await RunScript(id: Self.fixtureSkillID, path: Self.systemFilePath)
+            .execute(in: Self.makeContext())
+
+        #expect(
+            ResourceTestSupport.correctiveMessage(of: output)
+                == ResourcePathRules.deniedMessage(path: Self.systemFilePath))
     }
 
     // MARK: - Direct-exec eligibility: executable bit + shebang

@@ -77,6 +77,35 @@ internal struct SkillOverlay: Sendable {
             highestDirectory.appendingPathComponent(relativePath), to: highestDirectory)
     }
 
+    /// The character that starts an absolute path.
+    private static let rootPathPrefix = "/"
+
+    /// The path of the skill that `path` names, relative to a layer directory.
+    ///
+    /// The model can give an absolute path, for example the absolute path that
+    /// an earlier operation gave it. This gives the relative path of such a
+    /// path, when a layer directory of the skill holds it. The relative path
+    /// then goes to `resolve(_:)`, thus an absolute path into a lower layer
+    /// directory reads the winning copy, which can be the copy of a higher
+    /// layer directory.
+    ///
+    /// `PathConfinement.relativePath(of:in:)` of `FoundationModelsExtras`
+    /// resolves the symbolic links, thus this type resolves none. The `/tmp`
+    /// form and the `/private/tmp` form of one path give the same result.
+    ///
+    /// - Parameter path: The path that the model gave.
+    /// - Returns: `path` with no change when it does not start with `/`; a
+    ///   caller checks it with `ResourcePathRules.isWellFormedRelativePath(_:)`
+    ///   later. For an absolute path, the path relative to the highest layer
+    ///   directory that holds it, or `nil` when no layer directory holds it.
+    internal func relativePath(for path: String) -> String? {
+        guard path.hasPrefix(Self.rootPathPrefix) else { return path }
+        let candidate = URL(fileURLWithPath: path)
+        return directories.reversed().lazy
+            .compactMap { PathConfinement.relativePath(of: candidate, in: $0) }
+            .first
+    }
+
     /// Every file path of the skill, at every depth, each with its winning
     /// copy.
     ///

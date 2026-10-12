@@ -113,6 +113,15 @@ struct DocumentationTests {
         "project/review/references/house-style.md",
     ]
 
+    /// The phrases of the host guide of the operations that say which
+    /// absolute path `read resource` and `run script` accept, and that each
+    /// other absolute path is refused, spelled as `SkillOverlay` applies the
+    /// rule.
+    private static let absolutePathPhrases = [
+        "an absolute path in a layer directory of the skill",
+        "each other absolute path is refused",
+    ]
+
     // MARK: - The names the code gives
 
     /// A `DiscoveredSkill` that stands for nothing, read for the names of its
@@ -147,6 +156,7 @@ struct DocumentationTests {
     private static let claims: [DocumentClaim] =
         ruleStatingDocuments.map { DocumentClaim(document: $0, text: overrideRuleSentence) }
         + layerExamplePaths.map { DocumentClaim(document: operationsPath, text: $0) }
+        + absolutePathPhrases.map { DocumentClaim(document: operationsPath, text: $0) }
         + [
             DocumentClaim(document: operationsPath, text: winningLayerWorkingDirectory),
             DocumentClaim(document: operationsPath, text: combinedViewPhrase),

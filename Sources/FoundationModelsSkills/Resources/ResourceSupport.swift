@@ -44,6 +44,17 @@ internal enum ResourcePathRules {
     internal static func deniedMessage(path: String) -> String {
         "The path `\(path)` is not accessible: it must resolve to a location inside the skill directory."
     }
+
+    /// The description of the `path` parameter of each resource operation
+    /// that reads one file of the skill (`ReadResource`, `RunScript`), thus
+    /// the two can never differ on it.
+    ///
+    /// The model can give an absolute path, and `SkillOverlay.relativePath(for:)`
+    /// accepts one that is in a layer directory of the skill, thus the text
+    /// says so.
+    internal static let pathParameterDescription =
+        "The path of the file, relative to the skill directory, for example `references/guide.md`. "
+        + "An absolute path in the skill directory also works."
 }
 
 /// Shared "resolve `id` against the calling context's visible catalog"

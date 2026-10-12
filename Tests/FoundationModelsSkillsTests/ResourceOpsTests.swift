@@ -402,6 +402,24 @@ struct ResourceOpsTests {
         #expect(!json.contains("escape-link"))
     }
 
+    // MARK: - The description of the path parameter
+
+    /// The text that the model reads for the `path` parameter of
+    /// `read resource` and of `run script`.
+    private static let pathParameterText =
+        "The path of the file, relative to the skill directory, for example `references/guide.md`. "
+        + "An absolute path in the skill directory also works."
+
+    /// The model can give an absolute path, thus the description of the
+    /// `path` parameter of each operation that reads a file of the skill says
+    /// that an absolute path in the skill directory also works.
+    @Test(arguments: [ReadResource.parameterMetadata, RunScript.parameterMetadata])
+    func thePathParameterSaysThatAnAbsolutePathInTheSkillWorks(parameters: [ParamMeta]) throws {
+        let pathParameter = try #require(parameters.first { $0.name == "path" })
+
+        #expect(pathParameter.description == Self.pathParameterText)
+    }
+
     // MARK: - >100-file cap (over a generated temp skill)
 
     @Test func listResourceCapsAt100RowsWithTheRealTotalOverAGeneratedTempSkill() async throws {

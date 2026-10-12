@@ -7,8 +7,8 @@ import Testing
 /// Tests for `ReadResource` that call the operation directly, without the
 /// fused `skills` tool in front of it: the memberwise initializer, the
 /// `generatedContent` round trip, the unreadable-file corrective, the
-/// denied-path corrective, and the empty window. `ResourceOpsTests` covers the
-/// same operation through the tool's dispatch.
+/// denied-path corrective, the absolute paths, and the empty window.
+/// `ResourceOpsTests` covers the same operation through the tool's dispatch.
 struct ReadResourceTests {
     /// The skill id every direct-construction test names.
     private static let sampleID = "release-notes"
@@ -212,6 +212,74 @@ struct ReadResourceTests {
         }
 
         #expect(output == .corrective(ResourcePathRules.deniedMessage(path: "escape/secret.md")))
+    }
+
+    // MARK: - Absolute paths
+
+    /// The fixture root that holds the `release-notes` skill.
+    private static let fixtureSkillsRoot = FixtureLibrary.url(relativePath: "project/.skills")
+
+    /// A file outside each skill, which each Mac holds.
+    private static let systemFilePath = "/etc/hosts"
+
+    /// The id of the skill that the two layer directories of the layered
+    /// test give.
+    private static let layeredSkillID = "layered"
+
+    /// The text of the copy of the lower layer.
+    private static let lowerLayerText = "lower layer"
+
+    /// The text of the copy of the higher layer.
+    private static let higherLayerText = "higher layer"
+
+    /// The absolute path of `samplePath` in the `release-notes` fixture skill.
+    private static var absoluteSamplePath: String {
+        fixtureSkillsRoot.appendingPathComponent(sampleID).appendingPathComponent(samplePath).path
+    }
+
+    /// The model can give the absolute path of a file of the skill. The read
+    /// gives the same content as the relative read, and the result names the
+    /// relative path.
+    @Test func anAbsoluteReadGivesTheResultOfTheRelativeRead() async throws {
+        let context = ResourceTestSupport.makeContext(roots: [Self.fixtureSkillsRoot])
+
+        let relativeOutput = try await ReadResource(id: Self.sampleID, path: Self.samplePath).execute(in: context)
+        let absoluteOutput = try await ReadResource(id: Self.sampleID, path: Self.absoluteSamplePath)
+            .execute(in: context)
+
+        let relativeResult = try #require(ResourceTestSupport.successResult(of: relativeOutput))
+        let absoluteResult = try #require(ResourceTestSupport.successResult(of: absoluteOutput))
+        #expect(absoluteResult == relativeResult)
+        #expect(absoluteResult.path == Self.samplePath)
+    }
+
+    /// An absolute path into a lower layer reads the copy of the highest
+    /// layer that holds the same relative path.
+    @Test func anAbsolutePathIntoALowerLayerReadsTheCopyOfTheHigherLayer() async throws {
+        let roots = try LayerFixtureSupport.makeLayerDirectories(count: 2)
+        defer { LayerFixtureSupport.removeDirectories(roots) }
+        let skillDirectories = try roots.map {
+            try ResourceTestSupport.writeMinimalSkillFile(id: Self.layeredSkillID, in: $0)
+        }
+        let lowerCopy = try LayerFixtureSupport.writeTextFile(
+            Self.lowerLayerText, at: Self.samplePath, in: skillDirectories[0])
+        try LayerFixtureSupport.writeTextFile(Self.higherLayerText, at: Self.samplePath, in: skillDirectories[1])
+
+        let output = try await ReadResource(id: Self.layeredSkillID, path: lowerCopy.path)
+            .execute(in: ResourceTestSupport.makeContext(roots: roots))
+
+        let result = try #require(ResourceTestSupport.successResult(of: output))
+        #expect(result.content == Self.higherLayerText)
+        #expect(result.path == Self.samplePath)
+    }
+
+    /// The denied corrective names the path that the model gave.
+    @Test func anAbsolutePathOutsideTheSkillDrawsTheDeniedCorrective() async throws {
+        let context = ResourceTestSupport.makeContext(roots: [Self.fixtureSkillsRoot])
+
+        let output = try await ReadResource(id: Self.sampleID, path: Self.systemFilePath).execute(in: context)
+
+        #expect(output == .corrective(ResourcePathRules.deniedMessage(path: Self.systemFilePath)))
     }
 
     // MARK: - Empty window

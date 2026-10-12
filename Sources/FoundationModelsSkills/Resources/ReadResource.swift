@@ -46,7 +46,8 @@ public struct ReadResource: OperationDefinition {
     /// The skill id owning the resource.
     public var id: String
 
-    /// The resource's path, relative to the skill directory.
+    /// The resource's path, relative to the skill directory, or an absolute
+    /// path in a layer directory of the skill.
     public var path: String
 
     /// The first line to return (1-based); `nil` defaults to `1`.
@@ -61,7 +62,8 @@ public struct ReadResource: OperationDefinition {
     ///
     /// - Parameters:
     ///   - id: The skill id owning the resource.
-    ///   - path: The resource's path, relative to the skill directory.
+    ///   - path: The resource's path, relative to the skill directory, or an
+    ///     absolute path in a layer directory of the skill.
     ///   - start: The first line to return; `nil` defaults to `1`.
     ///   - end: The last line to return; `nil` defaults to `start +
     ///     maxLinesPerCall - 1`.
@@ -88,7 +90,7 @@ public struct ReadResource: OperationDefinition {
         ParamMeta(name: idKey, type: .string, required: true, description: "The skill id owning the resource."),
         ParamMeta(
             name: pathKey, type: .string, required: true,
-            description: "The resource's path, relative to the skill directory."),
+            description: ResourcePathRules.pathParameterDescription),
         ParamMeta(
             name: startKey, type: .integer, required: false,
             description: "The first line to return (1-based). Defaults to 1."),
@@ -156,6 +158,12 @@ public struct ReadResource: OperationDefinition {
     /// lower layer holds is read, and the copy of the highest layer that holds
     /// the path wins.
     ///
+    /// `path` can be absolute, for example the absolute path that an earlier
+    /// operation gave the model. `SkillOverlay.relativePath(for:)` then gives
+    /// the path relative to a layer directory of the skill, and the read and
+    /// the result use that relative path. An absolute path that no layer
+    /// directory of the skill holds is denied.
+    ///
     /// - Parameter context: The shared context supplying the model-visible
     ///   registry.
     /// - Returns: `.success(_:)` carrying the sliced content on success;
@@ -166,32 +174,53 @@ public struct ReadResource: OperationDefinition {
     ///   `OperationDefinition` protocol requirement.
     public func execute(in context: SkillsToolContext) async throws -> ReadResourceOutput {
         await ResourceIDLookup.withResolvedOverlay(id: id, context: context) { overlay in
-            guard overlay.resolve(path) != nil else {
-                return .corrective(Self.unresolvedMessage(path: path, in: overlay))
+            guard let relativePath = overlay.relativePath(for: path) else {
+                return .corrective(ResourcePathRules.deniedMessage(path: path))
             }
-            guard let statedSize = overlay.size(of: path) else {
-                return .corrective(Self.unreadableMessage(path: path))
-            }
-            let window = LineWindow(start: start, end: end, maxLines: Self.maxLinesPerCall)
-            var scanner = LineWindowScanner(
-                window: window, contentByteBudget: Self.maxContentBytesPerCall,
-                chunkByteSize: Self.readChunkByteSize)
-            switch scanner.scan(path, in: overlay) {
-            case .unreadable:
-                return .corrective(Self.unreadableMessage(path: path))
-            case .nonUTF8:
-                return .corrective(Self.nonUTF8Message(path: path, byteSize: statedSize))
-            case .oversizedLine(let lineNumber):
-                return .corrective(Self.oversizedLineMessage(path: path, lineNumber: lineNumber))
-            case .window(let lines, let totalLines):
-                return .success(result(window: window, lines: lines, totalLines: totalLines))
-            }
+            return read(relativePath, in: overlay)
+        }
+    }
+
+    /// Reads the window of the winning copy of `relativePath`, or returns a
+    /// corrective message.
+    ///
+    /// - Parameters:
+    ///   - relativePath: The path of the resource, relative to a layer
+    ///     directory of the skill. The result and each corrective message
+    ///     name it.
+    ///   - overlay: The combined view of the layer directories of the skill.
+    /// - Returns: `.success(_:)` carrying the sliced content;
+    ///   `.corrective(_:)` for a confinement violation, an unreadable file,
+    ///   non-UTF-8 content, or a single line over the content byte budget.
+    private func read(_ relativePath: String, in overlay: SkillOverlay) -> ReadResourceOutput {
+        guard overlay.resolve(relativePath) != nil else {
+            return .corrective(Self.unresolvedMessage(path: relativePath, in: overlay))
+        }
+        guard let statedSize = overlay.size(of: relativePath) else {
+            return .corrective(Self.unreadableMessage(path: relativePath))
+        }
+        let window = LineWindow(start: start, end: end, maxLines: Self.maxLinesPerCall)
+        var scanner = LineWindowScanner(
+            window: window, contentByteBudget: Self.maxContentBytesPerCall,
+            chunkByteSize: Self.readChunkByteSize)
+        switch scanner.scan(relativePath, in: overlay) {
+        case .unreadable:
+            return .corrective(Self.unreadableMessage(path: relativePath))
+        case .nonUTF8:
+            return .corrective(Self.nonUTF8Message(path: relativePath, byteSize: statedSize))
+        case .oversizedLine(let lineNumber):
+            return .corrective(Self.oversizedLineMessage(path: relativePath, lineNumber: lineNumber))
+        case .window(let lines, let totalLines):
+            return .success(
+                result(path: relativePath, window: window, lines: lines, totalLines: totalLines))
         }
     }
 
     /// Assembles the successful result for the lines the scan retained.
     ///
     /// - Parameters:
+    ///   - path: The path of the resource, relative to a layer directory of
+    ///     the skill.
     ///   - window: The requested window; its first line is the result's
     ///     `start`.
     ///   - lines: The retained lines, in order -- possibly fewer than the
@@ -199,7 +228,7 @@ public struct ReadResource: OperationDefinition {
     ///   - totalLines: The file's exact line count.
     /// - Returns: The result, whose `end` is the last line returned, or
     ///   `start - 1` when no line was.
-    private func result(window: LineWindow, lines: [String], totalLines: Int) -> ReadResourceResult {
+    private func result(path: String, window: LineWindow, lines: [String], totalLines: Int) -> ReadResourceResult {
         ReadResourceResult(
             id: id, path: path, content: lines.joined(separator: "\n"), start: window.first,
             end: window.first + lines.count - 1, totalLines: totalLines)

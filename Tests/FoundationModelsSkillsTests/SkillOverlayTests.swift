@@ -167,6 +167,130 @@ struct SkillOverlayTests {
         #expect(!SkillOverlay(directories: directories).isExecutable(Self.sharedPath))
     }
 
+    // MARK: - The relative path of a path that the model gives
+
+    /// The directory under which the `/tmp` test makes its layer directory.
+    /// On macOS, `/tmp` is a symbolic link to `/private/tmp`.
+    private static let shortTemporaryParent = URL(fileURLWithPath: "/tmp", isDirectory: true)
+
+    /// The prefix that macOS puts before `/tmp` when it resolves the link.
+    private static let privatePrefix = "/private"
+
+    /// A file outside each skill, which each Mac holds.
+    private static let systemFilePath = "/etc/hosts"
+
+    @Test func aRelativePathComesBackWithNoChange() throws {
+        let directories = try Self.makeTwoLayerFixture()
+        defer { LayerFixtureSupport.removeDirectories(directories) }
+
+        #expect(SkillOverlay(directories: directories).relativePath(for: Self.higherOnlyPath) == Self.higherOnlyPath)
+    }
+
+    /// The text check of a relative path stays with the caller, thus a
+    /// relative path that walks up also comes back with no change.
+    @Test func aRelativePathThatWalksUpComesBackWithNoChange() throws {
+        let directories = try Self.makeTwoLayerFixture()
+        defer { LayerFixtureSupport.removeDirectories(directories) }
+
+        #expect(SkillOverlay(directories: directories).relativePath(for: "../outside.md") == "../outside.md")
+    }
+
+    @Test func anAbsolutePathInTheHighestDirectoryGivesItsRelativePath() throws {
+        let directories = try Self.makeTwoLayerFixture()
+        defer { LayerFixtureSupport.removeDirectories(directories) }
+        let absolutePath = directories[1].appendingPathComponent(Self.higherOnlyPath).path
+
+        #expect(SkillOverlay(directories: directories).relativePath(for: absolutePath) == Self.higherOnlyPath)
+    }
+
+    @Test func anAbsolutePathInTheLowestDirectoryGivesItsRelativePath() throws {
+        let directories = try Self.makeTwoLayerFixture()
+        defer { LayerFixtureSupport.removeDirectories(directories) }
+        let absolutePath = directories[0].appendingPathComponent(Self.lowerOnlyPath).path
+
+        #expect(SkillOverlay(directories: directories).relativePath(for: absolutePath) == Self.lowerOnlyPath)
+    }
+
+    /// An absolute path into the lowest directory gives the relative path, and
+    /// that relative path resolves to the copy of the highest directory.
+    @Test func anAbsolutePathIntoALowerCopyResolvesToTheHigherCopy() throws {
+        let directories = try Self.makeTwoLayerFixture()
+        defer { LayerFixtureSupport.removeDirectories(directories) }
+        let overlay = SkillOverlay(directories: directories)
+        let absolutePath = directories[0].appendingPathComponent(Self.sharedPath).path
+
+        let relativePath = try #require(overlay.relativePath(for: absolutePath))
+        let winner = try #require(overlay.resolve(relativePath))
+
+        #expect(relativePath == Self.sharedPath)
+        #expect(winner.directoryIndex == 1)
+    }
+
+    /// The `/tmp` form and the `/private/tmp` form of one file give the same
+    /// relative path, whichever form the directory of the overlay has.
+    @Test(arguments: [false, true])
+    func theTmpFormAndThePrivateTmpFormGiveTheSameRelativePath(directoryHasPrivatePrefix: Bool) throws {
+        let tmpDirectory = Self.shortTemporaryParent
+            .appendingPathComponent("SkillOverlayTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tmpDirectory, withIntermediateDirectories: true)
+        defer { LayerFixtureSupport.removeDirectories([tmpDirectory]) }
+        try LayerFixtureSupport.writeTextFile(at: Self.higherOnlyPath, in: tmpDirectory)
+        let tmpFormPath = tmpDirectory.appendingPathComponent(Self.higherOnlyPath).path
+        let privateFormPath = Self.privatePrefix + tmpFormPath
+        let directory =
+            directoryHasPrivatePrefix ? URL(fileURLWithPath: Self.privatePrefix + tmpDirectory.path) : tmpDirectory
+        let overlay = SkillOverlay(directories: [directory])
+
+        #expect(overlay.relativePath(for: tmpFormPath) == Self.higherOnlyPath)
+        #expect(overlay.relativePath(for: privateFormPath) == Self.higherOnlyPath)
+    }
+
+    @Test func aSystemFileGivesNothing() throws {
+        let directories = try Self.makeTwoLayerFixture()
+        defer { LayerFixtureSupport.removeDirectories(directories) }
+
+        #expect(SkillOverlay(directories: directories).relativePath(for: Self.systemFilePath) == nil)
+    }
+
+    /// The name of the skill directory of the sibling tests.
+    private static let siblingTestSkillName = "release-notes"
+
+    /// A file in a sibling directory of the skill, under the same layer root,
+    /// is outside the skill: a file of a different skill, and a file of a
+    /// directory whose name starts with the name of the skill directory.
+    @Test(arguments: ["other-skill/SKILL.md", "release-notes-extra/x"])
+    func aFileOfASiblingDirectoryGivesNothing(pathUnderRoot: String) throws {
+        let root = try WatcherTestSupport.makeTempDirectory()
+        defer { LayerFixtureSupport.removeDirectories([root]) }
+        let skillDirectory = root.appendingPathComponent(Self.siblingTestSkillName, isDirectory: true)
+        try LayerFixtureSupport.writeTextFile(at: Self.sharedPath, in: skillDirectory)
+        let siblingFile = try LayerFixtureSupport.writeTextFile(at: pathUnderRoot, in: root)
+
+        #expect(SkillOverlay(directories: [skillDirectory]).relativePath(for: siblingFile.path) == nil)
+    }
+
+    @Test func anAbsolutePathWhoseParentStepsLeaveTheSkillGivesNothing() throws {
+        let directories = try Self.makeTwoLayerFixture()
+        defer { LayerFixtureSupport.removeDirectories(directories) }
+        let escapingPath = directories[1].path + "/references/../../outside.md"
+
+        #expect(SkillOverlay(directories: directories).relativePath(for: escapingPath) == nil)
+    }
+
+    /// A symbolic link in the skill that points at a directory outside it: the
+    /// absolute path through the link leaves the skill.
+    @Test func anAbsolutePathThroughASymbolicLinkThatLeavesTheSkillGivesNothing() throws {
+        let directories = try LayerFixtureSupport.makeLayerDirectories(count: 2)
+        defer { LayerFixtureSupport.removeDirectories(directories) }
+        let (skillDirectory, outside) = (directories[0], directories[1])
+        try LayerFixtureSupport.writeTextFile(at: "secret.md", in: outside)
+        try FileManager.default.createSymbolicLink(
+            at: skillDirectory.appendingPathComponent("escape"), withDestinationURL: outside)
+        let linkedPath = skillDirectory.appendingPathComponent(Self.escapingPath).path
+
+        #expect(SkillOverlay(directories: [skillDirectory]).relativePath(for: linkedPath) == nil)
+    }
+
     // MARK: - Test helpers
 
     /// Makes the two-layer fixture each test of this suite reads: the lowest

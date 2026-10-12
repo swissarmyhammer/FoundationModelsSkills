@@ -59,8 +59,21 @@ comments:
     - review: stuck — the review skill refuses a target outside the repository root; the code is in ../FoundationModelsExtras 6ac66c1
     - next: a person runs `/review ^hh71nx8 6ac66c1~1..6ac66c1` in a session rooted at FoundationModelsExtras, or changes the scope rule. Tasks ^aaj8fa4 and ^g2bzbmb depend on this card.
   timestamp: 2026-10-12T12:48:41.689152+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01m4r47q88htwsak490mkqvk33
+  text: |-
+    ### review — clean
+    - evidence: review sha 6ac66c1~1..6ac66c1, run in the FoundationModelsExtras session (foundationmodelsextras-56), because the review skill of this repository refuses a target outside its root. Counts: attempted 7, confirmed 0, refuted 1, findings 0, failed 0, skipped 0. Reviewed 6 files: PathConfinement.swift, DotfolderLoader.swift, TemplateEngine.swift, StenciledDotfolderStack.swift, PathConfinementTests.swift, StenciledDotfolderStackTests.swift.
+    - next: move to done
+
+    ### finish iteration 3 — clean
+    - implement: no-change (code is Extras 6ac66c1, pushed)
+    - test: green (iteration 2) — Skills 560 passed, Extras 987 passed
+    - commit: a3da4ae
+    - review: clean — 0 findings (run in the Extras session)
+  timestamp: 2026-10-12T13:18:36.296586+00:00
+position_column: done
+position_ordinal: ff9a80
 title: 'FoundationModelsExtras: add the path helper and the include resolver for skill files'
 ---
 ## What

@@ -35,7 +35,8 @@ public struct RunScript: OperationDefinition {
     /// The skill id owning the script.
     public var id: String
 
-    /// The script's path, relative to the skill directory, under `scripts/`.
+    /// The script's path, relative to the skill directory, under `scripts/`,
+    /// or an absolute path in a layer directory of the skill.
     public var path: String
 
     /// Positional arguments to pass to the script.
@@ -50,7 +51,8 @@ public struct RunScript: OperationDefinition {
     ///
     /// - Parameters:
     ///   - id: The skill id owning the script.
-    ///   - path: The script's path, relative to the skill directory.
+    ///   - path: The script's path, relative to the skill directory, or an
+    ///     absolute path in a layer directory of the skill.
     ///   - arguments: Positional arguments to pass to the script.
     ///   - timeout: Seconds to allow before killing the script's process
     ///     group; `nil` defaults to `defaultTimeoutSeconds`.
@@ -77,7 +79,7 @@ public struct RunScript: OperationDefinition {
         ParamMeta(name: idKey, type: .string, required: true, description: "The skill id owning the script."),
         ParamMeta(
             name: pathKey, type: .string, required: true,
-            description: "The script's path, relative to the skill directory, under \(scriptsDirectoryPrefix)."),
+            description: ResourcePathRules.pathParameterDescription),
         ParamMeta(
             name: argumentsKey, type: .array(of: .string), required: false,
             description: "Positional arguments to pass to the script."),
@@ -160,29 +162,54 @@ public struct RunScript: OperationDefinition {
         }
 
         return await ResourceIDLookup.withResolvedOverlay(id: id, context: context) { overlay in
-            guard path.hasPrefix(scriptsDirectoryPrefix) else {
-                return .corrective(Self.notUnderScriptsMessage(path: path))
-            }
-            guard overlay.confines(path) else {
+            guard let relativePath = overlay.relativePath(for: path) else {
                 return .corrective(ResourcePathRules.deniedMessage(path: path))
             }
-
-            let allowedTools = context.registry.allowedTools(id: id) ?? []
-            if case .corrective(let message) = ScriptGate.evaluateGrant(path: path, allowedTools: allowedTools) {
-                return .corrective(message)
-            }
-
-            guard let winning = overlay.resolve(path) else {
-                return .corrective(Self.missingScriptMessage(path: path))
-            }
-            if let issue = Self.executabilityIssue(path: path, in: overlay) {
-                return .corrective(issue)
-            }
-
-            return .success(
-                await result(
-                    ofRunning: winning.url, in: overlay.directories[winning.directoryIndex]))
+            return await run(relativePath, in: overlay, context: context)
         }
+    }
+
+    /// Runs the winning copy of `relativePath` under the path gates, the
+    /// grant gate and the direct-exec check, or returns a corrective message.
+    ///
+    /// The host policy gate ran before this, and `relativePath` is the path
+    /// that `SkillOverlay.relativePath(for:)` gave, thus an absolute path in
+    /// a layer directory of the skill goes through the same gates, in the same
+    /// order, as a relative path.
+    ///
+    /// - Parameters:
+    ///   - relativePath: The script's path, relative to a layer directory of
+    ///     the skill. The result and each corrective message name it.
+    ///   - overlay: The combined view of the layer directories of the skill.
+    ///   - context: The shared context supplying the registry.
+    /// - Returns: `.success(_:)` carrying the process's outcome;
+    ///   `.corrective(_:)` for a confinement/scripts-prefix violation, a gate
+    ///   refusal, or a missing executable bit/shebang.
+    private func run(
+        _ relativePath: String, in overlay: SkillOverlay, context: SkillsToolContext
+    ) async -> RunScriptOutput {
+        guard relativePath.hasPrefix(scriptsDirectoryPrefix) else {
+            return .corrective(Self.notUnderScriptsMessage(path: relativePath))
+        }
+        guard overlay.confines(relativePath) else {
+            return .corrective(ResourcePathRules.deniedMessage(path: relativePath))
+        }
+
+        let allowedTools = context.registry.allowedTools(id: id) ?? []
+        if case .corrective(let message) = ScriptGate.evaluateGrant(path: relativePath, allowedTools: allowedTools) {
+            return .corrective(message)
+        }
+
+        guard let winning = overlay.resolve(relativePath) else {
+            return .corrective(Self.missingScriptMessage(path: relativePath))
+        }
+        if let issue = Self.executabilityIssue(path: relativePath, in: overlay) {
+            return .corrective(issue)
+        }
+
+        return .success(
+            await result(
+                ofRunning: winning.url, at: relativePath, in: overlay.directories[winning.directoryIndex]))
     }
 
     // MARK: - Running the script
@@ -222,16 +249,21 @@ public struct RunScript: OperationDefinition {
     /// whole group dies with `SIGKILL` at the timeout, and the read of the
     /// output stops at `outputByteLimit`.
     ///
-    /// A spawn that never reached exec gives `failedToSpawnResult`, which is
-    /// the one shape that carries no duration, no output and no exit code.
+    /// A spawn that never reached exec gives `failedToSpawnResult(path:)`,
+    /// which is the one shape that carries no duration, no output and no exit
+    /// code.
     ///
     /// - Parameters:
     ///   - executableURL: The script file to exec, already resolved and
     ///     confined.
+    ///   - relativePath: The script's path, relative to a layer directory of
+    ///     the skill, which the result names.
     ///   - workingDirectory: The child's working directory -- the layer
     ///     directory that gave the winning copy of the script.
     /// - Returns: The result of the run.
-    private func result(ofRunning executableURL: URL, in workingDirectory: URL) async -> RunScriptResult {
+    private func result(
+        ofRunning executableURL: URL, at relativePath: String, in workingDirectory: URL
+    ) async -> RunScriptResult {
         do {
             let outcome = try await ProcessRunner.run(
                 executable: executableURL,
@@ -242,14 +274,14 @@ public struct RunScript: OperationDefinition {
                     lineCount: Self.tailLineCount, byteLimit: Self.outputByteLimit))
 
             return RunScriptResult(
-                id: id, path: path,
+                id: id, path: relativePath,
                 status: Self.status(of: outcome.termination).rawValue,
                 exitCode: Self.exitCode(of: outcome.termination),
                 durationMs: Self.milliseconds(of: outcome.duration),
                 lines: outcome.lineCount,
                 output: Self.numbered(tail: outcome.output, ofLineCount: outcome.lineCount))
         } catch {
-            return failedToSpawnResult
+            return failedToSpawnResult(path: relativePath)
         }
     }
 
@@ -258,9 +290,13 @@ public struct RunScript: OperationDefinition {
     ///
     /// There is no duration, no output and no exit code to report, thus each
     /// of those fields carries its empty value.
-    private var failedToSpawnResult: RunScriptResult {
+    ///
+    /// - Parameter relativePath: The script's path, relative to a layer
+    ///   directory of the skill, which the result names.
+    /// - Returns: The result of the failed run.
+    private func failedToSpawnResult(path relativePath: String) -> RunScriptResult {
         RunScriptResult(
-            id: id, path: path, status: Status.failed.rawValue, exitCode: nil, durationMs: 0, lines: 0,
+            id: id, path: relativePath, status: Status.failed.rawValue, exitCode: nil, durationMs: 0, lines: 0,
             output: [])
     }
 

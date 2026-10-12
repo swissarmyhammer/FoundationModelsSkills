@@ -9,9 +9,9 @@ import FoundationModelsSkills
 /// parameters, since the two were otherwise byte-identical (review findings,
 /// 2026-07-29 22:27 and 22:36).
 ///
-/// The readers of one `run script` outcome are here for the same reason: two
-/// test files unwrap a `RunScriptOutput`, thus neither keeps a copy of that
-/// reader.
+/// The readers of one operation outcome are here for the same reason: more
+/// than one test file unwraps a `RunScriptOutput` or a `ReadResourceOutput`,
+/// thus no file keeps a copy of that reader.
 enum ResourceTestSupport {
     /// Builds a `SkillsToolContext` over `roots`, under `policy`.
     ///
@@ -43,30 +43,30 @@ enum ResourceTestSupport {
     /// The `allowed-tools:` value that pre-approves every script of a skill.
     static let everyScriptGrant = "Script(scripts/*)"
 
-    /// The result of a success outcome of `run script`, or `nil` for a
-    /// corrective outcome.
+    /// The result of a success outcome of `run script` or `read resource`, or
+    /// `nil` for a corrective outcome.
     ///
     /// A test unwraps the value with `#require`, thus a corrective outcome
     /// fails the test instead of ending it before its assertions.
     ///
-    /// - Parameter output: The outcome of one `run script` call.
+    /// - Parameter output: The outcome of one operation call.
     /// - Returns: The result, or `nil`.
-    static func successResult(of output: RunScriptOutput) -> RunScriptResult? {
+    static func successResult<Result>(of output: CorrectiveOutcome<Result>) -> Result? {
         if case .success(let result) = output {
             return result
         }
         return nil
     }
 
-    /// The message of a corrective outcome of `run script`, or `nil` for a
-    /// success outcome.
+    /// The message of a corrective outcome of `run script` or
+    /// `read resource`, or `nil` for a success outcome.
     ///
     /// The counterpart of `successResult(of:)`, for a test that holds the
     /// operation to a corrective message.
     ///
-    /// - Parameter output: The outcome of one `run script` call.
+    /// - Parameter output: The outcome of one operation call.
     /// - Returns: The corrective message, or `nil`.
-    static func correctiveMessage(of output: RunScriptOutput) -> String? {
+    static func correctiveMessage<Result>(of output: CorrectiveOutcome<Result>) -> String? {
         if case .corrective(let message) = output {
             return message
         }
