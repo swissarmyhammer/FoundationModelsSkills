@@ -30,6 +30,39 @@ comments:
     - evidence: `swift test`: 616 tests in 56 suites passed, 0 failures (LoadingBoundaryTests, MarketplacePartialScopeTests, RenderPipelineNoRescanTests included). No compiler warning. One SwiftPM build-graph warning ("missing creator for mutated node" for the mlx-swift_Cmlx bundle) comes from a dependency, not from this change. 10 files: Sources/FoundationModelsSkills/Render/SkillFileInclude.swift (new), Render/StencilPass.swift, Render/RenderPipeline.swift, Registry/SkillsRegistry.swift, Tests/FoundationModelsSkillsTests/StencilPassTests.swift (+16 cases), RenderPipelineTests.swift (+2), MarketplacePartialScopeTests.swift (+1), README.md, docs/marketplaces.md, docs/security.md. Not committed.
     - next: /review
   timestamp: 2026-10-12T15:14:52.017899+00:00
+- actor: claude-code
+  id: 01m4rb1d628wfbntcprwh48pj7
+  text: |-
+    ### review — findings
+    - evidence: review sha HEAD~1..HEAD (4b6c676); 1 finding (1 confirmed, 0 refuted) — Sources/FoundationModelsSkills/Render/SkillFileInclude.swift:77
+    - next: Use one shared hidden-path-component check for `ListResource.isHidden(_:)` and `SkillFileInclude.isSkillFileName(_:)`. Remove the local `hiddenComponentPrefix` constant. Then review again.
+  timestamp: 2026-10-12T15:17:29.410233+00:00
+- actor: claude-code
+  id: 01m4rb1q8wrxm87wx81spsjm3b
+  text: |-
+    ### finish iteration 1 — findings
+    - implement: changed — 10 files (resumed once after an API usage limit)
+    - test: green — swift test, 616 passed in 56 suites
+    - commit: 4b6c676
+    - review: findings — Sources/FoundationModelsSkills/Render/SkillFileInclude.swift:77
+  timestamp: 2026-10-12T15:17:39.740801+00:00
+- actor: claude-code
+  id: 01m4rb6d4k34h7zf0bhkqwb40n
+  text: |-
+    Review finding fixed (reuse/reuse at SkillFileInclude.swift:77).
+    - New shared rule `ResourcePathRules.hasHiddenComponent(_:)` in Sources/FoundationModelsSkills/Resources/ResourceSupport.swift, next to `isWellFormedRelativePath(_:)`. It owns the `pathSeparator` and `hiddenComponentPrefix` constants.
+    - `ListResource.isListed(_:)` calls the shared rule. The private `ListResource.isHidden(_:)` is deleted.
+    - `SkillFileInclude.isSkillFileName(_:)` calls the shared rule. The local `hiddenComponentPrefix` constant is deleted.
+    - A search of all `.swift` files finds no other copy of the rule (`hasPrefix(".")`, `isHidden(`, `hiddenComponentPrefix`).
+    - TDD: two table tests in ResourcePathRulesTests (4 hidden paths, 4 paths that are not hidden, one with a full stop inside a name). RED was a compile failure: "type 'ResourcePathRules' has no member 'hasHiddenComponent'". GREEN after the function was added.
+  timestamp: 2026-10-12T15:20:13.203254+00:00
+- actor: claude-code
+  id: 01m4rb6frqwv6q11z9geyxwq8a
+  text: |-
+    ### implement — changed
+    - evidence: `swift test`: 618 tests in 56 suites passed, 0 failures (was 616; +2 parameterized tests). No compiler warning. The one SwiftPM warning ("missing creator for mutated node" for the mlx-swift_Cmlx bundle) comes from a dependency. 4 files: Sources/FoundationModelsSkills/Resources/ResourceSupport.swift, Sources/FoundationModelsSkills/Resources/ListResource.swift, Sources/FoundationModelsSkills/Render/SkillFileInclude.swift, Tests/FoundationModelsSkillsTests/ResourcePathRulesTests.swift. Not committed. The finding is `- [x]`.
+    - next: /review
+  timestamp: 2026-10-12T15:20:15.895003+00:00
 depends_on:
 - 01M4R0NQVS6M1G3SBMXHH71NX8
 - 01M4R0BGFCECWZYT3BWRFXG8ZA
@@ -71,3 +104,17 @@ Rules:
 
 ## Workflow
 - Use `/tdd` — write failing tests first, then implement to make them pass.
+
+## Review Findings (2026-10-12 10:15)
+
+> Scope: `review sha HEAD~1..HEAD` — reviewed the diffs only — lines this change added or modified. 7 file(s) reviewed, 7 not reviewed.
+
+> 4 file(s) not reviewed — excluded by an ignore rule:
+> - `.kanban/ (from .reviewignore)` — 4 file(s)
+
+> 3 file(s) not reviewed — no validator matched:
+> - `README.md` — no validator matches this file
+> - `docs/marketplaces.md` — no validator matches this file
+> - `docs/security.md` — no validator matches this file
+
+- [x] `Sources/FoundationModelsSkills/Render/SkillFileInclude.swift:77` `reuse/reuse` — The hidden-path-component test is written again here. `ListResource.isHidden(_:)` already does the same check: it splits on `/` and tests whether any component starts with `.`. Two copies of the rule can diverge, so a later change to the hidden-file rule could be made in one place and missed in the other. Make `ListResource.isHidden(_:)` internal, or move it to `ResourcePathRules` next to `isWellFormedRelativePath(_:)`, and call it from `SkillFileInclude.isSkillFileName(_:)`. Remove the local `hiddenComponentPrefix` constant.

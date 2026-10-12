@@ -9,8 +9,8 @@ internal let resourceOperationNoun = "resource"
 internal let scriptsDirectoryPrefix = "scripts/"
 
 /// The rules of a skill-relative resource path that open no file: whether the
-/// path is well formed, and the text a resource operation gives for a path it
-/// denies.
+/// path is well formed, whether it is hidden, and the text a resource
+/// operation gives for a path it denies.
 ///
 /// `ReadResource` and `RunScript` each read these, thus the two can never
 /// differ on what counts as a relative path, or on the wording of the refusal.
@@ -32,6 +32,26 @@ internal enum ResourcePathRules {
     internal static func isWellFormedRelativePath(_ path: String) -> Bool {
         guard !path.isEmpty, !path.hasPrefix("/"), !path.hasPrefix("~") else { return false }
         return !path.split(separator: "/", omittingEmptySubsequences: true).contains("..")
+    }
+
+    /// The separator of the components of a path relative to a layer
+    /// directory.
+    private static let pathSeparator: Character = "/"
+
+    /// The text that starts the name of a hidden path component.
+    private static let hiddenComponentPrefix = "."
+
+    /// Whether a component of `path` starts with a full stop, which makes the
+    /// file itself, or a directory above it, hidden.
+    ///
+    /// `ListResource` keeps a hidden file out of a listing, and
+    /// `SkillFileInclude` keeps an `{% include %}` from a hidden file. Both
+    /// read this one rule, thus the two can never differ on what is hidden.
+    ///
+    /// - Parameter path: A path relative to a layer directory.
+    /// - Returns: Whether `path` holds a hidden component.
+    internal static func hasHiddenComponent(_ path: String) -> Bool {
+        path.split(separator: pathSeparator).contains { $0.hasPrefix(hiddenComponentPrefix) }
     }
 
     /// The corrective message for a `path` that leaves the skill directory --

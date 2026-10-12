@@ -31,9 +31,6 @@ internal enum SkillFileInclude {
     /// The separator of the components of an include name.
     private static let pathSeparator: Character = "/"
 
-    /// The character that starts the name of a hidden path component.
-    private static let hiddenComponentPrefix = "."
-
     /// The resolver that gives the text of a file of the skill that an
     /// `{% include %}` names.
     ///
@@ -64,7 +61,8 @@ internal enum SkillFileInclude {
     /// - hold a minimum of one `/`, thus a bare partial name never names a
     ///   file of the skill;
     /// - not name `SKILL.md` of the skill;
-    /// - hold no hidden path component (a component that starts with `.`).
+    /// - hold no hidden path component (a component that starts with `.`),
+    ///   the rule of `ResourcePathRules.hasHiddenComponent(_:)`.
     ///
     /// - Parameter name: The include name as the template wrote it.
     /// - Returns: Whether step 1 may search for `name`.
@@ -74,7 +72,7 @@ internal enum SkillFileInclude {
         }
         let components = name.split(separator: pathSeparator).map(String.init)
         guard components != [SkillDiscovery.skillFileName] else { return false }
-        return !components.contains { $0.hasPrefix(hiddenComponentPrefix) }
+        return !ResourcePathRules.hasHiddenComponent(name)
     }
 
     /// The directories of the skill whose layer is in the partial scope of

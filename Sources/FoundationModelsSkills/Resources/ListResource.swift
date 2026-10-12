@@ -144,16 +144,7 @@ public struct ListResource: OperationDefinition {
     /// - Parameter relativePath: The path of one file of the combined view.
     /// - Returns: Whether the listing shows the file.
     private static func isListed(_ relativePath: String) -> Bool {
-        relativePath != Self.skillFileName && !Self.isHidden(relativePath)
-    }
-
-    /// Whether a component of `relativePath` starts with a full stop, which
-    /// makes the file itself, or a directory above it, hidden.
-    ///
-    /// - Parameter relativePath: The path of one file of the combined view.
-    /// - Returns: Whether the path is hidden.
-    private static func isHidden(_ relativePath: String) -> Bool {
-        relativePath.split(separator: "/").contains { $0.hasPrefix(".") }
+        relativePath != Self.skillFileName && !ResourcePathRules.hasHiddenComponent(relativePath)
     }
 
     /// The kind of a file under `scripts/`.
