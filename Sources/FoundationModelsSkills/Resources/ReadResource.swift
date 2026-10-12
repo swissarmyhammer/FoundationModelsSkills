@@ -214,7 +214,7 @@ public struct ReadResource: OperationDefinition {
             return .corrective(Self.unreadableMessage(path: relativePath))
         case .nonUTF8:
             return .success(
-                binaryResult(path: relativePath, absolutePath: winningCopy.url.path, byteSize: statedSize))
+                .binaryFile(id: id, path: relativePath, absolutePath: winningCopy.url.path, byteSize: statedSize))
         case .oversizedLine(let lineNumber):
             return .corrective(Self.oversizedLineMessage(path: relativePath, lineNumber: lineNumber))
         case .window(let lines, let totalLines):
@@ -239,42 +239,6 @@ public struct ReadResource: OperationDefinition {
         ReadResourceResult(
             id: id, path: path, content: lines.joined(separator: "\n"), start: window.first,
             end: window.first + lines.count - 1, totalLines: totalLines)
-    }
-
-    /// The `start`, `end` and `totalLines` of the binary result: a binary file
-    /// has no lines.
-    private static let binaryLineValue = 0
-
-    /// Assembles the successful result for a file that is not UTF-8 text.
-    ///
-    /// The result gives no bytes of the file. It gives the absolute path of
-    /// the winning copy and the size, thus the model can give the path to a
-    /// different tool.
-    ///
-    /// - Parameters:
-    ///   - path: The path of the resource, relative to a layer directory of
-    ///     the skill.
-    ///   - absolutePath: The absolute path of the winning copy, as the
-    ///     combined view gives it.
-    ///   - byteSize: The size of the winning copy in bytes.
-    /// - Returns: The result, with `binary == true`.
-    private func binaryResult(path: String, absolutePath: String, byteSize: Int) -> ReadResourceResult {
-        ReadResourceResult(
-            id: id, path: path, content: Self.binaryContent(absolutePath: absolutePath, byteSize: byteSize),
-            start: Self.binaryLineValue, end: Self.binaryLineValue, totalLines: Self.binaryLineValue,
-            binary: true, absolutePath: absolutePath, byteSize: byteSize)
-    }
-
-    /// The `content` sentence of the binary result.
-    ///
-    /// - Parameters:
-    ///   - absolutePath: The absolute path of the winning copy.
-    ///   - byteSize: The size of the winning copy in bytes.
-    /// - Returns: The sentence that says the file is binary, and gives its
-    ///   absolute path and its size.
-    private static func binaryContent(absolutePath: String, byteSize: Int) -> String {
-        "This file is binary. It is not shown as text. Its absolute path is `\(absolutePath)` "
-            + "and its size is \(byteSize) bytes."
     }
 
     /// The corrective message for a `path` the combined view gave no copy of.

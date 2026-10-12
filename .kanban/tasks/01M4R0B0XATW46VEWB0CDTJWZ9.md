@@ -29,6 +29,39 @@ comments:
     - evidence: `swift test` — 586 tests in 55 suites passed, 0 failures (LoadingBoundaryTests included). The only `warning:` line is the SwiftPM build-graph note on the dependency product `mlx-swift_Cmlx.bundle`, not from a changed file. 7 files: Sources/FoundationModelsSkills/Resources/ReadResource.swift, Sources/FoundationModelsSkills/Resources/ResourceRow.swift, Tests/FoundationModelsSkillsTests/ResourceOpsTests.swift, Tests/FoundationModelsSkillsTests/ReadResourceTests.swift, Tests/FoundationModelsSkillsTests/DocumentationTests.swift, docs/operations.md, docs/development.md. Not committed.
     - next: /review
   timestamp: 2026-10-12T13:45:22.756712+00:00
+- actor: claude-code
+  id: 01m4r5xvs1zee6746wsp6xb8z6
+  text: |-
+    ### review — findings
+    - evidence: review sha HEAD~1..HEAD (b4eb249), 1 finding (1 confirmed, 0 refuted) — Sources/FoundationModelsSkills/Resources/ResourceRow.swift:96 (swift/state-modeling)
+    - next: implement the swift/state-modeling finding on ReadResourceResult, then review again
+  timestamp: 2026-10-12T13:48:10.401074+00:00
+- actor: claude-code
+  id: 01m4r5y6vrp3et5yzezbg4ee3q
+  text: |-
+    ### finish iteration 1 — findings
+    - implement: changed — 7 files
+    - test: green — swift test, 586 passed in 55 suites
+    - commit: b4eb249
+    - review: findings — Sources/FoundationModelsSkills/Resources/ResourceRow.swift:96
+  timestamp: 2026-10-12T13:48:21.752386+00:00
+- actor: claude-code
+  id: 01m4r64a8nvst8fhrpbmxrvea8
+  text: |-
+    Fix for the `swift/state-modeling` finding (TDD).
+    - RED: `ReadResourceTests.theBinaryFactorySetsEveryBinaryFieldConsistently` did not compile: "type 'ReadResourceResult' has no member 'binaryFile'". Also added `theTextInitializerGivesNoBinaryField` as a guard for the text path.
+    - GREEN: `ReadResourceResult` now stores one private `FileKind` enum (`.text` or `.binary(absolutePath:byteSize:)`). `binary`, `absolutePath` and `byteSize` are computed from it, so they cannot disagree. One private init sets the stored fields. The public 6-argument init is the text init (the binary default parameters are removed). The new `static func binaryFile(id:path:absolutePath:byteSize:)` is the only way to make a binary result. It also sets `content` and the `0` line values, so those cannot disagree with the kind.
+    - The JSON stays the same: a custom `encode(to:)` writes the flat keys in the old order, `binary` always, and `absolutePath`/`byteSize` with `encodeIfPresent`.
+    - `ReadResource.read(_:in:)` calls `.binaryFile(...)`. `binaryResult`, `binaryLineValue` and `binaryContent` moved from `ReadResource` into `ReadResourceResult` (the last two are private there).
+    - The factory is named `binaryFile` and not `binary`, so it does not share a name with the `binary` property.
+  timestamp: 2026-10-12T13:51:41.845699+00:00
+- actor: claude-code
+  id: 01m4r64dvnrerjfdan1zb20t9s
+  text: |-
+    ### implement — changed
+    - evidence: `swift test` — 588 tests in 55 suites passed, 0 failures. The only `warning:` line is the old SwiftPM build-graph note on the dependency product `mlx-swift_Cmlx.bundle`, not from a changed file. 3 files: Sources/FoundationModelsSkills/Resources/ResourceRow.swift, Sources/FoundationModelsSkills/Resources/ReadResource.swift, Tests/FoundationModelsSkillsTests/ReadResourceTests.swift. The `swift/state-modeling` finding is set to `- [x]`. Not committed.
+    - next: /review
+  timestamp: 2026-10-12T13:51:45.525100+00:00
 depends_on:
 - 01M4R0ANACQ08YDG539AAJ8FA4
 position_column: doing
@@ -58,3 +91,16 @@ Now, `read resource` of a file that is not UTF-8 text (for example `assets/logo.
 
 ## Workflow
 - Use `/tdd` — write failing tests first, then implement to make them pass.
+
+## Review Findings (2026-10-12 08:46)
+
+> Scope: `review sha HEAD~1..HEAD` — reviewed the diffs only — lines this change added or modified. 5 file(s) reviewed, 6 not reviewed.
+
+> 4 file(s) not reviewed — excluded by an ignore rule:
+> - `.kanban/ (from .reviewignore)` — 4 file(s)
+
+> 2 file(s) not reviewed — no validator matched:
+> - `docs/development.md` — no validator matches this file
+> - `docs/operations.md` — no validator matches this file
+
+- [x] `Sources/FoundationModelsSkills/Resources/ResourceRow.swift:96` `swift/state-modeling` — The new fields binary, absolutePath and byteSize model one state as three values that can disagree. binary == true with absolutePath == nil, or binary == false with absolutePath set, is representable but invalid. The text result and the binary result are two cases of one value, and the struct does not enforce which case it is. Model the two outcomes as an enum, for example enum ReadResourceContent { case text(lines: String, start: Int, end: Int, totalLines: Int); case binary(absolutePath: String, byteSize: Int) }, and keep the Encodable output shape the tests check. If the flat JSON shape must stay, derive binary from absolutePath != nil through one private initializer so the three fields cannot be set separately.

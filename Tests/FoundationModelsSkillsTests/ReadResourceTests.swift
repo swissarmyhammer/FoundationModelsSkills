@@ -334,6 +334,41 @@ struct ReadResourceTests {
         #expect(result.start == 0 && result.end == 0 && result.totalLines == 0)
     }
 
+    // MARK: - Result kinds
+
+    /// The absolute path that the result-kind tests give to the binary factory.
+    private static let sampleAbsolutePath = "/skills/release-notes/assets/logo.bin"
+
+    /// The byte size that the result-kind tests give to the binary factory.
+    private static let sampleByteSize = 4_096
+
+    /// The binary factory sets `binary`, `absolutePath` and `byteSize`
+    /// together, gives no lines, and names the path and the size in `content`.
+    @Test func theBinaryFactorySetsEveryBinaryFieldConsistently() {
+        let result = ReadResourceResult.binaryFile(
+            id: Self.sampleID, path: Self.binaryAssetPath,
+            absolutePath: Self.sampleAbsolutePath, byteSize: Self.sampleByteSize)
+
+        #expect(result.binary)
+        #expect(result.absolutePath == Self.sampleAbsolutePath)
+        #expect(result.byteSize == Self.sampleByteSize)
+        #expect(result.start == 0 && result.end == 0 && result.totalLines == 0)
+        #expect(result.content.contains(Self.sampleAbsolutePath))
+        #expect(result.content.contains("\(Self.sampleByteSize) bytes"))
+    }
+
+    /// The text initializer gives a result that is not binary and that has
+    /// no binary field.
+    @Test func theTextInitializerGivesNoBinaryField() {
+        let result = ReadResourceResult(
+            id: Self.sampleID, path: Self.samplePath, content: "", start: Self.sampleStart,
+            end: Self.sampleStart - 1, totalLines: Self.sampleEnd)
+
+        #expect(!result.binary)
+        #expect(result.absolutePath == nil)
+        #expect(result.byteSize == nil)
+    }
+
     // MARK: - Empty window
 
     @Test func readResourcePastTheLastLineReturnsAnEmptyWindowEndingBeforeStart() async throws {
