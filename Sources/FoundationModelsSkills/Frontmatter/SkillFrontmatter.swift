@@ -1,3 +1,5 @@
+import FoundationModelsExtras
+
 /// A YAML scalar/collection value, used for `SkillFrontmatter.metadata`'s
 /// arbitrary-typed values and for `arguments:`'s dual spelling (a
 /// space-separated string or a YAML list) -- this package's own YAML-value
@@ -242,8 +244,11 @@ extension SkillFrontmatter: Decodable {
     /// Every top-level key this decoder recognizes -- spec fields plus
     /// extension-field spellings. Anything else lands in
     /// `unknownTopLevelKeys`.
+    ///
+    /// The `enabled` key is known too. Extras reads it, and this decoder
+    /// does not: the registry leaves a skill that is off out of the catalog.
     private static let knownTopLevelKeys: Set<String> =
-        Self.specFieldKeys.union(ExtensionKey.allCases.map(\.rawValue))
+        Self.specFieldKeys.union(ExtensionKey.allCases.map(\.rawValue)).union([FrontmatterEnablement.key])
 
     /// Extension-field spellings, shared between top-level lookup and
     /// `metadata.*` lookup so the two stay in lockstep.

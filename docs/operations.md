@@ -267,9 +267,35 @@ does not resolve to `use skill`.
 | `disable-model-invocation: true` | listed | hidden | no |
 | `user-invocable: false` | hidden | searchable + usable | no |
 | `preload: true` | listed | searchable + usable | **yes** (body injected into `Instructions`) |
+| `enabled: false` | hidden | hidden | no |
 
 `ListSkill`, `UseSkill`, and the resource operations obey
 `context.visibilityPredicate`. `SkillsTool.make` sets it to
 `isModelVisible` as the default. `SkillsCLI` supplies a different
 predicate: id membership in `registry.commandListing()`. Thus the CLI
 shows the user-facing surface.
+
+## Turn a skill off
+
+`enabled: false` turns a skill off. The key comes from `FoundationModelsExtras`.
+
+- A skill that is off is not in the catalog. Thus no surface shows it: not
+  `metadata()`, not the list in the tool description, not `search skill` or
+  `list skill`, not the preload, not the `/` menu, and not the CLI.
+- `use skill` and each resource operation give a skill that is off the same
+  corrective as an unknown id.
+- A missing key leaves the skill on. A value that is not `true` or `false`,
+  for example `enabled: "yes"`, turns the skill off, and
+  `registry.diagnostics` holds one `.skip` diagnostic for it. A skill with
+  `enabled: false` gives no diagnostic.
+- The layer rule runs first. A higher layer turns off a skill of a lower layer
+  with a `SKILL.md` that holds only `enabled: false`. The lower copy does not
+  come back.
+- A change of the key in a watched file is an ordinary reload. The session
+  gets a catalog-change notice: `Removed` when the skill turns off, `New` when
+  it turns on again.
+
+The `/` menu hides a skill that is off too. Every surface reads the one
+catalog, and the view that holds a skill that is off is for a settings UI,
+which this package does not have. Such a UI reads `FrontmatterDocumentStack.items`
+of Extras, where each document carries its `enablement`.

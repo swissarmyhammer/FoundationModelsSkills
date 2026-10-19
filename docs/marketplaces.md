@@ -109,6 +109,18 @@ The layer that gives the winning `SKILL.md` gives the frontmatter, the body and
 the provenance of the skill, and the shadow diagnostic names both sides of that
 one file.
 
+**Turn off a marketplace skill with a stub.** A local `SKILL.md` that holds
+only `enabled: false` wins over the marketplace copy, and it turns the skill
+off. The marketplace copy does not come back. Neither the model nor the `/`
+menu shows the skill. Read [operations.md](operations.md#turn-a-skill-off) for
+the rule.
+
+```markdown
+---
+enabled: false
+---
+```
+
 The source of each marketplace layer is
 `DotfolderStack.Source.marketplace`. That tag, and not the position of the
 layer, is what makes the layer render untrusted and what scopes its partials.

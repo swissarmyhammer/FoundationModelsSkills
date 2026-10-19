@@ -45,11 +45,34 @@ comments:
     - evidence: swift test — 644 tests in 59 suites passed, 0 failed, 0 skipped; only build warning is the known mlx-swift_Cmlx.bundle "missing creator for mutated node" (dependency, seen again); SkillsCatalogNoticeTests 3/3 passed in the full run
     - next: 5x repeat of SkillsCatalogNoticeTests not run (test rules forbid looping test runs)
   timestamp: 2026-10-19T15:42:55.836978+00:00
+- actor: claude-code
+  id: 01m5ad9ps4pdkbym4p2prqn9jc
+  text: |-
+    ### commit — changed
+    - evidence: f8ff30e feat(skills-tool): post one catalog-change notice per reload to every live session
+    - next: review
+  timestamp: 2026-10-19T15:43:18.308135+00:00
+- actor: claude-code
+  id: 01m5ade87c33z9rmhke1x4thhw
+  text: |-
+    ### review — clean
+    - evidence: review sha HEAD~1..HEAD (f8ff30e) — 0 findings, 0 confirmed, 0 refuted; 7 files reviewed, 0 failed; 4 .kanban files excluded by .reviewignore
+    - next: task moved to done. The open acceptance item (after the push, the user's step, send the sha to foundationmodelsacpagent-a5) is outside this pipeline.
+  timestamp: 2026-10-19T15:45:47.244029+00:00
+- actor: claude-code
+  id: 01m5adehc178dnrdbrt8jb03qb
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 7 files (SkillsCatalogNoticeFollower, SkillsToolContext, SkillsCatalogTool, SkillsTool, SkillsToolAssembly, Package.swift, SkillsCatalogNoticeTests)
+    - test: green — swift test, 644 tests in 59 suites
+    - commit: f8ff30e
+    - review: clean — no findings; the task is in done
+  timestamp: 2026-10-19T15:45:56.609788+00:00
 depends_on:
 - 01M5A7Z0YGYG5Y3MR7EBQ1DX6D
 - 01M5A84CYKC62A5H2MMWFHKW3J
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: ffa380
 title: On each reload, post one catalog-change notice to every live session that has the skills tool
 ---
 ## What

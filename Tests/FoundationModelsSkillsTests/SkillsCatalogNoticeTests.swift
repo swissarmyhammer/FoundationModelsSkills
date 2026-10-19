@@ -32,6 +32,13 @@ struct SkillsCatalogNoticeTests {
     /// The frontmatter line that hides a skill from the model.
     private static let hiddenFrontmatter = "disable-model-invocation: true\n"
 
+    /// The frontmatter line that turns a skill off.
+    private static let disabledFrontmatter = "enabled: false\n"
+
+    /// The notices of the off-then-on case: one when the skill turns off,
+    /// and one when it turns on again.
+    private static let offThenOnNoticeCount = 2
+
     /// The body a body-only edit writes. The description stays the same.
     private static let editedBody = "An edited body, which the list never shows."
 
@@ -61,6 +68,27 @@ struct SkillsCatalogNoticeTests {
         #expect(notice.kind == .skills)
         #expect(notice.added.map(\.name) == [Self.firstAddedSkillID])
         #expect(notice.text.contains("New: `\(Self.firstAddedSkillID)`"))
+    }
+
+    // MARK: - The enabled key
+
+    @Test(.timeLimit(.minutes(1)))
+    func turningASkillOffThenOnPostsRemovedThenNew() async throws {
+        let fixture = try await Fixture()
+        defer { fixture.remove() }
+        let session = Session()
+        session.mount(fixture.tool)
+
+        try ReloadTestSupport.writeSkillFile(
+            id: Self.seededSkillID, in: fixture.root, extraFrontmatter: Self.disabledFrontmatter)
+        _ = await session.notices(reaching: 1)
+        try ReloadTestSupport.writeSkillFile(id: Self.seededSkillID, in: fixture.root)
+        let notices = await session.notices(reaching: Self.offThenOnNoticeCount)
+
+        #expect(notices.map { $0.removed.map(\.name) } == [[Self.seededSkillID], []])
+        #expect(notices.map { $0.added.map(\.name) } == [[], [Self.seededSkillID]])
+        #expect(notices.first?.text.contains("Removed: `\(Self.seededSkillID)`") == true)
+        #expect(notices.last?.text.contains("New: `\(Self.seededSkillID)`") == true)
     }
 
     // MARK: - No notice for a change the list does not show

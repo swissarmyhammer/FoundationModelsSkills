@@ -698,6 +698,10 @@ public struct SkillsRegistry: Sendable {
     /// Discovers, decodes, and validates every skill across `layers`'
     /// roots, folding the un-hidden survivors into a catalog keyed by id.
     ///
+    /// A skill that is off, by its `enabled` key, is not a survivor. Thus
+    /// it is in no surface: not the model list, not search, not the
+    /// preload, and not the user `/` menu.
+    ///
     /// - Parameter plan: The layers to build the catalog over, lowest
     ///   precedence first, and the marketplace each of them came from.
     /// - Returns: The catalog, keyed by id, plus every diagnostic raised
@@ -768,6 +772,13 @@ public struct SkillsRegistry: Sendable {
     /// body and each `metadata.*` value later, with the arguments of the
     /// call.
     ///
+    /// The read gives each document, also one that is off, with its
+    /// `enablement`. It does not use `enabledItems(in:named:)`: that view has
+    /// no entry for a skill that is off, so this registry could not tell such
+    /// a skill from one whose file it cannot read. `validate` applies the
+    /// same filter instead. Thus the catalog holds only the skills that are
+    /// on, and every surface that reads the catalog shows only those.
+    ///
     /// - Parameter layers: The layers of one catalog generation, lowest
     ///   precedence first.
     /// - Returns: The winning `SKILL.md` of each child directory of the
@@ -790,6 +801,10 @@ public struct SkillsRegistry: Sendable {
     /// read as UTF-8 text, thus `document` is `nil` exactly for such a skill,
     /// and that skill gets the `.skip` diagnostic below.
     ///
+    /// A skill that is off is not validated, and it gets no diagnostic. A
+    /// value of `enabled` that is not a bool also turns the skill off, and it
+    /// gets one `.skip` diagnostic with the text that Extras gives.
+    ///
     /// - Parameters:
     ///   - discovered: The skill's discovery record.
     ///   - document: The winning `SKILL.md` of this id, or `nil` when the
@@ -798,8 +813,8 @@ public struct SkillsRegistry: Sendable {
     ///     diagnostic names it.
     ///   - diagnostics: Accumulates every diagnostic raised.
     /// - Returns: The validated skill, or `nil` for unparseable YAML
-    ///   (`SkillValidator`'s own `.skipped` outcome) or an unreadable
-    ///   `SKILL.md`.
+    ///   (`SkillValidator`'s own `.skipped` outcome), an unreadable
+    ///   `SKILL.md`, or a skill that is off.
     private static func validate(
         discovered: DiscoveredSkill,
         document: FrontmatterDocument<FrontmatterDecoder.MetadataOutcome>?,
@@ -807,12 +822,15 @@ public struct SkillsRegistry: Sendable {
     ) -> ValidatedSkill? {
         guard let document else {
             diagnostics.append(
-                SkillDiagnostic(
-                    severity: .skip, skillID: discovered.id,
-                    provenance: SkillDiagnostic.Provenance(
-                        discovered: discovered,
-                        marketplace: marketplaces.provenance(atLayerIndex: discovered.rootIndex)),
-                    message: Self.unreadableSkillFileMessage))
+                Self.skipDiagnostic(
+                    discovered: discovered, marketplaces: marketplaces, message: Self.unreadableSkillFileMessage))
+            return nil
+        }
+        guard document.isEnabled else {
+            if case .invalid(let message) = document.enablement {
+                diagnostics.append(
+                    Self.skipDiagnostic(discovered: discovered, marketplaces: marketplaces, message: message))
+            }
             return nil
         }
         let result = SkillValidator.validate(
@@ -826,6 +844,25 @@ public struct SkillsRegistry: Sendable {
     /// The text of the `.skip` diagnostic for a discovered skill whose
     /// winning `SKILL.md` the stack cannot read.
     private static let unreadableSkillFileMessage = "SKILL.md could not be read"
+
+    /// A `.skip` diagnostic for a discovered skill that does not load.
+    ///
+    /// - Parameters:
+    ///   - discovered: The skill's discovery record, for the id and the
+    ///     provenance.
+    ///   - marketplaces: Which marketplace each layer came from, so the
+    ///     provenance names it.
+    ///   - message: The text of the diagnostic.
+    /// - Returns: The diagnostic.
+    private static func skipDiagnostic(
+        discovered: DiscoveredSkill, marketplaces: MarketplaceProvenanceIndex, message: String
+    ) -> SkillDiagnostic {
+        SkillDiagnostic(
+            severity: .skip, skillID: discovered.id,
+            provenance: SkillDiagnostic.Provenance(
+                discovered: discovered, marketplace: marketplaces.provenance(atLayerIndex: discovered.rootIndex)),
+            message: message)
+    }
 
     // MARK: - Rendering helpers
 
