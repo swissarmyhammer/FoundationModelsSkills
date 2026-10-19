@@ -38,11 +38,34 @@ comments:
     - evidence: swift test — 656 tests in 60 suites passed, 0 failed, 0 skipped; only build warning is the known mlx-swift_Cmlx.bundle "missing creator for mutated node" (dependency, not fixed); no package warnings
     - next: review
   timestamp: 2026-10-19T15:54:10.274124+00:00
+- actor: claude-code
+  id: 01m5ady134f7qqd52bhgmsx3qv
+  text: |-
+    ### commit — changed
+    - evidence: a91e8d1 feat(skills): show only enabled skills to the model via the `enabled` frontmatter key
+    - next: review
+  timestamp: 2026-10-19T15:54:24.228389+00:00
+- actor: claude-code
+  id: 01m5ae2ndj9w1zqxkyssfbf4er
+  text: |-
+    ### review — clean
+    - evidence: no findings — `review sha HEAD~1..HEAD` (a91e8d1): counts findings 0, confirmed 0, refuted 0, attempted 7, failed 0. Not reviewed: .kanban/ (.reviewignore); docs/operations.md and docs/marketplaces.md (no validator matched). Shadowing checked: the `items` read gives one winner per id, and `validate` drops a winner that is off at `guard document.isEnabled`, so the lower copy cannot come back. Covered by SkillEnablementTests `aHigherStubThatTurnsASkillOffHidesTheLowerCopy`.
+    - next: moved to done. Sending the sha to foundationmodelsacpagent-a5 once it is on origin/main is outside the pipeline.
+  timestamp: 2026-10-19T15:56:56.114411+00:00
+- actor: claude-code
+  id: 01m5ae30p889eejf9xgxe5a1fq
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 6 files (SkillsRegistry, SkillFrontmatter, SkillEnablementTests, SkillsCatalogNoticeTests, docs)
+    - test: green — swift test, 656 tests in 60 suites
+    - commit: a91e8d1
+    - review: clean — no findings; the task is in done
+  timestamp: 2026-10-19T15:57:07.656725+00:00
 depends_on:
 - 01M5A7ZGHC7Y1KY81E8C5KPNWV
 - 01M5A84CYKC62A5H2MMWFHKW3J
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: ffa480
 title: Show only enabled skills to the model, using the Extras `enabled` frontmatter key
 ---
 #skills #extras
