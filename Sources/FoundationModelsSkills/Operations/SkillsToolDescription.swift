@@ -65,6 +65,33 @@ internal enum SkillsToolDescription {
         return header + list(for: catalog, characterLimit: characterLimit)
     }
 
+    /// Gives the entries that the list shows for `catalog`: each skill that
+    /// `isListed` accepts, with its id and its description on one line.
+    ///
+    /// A catalog-change notice compares these entries. The list of the
+    /// description is made from the same entries, thus the notice and the
+    /// list cannot differ on what a skill shows.
+    ///
+    /// - Parameters:
+    ///   - catalog: The skills, not filtered.
+    ///   - isListed: Which skills the list shows: the visibility predicate
+    ///     of the tool.
+    /// - Returns: The entries, in the order of `catalog`.
+    internal static func catalogEntries(
+        for catalog: [SkillMetadata], isListed: (SkillMetadata) -> Bool
+    ) -> [CatalogEntry] {
+        entries(for: catalog.filter(isListed))
+    }
+
+    /// Gives one entry for each skill of `catalog`: its id and its
+    /// description on one line.
+    ///
+    /// - Parameter catalog: The skills the list gives.
+    /// - Returns: The entries, in the order of `catalog`.
+    private static func entries(for catalog: [SkillMetadata]) -> [CatalogEntry] {
+        catalog.map { CatalogEntry(name: $0.id, description: SkillCatalogText.oneLine($0.description)) }
+    }
+
     /// Gives the list of the first step that fits `characterLimit`.
     ///
     /// - Parameters:
@@ -72,11 +99,11 @@ internal enum SkillsToolDescription {
     ///   - characterLimit: The most characters the list may have.
     /// - Returns: The list.
     private static func list(for catalog: [SkillMetadata], characterLimit: Int) -> String {
-        let entries = catalog.map { (id: $0.id, description: SkillCatalogText.oneLine($0.description)) }
-        let ids = entries.map(\.id)
-        let fullList = describedList(entries)
+        let listed = entries(for: catalog)
+        let ids = listed.map(\.name)
+        let fullList = describedList(listed)
         let shortenedList = describedList(
-            entries.map { (id: $0.id, description: SkillsRegistry.truncatedForMenu($0.description)) })
+            listed.map { CatalogEntry(name: $0.name, description: SkillsRegistry.truncatedForMenu($0.description)) })
         let idLine = ids.joined(separator: idSeparator)
         let fitting = [fullList, shortenedList, idLine].first { $0.count <= characterLimit }
         return fitting ?? partialIDList(ids, characterLimit: characterLimit)
@@ -87,8 +114,8 @@ internal enum SkillsToolDescription {
     ///
     /// - Parameter entries: The ids and the descriptions, each on one line.
     /// - Returns: The lines, joined with line breaks.
-    private static func describedList(_ entries: [(id: String, description: String)]) -> String {
-        entries.map { SkillCatalogText.line(id: $0.id, description: $0.description) }.joined(separator: lineBreak)
+    private static func describedList(_ entries: [CatalogEntry]) -> String {
+        entries.map { SkillCatalogText.line(id: $0.name, description: $0.description) }.joined(separator: lineBreak)
     }
 
     /// Gives as many ids as fit `characterLimit` on one line, then the line
