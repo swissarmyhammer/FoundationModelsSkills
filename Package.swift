@@ -38,6 +38,10 @@ let loggingPackage = "swift-log"
 /// The package of the metrics API: the `Metrics` product.
 let metricsPackage = "swift-metrics"
 
+/// The package of the `ULID` type, the session id of the hosting API of
+/// `FoundationModelsExtras`. Only the test target links it.
+let ulidPackage = "ULID.swift"
+
 /// Shared product dependencies needed by both the library target and its test
 /// target -- factored out so the two lists can't drift out of sync.
 let commonDependencies: [Target.Dependency] = [
@@ -81,11 +85,15 @@ let commonDependencies: [Target.Dependency] = [
 /// the code under test and reads the finished spans and the recorded values
 /// back. `TelemetryCapture`, the content-safety helper of the family, comes
 /// from the `TelemetryTestSupport` product of `FoundationModelsExtras`.
+///
+/// `ULID` comes from the `ULID` product. A test makes the session ids of the
+/// sessions that mount the `skills` tool with it.
 let testOnlyDependencies: [Target.Dependency] = [
     .product(name: "MarketplaceFixtures", package: "FoundationModelsExtras"),
     .product(name: "InMemoryTracing", package: tracingPackage),
     .product(name: "MetricsTestKit", package: metricsPackage),
     .product(name: "TelemetryTestSupport", package: "FoundationModelsExtras"),
+    .product(name: "ULID", package: ulidPackage),
 ]
 
 /// The `FoundationModelsSkills` SwiftPM package definition.
@@ -135,6 +143,9 @@ let package = Package(
         .package(url: "https://github.com/apple/\(tracingPackage).git", from: "1.4.1"),
         .package(url: "https://github.com/apple/\(loggingPackage).git", from: "1.15.1"),
         .package(url: "https://github.com/apple/\(metricsPackage).git", from: "2.11.0"),
+        // The session ids of the tests (see `testOnlyDependencies`). The range
+        // is the range that `FoundationModelsExtras` declares.
+        .package(url: "https://github.com/yaslab/\(ulidPackage).git", from: "1.3.1"),
     ],
     targets: [
         .target(

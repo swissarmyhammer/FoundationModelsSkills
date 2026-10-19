@@ -191,6 +191,13 @@ extension SkillsTool {
     /// drop a reload that lands between the two reads. A `watch: false`
     /// registry answers `nil` there, and gets no follower.
     ///
+    /// The context also gets a `SkillsCatalogNoticeFollower`, on a reload
+    /// stream of its own, whenever the registry reloads. `followReloads` does
+    /// not change that: it only says who pumps the search agent. The notice
+    /// follower reads its seed catalog last, after the index is built, thus
+    /// the seed is as close as it can be to the catalog that the description
+    /// of the tool lists.
+    ///
     /// - Parameters:
     ///   - registry: The registry the assembled context wraps.
     ///   - mode: Which tier the searcher uses.
@@ -213,6 +220,7 @@ extension SkillsTool {
         visibilityPredicate: @escaping @Sendable (SkillMetadata) -> Bool
     ) async -> SkillsToolContext {
         let reloads = followReloads ? registry.onReload : nil
+        let catalogReloads = registry.onReload
         let index = await MetadataIndex.build(
             items: registry.metadata().filter(visibilityPredicate),
             embedder: embedder)
@@ -222,10 +230,15 @@ extension SkillsTool {
         }
         let agent = SkillSearchAgent(
             searcher: searcher, retrievalFallback: retrievalFallback, visibilityPredicate: visibilityPredicate)
+        let noticeFollower = catalogReloads.map {
+            SkillsCatalogNoticeFollower(
+                reloads: $0, seed: registry.metadata(), visibilityPredicate: visibilityPredicate)
+        }
         return SkillsToolContext(
             registry: registry,
             searchAgent: agent,
             visibilityPredicate: visibilityPredicate,
-            reloadFollower: reloads.map { SkillsReloadFollower(reloads: $0, agent: agent) })
+            reloadFollower: reloads.map { SkillsReloadFollower(reloads: $0, agent: agent) },
+            catalogNoticeFollower: noticeFollower)
     }
 }

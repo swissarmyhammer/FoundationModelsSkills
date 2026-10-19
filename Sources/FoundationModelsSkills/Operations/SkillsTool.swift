@@ -37,6 +37,10 @@ public enum SkillsTool {
     /// schema is a plain string, thus a skill that a hot reload adds loads
     /// with `use skill` in the same session. See `SkillsCatalogTool`.
     ///
+    /// The tool gets `context.catalogNoticeBoard`. Thus each tool made from
+    /// one context shares one board, and a session learns of a reload from
+    /// the one notice that `context.catalogNoticeFollower` posts there.
+    ///
     /// - Parameters:
     ///   - context: The shared context every operation's `execute(in:)` runs
     ///     against.
@@ -71,7 +75,9 @@ public enum SkillsTool {
             ],
             resolver: resolver
         )
-        return try SkillsCatalogTool(operationTool: operationTool, skillIDs: catalog.map(\.id), resolver: resolver)
+        return try SkillsCatalogTool(
+            operationTool: operationTool, skillIDs: catalog.map(\.id), resolver: resolver,
+            catalogNoticeBoard: context.catalogNoticeBoard)
     }
 
     /// Builds the forgiving resolver `make(context:)` fuses the tool with.

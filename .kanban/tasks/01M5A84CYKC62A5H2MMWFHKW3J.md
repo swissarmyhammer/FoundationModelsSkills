@@ -39,8 +39,31 @@ comments:
     - evidence: `swift test` (full run, exit 0) — 633 tests in 58 suites passed, 0 failed, 0 skipped; no warnings from this package. The only build warning is the known mlx-swift dependency one ("missing creator for mutated node ... mlx-swift_Cmlx.bundle"), which appeared again.
     - next: review
   timestamp: 2026-10-19T15:27:03.461091+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01m5accb4v7jxk91c1k4gp2fqj
+  text: |-
+    ### commit — changed
+    - evidence: 9ce4e2a feat(skills-tool): plain string id and a corrective that names the closest ids
+    - next: review
+  timestamp: 2026-10-19T15:27:16.123123+00:00
+- actor: claude-code
+  id: 01m5acn3kxx0zfcx7j2yph6jc9
+  text: |-
+    ### review — clean
+    - evidence: review sha HEAD~1..HEAD (9ce4e2a): 0 findings, 0 confirmed, 0 refuted; 14 files attempted, 0 failed. Not reviewed: 6 .kanban files (.reviewignore), README.md and docs/operations.md (no validator matched). The sed-edited separator lines in ResourceOpsTests.swift and SkillsCLITests.swift were checked in the diff and are intact.
+    - next: none; task moved to done
+  timestamp: 2026-10-19T15:32:03.325490+00:00
+- actor: claude-code
+  id: 01m5acnegnz0meh8597j2736nx
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 17 files (UnusableSkillIDText, SkillsToolSchema, docs, tests)
+    - test: green — swift test, 633 tests in 58 suites
+    - commit: 9ce4e2a
+    - review: clean — no findings; the task is in done
+  timestamp: 2026-10-19T15:32:14.485515+00:00
+position_column: done
+position_ordinal: ffa280
 title: Make the skills `id` a plain string, and let the use skill corrective name the closest ids and say to call search skill
 ---
 ## What

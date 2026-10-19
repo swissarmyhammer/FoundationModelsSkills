@@ -1,3 +1,5 @@
+import FoundationModelsExtras
+
 /// The shared environment the three skill operations (`SearchSkill`,
 /// `ListSkill`, `UseSkill`) dispatch against once fused into one
 /// `OperationTool`.
@@ -46,6 +48,23 @@ public struct SkillsToolContext: Sendable {
     /// pumps the stream itself.
     public let reloadFollower: SkillsReloadFollower?
 
+    /// The follower that posts a catalog-change notice for each reload that
+    /// changes the listed catalog, or `nil` when no notice is posted.
+    ///
+    /// Held for its lifetime alone, the same as `reloadFollower`. `nil` for a
+    /// `watch: false` registry, which never reloads, and for a context that a
+    /// host builds without one.
+    public let catalogNoticeFollower: SkillsCatalogNoticeFollower?
+
+    /// The board of the catalog notices. `SkillsTool.make(context:)` gives it
+    /// to each tool it makes, and each session that mounts such a tool joins
+    /// it.
+    ///
+    /// It is the board of `catalogNoticeFollower`, thus the follower posts to
+    /// the board that the sessions join. With no follower, it is a board that
+    /// gets no notice.
+    public let catalogNoticeBoard: CatalogNoticeBoard
+
     /// Creates a `SkillsToolContext` bundling a registry, its search agent,
     /// and which surface's visibility rules `ListSkill`/`UseSkill` enforce.
     ///
@@ -61,15 +80,21 @@ public struct SkillsToolContext: Sendable {
     ///   - reloadFollower: The follower this context keeps alive. Defaults
     ///     to `nil`, which leaves the host responsible for forwarding
     ///     `registry.onReload` into `searchAgent` itself.
+    ///   - catalogNoticeFollower: The notice follower this context keeps
+    ///     alive. Its board becomes `catalogNoticeBoard`. Defaults to `nil`,
+    ///     which posts no notice.
     public init(
         registry: SkillsRegistry,
         searchAgent: SkillSearchAgent,
         visibilityPredicate: @escaping @Sendable (SkillMetadata) -> Bool = { $0.isModelVisible },
-        reloadFollower: SkillsReloadFollower? = nil
+        reloadFollower: SkillsReloadFollower? = nil,
+        catalogNoticeFollower: SkillsCatalogNoticeFollower? = nil
     ) {
         self.registry = registry
         self.searchAgent = searchAgent
         self.visibilityPredicate = visibilityPredicate
         self.reloadFollower = reloadFollower
+        self.catalogNoticeFollower = catalogNoticeFollower
+        catalogNoticeBoard = catalogNoticeFollower?.board ?? CatalogNoticeBoard()
     }
 }

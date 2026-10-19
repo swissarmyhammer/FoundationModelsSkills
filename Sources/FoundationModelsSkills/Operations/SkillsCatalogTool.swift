@@ -56,6 +56,13 @@ public struct SkillsCatalogTool: Tool {
     /// The fused schema of the operations, with a plain string `id` field.
     public let parameters: GenerationSchema
 
+    /// The board that the catalog-change notices of the skills catalog go
+    /// to: the board of the tool context.
+    ///
+    /// Each session that mounts this tool with `ToolMounting.makeWrapped`
+    /// joins it. A child session that gets this tool joins it as well.
+    public let catalogNoticeBoard: CatalogNoticeBoard
+
     /// Finds the payloads of `search skill`, `list skill`, and `use skill`,
     /// and decodes their answers to plain text.
     private let plainTextOperations: PlainTextOperations
@@ -68,13 +75,16 @@ public struct SkillsCatalogTool: Tool {
     ///   - skillIDs: The visible skill ids, in catalog order.
     ///   - resolver: The resolver of `operationTool`. It finds the payloads
     ///     of the skill operations with the same rules as the dispatch.
+    ///   - catalogNoticeBoard: The board of the catalog-change notices.
     /// - Throws: Whatever `SkillsToolSchema.make(name:operations:)` or
     ///   `PlainTextOperations.init(resolver:)` throws.
     internal init(
-        operationTool: OperationTool<SkillsToolContext>, skillIDs: [String], resolver: OperationResolver
+        operationTool: OperationTool<SkillsToolContext>, skillIDs: [String], resolver: OperationResolver,
+        catalogNoticeBoard: CatalogNoticeBoard
     ) throws {
         self.operationTool = operationTool
         self.skillIDs = skillIDs
+        self.catalogNoticeBoard = catalogNoticeBoard
         parameters = try SkillsToolSchema.make(name: operationTool.name, operations: operationTool.operations)
         plainTextOperations = try PlainTextOperations(resolver: resolver)
     }
@@ -138,6 +148,11 @@ public struct SkillsCatalogTool: Tool {
 /// `forked()`, which gives back `self`, is what `operationTool.forked()`
 /// gives too: the same context, shared.
 extension SkillsCatalogTool: ForkableTool {}
+
+/// The description lists the catalog of the time the tool was made, and never
+/// changes. A reload of the catalog reaches each session that mounted the
+/// tool as one notice on `catalogNoticeBoard` (`SkillsCatalogNoticeFollower`).
+extension SkillsCatalogTool: CatalogNoticing {}
 
 /// A host that holds only `any Tool` gets the operations of this tool as
 /// descriptors, and dispatches one operation with `perform(_:)`, through
