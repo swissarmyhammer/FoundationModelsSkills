@@ -249,7 +249,7 @@ struct HotReloadTests {
 
     /// Removes `alpha` and `charlie`, confirming `alpha`'s id disappears
     /// from `search skill` / `list skill`, that `use skill` against it draws
-    /// the corrective carrying the current id list, and that `charlie`'s
+    /// the corrective naming the closest usable ids, and that `charlie`'s
     /// preloaded body no longer survives in `preloadedBodies()`.
     ///
     /// - Parameters:
@@ -282,7 +282,7 @@ struct HotReloadTests {
         let useAnswer = try await tool.call(
             arguments: GeneratedContent(properties: ["op": "use skill", "id": "alpha"]))
         #expect(useAnswer.contains("not currently usable"))
-        #expect(useAnswer.contains("bravo"), "the corrective should carry the current (still-usable) id list")
+        #expect(useAnswer.contains("bravo"), "the corrective should name the closest still-usable id")
 
         let preloadedAfterRemove = await registry.preloadedBodies()
         #expect(
@@ -327,8 +327,8 @@ struct HotReloadTests {
     /// tracked `charlie`'s add/edit/remove across steps 1-3 (not merely
     /// empty because nothing was ever preloaded), and that the fused tool's
     /// schema is byte-identical to what it was before any of the four
-    /// preceding steps ran -- the schema, with its `id` enum, is fixed when
-    /// the tool is made, and a hot reload never changes it.
+    /// preceding steps ran -- the schema, with its plain string `id` field,
+    /// is fixed when the tool is made, and a hot reload never changes it.
     ///
     /// - Parameters:
     ///   - registry: The registry under test.

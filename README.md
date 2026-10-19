@@ -74,10 +74,12 @@ The optional `embedder:` argument takes any `PooledEmbedding`, for example a
 The tool shows the catalog to the model before it plans. Its description lists
 each visible skill with its description, and tells the model to load each skill
 that helps with any part of the task with `use skill`. The `id` field of its
-schema is an enum of the visible skill ids. Both are fixed when the tool is
-made: a skill that a hot reload adds is found by `search skill`, and the next
-session gets it in the description and in the enum. `catalogCharacterLimit`
-(8,000 characters by default) limits the list. See
+schema is a plain string. The description and the schema are fixed when the
+tool is made. A skill that a hot reload adds is found by `search skill` and
+loads with `use skill` in the same session. The next session gets it in the
+description. An unknown id gets a corrective that names the closest usable ids
+and the `search skill` call. `catalogCharacterLimit` (8,000 characters by
+default) limits the list. See
 [`docs/operations.md`](docs/operations.md).
 
 For each prompt, the selection tier makes a new `LanguageModelSession` on the

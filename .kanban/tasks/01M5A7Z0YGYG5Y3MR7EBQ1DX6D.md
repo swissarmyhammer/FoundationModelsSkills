@@ -34,8 +34,24 @@ comments:
     - evidence: ee62157 feat(tool-description): map listed skills to Extras catalog entries
     - next: review
   timestamp: 2026-10-19T15:14:28.458621+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01m5abra70n6tvnhsnbx2740fk
+  text: |-
+    ### review — clean
+    - evidence: no findings — `review sha HEAD~1..HEAD` (checkpoint commit 4c8896b; the commit-step comment's ee62157 was amended to 4c8896b); counts findings 0, confirmed 0, refuted 0; 7 validator runs attempted, 0 failed; 2 files reviewed, 8 .kanban/ files excluded by .reviewignore
+    - next: task moved to done
+  timestamp: 2026-10-19T15:16:19.808698+00:00
+- actor: claude-code
+  id: 01m5abrhfe0ddrzyqsc5aypt13
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — SkillsToolDescription.swift; SkillCatalogEntriesTests.swift
+    - test: green — swift test, 629 tests in 57 suites
+    - commit: 4c8896b
+    - review: clean — no findings; the task is in done
+  timestamp: 2026-10-19T15:16:27.246352+00:00
+position_column: done
+position_ordinal: ffa180
 title: Map the listed skill catalog to [CatalogEntry] for the Extras catalog compare
 ---
 #skills

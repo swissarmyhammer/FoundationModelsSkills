@@ -2,16 +2,15 @@
 
 The `skills` tool is one fused tool with six operations. The schema is a
 flat union: an `op` discriminator plus every field as an optional. The `id`
-field is an enum of the visible skill ids. An invalid input does not throw.
-The tool returns a corrective message that tells the model how to correct the
-call.
+field is a plain string. An invalid input does not throw. The tool returns a
+corrective message that tells the model how to correct the call.
 
-## The tool description and the `id` enum
+## The tool description and the `id` field
 
 A model reads the name, the description, and the schema of a tool before it
-plans. Thus `SkillsTool.make` puts the catalog in the description and in the
-schema. It reads `registry.metadata()` one time, keeps the skills that the
-visibility predicate accepts, and keeps the catalog order.
+plans. Thus `SkillsTool.make` puts the catalog in the description. It reads
+`registry.metadata()` one time, keeps the skills that the visibility
+predicate accepts, and keeps the catalog order.
 
 The description has three fixed lines, then one line for each skill. The
 first line tells what a skill is. The second line is the use rule. The third
@@ -42,23 +41,25 @@ order, and stops at the first one that fits:
 When no skill is visible, the description is `Skills are procedures for kinds
 of work.` and the line `No skills are installed now.`
 
-The `id` field of the schema is an enum of the visible ids, thus the model
-cannot invent an id. When no skill is visible, `id` stays a plain string,
-because an empty enum accepts no value. The `id` field has the description
+The `id` field of the schema is a plain string for every catalog, and is not
+an enum of the visible ids. The `id` field has the description
 `The id of the skill to load.` The schema root has no description, thus the
-catalog is not in the prompt two times.
+catalog is not in the prompt two times. The live registry checks the id at
+call time. An id that is not usable gets a corrective that names the closest
+usable ids and the `search skill` call. See
+[The `use skill` answer](#the-use-skill-answer).
 
 ### Hot reload
 
 A tool description and a schema are fixed when a session is made. A hot
-reload does not rebuild the tool:
+reload does not rebuild the tool, thus the schema stays the same for the
+whole session:
 
 - `search skill` and `list skill` find a skill that a hot reload adds.
-- The description of the tool does not show that skill, and the `id` enum
-  does not hold its id. Thus the model cannot load it with `use skill` in the
-  current session.
-- The next session gets a new tool, thus the skill is in its description and
-  in its `id` enum.
+- `use skill` loads that skill in the same session, because the `id` field is
+  a plain string and the operation reads the live registry.
+- The description of the tool does not show that skill. The next session gets
+  a new tool, thus the skill is in its description.
 
 ## The operations
 
@@ -66,7 +67,7 @@ reload does not rebuild the tool:
 |---|---|---|
 | `search skill` | `query` (req), `limit?` | Finds the skills for the kind of work that the model will do next. Search by the kind of work, not by the topic of the task. The answer is plain text: one line for each match from `SkillSearchAgent` over the model-visible catalog, in rank order, and the instruction that names the exact `use skill` call. See [The `search skill` and `list skill` answers](#the-search-skill-and-list-skill-answers). |
 | `list skill` | `filter?` | Lists each skill with its description: the model-visible catalog (with an optional filter), in catalog order, with no ranking. The answer is the same plain lines and the same instruction as `search skill`. |
-| `use skill` | `id` (req), `arguments?` | Loads the instructions of a skill for the model to follow: renders the pipeline with `arguments`. The answer is the rendered body as plain text. When the skill has files other than `SKILL.md`, the list of the files and the calls that read them follow the body. An unknown or hidden `id` returns a corrective sentence that contains the current id list. See [The `use skill` answer](#the-use-skill-answer). |
+| `use skill` | `id` (req), `arguments?` | Loads the instructions of a skill for the model to follow: renders the pipeline with `arguments`. The answer is the rendered body as plain text. When the skill has files other than `SKILL.md`, the list of the files and the calls that read them follow the body. An unknown or hidden `id` returns a corrective sentence that names the closest usable ids and the `search skill` call. See [The `use skill` answer](#the-use-skill-answer). |
 | `list resource` | `id` (req) | Lists each file of the combined view of the skill except `SKILL.md`. The list stops at 100 rows. |
 | `read resource` | `id` (req), `path` (req), `start?`, `end?` | Returns the winning copy of a file verbatim, in a line window: 500 lines maximum and 1,000,000 content bytes maximum for each call. The tool never renders the file. It streams the file in 64 KiB parts and never loads the full file. `totalLines` is exact. See [development.md](development.md) for the exact byte-budget rules. `path` is relative to the skill directory. The tool also accepts an absolute path in a layer directory of the skill, and the result gives the relative path; each other absolute path is refused. A file that is not UTF-8 text is binary, and a binary file gives its absolute path and its size, not its content: the result has `binary: true`, `absolutePath` (the winning copy) and `byteSize`, and `start`, `end` and `totalLines` are `0`. Give that absolute path to a different tool, or to `read resource` again. A text read gives `binary: false`. |
 | `run script` | `id` (req), `path` (req, in `scripts/`), `arguments?`, `timeout?` | Runs the winning copy of the file directly, in the layer directory that gave the winning copy. The file must have the executable bit and a shebang. Three gates apply: the host policy, the skill's `allowed-tools: Script(<glob>)` grant, and the host trust posture. The process runs in its own process group. A timeout sends `SIGKILL`. The tool also accepts an absolute path in a layer directory of the skill, and the result gives the relative path; each other absolute path is refused. The host policy gate applies before the path check. |
@@ -159,11 +160,23 @@ Before, the answer was a JSON object:
 `{"body": "…the rendered body, with \n escapes…", "id": "explore"}`.
 
 An error is a plain sentence too. It says what is wrong. For an unknown or
-hidden id, it names the ids that the model can use:
+hidden id, it names the closest ids that the model can use, then the exact
+`search skill` call. A small model can guess an id, because the `id` field is
+a plain string, thus the sentence points to the right one:
 
 ```text
-The skill id `totally-made-up` is not currently usable. Currently usable ids: commit, env-report, lint.
+The skill id `explor` is not currently usable. Closest usable ids: explore, explain, lint. To find a skill, call the `skills` tool with {"op": "search skill", "query": "<the kind of work>"}.
 ```
+
+- The closeness is the edit distance: the fewest one-character insertions,
+  deletions, and substitutions that turn the given id into a usable id. Ids at
+  the same distance are in id order. Thus the same catalog and the same id
+  always give the same sentence.
+- The sentence names five ids at most.
+- When no skill is usable, the sentence is
+  ``The skill id `<id>` is not currently usable, and no skills are currently usable.``
+- `list resource`, `read resource`, and `run script` give the same sentence
+  for an id that is not usable.
 
 The resource operations keep their JSON answers. The command line
 (`SkillsCLI`) prints the JSON of each operation, thus `skills skill search`,

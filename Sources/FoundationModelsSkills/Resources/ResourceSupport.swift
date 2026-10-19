@@ -126,12 +126,16 @@ internal enum ResourceIDLookup {
     ///   - whenGranted: Runs with the overlay of the skill once `id`
     ///     resolves; never runs at all when it does not.
     /// - Returns: `whenGranted`'s result, or the corrective message for an
-    ///   id that did not resolve.
+    ///   id that did not resolve. `UnusableSkillIDText` writes that message,
+    ///   thus `use skill` gives the same text: the closest usable ids and the
+    ///   `search skill` call.
     internal static func withResolvedOverlay<Success: Encodable & Sendable & Equatable>(
         id: String, context: SkillsToolContext, whenGranted: (SkillOverlay) async -> CorrectiveOutcome<Success>
     ) async -> CorrectiveOutcome<Success> {
         guard Self.isUsable(id: id, context: context) else {
-            return .corrective(Self.unusableIDMessage(id: id, context: context))
+            return .corrective(
+                UnusableSkillIDText.message(
+                    id: id, catalog: context.registry.metadata(), visibilityPredicate: context.visibilityPredicate))
         }
         return await whenGranted(Self.overlay(id: id, context: context))
     }
@@ -203,23 +207,5 @@ internal enum ResourceIDLookup {
     /// - Returns: The overlay over the layer directories of the skill.
     internal static func overlay(id: String, context: SkillsToolContext) -> SkillOverlay {
         SkillOverlay(directories: context.registry.contributingDirectories(id: id).map(\.directory))
-    }
-
-    /// The corrective message for an id that is unknown, stale, or not
-    /// visible on this surface, carrying the current usable id list
-    ///.
-    ///
-    /// - Parameters:
-    ///   - id: The id that could not be resolved.
-    ///   - context: The shared context supplying the registry and which
-    ///     entries `context.visibilityPredicate` accepts.
-    /// - Returns: The corrective message.
-    private static func unusableIDMessage(id: String, context: SkillsToolContext) -> String {
-        let prefix = "The skill id `\(id)` is not currently usable"
-        let validIDs = context.registry.metadata().filter(context.visibilityPredicate).map(\.id).sorted()
-        guard !validIDs.isEmpty else {
-            return "\(prefix), and no skills are currently usable."
-        }
-        return "\(prefix). Currently usable ids: \(validIDs.joined(separator: ", "))."
     }
 }

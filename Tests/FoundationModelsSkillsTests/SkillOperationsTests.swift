@@ -393,7 +393,7 @@ struct SkillOperationsTests {
     /// belongs to. It always answers `true`, so the lookup passes and the
     /// race reaches the `call`.
     ///
-    /// The predicate is idempotent: `unusableIDMessage` runs it a second
+    /// The predicate is idempotent: `UnusableSkillIDText` runs it a second
     /// time over the pre-race snapshot, and by then the directory is gone
     /// and the catalog already rebuilt, so that call returns at once.
     ///
@@ -444,7 +444,10 @@ struct SkillOperationsTests {
             return
         }
         let id = Self.widgetSkillID
-        #expect(message == "The skill id `\(id)` is not currently usable. Currently usable ids: \(id).")
+        #expect(
+            message
+                == "The skill id `\(id)` is not currently usable. Closest usable ids: \(id). "
+                + #"To find a skill, call the `skills` tool with {"op": "search skill", "query": "<the kind of work>"}."#)
     }
 
     // MARK: - Resolver: canonical + forgiving spellings

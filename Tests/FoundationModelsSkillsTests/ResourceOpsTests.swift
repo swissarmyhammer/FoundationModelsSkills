@@ -573,14 +573,14 @@ struct ResourceOpsTests {
                 properties: ["op": "read resource", "id": "deploy", "path": "SKILL.md"]))
 
         #expect(Self.isCorrective(json))
-        let usableIDsList = try #require(json.components(separatedBy: "Currently usable ids: ").last)
+        let usableIDsList = try #require(json.components(separatedBy: "Closest usable ids: ").last)
         #expect(usableIDsList.contains("lint"))
         #expect(!usableIDsList.contains("deploy"))
     }
 
     @Test func readResourceOnTheUserSurfaceRefusesLintWithACorrectiveNamingOnlyUserVisibleIDs() async throws {
         // Proves `ReadResource` (not just `ListResource`) honors the same
-        // surface predicate, and that the corrective's "currently usable
+        // surface predicate, and that the corrective's "closest usable
         // ids" list reflects this surface's own visible set.
         let tool = try SkillsTool.make(context: Self.makeUserSurfaceContext())
 
@@ -589,7 +589,7 @@ struct ResourceOpsTests {
                 properties: ["op": "read resource", "id": "lint", "path": "SKILL.md"]))
 
         #expect(Self.isCorrective(json))
-        let usableIDsList = try #require(json.components(separatedBy: "Currently usable ids: ").last)
+        let usableIDsList = try #require(json.components(separatedBy: "Closest usable ids: ").last)
         #expect(usableIDsList.contains("deploy"))
         #expect(!usableIDsList.contains("lint"))
     }

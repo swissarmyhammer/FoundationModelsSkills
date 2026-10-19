@@ -31,6 +31,17 @@ struct UseSkillPlainTextTests {
     /// An id that no fixture skill has.
     private static let unknownSkillID = "totally-made-up"
 
+    /// The answer for `unknownSkillID`: the five model-visible fixture ids
+    /// closest to it, then the `search skill` call.
+    ///
+    /// `commit`, `git-context`, `release-notes`, and `spec-clean` are 13
+    /// edits from it, and `env-report` and `lint` are 14. Thus `lint` is the
+    /// sixth id, and the answer leaves it out.
+    private static let unknownSkillIDAnswer =
+        "The skill id `totally-made-up` is not currently usable. "
+        + "Closest usable ids: commit, git-context, release-notes, spec-clean, env-report. "
+        + #"To find a skill, call the `skills` tool with {"op": "search skill", "query": "<the kind of work>"}."#
+
     /// The key that the old JSON answer used for the rendered body.
     private static let bodyKey = #""body":"#
 
@@ -78,18 +89,13 @@ struct UseSkillPlainTextTests {
     // MARK: - An error is a plain sentence
 
     @Test(arguments: useSkillOps)
-    func anUnknownIDGivesAPlainSentenceThatNamesTheValidIDs(op: String) async throws {
-        let registry = Self.makeFixtureRegistry()
-        let tool = try Self.makeTool(registry: registry)
-        let validIDs = registry.metadata().filter(\.isModelVisible).map(\.id).sorted()
+    func anUnknownIDGivesAPlainSentenceThatNamesTheClosestValidIDs(op: String) async throws {
+        let tool = try Self.makeTool(registry: Self.makeFixtureRegistry())
 
         let answer = try await tool.call(
             arguments: GeneratedContent(properties: ["op": op, "id": Self.unknownSkillID]))
 
-        #expect(
-            answer
-                == "The skill id `\(Self.unknownSkillID)` is not currently usable. "
-                + "Currently usable ids: \(validIDs.joined(separator: ", ")).")
+        #expect(answer == Self.unknownSkillIDAnswer)
     }
 
     @Test(arguments: useSkillOps)

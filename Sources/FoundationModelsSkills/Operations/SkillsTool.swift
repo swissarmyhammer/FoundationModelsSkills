@@ -7,8 +7,8 @@ import Operations
 ///
 /// The forgiving op/parameter resolution and the return-don't-throw retry
 /// cap are inherited from the upstream `Operations` runtime. This type
-/// supplies the operation set, the verb aliases, and
-/// the catalog: the tool description and the `id` enum of the schema.
+/// supplies the operation set, the verb aliases, and the catalog of the
+/// tool description. The `id` field of the schema is a plain string.
 public enum SkillsTool {
     /// The fused tool's model- and CLI-facing name.
     ///
@@ -30,10 +30,12 @@ public enum SkillsTool {
     /// resource` / `read resource` / `run script` -- the order the fused
     /// schema's `op` enum and any unknown-operation corrective list them in.
     ///
-    /// The description and the `id` enum of the schema come from the
-    /// catalog one time, here: `context.registry.metadata()`, filtered by
+    /// The description comes from the catalog one time, here:
+    /// `context.registry.metadata()`, filtered by
     /// `context.visibilityPredicate`, in catalog order. A hot reload does not
-    /// change them. See `SkillsCatalogTool`.
+    /// change it, and it does not change the schema. The `id` field of the
+    /// schema is a plain string, thus a skill that a hot reload adds loads
+    /// with `use skill` in the same session. See `SkillsCatalogTool`.
     ///
     /// - Parameters:
     ///   - context: The shared context every operation's `execute(in:)` runs

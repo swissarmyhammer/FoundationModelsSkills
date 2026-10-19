@@ -1,3 +1,5 @@
+import Operations
+
 /// Builds the plain text that tells the model which skills exist and how to
 /// load one.
 ///
@@ -123,7 +125,17 @@ internal enum SkillCatalogText {
         call(op: UseSkill.opString, id: id)
     }
 
-    /// Gives the arguments of one `skills` call, as the model writes them.
+    /// The name of the `id` field of a call.
+    private static let idFieldName = "id"
+
+    /// The name of the `path` field of a call.
+    private static let pathFieldName = "path"
+
+    /// The name of the `query` field of a `search skill` call.
+    private static let queryFieldName = "query"
+
+    /// Gives the arguments of one `skills` call that names a skill, as the
+    /// model writes them.
     ///
     /// The load call of this type and the calls of `SkillFilesText` each come
     /// from here, thus the texts cannot differ on the shape of a call.
@@ -136,15 +148,40 @@ internal enum SkillCatalogText {
     /// - Returns: The call, for example
     ///   `{"op": "read resource", "id": "release-notes", "path": "<path>"}`.
     internal static func call(op: String, id: String, path: String? = nil) -> String {
-        let pathField = path.map { #", "path": "\#($0)""# } ?? ""
-        return #"{"op": "\#(op)", "id": "\#(id)"\#(pathField)}"#
+        let pathFields = path.map { [(name: pathFieldName, value: $0)] } ?? []
+        return call(op: op, fields: [(name: idFieldName, value: id)] + pathFields)
+    }
+
+    /// Gives the arguments of the `search skill` call, as the model writes
+    /// them.
+    ///
+    /// - Parameter query: The query of the search, or a placeholder for it.
+    /// - Returns: The call, for example
+    ///   `{"op": "search skill", "query": "<the kind of work>"}`.
+    internal static func searchCall(query: String) -> String {
+        call(op: SearchSkill.opString, fields: [(name: queryFieldName, value: query)])
+    }
+
+    /// Gives the arguments of one `skills` call: the `op` field, then each
+    /// field of `fields` in order.
+    ///
+    /// Each call of this type comes from here, thus no two calls can differ
+    /// on the shape of a field.
+    ///
+    /// - Parameters:
+    ///   - op: The op of the operation.
+    ///   - fields: The other fields of the call, in the order to write them.
+    /// - Returns: The call, for example `{"op": "use skill", "id": "explore"}`.
+    private static func call(op: String, fields: [(name: String, value: String)]) -> String {
+        let allFields = [(name: OperationKeys.opFieldName, value: op)] + fields
+        return "{" + allFields.map { #""\#($0.name)": "\#($0.value)""# }.joined(separator: ", ") + "}"
     }
 
     /// Gives the words that tell the model to call the `skills` tool with
     /// `call`.
     ///
     /// - Parameter call: The arguments of the call, from
-    ///   `call(op:id:path:)`.
+    ///   `call(op:id:path:)` or `searchCall(query:)`.
     /// - Returns: The words. For the load call, the words are: call the
     ///   `skills` tool with `{"op": "use skill", "id": "<id>"}`.
     internal static func callTheTool(with call: String) -> String {

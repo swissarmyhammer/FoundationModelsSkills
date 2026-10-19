@@ -136,8 +136,7 @@ public struct UseSkill: OperationDefinition {
     public func execute(in context: SkillsToolContext) async throws -> UseSkillOutput {
         let catalog = context.registry.metadata()
         guard let entry = catalog.first(where: { $0.id == id }), context.visibilityPredicate(entry) else {
-            return .corrective(
-                Self.unusableIDMessage(id: id, catalog: catalog, visibilityPredicate: context.visibilityPredicate))
+            return unusableIDCorrective(catalog: catalog, context: context)
         }
 
         do {
@@ -147,9 +146,20 @@ public struct UseSkill: OperationDefinition {
             // The live catalog changed between the lookup above and this
             // call (a race with a hot reload) -- report it the same way as
             // an id that was already unusable at lookup time.
-            return .corrective(
-                Self.unusableIDMessage(id: id, catalog: catalog, visibilityPredicate: context.visibilityPredicate))
+            return unusableIDCorrective(catalog: catalog, context: context)
         }
+    }
+
+    /// The corrective for an `id` that is unknown, stale, or not visible on
+    /// the surface of the call: the closest usable ids and the
+    /// `search skill` call (`UnusableSkillIDText`).
+    ///
+    /// - Parameters:
+    ///   - catalog: The catalog snapshot to take the usable ids from.
+    ///   - context: The shared context that gives the visibility predicate.
+    /// - Returns: `.corrective(_:)` with the text.
+    private func unusableIDCorrective(catalog: [SkillMetadata], context: SkillsToolContext) -> UseSkillOutput {
+        .corrective(UnusableSkillIDText.message(id: id, catalog: catalog, visibilityPredicate: context.visibilityPredicate))
     }
 
     // MARK: - The files of the skill
@@ -170,29 +180,5 @@ public struct UseSkill: OperationDefinition {
         return SkillFilesText.text(
             id: id, rows: ListResource.listedRows(in: overlay),
             isScriptExecutionDisabled: context.registry.policy.isScriptExecutionDisabled)
-    }
-
-    // MARK: - Unusable id (unknown, stale, or not visible on this surface)
-
-    /// The corrective message for an id that is unknown, stale, or not
-    /// visible on the calling context's surface, carrying the current
-    /// usable id list.
-    ///
-    /// - Parameters:
-    ///   - id: The id that could not be used.
-    ///   - catalog: The full catalog snapshot to derive the current usable
-    ///     id list from.
-    ///   - visibilityPredicate: Which catalog entries count as usable on the
-    ///     calling context's surface.
-    /// - Returns: The corrective message.
-    private static func unusableIDMessage(
-        id: String, catalog: [SkillMetadata], visibilityPredicate: (SkillMetadata) -> Bool
-    ) -> String {
-        let prefix = "The skill id `\(id)` is not currently usable"
-        let validIDs = catalog.filter(visibilityPredicate).map(\.id).sorted()
-        guard !validIDs.isEmpty else {
-            return "\(prefix), and no skills are currently usable."
-        }
-        return "\(prefix). Currently usable ids: \(validIDs.joined(separator: ", "))."
     }
 }

@@ -5,12 +5,14 @@ import Operations
 import Testing
 
 /// Tests for the catalog that the `skills` tool shows the model: the tool
-/// description, the `id` enum of the fused schema, and the texts of the
-/// operations.
+/// description, the plain `id` field of the fused schema, and the texts of
+/// the operations.
 ///
 /// A model sees only the name, the description, and the schema of a tool
-/// before it plans. These cases show that the description and the schema
-/// carry the visible skills, and that no model-hidden skill gets into them.
+/// before it plans. These cases show that the description carries the
+/// visible skills, and that no model-hidden skill gets into it. The `id`
+/// field is a plain string, thus a skill that a reload adds can be loaded in
+/// the same session.
 struct SkillsCatalogToolTests {
     // MARK: - Constants
 
@@ -39,6 +41,15 @@ struct SkillsCatalogToolTests {
     /// The name of the fused schema field that holds a skill id.
     private static let idFieldName = "id"
 
+    /// The JSON schema type name of a plain string field.
+    private static let stringTypeName = "string"
+
+    /// The skill in the root when the tool is made.
+    private static let skillBeforeReload = "alpha"
+
+    /// The skill that a reload adds after the tool is made.
+    private static let skillAddedByReload = "bravo"
+
     // MARK: - The description
 
     @Test func theDescriptionListsEachVisibleSkillWithItsDescriptionAndNoHiddenOne() async throws {
@@ -64,17 +75,40 @@ struct SkillsCatalogToolTests {
         #expect(tool.description.hasSuffix("\n\n" + visibleIDs.joined(separator: ", ")))
     }
 
-    // MARK: - The id enum
+    // MARK: - The id field
 
-    @Test func theIDFieldOfTheSchemaIsAnEnumOfTheVisibleIDs() async throws {
+    @Test func theIDFieldOfTheSchemaIsAPlainStringForAFullCatalog() async throws {
         let registry = Self.makeFixtureRegistry()
-        let visibleIDs = registry.metadata().filter(\.isModelVisible).map(\.id)
+        #expect(!registry.metadata().filter(\.isModelVisible).isEmpty, "the catalog must hold a visible skill")
 
         let tool = try await SkillsTool.make(registry: registry)
         let idProperty = try Self.property(named: Self.idFieldName, in: tool.parameters)
 
-        #expect(idProperty["enum"] as? [String] == visibleIDs)
+        #expect(idProperty["enum"] == nil, "a fixed enum would refuse a skill that a reload adds")
+        #expect(idProperty["type"] as? String == Self.stringTypeName)
         #expect(idProperty["description"] as? String == "The id of the skill to load.")
+    }
+
+    // MARK: - A skill that a reload adds
+
+    @Test func aSkillThatAReloadAddsAfterTheToolIsMadeLoadsThroughTheTool() async throws {
+        let root = try HotReloadTestSupport.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try ReloadTestSupport.writeSkillFile(id: Self.skillBeforeReload, in: root)
+        let registry = SkillsRegistry(roots: [root], watch: true)
+        let tool = try await SkillsTool.make(registry: registry)
+        let tally = ReloadTestSupport.EventTally()
+        let subscription = ReloadTestSupport.tally(registry.onReload, into: tally)
+        defer { subscription.cancel() }
+
+        try ReloadTestSupport.writeSkillFile(id: Self.skillAddedByReload, in: root)
+        await ReloadTestSupport.expectExactlyOneEvent(tally)
+        let idProperty = try Self.property(named: Self.idFieldName, in: tool.parameters)
+        let answer = try await tool.call(
+            arguments: GeneratedContent(properties: ["op": "use skill", "id": Self.skillAddedByReload]))
+
+        #expect((idProperty["enum"] as? [String])?.contains(Self.skillAddedByReload) ?? true)
+        #expect(answer == (try await registry.call(id: Self.skillAddedByReload)))
     }
 
     @Test func theSchemaKeepsTheOpEnumAndEveryField() async throws {
@@ -98,7 +132,8 @@ struct SkillsCatalogToolTests {
         let idProperty = try Self.property(named: Self.idFieldName, in: tool.parameters)
 
         #expect(tool.description.hasSuffix(Self.noSkillsLine))
-        #expect(idProperty["enum"] == nil, "an empty enum admits no value, thus the id stays a plain string")
+        #expect(idProperty["enum"] == nil)
+        #expect(idProperty["type"] as? String == Self.stringTypeName)
     }
 
     // MARK: - The tool still works

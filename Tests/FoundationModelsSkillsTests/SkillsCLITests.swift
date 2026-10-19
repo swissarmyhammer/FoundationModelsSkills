@@ -155,9 +155,9 @@ struct SkillsCLITests {
 
         let result = await driver.run(arguments: ["skill", "use", "--id", "lint"])
         #expect(result.output.hasPrefix("\""))
-        let usableIDsList = try #require(result.output.components(separatedBy: "Currently usable ids: ").last)
+        let usableIDsList = try #require(result.output.components(separatedBy: "Closest usable ids: ").last)
 
-        // The corrective's "currently usable ids" list is this surface's own
+        // The corrective's "closest usable ids" list is this surface's own
         // (user-facing) visible set, not the model-facing one: it must
         // name `deploy` (user-visible, model-hidden) but never the
         // model-only `lint` that was just refused.

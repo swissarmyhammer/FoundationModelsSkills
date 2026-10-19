@@ -5,7 +5,7 @@ import Testing
 /// Tests for the corrective `ResourceIDLookup` draws when the calling
 /// context's catalog holds no usable skill at all. `ResourceOpsTests` and
 /// `RunScriptTests` always hold at least one usable skill, so they reach
-/// only the "Currently usable ids: ..." branch of that message.
+/// only the "Closest usable ids: ..." branch of that message.
 ///
 /// The tests of `ResourceIDLookup.withResolvedPath(_:id:context:whenResolved:)`
 /// are here too: that lookup gives the relative path of a path that the
@@ -20,7 +20,7 @@ struct ResourceIDLookupTests {
 
     /// The text the other branch of the corrective carries, and this branch
     /// must not.
-    private static let usableIDsPrefix = "Currently usable ids:"
+    private static let usableIDsPrefix = "Closest usable ids:"
 
     /// Thrown by `correctiveMessage(fromEmptyCatalog:)` when the operation
     /// succeeded against an empty catalog, which no test here expects.

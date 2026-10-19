@@ -3,23 +3,24 @@ import FoundationModelsExtras
 import Operations
 
 /// The fused `skills` tool that `SkillsTool.make` gives a host: the six
-/// skill operations, with the visible catalog in the description and in the
-/// schema.
+/// skill operations, with the visible catalog in the description.
 ///
 /// A model reads the name, the description, and the schema of a tool before
-/// it plans. This tool puts the catalog in two of them:
+/// it plans. This tool fills them as follows:
 ///
 /// - `description` holds each visible skill with its description, and the
 ///   rule to load each skill that helps with the task
 ///   (`SkillsToolDescription`).
-/// - `parameters` is the fused schema of the operations, with the `id`
-///   field made an enum of the visible skill ids (`SkillsToolSchema`). Thus
-///   the model cannot invent an id.
+/// - `parameters` is the fused schema of the operations
+///   (`SkillsToolSchema`). The `id` field is a plain string, not an enum of
+///   the visible skill ids.
 ///
-/// Both are fixed when the tool is made. A skill that a hot reload adds is
-/// found by `search skill`, but its id is not in the enum, thus the model
-/// cannot load it with `use skill` until the host makes a new tool for the
-/// next session. A hot reload does not rebuild this tool.
+/// Both are fixed when the tool is made, thus the schema stays the same for
+/// the whole session. A hot reload does not rebuild this tool. Each
+/// operation reads the live registry at call time, thus a skill that a hot
+/// reload adds is found by `search skill` and loads with `use skill` in the
+/// same session. An id that is not usable gets a corrective that names the
+/// closest usable ids and the `search skill` call (`UnusableSkillIDText`).
 ///
 /// Each call goes to `operationTool`, the `OperationTool` of the
 /// `Operations` runtime. It resolves the payload, dispatches the operation,
@@ -44,20 +45,22 @@ public struct SkillsCatalogTool: Tool {
     /// operations from it.
     public let operationTool: OperationTool<SkillsToolContext>
 
-    /// The ids the `id` enum of `parameters` holds, in catalog order.
+    /// The ids of the skills that were visible when the tool was made, in
+    /// catalog order: the skills of `description`.
     ///
-    /// Empty when no skill was visible when the tool was made. The `id`
-    /// field is then a plain string.
+    /// The schema does not read them. The `id` field of `parameters` is a
+    /// plain string, thus `use skill` also takes a skill that a hot reload
+    /// adds later.
     public let skillIDs: [String]
 
-    /// The fused schema, with the `id` field made an enum of `skillIDs`.
+    /// The fused schema of the operations, with a plain string `id` field.
     public let parameters: GenerationSchema
 
     /// Finds the payloads of `search skill`, `list skill`, and `use skill`,
     /// and decodes their answers to plain text.
     private let plainTextOperations: PlainTextOperations
 
-    /// Wraps `operationTool` and builds the schema over `skillIDs`.
+    /// Wraps `operationTool` and builds the schema of its operations.
     ///
     /// - Parameters:
     ///   - operationTool: The tool that resolves and dispatches each call.
@@ -65,15 +68,14 @@ public struct SkillsCatalogTool: Tool {
     ///   - skillIDs: The visible skill ids, in catalog order.
     ///   - resolver: The resolver of `operationTool`. It finds the payloads
     ///     of the skill operations with the same rules as the dispatch.
-    /// - Throws: Whatever `SkillsToolSchema.make(name:operations:skillIDs:)`
-    ///   or `PlainTextOperations.init(resolver:)` throws.
+    /// - Throws: Whatever `SkillsToolSchema.make(name:operations:)` or
+    ///   `PlainTextOperations.init(resolver:)` throws.
     internal init(
         operationTool: OperationTool<SkillsToolContext>, skillIDs: [String], resolver: OperationResolver
     ) throws {
         self.operationTool = operationTool
         self.skillIDs = skillIDs
-        parameters = try SkillsToolSchema.make(
-            name: operationTool.name, operations: operationTool.operations, skillIDs: skillIDs)
+        parameters = try SkillsToolSchema.make(name: operationTool.name, operations: operationTool.operations)
         plainTextOperations = try PlainTextOperations(resolver: resolver)
     }
 
