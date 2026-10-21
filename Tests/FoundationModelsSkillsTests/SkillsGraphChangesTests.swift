@@ -151,23 +151,6 @@ struct SkillsGraphChangesTests {
         #expect(later.ids == ChangedIDs(added: [Self.laterSkillID]))
     }
 
-    /// `skillChanges` is an alias of `changes`, and the response reports the
-    /// rewrite.
-    @Test func skillChangesIsAnAliasOfChanges() async throws {
-        let fixture = try ProviderFixture()
-        defer { fixture.remove() }
-        let start = try await fixture.endpoint.cursor()
-        try ReloadTestSupport.writeSkillFile(id: Self.addedSkillID, in: fixture.root)
-        fixture.reload()
-        _ = try await fixture.endpoint.firstEvent(after: start)
-
-        let response = try await fixture.endpoint.firstResponse(
-            of: "subscription { skillChanges(after: \"\(start)\") { added } }")
-
-        #expect(try ChangeEvent.ids(in: response, at: "skillChanges") == ChangedIDs(added: [Self.addedSkillID]))
-        #expect(try ResponseText.rewrites(response) == ["skillChanges→changes"])
-    }
-
     // MARK: - RESYNC_REQUIRED
 
     /// A text that is not a cursor gives `RESYNC_REQUIRED`.
@@ -297,18 +280,6 @@ struct SkillsGraphChangesTests {
             let errors = try object(text)["errors"] as? [[String: Any]] ?? []
             return errors.compactMap { error in (error["extensions"] as? [String: Any])?["code"] as? String }
         }
-
-        /// Gives each `extensions.rewrites` entry of a response as
-        /// `from→to`.
-        ///
-        /// - Parameter text: The JSON text.
-        /// - Returns: The rewrites, in order.
-        /// - Throws: A failure of `#require` when the text is not an object.
-        static func rewrites(_ text: String) throws -> [String] {
-            let extensions = try object(text)["extensions"] as? [String: Any]
-            let rewrites = extensions?["rewrites"] as? [[String: Any]] ?? []
-            return rewrites.map { rewrite in "\(rewrite["from"] ?? "")→\(rewrite["to"] ?? "")" }
-        }
     }
 
     /// One event of the `changes` subscription.
@@ -324,33 +295,20 @@ struct SkillsGraphChangesTests {
         /// - Parameter text: The JSON text of the response.
         /// - Throws: A failure of `#require` when the response has no event.
         init(response text: String) throws {
-            let event = try Self.event(in: text, at: "changes")
+            let event = try Self.event(in: text)
             cursor = try #require(event["cursor"] as? String)
             _ = try #require(event["at"] as? String)
             ids = Self.ids(of: event)
         }
 
-        /// Reads the ids of the event of a response.
-        ///
-        /// - Parameters:
-        ///   - text: The JSON text of the response.
-        ///   - key: The response key of the subscription field.
-        /// - Returns: The ids.
-        /// - Throws: A failure of `#require` when the response has no event.
-        static func ids(in text: String, at key: String) throws -> ChangedIDs {
-            try ids(of: event(in: text, at: key))
-        }
-
         /// Reads the event object of a response.
         ///
-        /// - Parameters:
-        ///   - text: The JSON text of the response.
-        ///   - key: The response key of the subscription field.
+        /// - Parameter text: The JSON text of the response.
         /// - Returns: The event object.
         /// - Throws: A failure of `#require` when the response has no event.
-        private static func event(in text: String, at key: String) throws -> [String: Any] {
+        private static func event(in text: String) throws -> [String: Any] {
             let data = try #require(try ResponseText.object(text)["data"] as? [String: Any])
-            return try #require(data[key] as? [String: Any])
+            return try #require(data["changes"] as? [String: Any])
         }
 
         /// Reads the ids of an event object.

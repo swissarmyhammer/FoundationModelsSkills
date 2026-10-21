@@ -24,6 +24,15 @@ struct SkillsGraphTests {
     /// An id that no skill has.
     private static let missingSkillID = "nosuchskill"
 
+    /// The skill that the probe of the `changes` subscription adds.
+    private static let addedSkillID = "charlie"
+
+    /// The canonical name of the subscription of the changes.
+    private static let changesField = "changes"
+
+    /// The alias of ``changesField`` that the endpoint rewrites.
+    private static let changesAlias = "skillChanges"
+
     /// The description of each fixture skill.
     private static let skillDescription = "Greets a person."
 
@@ -45,18 +54,21 @@ struct SkillsGraphTests {
     // MARK: - Rule 11
 
     /// The endpoint has the facts of a host, the response conventions of
-    /// the toolkit, rewrites `skill(name:)` to `skill(id:)`, and obeys each
-    /// rule of EXTRAS-9 with no exception: rule 9 too, the `changes`
-    /// subscription and the root `cursor`. The endpoint has no code of its
-    /// own, thus it gives no code for rule 8.
+    /// the toolkit, rewrites `skill(name:)` to `skill(id:)` and the
+    /// subscription `skillChanges` to `changes`, and obeys each rule of
+    /// EXTRAS-9 with no exception: rule 9 too, the `changes` subscription
+    /// and the root `cursor`. The endpoint has no code of its own, thus it
+    /// gives no code for rule 8.
     @Test func theEndpointConforms() async throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
-        let probe = GraphQLAliasProbe(
+        let queryProbe = GraphQLAliasProbe(
             query: "{ skill(name: \"\(Self.onSkillID)\") { id } }", from: "name", to: "id")
+        let subscriptionProbe = try await fixture.changesProbe()
 
         let problems = await GraphQLEndpointConformance.problems(
-            of: fixture.graph, scope: .sessionFolder, probe: probe, codes: [], exceptions: [])
+            of: fixture.graph, scope: .sessionFolder, probes: [queryProbe, subscriptionProbe], codes: [],
+            exceptions: [])
 
         #expect(problems.isEmpty)
     }
@@ -215,9 +227,16 @@ struct SkillsGraphTests {
 
     /// A temporary layer with ``onSkillID`` and ``offSkillID``, an unwatched
     /// registry over it, and the endpoint over that registry.
+    ///
+    /// A fake marketplace provider with no layer backs the registry, and each
+    /// update of the provider reloads the registry one time, thus
+    /// ``changesProbe()`` gives exactly one change.
     private struct Fixture {
         /// The temporary layer root.
         let root: URL
+
+        /// The provider whose updates reload the registry.
+        let provider = FakeMarketplaceProvider(layers: [])
 
         /// The endpoint under test.
         let graph: SkillsGraph
@@ -230,7 +249,41 @@ struct SkillsGraphTests {
             root = try HotReloadTestSupport.makeTempDirectory()
             try Self.writeSkill(id: SkillsGraphTests.onSkillID, extraFrontmatter: "", in: root)
             try Self.writeSkill(id: SkillsGraphTests.offSkillID, extraFrontmatter: "enabled: false\n", in: root)
-            graph = try SkillsGraph(registry: SkillsRegistry(roots: [root]))
+            graph = try SkillsGraph(registry: provider.makeRegistry(projectRoot: root))
+        }
+
+        /// Makes the probe of the alias ``SkillsGraphTests/changesAlias`` of
+        /// the `changes` subscription for the conformance check.
+        ///
+        /// The probe resumes after the cursor of now. One reload that adds
+        /// ``SkillsGraphTests/addedSkillID`` then follows that cursor, and the
+        /// wait for the root `cursor` to move puts its change in the buffer
+        /// of the change log, thus the first response of the subscription
+        /// comes at once.
+        ///
+        /// - Returns: The probe, which expects the rewrite from the alias to
+        ///   `changes`.
+        /// - Throws: An error of the endpoint, of the file write, or a
+        ///   failure of `#require` when no change comes.
+        func changesProbe() async throws -> GraphQLAliasProbe {
+            let start = try await cursor()
+            try Self.writeSkill(id: SkillsGraphTests.addedSkillID, extraFrontmatter: "", in: root)
+            provider.publish(layers: [])
+            try await ReloadTestSupport.newestCursor(after: start, reading: cursor)
+            return GraphQLAliasProbe(
+                query: "subscription($after: String) { \(SkillsGraphTests.changesAlias)(after: $after) { cursor } }",
+                variables: ["after": .string(start)],
+                from: SkillsGraphTests.changesAlias,
+                to: SkillsGraphTests.changesField,
+                kind: .subscription)
+        }
+
+        /// Queries the root `cursor`.
+        ///
+        /// - Returns: The cursor of the newest change.
+        /// - Throws: An error of the endpoint, or a failure of `#require`.
+        func cursor() async throws -> String {
+            try #require(try await run("{ cursor }").data?["cursor"] as? String)
         }
 
         /// Runs one document with no viewer.

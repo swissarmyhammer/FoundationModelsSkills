@@ -135,4 +135,18 @@ final class FakeMarketplaceProvider: MarketplaceLayerProviding, Sendable {
         self.layers.withLock { $0 = layers }
         continuation.yield()
     }
+
+    /// Makes a registry that does not watch, over the layers of this
+    /// provider and one local project layer.
+    ///
+    /// The registry reloads one time for each ``publish(layers:)``, whatever
+    /// the files of the project layer hold then.
+    ///
+    /// - Parameter root: The root of the project layer.
+    /// - Returns: The registry.
+    func makeRegistry(projectRoot root: URL) -> SkillsRegistry {
+        var stack = DotfolderStack(name: "skills", workingDirectory: root, environment: [:])
+        stack.layers = [DotfolderStack.Layer(source: .project, root: root)]
+        return SkillsRegistry(marketplaces: self, stack: stack)
+    }
 }

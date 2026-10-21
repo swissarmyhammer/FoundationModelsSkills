@@ -113,6 +113,25 @@ enum ReloadTestSupport {
         return current
     }
 
+    /// Waits until the root `cursor` of an endpoint moves past a cursor.
+    ///
+    /// The root `cursor` changes when the change log takes an event, thus a
+    /// subscription after `start` then replays that event with no wait.
+    ///
+    /// - Parameters:
+    ///   - start: The cursor that the wait must see move.
+    ///   - cursor: Reads the root `cursor` of the endpoint.
+    /// - Returns: The newest cursor, which is not `start`.
+    /// - Throws: A failure of `#require` when the cursor does not move in
+    ///   ``expectedSignalTimeout``.
+    @discardableResult
+    static func newestCursor(after start: String, reading cursor: () async throws -> String) async throws -> String {
+        let newest = await poll(
+            { (try? await cursor()) ?? start }, until: { newest in newest != start }, timeout: expectedSignalTimeout)
+        try #require(newest != start)
+        return newest
+    }
+
     /// The number of new events, after the baseline, that proves a second
     /// and unwanted event came after the one event the caller expects.
     private static let oneEventTooMany = 2
