@@ -19,7 +19,12 @@ import GraphQL
 /// The endpoint reads and changes nothing on disk: it has no `Mutation`
 /// type (D84). It has no package error code: each error is a code of the
 /// toolkit.
-public struct SkillsGraph: GraphQLEndpoint {
+///
+/// The endpoint is a class because its identity is part of its contract:
+/// one endpoint serves one registry. `SkillsTool.make(context:)` makes it one
+/// time, and each copy and each fork of the `skills` tool gives that same
+/// instance through `GraphQLEndpointTool`.
+public final class SkillsGraph: GraphQLEndpoint {
     /// The name of the endpoint: the noun of the `skills` tool.
     public static let endpointName = "skills"
 

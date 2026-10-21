@@ -41,6 +41,10 @@ public enum SkillsTool {
     /// one context shares one board, and a session learns of a reload from
     /// the one notice that `context.catalogNoticeFollower` posts there.
     ///
+    /// The tool also gets the `skills` GraphQL endpoint (`SkillsGraph`) over
+    /// `context.registry`, made one time here. Each copy and each fork of
+    /// the tool gives that same endpoint through `GraphQLEndpointTool`.
+    ///
     /// - Parameters:
     ///   - context: The shared context every operation's `execute(in:)` runs
     ///     against.
@@ -55,7 +59,8 @@ public enum SkillsTool {
     ///   declares a parameter colliding with the `op` discriminator (not
     ///   expected for this fixed operation set, but propagated per
     ///   `OperationTool.init`'s contract); rethrows `GenerationSchema.SchemaError`
-    ///   on any other schema-fusion failure.
+    ///   on any other schema-fusion failure, and an error of the GraphQL
+    ///   schema builder from `SkillsGraph.init(registry:)`.
     public static func make(
         context: SkillsToolContext, catalogCharacterLimit: Int = defaultCatalogCharacterLimit
     ) throws -> SkillsCatalogTool {
@@ -77,7 +82,8 @@ public enum SkillsTool {
         )
         return try SkillsCatalogTool(
             operationTool: operationTool, skillIDs: catalog.map(\.id), resolver: resolver,
-            catalogNoticeBoard: context.catalogNoticeBoard)
+            catalogNoticeBoard: context.catalogNoticeBoard,
+            skillsGraph: SkillsGraph(registry: context.registry))
     }
 
     /// Builds the forgiving resolver `make(context:)` fuses the tool with.

@@ -9,6 +9,12 @@ comments:
     - EXTRAS-11 (coded, not yet pushed): `GraphQLEndpointConformance.problems(of:scope:probe:codes: [String] = [], exceptions: [GraphQLConventionException] = [])`. When it lands, replace the "filter problems mentioning rule 9" workaround in SkillsGraphTests with `exceptions: [GraphQLConventionException(rule: .rule9, removedBy: "01M5F23EYC7GEW1B2BZHPT8953")]`, and `codes: []`. Once this task ships rule 9, drop the exception.
     - Extras task ^70231sy adds an `ID` scalar to `addToolkitScalars()`. SkillsGraph currently declares its own scalar named "ID" (as kanban does). When ^70231sy lands, remove the package's ID scalar, or the two clash on the type name. Until then `IDChange`/`ChangedIDs` render as `String!`.
   timestamp: 2026-10-21T11:48:02.382918+00:00
+- actor: claude-code
+  id: 01m5f4w9qnddrjryveksdmmse5
+  text: |-
+    ### EXTRAS-11 landed
+    FoundationModelsExtras origin/main: code dbf4202, tip 02a207c. Run `swift package update FoundationModelsExtras`. Replace the test-side "rule 9" string filter in SkillsGraphTests with `GraphQLEndpointConformance.problems(of:scope:probe:codes: [], exceptions: [...])`. This task implements rule 9, so the final state needs no exception at all. Toolkit ID scalar (^70231sy) will be the opt-in `addToolkitIDScalar()`; keep the package ID scalar until that sha arrives.
+  timestamp: 2026-10-21T11:52:22.517692+00:00
 depends_on:
 - 01M5F230NX5CY90TNJP53Y1QD6
 position_column: todo

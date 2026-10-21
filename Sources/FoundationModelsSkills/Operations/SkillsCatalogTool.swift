@@ -63,6 +63,13 @@ public struct SkillsCatalogTool: Tool {
     /// joins it. A child session that gets this tool joins it as well.
     public let catalogNoticeBoard: CatalogNoticeBoard
 
+    /// The `skills` GraphQL endpoint over the registry of the tool context.
+    ///
+    /// `SkillsTool.make(context:)` makes it one time. The tool is a value
+    /// type, thus each copy and each fork holds this same instance, and a
+    /// host gets one endpoint for the registry.
+    private let skillsGraph: SkillsGraph
+
     /// Finds the payloads of `search skill`, `list skill`, and `use skill`,
     /// and decodes their answers to plain text.
     private let plainTextOperations: PlainTextOperations
@@ -76,15 +83,18 @@ public struct SkillsCatalogTool: Tool {
     ///   - resolver: The resolver of `operationTool`. It finds the payloads
     ///     of the skill operations with the same rules as the dispatch.
     ///   - catalogNoticeBoard: The board of the catalog-change notices.
+    ///   - skillsGraph: The `skills` GraphQL endpoint over the registry of
+    ///     the context of `operationTool`.
     /// - Throws: Whatever `SkillsToolSchema.make(name:operations:)` or
     ///   `PlainTextOperations.init(resolver:)` throws.
     internal init(
         operationTool: OperationTool<SkillsToolContext>, skillIDs: [String], resolver: OperationResolver,
-        catalogNoticeBoard: CatalogNoticeBoard
+        catalogNoticeBoard: CatalogNoticeBoard, skillsGraph: SkillsGraph
     ) throws {
         self.operationTool = operationTool
         self.skillIDs = skillIDs
         self.catalogNoticeBoard = catalogNoticeBoard
+        self.skillsGraph = skillsGraph
         parameters = try SkillsToolSchema.make(name: operationTool.name, operations: operationTool.operations)
         plainTextOperations = try PlainTextOperations(resolver: resolver)
     }
@@ -153,6 +163,17 @@ extension SkillsCatalogTool: ForkableTool {}
 /// changes. A reload of the catalog reaches each session that mounted the
 /// tool as one notice on `catalogNoticeBoard` (`SkillsCatalogNoticeFollower`).
 extension SkillsCatalogTool: CatalogNoticing {}
+
+/// A host finds the `skills` GraphQL endpoint with
+/// `tool as? any GraphQLEndpointTool`, and serves it to its clients. The
+/// model never sends GraphQL to this tool: it calls the skill operations, and
+/// the endpoint reads the same registry.
+extension SkillsCatalogTool: GraphQLEndpointTool {
+    /// The endpoints of the tool: a list of one, the `skills` endpoint.
+    public var graphQLEndpoints: [any GraphQLEndpoint] {
+        [skillsGraph]
+    }
+}
 
 /// A host that holds only `any Tool` gets the operations of this tool as
 /// descriptors, and dispatches one operation with `perform(_:)`, through
