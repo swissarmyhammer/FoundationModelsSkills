@@ -21,10 +21,26 @@ comments:
     - evidence: swift build && swift test — 675 tests in 62 suites passed, 0 failed, 0 skipped; only warning is the known mlx-swift Cmlx "missing creator for mutated node" (out of scope)
     - next: review
   timestamp: 2026-10-21T11:56:40.721675+00:00
+- actor: claude-code
+  id: 01m5f59v1ve2g9w5w492ydmaqs
+  text: |-
+    ### review — clean
+    - evidence: review sha HEAD~1..HEAD (f0f7244) — 0 findings (7 attempted, 1 refuted, 0 failed); 4 files reviewed, 6 .kanban files excluded by .reviewignore
+    - next: none — task moved to done
+  timestamp: 2026-10-21T11:59:46.235572+00:00
+- actor: claude-code
+  id: 01m5f5a2vnd1j8dsjegmb77fh7
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 4 files
+    - test: green — swift test, 675 passed in 62 suites
+    - commit: f0f7244
+    - review: clean — 0 findings
+  timestamp: 2026-10-21T11:59:54.229854+00:00
 depends_on:
 - 01M5F230NX5CY90TNJP53Y1QD6
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: ffa680
 title: 'SK-5: SkillsCatalogTool conforms to GraphQLEndpointTool'
 ---
 ## What

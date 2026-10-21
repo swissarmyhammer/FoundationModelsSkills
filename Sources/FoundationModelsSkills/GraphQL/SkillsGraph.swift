@@ -15,29 +15,39 @@ import GraphQL
 ///   skills that are on.
 /// - `Query.skill(id:)` gives one skill, or `null` when no skill has the id.
 ///   The id is the name of the skill, thus `skill(name:)` is an alias.
+/// - `Query.cursor` and `Subscription.changes(after:)` give the changes of
+///   the skills (rule 9): one `SkillChange` for each reload of the registry
+///   that adds, changes or removes a skill, the skills that are off included.
+///   A cursor that the change log cannot resume after gives
+///   `RESYNC_REQUIRED`. `skillChanges` is an alias of `changes`.
 ///
 /// The endpoint reads and changes nothing on disk: it has no `Mutation`
 /// type (D84). It has no package error code: each error is a code of the
 /// toolkit.
 ///
 /// The endpoint is a class because its identity is part of its contract:
-/// one endpoint serves one registry. `SkillsTool.make(context:)` makes it one
-/// time, and each copy and each fork of the `skills` tool gives that same
-/// instance through `GraphQLEndpointTool`.
+/// one endpoint serves one registry, with one change log. `SkillsTool.make(context:)`
+/// makes it one time, and each copy and each fork of the `skills` tool gives
+/// that same instance, and thus that same change log, through
+/// `GraphQLEndpointTool`.
 public final class SkillsGraph: GraphQLEndpoint {
     /// The name of the endpoint: the noun of the `skills` tool.
     public static let endpointName = "skills"
 
     /// The other names that a call can write for the names of the schema:
-    /// `listSkills` and `getSkill` for the root fields, and `name` for the
-    /// `id` argument of `skill`, because the id of a skill is its name.
+    /// `listSkills` and `getSkill` for the root fields, `skillChanges` for
+    /// the subscription, and `name` for the `id` argument of `skill`, because
+    /// the id of a skill is its name.
     static let rules = GraphQLNameRules(
         aliases: GraphQLAliasTable(
             byType: [
                 "Query": [
                     "skills": ["listSkills"],
                     "skill": ["getSkill"],
-                ]
+                ],
+                "Subscription": [
+                    "changes": ["skillChanges"]
+                ],
             ],
             byField: [
                 "Query.skill": ["id": ["name"]]
@@ -56,13 +66,39 @@ public final class SkillsGraph: GraphQLEndpoint {
     /// The Graphiti engine of the endpoint.
     private let api: SkillsGraphAPI
 
-    /// Makes the endpoint over a registry.
+    /// The feed that appends one event to the change log for each reload of
+    /// the registry that changes a skill. The endpoint owns it, and its
+    /// deinit stops the feed.
+    ///
+    /// Held for its lifetime only: the deinit of the endpoint releases it,
+    /// and its own deinit cancels the feed task; periphery sees no read.
+    // periphery:ignore
+    private let feed: SkillChangeFeed
+
+    /// Makes the endpoint over a registry, with a new change log of the
+    /// default size.
     ///
     /// - Parameter registry: The registry whose skills the endpoint gives.
-    ///   Each call reads its current catalog generation.
+    ///   Each call reads its current catalog generation, and each reload
+    ///   feeds the change log.
     /// - Throws: An error of the schema builder.
-    public init(registry: SkillsRegistry) throws {
-        api = try SkillsGraphAPI(resolver: SkillsGraphResolver(registry: registry))
+    public convenience init(registry: SkillsRegistry) throws {
+        try self.init(registry: registry, changeLog: ChangeLog())
+    }
+
+    /// Makes the endpoint over a registry and a change log.
+    ///
+    /// A test gives a small change log, so that a cursor can fall out of its
+    /// buffer.
+    ///
+    /// - Parameters:
+    ///   - registry: The registry whose skills the endpoint gives.
+    ///   - changeLog: The change log of the endpoint. The endpoint is its one
+    ///     writer.
+    /// - Throws: An error of the schema builder.
+    init(registry: SkillsRegistry, changeLog: ChangeLog<ChangedIDs>) throws {
+        api = try SkillsGraphAPI(resolver: SkillsGraphResolver(registry: registry, changeLog: changeLog))
+        feed = SkillChangeFeed(registry: registry, changeLog: changeLog)
     }
 
     /// The schema of the endpoint in SDL.
@@ -91,8 +127,9 @@ public final class SkillsGraph: GraphQLEndpoint {
 
     /// Starts one GraphQL subscription.
     ///
-    /// The schema has no subscription yet, thus each document gives one
-    /// response with the errors, and the stream then ends.
+    /// `changes(after:)` gives one response for each change after the
+    /// cursor. A cursor that the change log cannot resume after gives one
+    /// final response with `RESYNC_REQUIRED`, and the stream then ends.
     ///
     /// - Parameters:
     ///   - query: The subscription document.

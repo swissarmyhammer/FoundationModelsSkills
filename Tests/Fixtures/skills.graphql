@@ -51,7 +51,32 @@ type Skill {
   enabled: Boolean!
 }
 
+"""
+One reload of the skills of the folder that added, changed or removed a skill.
+"""
+type SkillChange {
+  """The cursor that resumes after this change."""
+  cursor: String!
+
+  """The time of the reload that made the change."""
+  at: DateTime!
+
+  """The ids of the skills that the reload added."""
+  added: [ID!]!
+
+  """
+  The ids of the skills whose SKILL.md the reload changed, also to turn one off.
+  """
+  changed: [ID!]!
+
+  """The ids of the skills that the reload removed."""
+  removed: [ID!]!
+}
+
 type Query {
+  """The cursor of the newest change of the skills, for changes(after:)."""
+  cursor: String!
+
   """Each skill of the folder, also the skills that are off, sorted by id."""
   skills: [Skill!]!
 
@@ -60,4 +85,16 @@ type Query {
     """The id of the skill, which is its name."""
     id: ID!
   ): Skill
+}
+
+type Subscription {
+  """
+  One change for each reload that adds, changes or removes a skill. A cursor that cannot resume gives RESYNC_REQUIRED.
+  """
+  changes(
+    """
+    The cursor to resume after, from cursor or a change. Omit it for the new changes only.
+    """
+    after: String
+  ): SkillChange!
 }

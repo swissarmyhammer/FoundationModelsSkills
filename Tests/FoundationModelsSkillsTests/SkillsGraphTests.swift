@@ -39,21 +39,16 @@ struct SkillsGraphTests {
     /// The golden file of the schema, from the package root.
     private static let goldenFilePath = "Tests/Fixtures/skills.graphql"
 
-    /// The text that names rule 9 of EXTRAS-9 (the `changes` subscription
-    /// and the root `cursor`) in a problem of the conformance check.
-    ///
-    /// The endpoint does not obey rule 9 yet. The exception goes away with
-    /// task 01M5F23EYC7GEW1B2BZHPT8953, which adds `changes(after:)` and
-    /// `cursor`.
-    private static let exceptedRule = "rule 9"
-
     /// The selection of each field of a `Skill`.
     private static let skillFields = "id name description parameters source marketplace enabled"
 
     // MARK: - Rule 11
 
     /// The endpoint has the facts of a host, the response conventions of
-    /// the toolkit, and rewrites `skill(name:)` to `skill(id:)`.
+    /// the toolkit, rewrites `skill(name:)` to `skill(id:)`, and obeys each
+    /// rule of EXTRAS-9 with no exception: rule 9 too, the `changes`
+    /// subscription and the root `cursor`. The endpoint has no code of its
+    /// own, thus it gives no code for rule 8.
     @Test func theEndpointConforms() async throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
@@ -61,9 +56,9 @@ struct SkillsGraphTests {
             query: "{ skill(name: \"\(Self.onSkillID)\") { id } }", from: "name", to: "id")
 
         let problems = await GraphQLEndpointConformance.problems(
-            of: fixture.graph, scope: .sessionFolder, probe: probe)
+            of: fixture.graph, scope: .sessionFolder, probe: probe, codes: [], exceptions: [])
 
-        #expect(problems.filter { problem in !problem.contains(Self.exceptedRule) }.isEmpty)
+        #expect(problems.isEmpty)
     }
 
     /// The endpoint is `skills`, version `1`, of the session folder scope.

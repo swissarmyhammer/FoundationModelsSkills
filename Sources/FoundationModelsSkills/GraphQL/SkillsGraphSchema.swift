@@ -2,44 +2,12 @@ import FoundationModelsExtras
 import Graphiti
 import GraphQL
 
-// The GraphQL schema of the `skills` endpoint (SK-5): the `ID` scalar, the
-// `SkillSource` enum, the `Skill` object type, the arguments, the resolver
-// and the Graphiti API over one `SkillsRegistry`.
+// The GraphQL schema of the `skills` endpoint (SK-5): the `SkillSource` enum,
+// the `Skill` and `SkillChange` object types, the arguments, the resolver and
+// the Graphiti API over one `SkillsRegistry` and its change log. The `ID`
+// scalar is the toolkit `ToolkitID`.
 
-// MARK: - Scalars and enums
-
-/// The text of a GraphQL `ID`: the id of a skill, which is its name.
-///
-/// Graphiti maps no Swift type to the built-in `ID` scalar, so this type is a
-/// scalar with that name. The schema does not refer to the built-in scalar,
-/// so the two do not collide. The Codable form is the text, so the default
-/// Graphiti scalar closures serialize and parse the value.
-struct SkillID: Codable, Sendable, Hashable {
-    /// The GraphQL name of the scalar: the built-in `ID` name.
-    static let name = "ID"
-
-    /// The text of the id.
-    let text: String
-}
-
-extension SkillID {
-    /// Decodes the id from its text.
-    ///
-    /// - Parameter decoder: The decoder that holds the text.
-    /// - Throws: A `DecodingError` when the value is not text.
-    init(from decoder: any Decoder) throws {
-        try self.init(text: decoder.singleValueContainer().decode(String.self))
-    }
-
-    /// Encodes the id as its text.
-    ///
-    /// - Parameter encoder: The encoder that gets the text.
-    /// - Throws: An error from the encoder.
-    func encode(to encoder: any Encoder) throws {
-        var container = encoder.singleValueContainer()
-        try container.encode(text)
-    }
-}
+// MARK: - Enums
 
 /// The layer of the dotfolder stack that gives a skill, as the `skills`
 /// endpoint names it.
@@ -78,7 +46,7 @@ enum SkillsGraphSource: String, Codable, CaseIterable, Sendable {
 /// The `Skill` object: one skill on disk.
 struct SkillsGraphSkill: Codable, Sendable {
     /// The id of the skill: its directory name.
-    let id: SkillID
+    let id: ToolkitID
 
     /// The name of the skill, the same text as the id.
     let name: String
@@ -102,7 +70,7 @@ struct SkillsGraphSkill: Codable, Sendable {
     ///
     /// - Parameter record: The record.
     init(_ record: SkillRecord) {
-        id = SkillID(text: record.id)
+        id = ToolkitID(record.id)
         name = record.id
         description = record.description
         parameters = record.parameters
@@ -117,7 +85,13 @@ struct SkillsGraphSkill: Codable, Sendable {
 /// The arguments of `Query.skill`.
 struct SkillsGraphSkillArguments: Codable, Sendable {
     /// The id of the skill.
-    let id: SkillID
+    let id: ToolkitID
+}
+
+/// The arguments of `Subscription.changes`.
+struct SkillsGraphChangesArguments: Codable, Sendable {
+    /// The cursor to resume after, or `nil` for the new changes only.
+    let after: String?
 }
 
 // MARK: - Resolver and context
@@ -128,10 +102,34 @@ struct SkillsGraphContext: GraphQLRunContext {
     let warnings = ResponseWarnings()
 }
 
-/// The root resolver of the `skills` endpoint over one registry.
+/// The root resolver of the `skills` endpoint over one registry and the
+/// change log of its reloads.
 struct SkillsGraphResolver: Sendable {
     /// The registry whose skills the endpoint gives.
     let registry: SkillsRegistry
+
+    /// The change log that `SkillChangeFeed` fills from the reloads of
+    /// ``registry``.
+    let changeLog: ChangeLog<ChangedIDs>
+
+    /// Resolves `Query.cursor`.
+    ///
+    /// - Returns: The cursor of the newest change of the skills.
+    func cursor(context _: SkillsGraphContext, arguments _: NoArguments) async -> String {
+        await changeLog.cursor
+    }
+
+    /// Resolves the source stream of `Subscription.changes`.
+    ///
+    /// - Parameter arguments: The cursor to resume after.
+    /// - Returns: The changes after the cursor, or only the new changes when
+    ///   there is no cursor. The stream ends with `RESYNC_REQUIRED` when the
+    ///   log cannot resume after the cursor.
+    func changes(
+        context _: SkillsGraphContext, arguments: SkillsGraphChangesArguments
+    ) async -> ChangeLog<ChangedIDs>.Changes {
+        await changeLog.changes(after: arguments.after)
+    }
 
     /// Resolves `Query.skills`.
     ///
@@ -168,8 +166,8 @@ struct SkillsGraphAPI: API {
         self.resolver = resolver
         schema = try SchemaBuilder(SkillsGraphResolver.self, SkillsGraphContext.self)
             .addToolkitScalars()
+            .addToolkitIDScalar()
             .add {
-                Scalar(SkillID.self, as: SkillID.name)
                 Enum(SkillsGraphSource.self, as: "SkillSource") {
                     Value(.marketplace).description("A cached remote skill marketplace.")
                     Value(.defaults).description("The defaults folder of the host.")
@@ -191,14 +189,42 @@ struct SkillsGraphAPI: API {
                         .description("False when the enabled key of the skill turns it off. The model does not see it then.")
                 }
                 .description("One skill on disk, also one that is off.")
+                Type(IDChange.self, as: "SkillChange") {
+                    Field("cursor", at: \.cursor).description("The cursor that resumes after this change.")
+                    Field("at", at: \.at).description("The time of the reload that made the change.")
+                    Field("added", at: \.added).description("The ids of the skills that the reload added.")
+                    Field("changed", at: \.changed)
+                        .description("The ids of the skills whose SKILL.md the reload changed, also to turn one off.")
+                    Field("removed", at: \.removed).description("The ids of the skills that the reload removed.")
+                }
+                .description("One reload of the skills of the folder that added, changed or removed a skill.")
             }
             .addQuery {
+                Field("cursor", at: SkillsGraphResolver.cursor)
+                    .description("The cursor of the newest change of the skills, for changes(after:).")
                 Field("skills", at: SkillsGraphResolver.skills)
                     .description("Each skill of the folder, also the skills that are off, sorted by id.")
                 Field("skill", at: SkillsGraphResolver.skill) {
                     Argument("id", at: \.id).description("The id of the skill, which is its name.")
                 }
                 .description("One skill, or null when no skill has the id.")
+            }
+            .addSubscription {
+                SubscriptionField(
+                    "changes",
+                    at: { (entry: ChangeLogEntry<ChangedIDs>) in
+                        { (_: SkillsGraphContext, _: SkillsGraphChangesArguments) async throws -> IDChange in
+                            IDChange(entry)
+                        }
+                    },
+                    atSub: SkillsGraphResolver.changes
+                ) {
+                    Argument("after", at: \.after)
+                        .description("The cursor to resume after, from cursor or a change. Omit it for the new changes only.")
+                }
+                .description(
+                    "One change for each reload that adds, changes or removes a skill. "
+                        + "A cursor that cannot resume gives RESYNC_REQUIRED.")
             }
             .build()
     }

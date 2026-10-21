@@ -1070,6 +1070,31 @@ public struct SkillsRegistry: Sendable {
         return (enabled + disabled).sorted { $0.id < $1.id }
     }
 
+    /// The content of every skill that loads, keyed by id: the record of
+    /// `records()`, the skills that are off included, with the frontmatter
+    /// and the body of its `SKILL.md`.
+    ///
+    /// All values come from one catalog generation. The `changes`
+    /// subscription of the `skills` endpoint compares two of these snapshots.
+    ///
+    /// - Returns: One `SkillContent` per skill, keyed by its id.
+    internal func skillContents() -> [String: SkillContent] {
+        let generation = catalogBox.snapshot
+        let enabled = generation.catalog.values.map { entry in content(of: entry, isEnabled: true) }
+        let disabled = generation.disabled.values.map { entry in content(of: entry, isEnabled: false) }
+        return Dictionary(uniqueKeysWithValues: (enabled + disabled).map { content in (content.record.id, content) })
+    }
+
+    /// Builds one `skillContents()` value for `entry`.
+    ///
+    /// - Parameters:
+    ///   - entry: The catalog entry to build a value for.
+    ///   - isEnabled: Whether the skill is on.
+    /// - Returns: The value.
+    private func content(of entry: CatalogEntry, isEnabled: Bool) -> SkillContent {
+        SkillContent(record: record(for: entry, isEnabled: isEnabled), frontmatter: entry.frontmatter, body: entry.body)
+    }
+
     /// Builds one `records()` row for `entry`.
     ///
     /// - Parameters:
