@@ -22,8 +22,24 @@ comments:
     - evidence: swift build && swift test — 689 tests in 63 suites passed, 0 failed, 0 skipped; only warning is the known out-of-scope SwiftPM "missing creator for mutated node" (mlx-swift Cmlx bundle)
     - next: review
   timestamp: 2026-10-21T20:30:01.671361+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01m5g2n61eys6t6rck17sh4gzn
+  text: |-
+    ### review — clean
+    - evidence: review sha HEAD~1..HEAD (b9270e9) — 0 findings (attempted 7, failed 0, skipped 0); 4 files reviewed, 2 .kanban files excluded by .reviewignore
+    - next: task moved to done
+  timestamp: 2026-10-21T20:32:46.638361+00:00
+- actor: claude-code
+  id: 01m5g2ndcp0ft35ekxq0a7ex3z
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 4 files
+    - test: green — swift test, 689 passed in 63 suites
+    - commit: b9270e9
+    - review: clean — 0 findings
+  timestamp: 2026-10-21T20:32:54.166958+00:00
+position_column: done
+position_ordinal: ffa880
 title: 'SK-5 follow-up: check the skillChanges alias with the toolkit subscription probe'
 ---
 ## What
