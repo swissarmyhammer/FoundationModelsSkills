@@ -10,7 +10,8 @@ import Testing
 /// that is not a bool also turns the skill off, with one diagnostic. A
 /// missing key leaves the skill on. A skill that is off is not in the
 /// catalog, thus no surface shows it: not the model list, not the tool
-/// description, not search, not the preload, and not the user `/` menu.
+/// description, not search, not the preload, and not the user `/` menu. Only
+/// the host view `records()` lists it, as off.
 struct SkillEnablementTests {
     // MARK: - Constants
 
@@ -148,6 +149,40 @@ struct SkillEnablementTests {
 
         #expect(fixture.registry.metadata().map(\.id) == [Self.onSkillID, Self.offSkillID])
         #expect(fixture.registry.diagnostics.isEmpty)
+    }
+
+    // MARK: - The host surface
+
+    @Test func theRecordsHoldADisabledSkillAsOff() throws {
+        let fixture = try Fixture(testedFrontmatter: Self.offFrontmatter)
+        defer { fixture.remove() }
+
+        let records = fixture.registry.records()
+
+        #expect(records.map(\.id) == [Self.onSkillID, Self.offSkillID])
+        #expect(records.map(\.isEnabled) == [true, false])
+        #expect(fixture.registry.diagnostics.isEmpty)
+    }
+
+    @Test func theRecordsHoldASkillWithAValueThatIsNotABoolAsOff() throws {
+        let fixture = try Fixture(testedFrontmatter: Self.invalidFrontmatter)
+        defer { fixture.remove() }
+
+        let records = fixture.registry.records()
+
+        #expect(records.map(\.id) == [Self.onSkillID, Self.offSkillID])
+        #expect(records.map(\.isEnabled) == [true, false])
+        #expect(fixture.registry.diagnostics.count == 1)
+    }
+
+    @Test func aRecordGivesTheLayerOfTheSkill() throws {
+        let fixture = try Fixture(testedFrontmatter: Self.offFrontmatter)
+        defer { fixture.remove() }
+
+        let records = fixture.registry.records()
+
+        #expect(records.map(\.layer) == [.project, .project])
+        #expect(records.map(\.marketplace) == [nil, nil])
     }
 
     // MARK: - Helpers

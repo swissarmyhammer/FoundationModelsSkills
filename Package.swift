@@ -42,6 +42,27 @@ let metricsPackage = "swift-metrics"
 /// `FoundationModelsExtras`. Only the test target links it.
 let ulidPackage = "ULID.swift"
 
+/// The GitHub URL base of the GraphQL engine and the schema builder.
+let graphQLSwiftOrg = "https://github.com/GraphQLSwift/"
+
+/// The GraphQL engine: the parser, the validator and the executor. The
+/// `skills` endpoint (SK-5) runs on it through the GraphQL toolkit of
+/// `FoundationModelsExtras`. Extras does not re-export it, and a target can
+/// link only a product of a package that its own manifest declares, thus this
+/// manifest declares it. The URL is the URL of Extras, so the package identity
+/// stays one and `Package.resolved` holds one copy.
+let graphQLPackage = "GraphQL"
+
+/// The version floor of `graphQLPackage`: the floor that Extras declares.
+let graphQLVersionFloor: Version = "4.3.0"
+
+/// The schema builder of the `skills` endpoint. It makes the GraphQL schema
+/// from Swift types. Extras declares it from the same URL.
+let graphitiPackage = "Graphiti"
+
+/// The version floor of `graphitiPackage`: the floor that Extras declares.
+let graphitiVersionFloor: Version = "3.1.0"
+
 /// Shared product dependencies needed by both the library target and its test
 /// target -- factored out so the two lists can't drift out of sync.
 let commonDependencies: [Target.Dependency] = [
@@ -71,6 +92,10 @@ let commonDependencies: [Target.Dependency] = [
     .product(name: "Tracing", package: tracingPackage),
     .product(name: "Logging", package: loggingPackage),
     .product(name: "Metrics", package: metricsPackage),
+    // The GraphQL engine and the schema builder of the `skills` endpoint.
+    // The test target reads the schema and gives variables as `Map` values.
+    .product(name: graphQLPackage, package: graphQLPackage),
+    .product(name: graphitiPackage, package: graphitiPackage),
 ]
 
 /// The fixtures of the marketplace, which only the test target links.
@@ -146,6 +171,9 @@ let package = Package(
         // The session ids of the tests (see `testOnlyDependencies`). The range
         // is the range that `FoundationModelsExtras` declares.
         .package(url: "https://github.com/yaslab/\(ulidPackage).git", from: "1.3.1"),
+        // The GraphQL engine and the schema builder (see `graphQLPackage`).
+        .package(url: "\(graphQLSwiftOrg)\(graphQLPackage).git", from: graphQLVersionFloor),
+        .package(url: "\(graphQLSwiftOrg)\(graphitiPackage).git", from: graphitiVersionFloor),
     ],
     targets: [
         .target(

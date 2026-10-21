@@ -1,0 +1,63 @@
+"""
+A point in time: RFC 3339 text in UTC with milliseconds, like 2026-10-06T14:49:10.690Z.
+"""
+scalar DateTime
+
+"""Any JSON value. The keys of each object are in sorted order."""
+scalar JSON
+
+"""The layer of the dotfolder stack that gives a skill."""
+enum SkillSource {
+  """A cached remote skill marketplace."""
+  MARKETPLACE
+
+  """The defaults folder of the host."""
+  DEFAULTS
+
+  """The user level."""
+  USER
+
+  """The project dotfolder of the working folder."""
+  PROJECT
+}
+
+"""One skill on disk, also one that is off."""
+type Skill {
+  """The id of the skill: its directory name."""
+  id: ID!
+
+  """The name of the skill, the same text as the id."""
+  name: String!
+
+  """The rendered description, or an empty text when the skill has none."""
+  description: String!
+
+  """
+  The placeholder of each parameter, in order, for example <message> or [env].
+  """
+  parameters: [String!]!
+
+  """The layer that gives the SKILL.md of the skill."""
+  source: SkillSource!
+
+  """
+  The marketplace of the skill, for example name@1a2b3c4, or null for a local skill.
+  """
+  marketplace: String
+
+  """
+  False when the enabled key of the skill turns it off. The model does not see it then.
+  """
+  enabled: Boolean!
+}
+
+type Query {
+  """Each skill of the folder, also the skills that are off, sorted by id."""
+  skills: [Skill!]!
+
+  """One skill, or null when no skill has the id."""
+  skill(
+    """The id of the skill, which is its name."""
+    id: ID!
+  ): Skill
+}

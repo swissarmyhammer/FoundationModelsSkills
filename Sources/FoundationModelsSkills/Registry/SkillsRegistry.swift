@@ -398,8 +398,7 @@ public struct SkillsRegistry: Sendable {
         self.policy = policy
         self.telemetry = telemetry
 
-        let built = Self.loadCatalog(plan: plan, telemetry: telemetry)
-        catalogBox = CatalogBox(catalog: built.catalog, diagnostics: built.diagnostics)
+        catalogBox = CatalogBox(Self.loadCatalog(plan: plan, telemetry: telemetry))
         // The stenciled stack of Extras keeps the process environment out of
         // its own ladder, thus this registry reads the environment one time,
         // here, and pass 3 interpolates it below the named arguments of a
@@ -669,6 +668,32 @@ public struct SkillsRegistry: Sendable {
         }
     }
 
+    /// One skill that passed validation, and whether its `enabled` key
+    /// leaves it on.
+    private struct LoadedSkill: Sendable {
+        /// The validated skill.
+        let validated: ValidatedSkill
+
+        /// Whether the skill is on.
+        let isEnabled: Bool
+    }
+
+    /// One catalog generation: what one build reads from the layers.
+    ///
+    /// `catalog` holds the skills that are on, and every surface reads only
+    /// it. `disabled` holds the skills that their `enabled` key turns off,
+    /// and only `records()` reads it, so a host view can list them.
+    private struct CatalogGeneration: Sendable {
+        /// The skills that are on, keyed by id.
+        let catalog: [String: CatalogEntry]
+
+        /// The skills that are off, keyed by id.
+        let disabled: [String: CatalogEntry]
+
+        /// Every diagnostic the build raised.
+        let diagnostics: [SkillDiagnostic]
+    }
+
     /// Builds one catalog generation in one
     /// ``SkillsTracing/SpanName/catalogLoad`` span, and records its size.
     ///
@@ -683,9 +708,7 @@ public struct SkillsRegistry: Sendable {
     ///     first, and the marketplace each of them came from.
     ///   - telemetry: The tracer and the metrics factory of the build.
     /// - Returns: The same value as ``buildCatalog(plan:)``.
-    private static func loadCatalog(
-        plan: LayerPlan, telemetry: SkillsTracing.Telemetry
-    ) -> (catalog: [String: CatalogEntry], diagnostics: [SkillDiagnostic]) {
+    private static func loadCatalog(plan: LayerPlan, telemetry: SkillsTracing.Telemetry) -> CatalogGeneration {
         telemetry.tracer.withSpan(SkillsTracing.SpanName.catalogLoad) { span in
             let built = buildCatalog(plan: plan)
             span.attributes[SkillsTracing.AttributeKey.skillCount] = built.catalog.count
@@ -700,17 +723,17 @@ public struct SkillsRegistry: Sendable {
     ///
     /// A skill that is off, by its `enabled` key, is not a survivor. Thus
     /// it is in no surface: not the model list, not search, not the
-    /// preload, and not the user `/` menu.
+    /// preload, and not the user `/` menu. It goes into the `disabled` part
+    /// of the generation instead, which only `records()` reads.
     ///
     /// - Parameter plan: The layers to build the catalog over, lowest
     ///   precedence first, and the marketplace each of them came from.
-    /// - Returns: The catalog, keyed by id, plus every diagnostic raised
-    ///   while validating (including for skills excluded from the
-    ///   catalog).
-    private static func buildCatalog(
-        plan: LayerPlan
-    ) -> (catalog: [String: CatalogEntry], diagnostics: [SkillDiagnostic]) {
+    /// - Returns: The catalog, the skills that are off, both keyed by id,
+    ///   plus every diagnostic raised while validating (including for skills
+    ///   excluded from the catalog).
+    private static func buildCatalog(plan: LayerPlan) -> CatalogGeneration {
         var catalog: [String: CatalogEntry] = [:]
+        var disabled: [String: CatalogEntry] = [:]
         var diagnostics: [SkillDiagnostic] = []
         let documents = Self.skillDocuments(layers: plan.layers)
 
@@ -718,20 +741,25 @@ public struct SkillsRegistry: Sendable {
             let validation = Self.validate(
                 discovered: discovered, document: documents[discovered.id]?.value,
                 marketplaces: plan.marketplaces, diagnostics: &diagnostics)
-            guard let validated = validation, !validated.isHidden else {
+            guard let loaded = validation, !loaded.validated.isHidden else {
+                continue
+            }
+            let entry = CatalogEntry(
+                validated: loaded.validated, discovered: discovered,
+                winningLayer: plan.layers[discovered.rootIndex],
+                contributingDirectories: plan.contributingDirectories(for: discovered),
+                marketplace: plan.marketplaces.provenance(atLayerIndex: discovered.rootIndex))
+            guard loaded.isEnabled else {
+                disabled[discovered.id] = entry
                 continue
             }
             diagnostics.append(
                 contentsOf: Self.inferenceDiagnostics(
-                    validated: validated, discovered: discovered, marketplaces: plan.marketplaces))
-            catalog[discovered.id] = CatalogEntry(
-                validated: validated, discovered: discovered,
-                winningLayer: plan.layers[discovered.rootIndex],
-                contributingDirectories: plan.contributingDirectories(for: discovered),
-                marketplace: plan.marketplaces.provenance(atLayerIndex: discovered.rootIndex))
+                    validated: loaded.validated, discovered: discovered, marketplaces: plan.marketplaces))
+            catalog[discovered.id] = entry
         }
 
-        return (catalog, diagnostics)
+        return CatalogGeneration(catalog: catalog, disabled: disabled, diagnostics: diagnostics)
     }
 
     /// Runs `ParameterInference` over `validated` and converts every
@@ -777,7 +805,8 @@ public struct SkillsRegistry: Sendable {
     /// no entry for a skill that is off, so this registry could not tell such
     /// a skill from one whose file it cannot read. `validate` applies the
     /// same filter instead. Thus the catalog holds only the skills that are
-    /// on, and every surface that reads the catalog shows only those.
+    /// on, and every surface that reads the catalog shows only those; the
+    /// skills that are off go to the `disabled` part of the generation.
     ///
     /// - Parameter layers: The layers of one catalog generation, lowest
     ///   precedence first.
@@ -801,9 +830,11 @@ public struct SkillsRegistry: Sendable {
     /// read as UTF-8 text, thus `document` is `nil` exactly for such a skill,
     /// and that skill gets the `.skip` diagnostic below.
     ///
-    /// A skill that is off is not validated, and it gets no diagnostic. A
-    /// value of `enabled` that is not a bool also turns the skill off, and it
-    /// gets one `.skip` diagnostic with the text that Extras gives.
+    /// A skill that is off is validated too, for `records()`, but it gets no
+    /// diagnostic of the validation: no surface that the diagnostics explain
+    /// shows it. A value of `enabled` that is not a bool also turns the skill
+    /// off, and it gets one `.skip` diagnostic with the text that Extras
+    /// gives.
     ///
     /// - Parameters:
     ///   - discovered: The skill's discovery record.
@@ -812,33 +843,31 @@ public struct SkillsRegistry: Sendable {
     ///   - marketplaces: Which marketplace each layer came from, so every
     ///     diagnostic names it.
     ///   - diagnostics: Accumulates every diagnostic raised.
-    /// - Returns: The validated skill, or `nil` for unparseable YAML
-    ///   (`SkillValidator`'s own `.skipped` outcome), an unreadable
-    ///   `SKILL.md`, or a skill that is off.
+    /// - Returns: The validated skill and whether it is on, or `nil` for
+    ///   unparseable YAML (`SkillValidator`'s own `.skipped` outcome) or an
+    ///   unreadable `SKILL.md`.
     private static func validate(
         discovered: DiscoveredSkill,
         document: FrontmatterDocument<FrontmatterDecoder.MetadataOutcome>?,
         marketplaces: MarketplaceProvenanceIndex, diagnostics: inout [SkillDiagnostic]
-    ) -> ValidatedSkill? {
+    ) -> LoadedSkill? {
         guard let document else {
             diagnostics.append(
                 Self.skipDiagnostic(
                     discovered: discovered, marketplaces: marketplaces, message: Self.unreadableSkillFileMessage))
             return nil
         }
-        guard document.isEnabled else {
-            if case .invalid(let message) = document.enablement {
-                diagnostics.append(
-                    Self.skipDiagnostic(discovered: discovered, marketplaces: marketplaces, message: message))
-            }
-            return nil
+        if case .invalid(let message) = document.enablement {
+            diagnostics.append(Self.skipDiagnostic(discovered: discovered, marketplaces: marketplaces, message: message))
         }
         let result = SkillValidator.validate(
             discovered: discovered,
             outcome: FrontmatterDecoder.Outcome(metadata: document.metadata, body: document.content),
             marketplaces: marketplaces)
-        diagnostics.append(contentsOf: result.diagnostics)
-        return result.skill
+        if document.isEnabled {
+            diagnostics.append(contentsOf: result.diagnostics)
+        }
+        return result.skill.map { validated in LoadedSkill(validated: validated, isEnabled: document.isEnabled) }
     }
 
     /// The text of the `.skip` diagnostic for a discovered skill whose
@@ -994,15 +1023,63 @@ public struct SkillsRegistry: Sendable {
     public func metadata() -> [SkillMetadata] {
         sortedCatalogEntries()
             .map { entry in
-                let entryParameters = parameters(entry: entry)
-                return SkillMetadata(
+                SkillMetadata(
                     id: entry.id,
-                    description: renderedMetadataText(text: entry.frontmatter.description ?? "", entry: entry),
+                    description: renderedDescription(entry: entry),
                     metadata: renderedMetadataFields(entry: entry),
-                    parameters: entryParameters.map(Self.parameterSummary),
+                    parameters: parameterSummaries(entry: entry),
                     isModelVisible: entry.isModelVisible,
                     source: entry.marketplace?.displayText)
             }
+    }
+
+    /// The `description:` of `entry`, rendered through render passes 1 and 3
+    /// only, or an empty string when the frontmatter carries none.
+    ///
+    /// - Parameter entry: The catalog entry whose description to render.
+    /// - Returns: The rendered description.
+    private func renderedDescription(entry: CatalogEntry) -> String {
+        renderedMetadataText(text: entry.frontmatter.description ?? "", entry: entry)
+    }
+
+    /// The placeholder summary of each parameter of `entry`, in position
+    /// order.
+    ///
+    /// - Parameter entry: The catalog entry whose parameters to summarize.
+    /// - Returns: One summary per inferred parameter.
+    private func parameterSummaries(entry: CatalogEntry) -> [String] {
+        parameters(entry: entry).map(Self.parameterSummary)
+    }
+
+    // MARK: - records()
+
+    /// Every skill that loads, the ones that their `enabled` key turns off
+    /// included, for a host view such as the `skills` GraphQL endpoint.
+    ///
+    /// Unlike `metadata()`, this reads the skills that are off too, each
+    /// with `isEnabled == false`. A skill that the validator hides, or whose
+    /// `SKILL.md` cannot be read or parsed, has no record. Each description
+    /// is rendered the same render pass 1+3 way `metadata()` renders its own,
+    /// and all records come from one catalog generation.
+    ///
+    /// - Returns: One `SkillRecord` per skill, sorted by id.
+    public func records() -> [SkillRecord] {
+        let generation = catalogBox.snapshot
+        let enabled = generation.catalog.values.map { entry in record(for: entry, isEnabled: true) }
+        let disabled = generation.disabled.values.map { entry in record(for: entry, isEnabled: false) }
+        return (enabled + disabled).sorted { $0.id < $1.id }
+    }
+
+    /// Builds one `records()` row for `entry`.
+    ///
+    /// - Parameters:
+    ///   - entry: The catalog entry to build a row for.
+    ///   - isEnabled: Whether the skill is on.
+    /// - Returns: The row.
+    private func record(for entry: CatalogEntry, isEnabled: Bool) -> SkillRecord {
+        SkillRecord(
+            id: entry.id, description: renderedDescription(entry: entry), parameters: parameterSummaries(entry: entry),
+            layer: entry.winningLayer.source, marketplace: entry.marketplace?.displayText, isEnabled: isEnabled)
     }
 
     // MARK: - commandListing()
@@ -1209,42 +1286,36 @@ public struct SkillsRegistry: Sendable {
     /// The atomically-swappable holder for one catalog generation and its
     /// diagnostics, shared by every copy of a `SkillsRegistry`.
     ///
-    /// `@unchecked Sendable`: both stored properties are only ever read or
-    /// replaced while holding `lock`, and `snapshot`/`replace(catalog:diagnostics:)`
-    /// are its only access points -- no caller ever reaches `catalog` or
-    /// `diagnostics` without going through the lock.
+    /// `@unchecked Sendable`: the stored generation is only ever read or
+    /// replaced while holding `lock`, and `snapshot`/`replace(with:)` are
+    /// its only access points -- no caller ever reaches the catalog, the
+    /// skills that are off, or the diagnostics without going through the
+    /// lock.
     private final class CatalogBox: @unchecked Sendable {
         private let lock = NSLock()
-        private var catalog: [String: CatalogEntry]
-        private var diagnostics: [SkillDiagnostic]
+        private var generation: CatalogGeneration
 
         /// Creates a `CatalogBox` holding one initial catalog generation.
         ///
-        /// - Parameters:
-        ///   - catalog: The initial catalog, keyed by id.
-        ///   - diagnostics: The initial catalog's diagnostics.
-        init(catalog: [String: CatalogEntry], diagnostics: [SkillDiagnostic]) {
-            self.catalog = catalog
-            self.diagnostics = diagnostics
+        /// - Parameter generation: The initial generation.
+        init(_ generation: CatalogGeneration) {
+            self.generation = generation
         }
 
-        /// The current catalog and its diagnostics, read together
-        /// atomically so a caller can never observe one paired with the
-        /// other's prior or next generation.
-        var snapshot: (catalog: [String: CatalogEntry], diagnostics: [SkillDiagnostic]) {
-            lock.withLock { (catalog, diagnostics) }
+        /// The current generation, read atomically so a caller can never
+        /// observe a catalog paired with the diagnostics of the prior or
+        /// next generation.
+        var snapshot: CatalogGeneration {
+            lock.withLock { generation }
         }
 
-        /// Atomically replaces both the catalog and its diagnostics with a
-        /// freshly-rebuilt generation.
+        /// Atomically replaces the whole generation with a freshly-rebuilt
+        /// one.
         ///
-        /// - Parameters:
-        ///   - catalog: The rebuilt catalog, keyed by id.
-        ///   - diagnostics: The rebuilt catalog's diagnostics.
-        func replace(catalog: [String: CatalogEntry], diagnostics: [SkillDiagnostic]) {
+        /// - Parameter generation: The rebuilt generation.
+        func replace(with generation: CatalogGeneration) {
             lock.withLock {
-                self.catalog = catalog
-                self.diagnostics = diagnostics
+                self.generation = generation
             }
         }
     }
@@ -1311,8 +1382,7 @@ public struct SkillsRegistry: Sendable {
             let broadcaster = EventBroadcaster<[SkillMetadata]>()
             self.broadcaster = broadcaster
             let rebuild: @Sendable () -> Void = {
-                let rebuilt = SkillsRegistry.loadCatalog(plan: source.plan(), telemetry: telemetry)
-                catalogBox.replace(catalog: rebuilt.catalog, diagnostics: rebuilt.diagnostics)
+                catalogBox.replace(with: SkillsRegistry.loadCatalog(plan: source.plan(), telemetry: telemetry))
                 broadcaster.publish(reader.metadata())
             }
             watcher = watchedRoots.map { DotfolderWatcher(roots: $0, onChange: rebuild) }
