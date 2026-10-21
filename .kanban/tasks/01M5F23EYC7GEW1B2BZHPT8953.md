@@ -52,10 +52,26 @@ comments:
     - evidence: swift build clean; swift test — 690 tests in 63 suites passed, 0 failed, 0 skipped; only warning is the known out-of-scope mlx-swift Cmlx "missing creator for mutated node". swift test --filter SkillsGraphChangesTests — 15 tests passed (twice in total: once inside the full run at 1.58s, once filtered at 1.06s), no timing flake observed. Not looped, per the one-measurement rule.
     - next: review/commit
   timestamp: 2026-10-21T12:11:07.810357+00:00
+- actor: claude-code
+  id: 01m5f65zh4k1t71w6te599n1n9
+  text: |-
+    ### review — clean
+    - evidence: review sha HEAD~1..HEAD (9711ce2) — 0 findings (7 files attempted, 0 confirmed, 1 refuted, 0 failed)
+    - next: none; task moved to done
+  timestamp: 2026-10-21T12:15:08.324634+00:00
+- actor: claude-code
+  id: 01m5f667ej4ba71hz460482c7n
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 8 files
+    - test: green — swift test, 690 passed in 63 suites
+    - commit: 9711ce2
+    - review: clean — 0 findings
+  timestamp: 2026-10-21T12:15:16.434092+00:00
 depends_on:
 - 01M5F230NX5CY90TNJP53Y1QD6
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: ffa780
 title: 'SK-5: changes(after:) subscription and cursor from the dotfolder watcher'
 ---
 ## Unblocked
