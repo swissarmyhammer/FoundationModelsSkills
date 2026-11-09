@@ -259,8 +259,18 @@ public struct SkillsRegistry: Sendable {
     ///   - watch: Whether to watch every root and rebuild the catalog on
     ///     change. Defaults to `false` -- a static catalog,
     ///     matching this initializer's prior behavior.
-    public init(roots: [URL], policy: RenderPolicy = RenderPolicy(), watch: Bool = false) {
-        self.init(layers: Self.untrustedLayers(for: roots), policy: policy, watch: watch)
+    ///   - templateContext: The session template context of the host: the
+    ///     structured values, for example `tools.kanban.enabled`, that every
+    ///     render of this registry interpolates -- the body, each
+    ///     `description`/`metadata.*` value, and each file of the skill that
+    ///     an `{% include %}` names. It sits below the named arguments of a
+    ///     skill and above the environment. Defaults to empty.
+    public init(
+        roots: [URL], policy: RenderPolicy = RenderPolicy(), watch: Bool = false,
+        templateContext: [String: TemplateValue] = [:]
+    ) {
+        self.init(
+            layers: Self.untrustedLayers(for: roots), policy: policy, watch: watch, templateContext: templateContext)
     }
 
     /// Creates a `SkillsRegistry` over a `DotfolderStack`'s own layers,
@@ -280,8 +290,17 @@ public struct SkillsRegistry: Sendable {
     ///   - watch: Whether to watch every layer root and rebuild the catalog
     ///     on change. Defaults to `false` -- a static catalog,
     ///     matching this initializer's prior behavior.
-    public init(stack: DotfolderStack, policy: RenderPolicy = RenderPolicy(), watch: Bool = false) {
-        self.init(layers: stack.layers, policy: policy, watch: watch)
+    ///   - templateContext: The session template context of the host: the
+    ///     structured values, for example `tools.kanban.enabled`, that every
+    ///     render of this registry interpolates -- the body, each
+    ///     `description`/`metadata.*` value, and each file of the skill that
+    ///     an `{% include %}` names. It sits below the named arguments of a
+    ///     skill and above the environment. Defaults to empty.
+    public init(
+        stack: DotfolderStack, policy: RenderPolicy = RenderPolicy(), watch: Bool = false,
+        templateContext: [String: TemplateValue] = [:]
+    ) {
+        self.init(layers: stack.layers, policy: policy, watch: watch, templateContext: templateContext)
     }
 
     /// Creates a `SkillsRegistry` over explicitly trust-labeled layers,
@@ -304,8 +323,19 @@ public struct SkillsRegistry: Sendable {
     ///     honors. Defaults to the permissive `RenderPolicy()`.
     ///   - watch: Whether to watch every layer root and rebuild the catalog
     ///     on change. Defaults to `false` -- a static catalog.
-    public init(layers: [DotfolderStack.Layer], policy: RenderPolicy = RenderPolicy(), watch: Bool = false) {
-        self.init(layers: layers, policy: policy, watch: watch, telemetry: SkillsTracing.Telemetry())
+    ///   - templateContext: The session template context of the host: the
+    ///     structured values, for example `tools.kanban.enabled`, that every
+    ///     render of this registry interpolates -- the body, each
+    ///     `description`/`metadata.*` value, and each file of the skill that
+    ///     an `{% include %}` names. It sits below the named arguments of a
+    ///     skill and above the environment. Defaults to empty.
+    public init(
+        layers: [DotfolderStack.Layer], policy: RenderPolicy = RenderPolicy(), watch: Bool = false,
+        templateContext: [String: TemplateValue] = [:]
+    ) {
+        self.init(
+            layers: layers, policy: policy, watch: watch, telemetry: SkillsTracing.Telemetry(),
+            templateContext: templateContext)
     }
 
     /// Creates a `SkillsRegistry` over explicitly trust-labeled layers, with
@@ -326,10 +356,15 @@ public struct SkillsRegistry: Sendable {
     ///     on change.
     ///   - telemetry: The tracer, the metrics factory and the logger of each
     ///     catalog load and each skill load.
-    init(layers: [DotfolderStack.Layer], policy: RenderPolicy, watch: Bool, telemetry: SkillsTracing.Telemetry) {
+    ///   - templateContext: The session template context of every render.
+    ///     Defaults to empty.
+    init(
+        layers: [DotfolderStack.Layer], policy: RenderPolicy, watch: Bool, telemetry: SkillsTracing.Telemetry,
+        templateContext: [String: TemplateValue] = [:]
+    ) {
         self.init(
             source: LayerSource(plan: { LayerPlan(localLayers: layers) }, marketplaceUpdates: nil),
-            policy: policy, watch: watch, telemetry: telemetry)
+            policy: policy, watch: watch, telemetry: telemetry, templateContext: templateContext)
     }
 
     /// Creates a `SkillsRegistry` over a marketplace provider's layers in
@@ -360,9 +395,16 @@ public struct SkillsRegistry: Sendable {
     ///     rebuild the catalog on change.
     ///     Defaults to `false`; a provider update still rebuilds, and a
     ///     cache-backed marketplace root rebuilds on that update only.
+    ///   - templateContext: The session template context of the host: the
+    ///     structured values, for example `tools.kanban.enabled`, that every
+    ///     render of this registry interpolates -- the body, each
+    ///     `description`/`metadata.*` value, and each file of the skill that
+    ///     an `{% include %}` names. It sits below the named arguments of a
+    ///     skill and above the environment. Defaults to empty.
     public init(
         marketplaces: some MarketplaceLayerProviding, stack: DotfolderStack,
-        policy: RenderPolicy = RenderPolicy(), watch: Bool = false
+        policy: RenderPolicy = RenderPolicy(), watch: Bool = false,
+        templateContext: [String: TemplateValue] = [:]
     ) {
         let localLayers = stack.layers
         self.init(
@@ -372,7 +414,7 @@ public struct SkillsRegistry: Sendable {
                         marketplaceLayers: marketplaces.marketplaceLayers(), localLayers: localLayers)
                 },
                 marketplaceUpdates: marketplaces.layerUpdates),
-            policy: policy, watch: watch, telemetry: SkillsTracing.Telemetry())
+            policy: policy, watch: watch, telemetry: SkillsTracing.Telemetry(), templateContext: templateContext)
     }
 
     /// Creates a `SkillsRegistry` over whatever computes its layers,
@@ -392,7 +434,12 @@ public struct SkillsRegistry: Sendable {
     ///     on change.
     ///   - telemetry: The tracer, the metrics factory and the logger of each
     ///     catalog load and each skill load.
-    private init(source: LayerSource, policy: RenderPolicy, watch: Bool, telemetry: SkillsTracing.Telemetry) {
+    ///   - templateContext: The session template context of every render,
+    ///     which pass 3 interpolates above the environment.
+    private init(
+        source: LayerSource, policy: RenderPolicy, watch: Bool, telemetry: SkillsTracing.Telemetry,
+        templateContext: [String: TemplateValue]
+    ) {
         let plan = source.plan()
         roots = plan.layers.map(\.root)
         self.policy = policy
@@ -403,10 +450,13 @@ public struct SkillsRegistry: Sendable {
         // its own ladder, thus this registry reads the environment one time,
         // here, and pass 3 interpolates it below the named arguments of a
         // skill. One read also keeps every render of one registry on one set
-        // of values.
+        // of values. The session template context of the host sits above
+        // the environment, thus an ambient variable never shadows it.
         pipeline = RenderPipeline(
             argumentSubstitution: ArgumentSubstitution(), shellInjection: ShellInjection(),
-            stencil: StencilPass(layers: plan.layers, environment: ProcessInfo.processInfo.environment))
+            stencil: StencilPass(
+                layers: plan.layers, environment: ProcessInfo.processInfo.environment,
+                templateContext: templateContext))
 
         guard watch || source.marketplaceUpdates != nil else {
             reloadCoordinator = nil

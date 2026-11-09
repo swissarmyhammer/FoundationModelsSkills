@@ -51,6 +51,15 @@ struct LoadingBoundaryTests {
     /// one `import FoundationModelsSkills` gives it.
     private static let seamReexportsFile = "\(sourcesPath)/SeamReexports.swift"
 
+    /// The files that carry the session template context of a host, as
+    /// `TemplateValue`s, from `SkillsRegistry` into the `values` of the
+    /// stenciled stack. They pass the values on; they build no template
+    /// context of their own.
+    private static let templateContextCarrierFiles = [
+        "\(sourcesPath)/Registry/SkillsRegistry.swift",
+        "\(sourcesPath)/Render/StencilPass.swift",
+    ]
+
     /// One rule of the loading boundary.
     struct Rule: Sendable, CustomStringConvertible {
         /// The character that stands between the path of a reported line and
@@ -148,8 +157,11 @@ struct LoadingBoundaryTests {
             exemptFiles: []),
         Rule(
             name: "TemplateValue",
-            reason: "the stenciled stack of Extras carries each quarantined span as a value",
-            exemptFiles: []),
+            reason: """
+                the stenciled stack of Extras carries each quarantined span as a value; only the \
+                carriers of the session template context of a host pass values into it
+                """,
+            exemptFiles: templateContextCarrierFiles),
         Rule(
             name: "WellKnownValues",
             reason: "the stenciled stack of Extras holds the lowest step of the variable ladder",

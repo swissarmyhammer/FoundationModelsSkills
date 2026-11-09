@@ -22,10 +22,11 @@ import FoundationModelsExtras
 /// `DotfolderStack`, thus this pass opens no file and resolves no link.
 ///
 /// The variables are the schema work of the skill format, thus they stay
-/// here: the process environment, and above it the named arguments of the
-/// `arguments:` frontmatter list. The stack puts both above its own
-/// well-known values (`working_directory`, `date`, `hostname` and
-/// `dotfolder_name`), which gives the lookup ladder of a render.
+/// here: the process environment, above it the session template context of
+/// the host, and above both the named arguments of the `arguments:`
+/// frontmatter list. The stack puts all three above its own well-known
+/// values (`working_directory`, `date`, `hostname` and `dotfolder_name`),
+/// which gives the lookup ladder of a render.
 public struct StencilPass: RenderPass {
     /// Makes the stenciled stack of one render, over the layers of this pass,
     /// the variables of that render and the include resolver of that render.
@@ -35,7 +36,7 @@ public struct StencilPass: RenderPass {
     /// gives a factory that pins those values, so that `{{ date }}` and
     /// `{{ hostname }}` do not depend on the clock or on the machine.
     typealias StackFactory =
-        @Sendable (DotfolderStack, [String: String], StenciledDotfolderStack.IncludeResolver?) ->
+        @Sendable (DotfolderStack, [String: TemplateValue], StenciledDotfolderStack.IncludeResolver?) ->
         StenciledDotfolderStack
 
     /// The host-supplied layer roots that an `{% include %}` of a render
@@ -54,6 +55,16 @@ public struct StencilPass: RenderPass {
     /// that a caller which states no environment renders no host value.
     public var environment: [String: String]
 
+    /// The session template context of the host: structured values, for
+    /// example `tools.kanban.enabled`, that a render interpolates above the
+    /// environment values and below the named arguments of the skill.
+    ///
+    /// Above the environment, thus an ambient environment variable of the
+    /// same name never shadows the configuration of the session. Below the
+    /// named arguments, thus a value that the skill author declared for the
+    /// call always wins. Empty by default.
+    public var templateContext: [String: TemplateValue]
+
     /// Makes the stenciled stack of one render.
     private let makeStack: StackFactory
 
@@ -64,10 +75,16 @@ public struct StencilPass: RenderPass {
     ///     `{% include %}` against, lowest precedence first. Defaults to
     ///     empty (no partial resolution).
     ///   - environment: The environment values to interpolate, below the
-    ///     named arguments. Defaults to empty.
-    public init(layers: [DotfolderStack.Layer] = [], environment: [String: String] = [:]) {
-        self.init(layers: layers, environment: environment) { base, variables, includeResolver in
-            StenciledDotfolderStack(base: base, variables: variables, includeResolver: includeResolver)
+    ///     session template context. Defaults to empty.
+    ///   - templateContext: The session template context to interpolate,
+    ///     below the named arguments. Defaults to empty.
+    public init(
+        layers: [DotfolderStack.Layer] = [], environment: [String: String] = [:],
+        templateContext: [String: TemplateValue] = [:]
+    ) {
+        self.init(layers: layers, environment: environment, templateContext: templateContext) {
+            base, variables, includeResolver in
+            StenciledDotfolderStack(base: base, values: variables, includeResolver: includeResolver)
         }
     }
 
@@ -79,14 +96,17 @@ public struct StencilPass: RenderPass {
     ///   - layers: The host-supplied layer roots to resolve an
     ///     `{% include %}` against, lowest precedence first.
     ///   - environment: The environment values to interpolate, below the
-    ///     named arguments.
+    ///     session template context.
+    ///   - templateContext: The session template context to interpolate,
+    ///     below the named arguments. Defaults to empty.
     ///   - makeStack: Makes the stenciled stack of one render.
     init(
         layers: [DotfolderStack.Layer], environment: [String: String],
-        makeStack: @escaping StackFactory
+        templateContext: [String: TemplateValue] = [:], makeStack: @escaping StackFactory
     ) {
         self.layers = layers
         self.environment = environment
+        self.templateContext = templateContext
         self.makeStack = makeStack
     }
 
@@ -115,15 +135,17 @@ public struct StencilPass: RenderPass {
         return QuarantinedText(spans: [.quarantined(rendered)])
     }
 
-    /// The variables of one render: the environment values, and above them
-    /// the named arguments of the skill.
+    /// The variables of one render: the environment values, above them the
+    /// session template context, and above both the named arguments of the
+    /// skill.
     ///
     /// - Parameter request: The render request that gives the arguments.
     /// - Returns: The merged variables, ready for the stenciled stack.
-    private func variables(for request: RenderRequest) -> [String: String] {
-        var variables = environment
+    private func variables(for request: RenderRequest) -> [String: TemplateValue] {
+        var variables = environment.mapValues(TemplateValue.string)
+        variables.merge(templateContext) { _, context in context }
         for (name, value) in Self.namedArguments(for: request) {
-            variables[name] = value
+            variables[name] = .string(value)
         }
         return variables
     }
@@ -144,7 +166,7 @@ public struct StencilPass: RenderPass {
     /// different position). A name with no supplied value pairs with `""`,
     /// exactly as `ArgumentSubstitution` substitutes `$name` in that case --
     /// each declared name is always a variable of the render, thus none can
-    /// fall through to an environment value or a well-known value of the
+    /// fall through to a context value, an environment value or a well-known value of the
     /// same key (the lookup ladder would otherwise give out host
     /// state that a skill author never supplied).
     ///

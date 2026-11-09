@@ -58,7 +58,7 @@ struct StencilPassTests {
             dotfolderName: dotfolderName)
         return StencilPass(layers: layers, environment: environment) { base, variables, includeResolver in
             StenciledDotfolderStack(
-                base: base, variables: variables, wellKnownValues: wellKnownValues,
+                base: base, values: variables, wellKnownValues: wellKnownValues,
                 includeResolver: includeResolver)
         }
     }
