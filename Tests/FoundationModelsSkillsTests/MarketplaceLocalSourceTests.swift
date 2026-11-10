@@ -113,7 +113,7 @@ struct MarketplaceLocalSourceTests {
             layers: [MarketplaceTestSupport.makeMarketplaceLayer(root: root, id: "cached", sha: "sha-1")])
         var stack = DotfolderStack(name: "skills", workingDirectory: localRoot, environment: [:])
         stack.layers = [DotfolderStack.Layer(source: .project, root: localRoot)]
-        let registry = SkillsRegistry(marketplaces: provider, stack: stack, watch: true)
+        let registry = SkillsRegistry(marketplaces: provider, stack: stack, mode: .open, watch: true)
         let stream = registry.onReload
         let tally = ReloadTestSupport.EventTally()
         let subscription = ReloadTestSupport.tally(stream, into: tally)

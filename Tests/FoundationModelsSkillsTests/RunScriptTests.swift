@@ -1,6 +1,7 @@
 import Darwin
 import Foundation
 import FoundationModels
+import FoundationModelsExtras
 import FoundationModelsMetadataRegistry
 import Operations
 import Testing
@@ -26,21 +27,22 @@ struct RunScriptTests {
     /// `RunScript.defaultTimeoutSeconds`.
     private static let failedToSpawnTimeoutSeconds: Int = 1
 
-    /// Builds a `SkillsToolContext` over `roots` under `policy`, via the
-    /// shared `ResourceTestSupport.makeContext(roots:policy:)` --
-    /// `ResourceOpsTests` builds one the identical way, minus this `policy`
+    /// Builds a `SkillsToolContext` over `roots` in `mode`, via the shared
+    /// `ResourceTestSupport.makeContext(roots:mode:policy:)` --
+    /// `ResourceOpsTests` builds one the identical way, minus this `mode`
     /// parameter.
     ///
     /// - Parameters:
     ///   - roots: The registry roots to build over. Defaults to the
     ///     fixture library.
-    ///   - policy: The render policy the registry is constructed with.
-    ///     Defaults to the permissive `RenderPolicy()`.
+    ///   - mode: The tool mode of the registry and the context. Defaults to
+    ///     `ToolMode.open`.
     /// - Returns: The assembled context.
+    /// - Throws: Whatever `SkillsToolContext.init` throws.
     private static func makeContext(
-        roots: [URL] = [ResourceTestSupport.projectSkillsRoot], policy: RenderPolicy = RenderPolicy()
-    ) -> SkillsToolContext {
-        ResourceTestSupport.makeContext(roots: roots, policy: policy)
+        roots: [URL] = [ResourceTestSupport.projectSkillsRoot], mode: ToolMode = .open
+    ) throws -> SkillsToolContext {
+        try ResourceTestSupport.makeContext(roots: roots, mode: mode)
     }
 
     // MARK: - Gate matrix
@@ -56,21 +58,21 @@ struct RunScriptTests {
         #expect(result.exitCode == 0)
     }
 
-    @Test func runScriptRefusesWhenHostPolicyDisablesScriptExecution() async throws {
-        let context = Self.makeContext(policy: RenderPolicy(isScriptExecutionDisabled: true))
+    @Test func runScriptRefusesInTheSandboxedMode() async throws {
+        let context = try Self.makeContext(mode: .sandboxed)
         let output = try await RunScript(id: "release-notes", path: "scripts/build.sh").execute(in: context)
 
         guard case .corrective(let message) = output else {
             Issue.record("expected a corrective outcome, got \(output)")
             return
         }
-        #expect(message.contains("disabled"))
+        #expect(message.contains(ToolMode.sandboxed.rawValue))
     }
 
-    // MARK: - Policy-first ordering: gate 1 precedes id lookup/path resolution
+    // MARK: - Mode-first ordering: gate 1 precedes id lookup/path resolution
 
     @Test(
-        "with scripts disabled, ANY path (valid, unknown id, escaping) draws the identical policy corrective",
+        "in the sandboxed mode, ANY path (valid, unknown id, escaping) draws the identical mode corrective",
         arguments: [
             (name: "a valid id and path", id: "release-notes", path: "scripts/build.sh"),
             (name: "an unknown id", id: "does-not-exist", path: "scripts/build.sh"),
@@ -82,8 +84,8 @@ struct RunScriptTests {
                 path: RunScriptTests.absoluteFixtureScriptPath
             ),
         ])
-    func hostPolicyGateFiresBeforeAnyIDOrPathResolution(name: String, id: String, path: String) async throws {
-        let context = Self.makeContext(policy: RenderPolicy(isScriptExecutionDisabled: true))
+    func modeGateFiresBeforeAnyIDOrPathResolution(name: String, id: String, path: String) async throws {
+        let context = try Self.makeContext(mode: .sandboxed)
 
         let output = try await RunScript(id: id, path: path).execute(in: context)
 
@@ -91,7 +93,7 @@ struct RunScriptTests {
             Issue.record("expected a corrective outcome, got \(output)")
             return
         }
-        #expect(message == "Script execution is disabled for this registry.", "\(name)")
+        #expect(message == "Script execution is not available in the sandboxed mode.", "\(name)")
     }
 
     @Test func runScriptRefusesWithNoGrantAtAll() async throws {
@@ -113,7 +115,8 @@ struct RunScriptTests {
     @Test func runScriptRefusesWithANonMatchingGlob() async throws {
         let root = try HotReloadTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
-        try ResourceTestSupport.writeMinimalSkillFile(id: "narrow-grant", in: root, allowedTools: "Script(scripts/other/*)")
+        try ResourceTestSupport.writeMinimalSkillFile(
+            id: "narrow-grant", in: root, allowedTools: "Script(scripts/other/*)")
         try ResourceTestSupport.writeExecutableShebangScript(named: "run.sh", inSkillID: "narrow-grant", under: root)
 
         let output = try await RunScript(id: "narrow-grant", path: "scripts/run.sh").execute(
@@ -353,11 +356,11 @@ struct RunScriptTests {
         let scriptURL = try ResourceTestSupport.scriptsDirectory(inSkillID: "sleeper", under: root)
             .appendingPathComponent("sleep-and-background.sh")
         try """
-            #!/bin/sh
-            sleep 100 &
-            echo "child pid: $!"
-            wait
-            """.write(to: scriptURL, atomically: true, encoding: .utf8)
+        #!/bin/sh
+        sleep 100 &
+        echo "child pid: $!"
+        wait
+        """.write(to: scriptURL, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
 
         let output = try await RunScript(id: "sleeper", path: "scripts/sleep-and-background.sh", timeout: 1).execute(

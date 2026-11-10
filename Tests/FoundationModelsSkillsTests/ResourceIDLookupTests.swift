@@ -1,6 +1,7 @@
 import Foundation
-@testable import FoundationModelsSkills
 import Testing
+
+@testable import FoundationModelsSkills
 
 /// Tests for the corrective `ResourceIDLookup` draws when the calling
 /// context's catalog holds no usable skill at all. `ResourceOpsTests` and
@@ -51,7 +52,7 @@ struct ResourceIDLookupTests {
     ) async throws -> String {
         let root = try HotReloadTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
-        let context = ResourceTestSupport.makeContext(roots: [root])
+        let context = try ResourceTestSupport.makeContext(roots: [root])
         guard case .corrective(let message) = try await operate(context) else {
             throw UnexpectedSuccess()
         }
@@ -94,27 +95,29 @@ struct ResourceIDLookupTests {
     /// - Parameter path: The path that the model gives.
     /// - Returns: The relative path that the closure got, or the corrective
     ///   message of the lookup.
-    private static func resolvedPath(of path: String) async -> CorrectiveOutcome<String> {
-        let context = ResourceTestSupport.makeContext(roots: [ResourceTestSupport.projectSkillsRoot])
+    /// - Throws: Whatever `ResourceTestSupport.makeContext(roots:mode:policy:)`
+    ///   throws.
+    private static func resolvedPath(of path: String) async throws -> CorrectiveOutcome<String> {
+        let context = try ResourceTestSupport.makeContext(roots: [ResourceTestSupport.projectSkillsRoot])
         return await ResourceIDLookup.withResolvedPath(path, id: Self.fixtureSkillID, context: context) {
             relativePath, _ in
             .success(relativePath)
         }
     }
 
-    @Test func anAbsolutePathInTheSkillReachesTheClosureAsItsRelativePath() async {
+    @Test func anAbsolutePathInTheSkillReachesTheClosureAsItsRelativePath() async throws {
         let absolutePath = ResourceTestSupport.absoluteSkillFilePath(
             root: ResourceTestSupport.projectSkillsRoot, id: Self.fixtureSkillID, path: Self.fixtureFilePath)
 
-        let output = await Self.resolvedPath(of: absolutePath)
+        let output = try await Self.resolvedPath(of: absolutePath)
 
         #expect(output == .success(Self.fixtureFilePath))
     }
 
     /// The closure does not run, and the denied corrective names the path that
     /// the model gave.
-    @Test func anAbsolutePathOutsideTheSkillDrawsTheDeniedCorrective() async {
-        let output = await Self.resolvedPath(of: ResourceTestSupport.systemFilePath)
+    @Test func anAbsolutePathOutsideTheSkillDrawsTheDeniedCorrective() async throws {
+        let output = try await Self.resolvedPath(of: ResourceTestSupport.systemFilePath)
 
         #expect(output == .corrective(ResourcePathRules.deniedMessage(path: ResourceTestSupport.systemFilePath)))
     }

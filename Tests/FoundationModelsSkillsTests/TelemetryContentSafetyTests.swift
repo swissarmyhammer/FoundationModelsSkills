@@ -68,7 +68,8 @@ struct TelemetryContentSafetyTests {
             let telemetry = SkillsTracing.Telemetry(
                 tracer: context.tracer, metricsFactory: context.metricsFactory, logger: context.logger)
             let registry = SkillsRegistry(
-                layers: [DotfolderStack.Layer(source: .project, root: root)], policy: RenderPolicy(), watch: true,
+                layers: [DotfolderStack.Layer(source: .project, root: root)], mode: .open, policy: RenderPolicy(),
+                watch: true,
                 telemetry: telemetry)
 
             try await Self.search(registry: registry, telemetry: telemetry)
@@ -79,7 +80,10 @@ struct TelemetryContentSafetyTests {
             #expect(rendered.contains(Self.scriptOutputMarker))
             #expect(
                 Self.packageSpanNames(context.spans.map(\.operationName))
-                    == [SkillsTracing.SpanName.search, SkillsTracing.SpanName.skillLoad, SkillsTracing.SpanName.catalogLoad])
+                    == [
+                        SkillsTracing.SpanName.search, SkillsTracing.SpanName.skillLoad,
+                        SkillsTracing.SpanName.catalogLoad,
+                    ])
         }
     }
 

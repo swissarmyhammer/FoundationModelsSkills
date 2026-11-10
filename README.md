@@ -45,7 +45,8 @@ let stack = DotfolderStack(
     workingDirectory: projectDirectory,
     defaultsDirectory: shippedSkillsURL,
     userDirectory: userConfigURL)
-let registry = SkillsRegistry(stack: stack, watch: true)
+// `.open` runs shell injection and scripts. An App Sandbox host gives `.sandboxed`.
+let registry = SkillsRegistry(stack: stack, mode: .open, watch: true)
 
 // One fused tool for the full catalog: search, list, use, resources, scripts.
 // The model you supply runs the selection tier. Nothing is hardcoded.
@@ -100,6 +101,20 @@ keyword rank, and the `skills` call does not fail.
 [`Examples/skills-demo`](Examples/skills-demo) is the compiled, always-current
 version of that example. `swift build` builds it with the library, and the
 tests run it as a subprocess.
+
+## Tool modes
+
+Each `SkillsRegistry` and each `SkillsToolContext` takes a `mode:` of type
+`ToolMode` (from FoundationModelsExtras), with no default:
+
+- `.open`: the tool has all nine operations, and a body runs its
+  `` !`command` `` and ` ```! ` shell injection.
+- `.sandboxed`: no operation starts a process. The tool has no `run script`
+  operation, and a body keeps each shell injection as text.
+
+`SkillsToolContext` calls `mode.validate(probe:)`. Thus `.open` in a process
+that the App Sandbox holds fails when the tool is made, with
+`ToolModeError.openModeInSandbox`.
 
 ## Install
 

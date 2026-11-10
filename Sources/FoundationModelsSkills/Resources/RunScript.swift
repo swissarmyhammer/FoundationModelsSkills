@@ -85,7 +85,8 @@ public struct RunScript: OperationDefinition {
             description: "Positional arguments to pass to the script."),
         ParamMeta(
             name: timeoutKey, type: .integer, required: false,
-            description: "Seconds to allow before killing the script's process group. Defaults to \(Self.defaultTimeoutSeconds)."
+            description:
+                "Seconds to allow before killing the script's process group. Defaults to \(Self.defaultTimeoutSeconds)."
         ),
     ]
 
@@ -135,29 +136,26 @@ public struct RunScript: OperationDefinition {
     /// layer directory that gave the winning copy, thus a script reaches the
     /// files beside it with a relative path.
     ///
-    /// Evaluates gate 1 (host policy) first, before any id lookup or path
+    /// Evaluates gate 1 (tool mode) first, before any id lookup or path
     /// resolution ("triple-gated, every check at dispatch"):
-    /// a script-disabled registry returns the identical policy corrective
-    /// for any `path` -- valid, unknown-id, or confinement-escaping alike --
-    /// never a path-shaped corrective ahead of the policy check.
+    /// a sandboxed context returns the identical mode corrective for any
+    /// `path` -- valid, unknown-id, or confinement-escaping alike -- never a
+    /// path-shaped corrective ahead of the mode check.
     ///
-    /// The value gate 1 reads is the host `RenderPolicy` of the registry,
-    /// which gates every layer: a skill of a marketplace layer is refused,
-    /// and permitted, exactly as a skill of a `user` or a `project` layer
-    /// is.
+    /// The value gate 1 reads is `context.mode`, which gates every layer: a
+    /// skill of a marketplace layer is refused, and permitted, exactly as a
+    /// skill of a `user` or a `project` layer is.
     ///
     /// - Parameter context: The shared context supplying the model-visible
     ///   registry.
     /// - Returns: `.success(_:)` carrying the process's outcome;
-    ///   `.corrective(_:)` for a disabled host policy, an unusable id, a
+    ///   `.corrective(_:)` for the sandboxed mode, an unusable id, a
     ///   confinement/scripts-prefix violation, a gate refusal, or a missing
     ///   executable bit/shebang.
     /// - Throws: Nothing; the signature carries `throws` to satisfy the
     ///   `OperationDefinition` protocol requirement.
     public func execute(in context: SkillsToolContext) async throws -> RunScriptOutput {
-        let hostPolicyResult = ScriptGate.evaluateHostPolicy(
-            isScriptExecutionDisabled: context.registry.policy.isScriptExecutionDisabled)
-        if case .corrective(let message) = hostPolicyResult {
+        if case .corrective(let message) = ScriptGate.evaluateMode(context.mode) {
             return .corrective(message)
         }
 
@@ -169,7 +167,7 @@ public struct RunScript: OperationDefinition {
     /// Runs the winning copy of `relativePath` under the path gates, the
     /// grant gate and the direct-exec check, or returns a corrective message.
     ///
-    /// The host policy gate ran before this, and `relativePath` is the path
+    /// The mode gate ran before this, and `relativePath` is the path
     /// that `ResourceIDLookup.withResolvedPath(_:id:context:whenResolved:)`
     /// gave, thus an absolute path in a layer directory of the skill goes
     /// through the same gates, in the same order, as a relative path.

@@ -7,9 +7,14 @@
   privileges. They get the full environment. There is no filesystem or
   network restriction beyond the script's own working-directory
   discipline. `sandbox-exec` is deprecated API over a private profile
-  language. Containment here is gates (host policy plus the skill's
+  language. Containment here is gates (the tool mode plus the skill's
   `allowed-tools` grants) and process control, not an OS sandbox. Examine
   this again when Apple ships a supported per-process confinement API.
+- **The sandboxed mode starts no process.** In `ToolMode.sandboxed`, the
+  `skills` tool has no `run script` operation, and the shell injection of a
+  body leaves each `` !`command` `` and ` ```! ` block as text. A host in the
+  App Sandbox gives `.sandboxed`. `SkillsToolContext` refuses `.open` in a
+  sandboxed process with `ToolModeError.openModeInSandbox`.
 - **Every child process has a group, a timeout and an output limit.** Both
   paths start their process with the `ProcessRunner` of
   `FoundationModelsExtras`. Each command runs in a process group of its own,
@@ -73,7 +78,7 @@ hold for every marketplace:
 
 1. **A marketplace is untrusted content.** It always renders untrusted, as a
    `user` layer and a `project` layer do, and it gets no permission switch of
-   its own. The host `RenderPolicy` is the one gate of the `` !`shell` ``
+   its own. The `ToolMode` of the host is the one gate of the `` !`shell` ``
    injection and of `run script`, for every layer, and the `allowed-tools`
    grant of the skill is still necessary for a script.
 2. **The allow-list and the block-list run before any I/O.**

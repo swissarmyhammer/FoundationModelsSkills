@@ -30,23 +30,27 @@ public enum SkillsCLI {
     /// - Throws: Whatever `SkillsTool.make(context:catalogCharacterLimit:)`
     ///   or `OperationCLIDriver.init(tool:executableName:)` throws.
     public static func makeDriver(registry: SkillsRegistry) throws -> OperationCLIDriver {
-        let tool = try SkillsTool.make(context: Self.makeContext(registry: registry))
+        let tool = try SkillsTool.make(context: try Self.makeContext(registry: registry))
         return try OperationCLIDriver(tool: tool.operationTool, executableName: Self.executableName)
     }
 
     /// Builds the CLI-facing `SkillsToolContext`: `registry` unchanged, a
     /// `visibilityPredicate` matching `registry.commandListing()`'s ids, and
-    /// a search agent seeded from that same subset.
+    /// a search agent seeded from that same subset, in the tool mode of
+    /// `registry`.
     ///
     /// - Parameter registry: The registry to derive the context from.
     /// - Returns: The CLI-facing context.
-    private static func makeContext(registry: SkillsRegistry) -> SkillsToolContext {
+    /// - Throws: Whatever `SkillsToolContext.init` throws for the mode of
+    ///   `registry`.
+    private static func makeContext(registry: SkillsRegistry) throws -> SkillsToolContext {
         let userVisibleIDs = Set(registry.commandListing().map(\.id))
         let isUserVisible: @Sendable (SkillMetadata) -> Bool = { userVisibleIDs.contains($0.id) }
         let searcher = MetadataSearcher(items: registry.metadata().filter(isUserVisible))
-        return SkillsToolContext(
+        return try SkillsToolContext(
             registry: registry,
             searchAgent: SkillSearchAgent(searcher: searcher, visibilityPredicate: isUserVisible),
+            mode: registry.mode,
             visibilityPredicate: isUserVisible
         )
     }

@@ -8,7 +8,7 @@ enum SkillsDemoAssembly {
     /// - Parameter watch: Whether to watch the stack and reload on change.
     /// - Returns: The assembled registry.
     static func makeRegistry(watch: Bool) -> SkillsRegistry {
-        SkillsRegistry(stack: FixtureStack.make(), watch: watch)
+        SkillsRegistry(stack: FixtureStack.make(), mode: .open, watch: watch)
     }
 
     /// Builds the fused `skills` tool over `registry`, through the one-call

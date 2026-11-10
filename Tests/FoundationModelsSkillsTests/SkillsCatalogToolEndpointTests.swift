@@ -83,7 +83,7 @@ struct SkillsCatalogToolEndpointTests {
         let root = try WatcherTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         let tool = try await SkillsTool.make(
-            registry: SkillsRegistry(layers: [DotfolderStack.Layer(source: .user, root: root)]))
+            registry: SkillsRegistry(layers: [DotfolderStack.Layer(source: .user, root: root)], mode: .open))
         let endpoint = try Self.onlyEndpoint(of: tool)
         let start = try await GraphQLTestSupport.cursor(of: endpoint)
         let stream = try await endpoint.subscribe(
@@ -149,7 +149,7 @@ struct SkillsCatalogToolEndpointTests {
     ///
     /// - Returns: The registry the cases hand to the factory.
     private static func makeFixtureRegistry() -> SkillsRegistry {
-        SkillsRegistry(stack: FixtureLibrary.stack())
+        SkillsRegistry(stack: FixtureLibrary.stack(), mode: .open)
     }
 
     /// Finds the endpoints of `tool` the way a host does, and requires

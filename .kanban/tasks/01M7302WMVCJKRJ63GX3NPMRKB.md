@@ -13,10 +13,32 @@ comments:
     - `mode.validate(probe: SandboxProbe = .live) throws(ToolModeError)`: call it at composition time (in `SkillsTool.make` or the `SkillsToolContext` init), before a tool is registered. Add a test with `.fixed(true)` and `.open` that expects `ToolModeError.openModeInSandbox`.
     Docs: Extras `docs/REFERENCE.md` ("Tool modes: ToolMode") and `docs/GUIDE.md`.
   timestamp: 2026-11-10T15:48:27.544429+00:00
+- actor: claude-code
+  id: 01m737be30gvd3vpxhffnx57pb
+  text: |-
+    ### Implementation notes
+    - `swift package update FoundationModelsExtras`: resolved at main 4254281 (ToolMode present). Package.resolved did not change.
+    - New public API (tell ACPAgent, ACPA-19):
+      - `SkillsRegistry` public inits take `mode: ToolMode` with no default, right after the source: `init(roots:mode:policy:watch:templateContext:)`, `init(stack:mode:policy:watch:templateContext:)`, `init(layers:mode:policy:watch:templateContext:)`, `init(marketplaces:stack:mode:policy:watch:templateContext:)`. New `public let mode: ToolMode`.
+      - `SkillsToolContext.init(registry:searchAgent:mode:sandboxProbe: = .live, visibilityPredicate:reloadFollower:catalogNoticeFollower:) throws`. It calls `mode.validate(probe:)` and throws `ToolModeError.openModeInSandbox`; it throws the new `SkillsToolContext.ModeMismatchError(registryMode:contextMode:)` when `mode != registry.mode`. New `public let mode`.
+      - `ShellInjection.init(mode: ToolMode)` (was `init()`); `ShellInjection.disabledMarker` is removed.
+      - `RenderPolicy` keeps only `shellCommandTimeout` and `shellOutputByteLimit`. `isShellExecutionDisabled` and `isScriptExecutionDisabled` are removed: ToolMode covers each use.
+      - `SkillsTool.make(registry:...)` factories and `SkillsCLI.makeDriver(registry:)` take the mode from `registry.mode`; no new parameter.
+    - `SkillsTool.make(context:)` does not register `RunScript` in `.sandboxed`. `ScriptGate` gate 1 is now the tool mode (`Script execution is not available in the sandboxed mode.`), for a host that dispatches `RunScript` against a sandboxed context directly.
+    - What did not work: a first `ProcessRegistry.global` watch missed the pids, because `touch` ends before a sample, and because `URL.resolvingSymlinksInPath()` keeps `/var` while `proc_pidinfo` gives `/private/var`. The fix: each fixture command waits for a release file, the watch makes that file when it sees a pid whose working directory is in the fixture folder, and the fixture uses `realpath(3)`. I checked by hand that both no-process tests fail when the fixture is built in `.open`.
+    - The `missing creator for mutated node ... mlx-swift_Cmlx.bundle` line is a SwiftPM build-system message from the dependency graph, not a compiler warning of this package.
+  timestamp: 2026-11-10T17:16:06.112285+00:00
+- actor: claude-code
+  id: 01m737bh0ggfm4pv217dm8tays
+  text: |-
+    ### implement — changed
+    - evidence: 62 files changed + new Tests/FoundationModelsSkillsTests/SandboxedModeTests.swift (11 tests). Sources: RenderPipeline.swift, ShellInjection.swift, SkillsRegistry.swift, SkillsToolContext.swift, SkillsTool.swift, SkillsToolAssembly.swift, SkillFilesText.swift, UseSkill.swift, ScriptGate.swift, RunScript.swift, SkillsCLI.swift; Examples/skills-demo; README.md, docs/operations.md, docs/security.md, docs/marketplaces.md; each test caller. `swift test`: 797 tests in 68 suites passed, 0 compiler warnings.
+    - next: /review
+  timestamp: 2026-11-10T17:16:09.104409+00:00
 depends_on:
 - 01M7302DGMW7PA5MMAZ3DJBEDK
-position_column: todo
-position_ordinal: '8380'
+position_column: doing
+position_ordinal: '80'
 title: 'SK-7a: Skill scripts and shell injection only in open mode (ToolMode)'
 ---
 ## What

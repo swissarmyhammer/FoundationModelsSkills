@@ -43,7 +43,7 @@ struct SkillsTelemetryTests {
 
     @Test func oneAnswerGivesOneSearchSpanOneEnterRecordAndOneDurationValue() async throws {
         let capture = TelemetryRecording()
-        let registry = SkillsRegistry(roots: [Self.projectSkillsRoot])
+        let registry = SkillsRegistry(roots: [Self.projectSkillsRoot], mode: .open)
         let agent = SkillSearchAgent(
             searcher: MetadataSearcher(items: registry.metadata().filter(\.isModelVisible)),
             retrievalFallback: nil, visibilityPredicate: { $0.isModelVisible }, telemetry: capture.telemetry)
@@ -119,7 +119,8 @@ struct SkillsTelemetryTests {
         }
         let capture = TelemetryRecording()
         let registry = SkillsRegistry(
-            layers: [DotfolderStack.Layer(source: .project, root: root)], policy: RenderPolicy(), watch: true,
+            layers: [DotfolderStack.Layer(source: .project, root: root)], mode: .open, policy: RenderPolicy(),
+            watch: true,
             telemetry: capture.telemetry)
         let initialSpans = capture.spans(named: SkillsTracing.SpanName.catalogLoad)
         let tally = ReloadTestSupport.EventTally()
@@ -134,8 +135,11 @@ struct SkillsTelemetryTests {
         let spans = capture.spans(named: SkillsTracing.SpanName.catalogLoad)
         let counts = [Self.skillIDsBeforeReload.count, Self.skillIDsAfterReload.count]
         #expect(initialSpans.count == 1)
-        #expect(spans.map { $0.attributes.get(SkillsTracing.AttributeKey.skillCount) } == counts.map { $0.toSpanAttribute() })
-        #expect(spans.allSatisfy { $0.attributes.get(SkillsTracing.AttributeKey.diagnosticCount) == 0.toSpanAttribute() })
+        #expect(
+            spans.map { $0.attributes.get(SkillsTracing.AttributeKey.skillCount) }
+                == counts.map { $0.toSpanAttribute() })
+        #expect(
+            spans.allSatisfy { $0.attributes.get(SkillsTracing.AttributeKey.diagnosticCount) == 0.toSpanAttribute() })
         let gauge = try capture.metrics.expectGauge(SkillsTracing.MetricName.skillsLoaded)
         #expect(gauge.values == counts.map(Double.init))
     }
@@ -147,7 +151,9 @@ struct SkillsTelemetryTests {
     /// - Parameter telemetry: The telemetry of the registry.
     /// - Returns: The registry.
     private static func fixtureRegistry(telemetry: SkillsTracing.Telemetry) -> SkillsRegistry {
-        SkillsRegistry(layers: FixtureLibrary.stack().layers, policy: RenderPolicy(), watch: false, telemetry: telemetry)
+        SkillsRegistry(
+            layers: FixtureLibrary.stack().layers, mode: .open, policy: RenderPolicy(), watch: false,
+            telemetry: telemetry)
     }
 }
 

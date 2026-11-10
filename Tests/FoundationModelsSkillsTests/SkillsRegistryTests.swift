@@ -36,7 +36,7 @@ struct SkillsRegistryTests {
     @Test func layersKeepTheSourceOfEachGivenLayerInOrder() {
         let layers = zip(Self.fixtureSources, Self.fixtureRoots).map { DotfolderStack.Layer(source: $0, root: $1) }
 
-        let registry = SkillsRegistry(layers: layers)
+        let registry = SkillsRegistry(layers: layers, mode: .open)
 
         #expect(registry.layers.map(\.source) == Self.fixtureSources)
     }
@@ -44,7 +44,7 @@ struct SkillsRegistryTests {
     @Test func layersKeepTheRootOfEachGivenLayerInOrder() {
         let layers = zip(Self.fixtureSources, Self.fixtureRoots).map { DotfolderStack.Layer(source: $0, root: $1) }
 
-        let registry = SkillsRegistry(layers: layers)
+        let registry = SkillsRegistry(layers: layers, mode: .open)
 
         #expect(registry.layers.map(\.root) == Self.fixtureRoots)
     }
@@ -52,7 +52,7 @@ struct SkillsRegistryTests {
     /// A bare root carries no source, thus `init(roots:)` labels each root
     /// `.project`, and the registry has no `.user` layer.
     @Test func layersOfARegistryOverBareRootsAreAllProjectLayers() {
-        let registry = SkillsRegistry(roots: Self.fixtureRoots)
+        let registry = SkillsRegistry(roots: Self.fixtureRoots, mode: .open)
 
         #expect(registry.layers.map(\.source) == Self.fixtureRoots.map { _ in .project })
     }
@@ -60,12 +60,12 @@ struct SkillsRegistryTests {
     // MARK: - Construction snapshot
 
     @Test func constructionOverFixtureRootsBuildsACatalogEntryForEveryStructuralSkill() {
-        let registry = SkillsRegistry(roots: Self.fixtureRoots)
+        let registry = SkillsRegistry(roots: Self.fixtureRoots, mode: .open)
         #expect(Set(registry.metadata().map(\.id)) == Self.expectedFixtureIDs)
     }
 
     @Test func diagnosticsCarryTheWinningRootProvenanceForTheShadowedFixture() throws {
-        let registry = SkillsRegistry(roots: Self.fixtureRoots)
+        let registry = SkillsRegistry(roots: Self.fixtureRoots, mode: .open)
         let shadowDiagnostic = try #require(
             registry.diagnostics.first { $0.skillID == "base-style" && $0.severity == .advisory })
         #expect(shadowDiagnostic.provenance.root.path == Self.userRoot.path)
@@ -76,8 +76,8 @@ struct SkillsRegistryTests {
             name: "skills", workingDirectory: FixtureLibrary.url(relativePath: "project"),
             defaultsDirectory: Self.defaultsRoot, userDirectory: Self.userRoot)
 
-        let viaStack = SkillsRegistry(stack: stack)
-        let viaRoots = SkillsRegistry(roots: Self.fixtureRoots)
+        let viaStack = SkillsRegistry(stack: stack, mode: .open)
+        let viaRoots = SkillsRegistry(roots: Self.fixtureRoots, mode: .open)
 
         #expect(Set(viaStack.metadata().map(\.id)) == Set(viaRoots.metadata().map(\.id)))
         #expect(Set(viaStack.commandListing().map(\.id)) == Set(viaRoots.commandListing().map(\.id)))
@@ -106,8 +106,8 @@ struct SkillsRegistryTests {
         // (both roots stay empty) but tidied up above regardless.
         stack.layers = [DotfolderStack.Layer(source: .defaults, root: defaultsDirectory)]
 
-        let viaStack = SkillsRegistry(stack: stack)
-        let viaRoots = SkillsRegistry(roots: [defaultsDirectory])
+        let viaStack = SkillsRegistry(stack: stack, mode: .open)
+        let viaRoots = SkillsRegistry(roots: [defaultsDirectory], mode: .open)
 
         let expectedWorkingDirectory = FileManager.default.currentDirectoryPath
         let stackEntry = try #require(viaStack.metadata().first { $0.id == "metadata-render-failure" })
@@ -151,7 +151,7 @@ struct SkillsRegistryTests {
         "visibility matrix: default, disable-model-invocation, user-invocable:false, preload:true",
         arguments: visibilityCases)
     private func visibilityMatrixMatchesPlanSectionSix(_ testCase: VisibilityCase) async {
-        let registry = SkillsRegistry(roots: Self.fixtureRoots)
+        let registry = SkillsRegistry(roots: Self.fixtureRoots, mode: .open)
 
         let metadataEntry = registry.metadata().first { $0.id == testCase.id }
         #expect(metadataEntry?.isModelVisible == testCase.isModelVisible, "\(testCase.id): model-visibility flag")
@@ -166,7 +166,7 @@ struct SkillsRegistryTests {
     // MARK: - commandListing() / metadata() deliberate disagreement
 
     @Test func commandListingAndMetadataDisagreeExactlyOnDeployAndLint() {
-        let registry = SkillsRegistry(roots: Self.fixtureRoots)
+        let registry = SkillsRegistry(roots: Self.fixtureRoots, mode: .open)
         let listedIDs = Set(registry.commandListing().map(\.id))
         let metadataByID = Dictionary(uniqueKeysWithValues: registry.metadata().map { ($0.id, $0) })
 
@@ -186,38 +186,36 @@ struct SkillsRegistryTests {
     // MARK: - metadata() parameter summaries
 
     @Test func metadataCarriesTheArgumentHintPlaceholderSummaryForCommit() throws {
-        let registry = SkillsRegistry(roots: Self.fixtureRoots)
+        let registry = SkillsRegistry(roots: Self.fixtureRoots, mode: .open)
         let entry = try #require(registry.metadata().first { $0.id == "commit" })
         #expect(entry.parameters == ["<message>"])
     }
 
-    // MARK: - preloadedBodies() honors RenderPolicy
+    // MARK: - preloadedBodies() honors the tool mode
 
-    @Test func shellExecutionDisabledPolicyAppliesToPreloadedBodies() async {
-        let registry = SkillsRegistry(
-            roots: Self.fixtureRoots, policy: RenderPolicy(isShellExecutionDisabled: true))
+    /// The shell injection of the `git-context` fixture, as its body holds it.
+    private static let gitContextInjection = "!`echo \"on branch main, working tree clean\"`"
+
+    @Test func theSandboxedModeLeavesTheInjectionOfAPreloadedBodyUnchanged() async {
+        let registry = SkillsRegistry(roots: Self.fixtureRoots, mode: .sandboxed)
         let preloaded = await registry.preloadedBodies()
-        #expect(preloaded.contains(ShellInjection.disabledMarker))
-        #expect(!preloaded.contains("on branch main, working tree clean"))
+        #expect(preloaded.contains(Self.gitContextInjection))
     }
 
-    @Test func shellExecutionDisabledPolicyAppliesToCallIDArguments() async throws {
-        // Coverage gap: the disable flag was previously only
-        // proven on the preload path -- `call(id:arguments:)` is the exact
-        // same path `use skill` and the CLI's `skill use` dispatch through.
-        let registry = SkillsRegistry(
-            roots: Self.fixtureRoots, policy: RenderPolicy(isShellExecutionDisabled: true))
+    @Test func theSandboxedModeLeavesTheInjectionOfACallUnchanged() async throws {
+        // `call(id:arguments:)` is the exact same path `use skill` and the
+        // CLI's `skill use` dispatch through, thus the mode holds for both.
+        let registry = SkillsRegistry(roots: Self.fixtureRoots, mode: .sandboxed)
 
         let body = try await registry.call(id: "git-context")
 
-        #expect(body.contains(ShellInjection.disabledMarker))
-        #expect(!body.contains("on branch main, working tree clean"))
+        #expect(body.contains(Self.gitContextInjection))
     }
 
     // MARK: - call(id:arguments:) plumbing
 
     @Test func callCommitSubstitutesSuppliedArgumentsIntoTheRenderedBody() async throws {
-        let registry = SkillsRegistry(roots: Self.fixtureRoots)
+        let registry = SkillsRegistry(roots: Self.fixtureRoots, mode: .open)
         // A caller building `arguments` element-by-element (rather than typing
         // one raw command line) quotes a multi-word value, the same discipline
         // $N/$ARGUMENTS[N] shell-style tokenizing already requires -- see
@@ -228,7 +226,7 @@ struct SkillsRegistryTests {
     }
 
     @Test func callUnknownIDThrowsCarryingTheCurrentValidIDs() async throws {
-        let registry = SkillsRegistry(roots: Self.fixtureRoots)
+        let registry = SkillsRegistry(roots: Self.fixtureRoots, mode: .open)
         var thrown: UnknownSkillError?
         do {
             _ = try await registry.call(id: "does-not-exist")
@@ -242,7 +240,7 @@ struct SkillsRegistryTests {
     }
 
     @Test func callOnAValidatorHiddenIDThrowsTheSameUnknownSkillError() async throws {
-        let registry = SkillsRegistry(roots: [Self.brokenRoot])
+        let registry = SkillsRegistry(roots: [Self.brokenRoot], mode: .open)
         var thrown: UnknownSkillError?
         do {
             _ = try await registry.call(id: "partial-flag")
@@ -330,7 +328,7 @@ struct SkillsRegistryTests {
         try Self.writeMetadataTemplatingSkill(in: root)
         let expectedWorkingDirectory = FileManager.default.currentDirectoryPath
 
-        let registry = SkillsRegistry(roots: [root])
+        let registry = SkillsRegistry(roots: [root], mode: .open)
 
         let metadataEntry = try #require(registry.metadata().first { $0.id == "metadata-templating" })
         #expect(metadataEntry.description == "Working directory is \(expectedWorkingDirectory).")
@@ -386,7 +384,7 @@ struct SkillsRegistryTests {
         // filter whitelist starts empty -- `| uppercase` is a real Stencil
         // filter that would succeed under `.trusted`, so this genuinely
         // fails here rather than never having been valid syntax.
-        let registry = SkillsRegistry(roots: [root])
+        let registry = SkillsRegistry(roots: [root], mode: .open)
         let entry = try #require(registry.metadata().first { $0.id == "metadata-render-failure" })
         #expect(entry.metadata["filtered-value"] == .string("will-fail={{ working_directory | uppercase }}"))
     }
@@ -421,7 +419,7 @@ struct SkillsRegistryTests {
         defer { try? FileManager.default.removeItem(at: root) }
         try Self.writePreloadedModelHiddenSkill(in: root)
 
-        let registry = SkillsRegistry(roots: [root])
+        let registry = SkillsRegistry(roots: [root], mode: .open)
 
         let entry = try #require(registry.metadata().first { $0.id == "preloaded-model-hidden" })
         #expect(entry.isModelVisible == false)
@@ -460,7 +458,7 @@ struct SkillsRegistryTests {
         defer { try? FileManager.default.removeItem(at: root) }
         try Self.writeArityMismatchSkill(in: root)
 
-        let registry = SkillsRegistry(roots: [root])
+        let registry = SkillsRegistry(roots: [root], mode: .open)
 
         let diagnostic = try #require(
             registry.diagnostics.first { $0.skillID == "arity-mismatch" && $0.severity == .advisory })
@@ -508,7 +506,7 @@ struct SkillsRegistryTests {
                 """,
             in: root)
 
-        let registry = SkillsRegistry(roots: [root])
+        let registry = SkillsRegistry(roots: [root], mode: .open)
 
         let diagnostic = try #require(
             registry.diagnostics.first { $0.skillID == "mistyped-metadata" && $0.severity == .advisory })
@@ -531,7 +529,7 @@ struct SkillsRegistryTests {
                 """,
             in: root)
 
-        let registry = SkillsRegistry(roots: [root])
+        let registry = SkillsRegistry(roots: [root], mode: .open)
 
         let diagnostic = try #require(
             registry.diagnostics.first { $0.skillID == "both-spellings" && $0.severity == .advisory })
@@ -573,7 +571,7 @@ struct SkillsRegistryTests {
         defer { try? FileManager.default.removeItem(at: root) }
         try Self.writeLongDescriptionSkill(in: root)
 
-        let registry = SkillsRegistry(roots: [root])
+        let registry = SkillsRegistry(roots: [root], mode: .open)
 
         let metadataEntry = try #require(registry.metadata().first { $0.id == "long-description" })
         #expect(metadataEntry.description.count > 200)
@@ -600,7 +598,7 @@ struct SkillsRegistryTests {
                 """,
             in: root)
 
-        let registry = SkillsRegistry(roots: [root])
+        let registry = SkillsRegistry(roots: [root], mode: .open)
 
         let listingEntry = try #require(registry.commandListing().first { $0.id == "boundary-description" })
         #expect(listingEntry.description == shortDescription)
@@ -652,7 +650,7 @@ struct SkillsRegistryTests {
         try Self.writeUnreadableSkill(id: "unreadable", in: root)
         try Self.writePreloadedModelHiddenSkill(in: root)
 
-        let registry = SkillsRegistry(roots: [root])
+        let registry = SkillsRegistry(roots: [root], mode: .open)
 
         let loadedIDs = Set(registry.metadata().map(\.id))
         #expect(!loadedIDs.contains("unreadable"))
@@ -690,7 +688,7 @@ struct SkillsRegistryTests {
         defer { try? FileManager.default.removeItem(at: root) }
         try Self.writeNonTextSkill(id: "not-text", in: root)
 
-        let registry = SkillsRegistry(roots: [root])
+        let registry = SkillsRegistry(roots: [root], mode: .open)
 
         #expect(!registry.metadata().contains { $0.id == "not-text" })
         let diagnostics = registry.diagnostics.filter { $0.skillID == "not-text" }
@@ -734,7 +732,7 @@ struct SkillsRegistryTests {
         try Self.writeMarkedSkill(id: "layered", marker: "the lower layer", in: lowerRoot)
         try Self.writeMarkedSkill(id: "layered", marker: "the higher layer", in: higherRoot)
 
-        let registry = SkillsRegistry(roots: [lowerRoot, higherRoot])
+        let registry = SkillsRegistry(roots: [lowerRoot, higherRoot], mode: .open)
 
         let entry = try #require(registry.metadata().first { $0.id == "layered" })
         #expect(entry.description == "Description from the higher layer.")
@@ -781,7 +779,7 @@ struct SkillsRegistryTests {
     @Test func aCatalogEntryCarriesTheLayerDirectoryOfEachLayerThatGivesTheSkillLowestPrecedenceFirst() {
         // `base-style` is the one fixture id that two of the three layer
         // roots hold, so it is the two-directory case.
-        let registry = SkillsRegistry(roots: Self.fixtureRoots)
+        let registry = SkillsRegistry(roots: Self.fixtureRoots, mode: .open)
 
         let contributing = registry.contributingDirectories(id: "base-style")
 
@@ -804,10 +802,11 @@ struct SkillsRegistryTests {
         try Self.writeSharedIDSkill(id: "shared-id", in: marketplaceRoot)
         try Self.writeSharedIDSkill(id: "shared-id", in: localRoot)
 
-        let registry = SkillsRegistry(layers: [
-            DotfolderStack.Layer(source: .marketplace, root: marketplaceRoot),
-            DotfolderStack.Layer(source: .user, root: localRoot),
-        ])
+        let registry = SkillsRegistry(
+            layers: [
+                DotfolderStack.Layer(source: .marketplace, root: marketplaceRoot),
+                DotfolderStack.Layer(source: .user, root: localRoot),
+            ], mode: .open)
 
         let contributing = registry.contributingDirectories(id: "shared-id")
 

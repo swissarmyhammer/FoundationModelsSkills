@@ -386,7 +386,7 @@ struct SkillsGraphChangesTests {
         init(watch: Bool = true) throws {
             root = try WatcherTestSupport.makeTempDirectory()
             try ReloadTestSupport.writeSkillFile(id: SkillsGraphChangesTests.firstSkillID, in: root)
-            registry = SkillsRegistry(roots: [root], watch: watch)
+            registry = SkillsRegistry(roots: [root], mode: .open, watch: watch)
             endpoint = Endpoint(graph: try SkillsGraph(registry: registry))
         }
 
@@ -429,7 +429,7 @@ struct SkillsGraphChangesTests {
             try ReloadTestSupport.writeSkillFile(id: SkillsGraphChangesTests.secondSkillID, in: root)
             var stack = DotfolderStack(name: "skills", workingDirectory: root, environment: [:])
             stack.layers = [DotfolderStack.Layer(source: .project, root: root)]
-            registry = SkillsRegistry(marketplaces: provider, stack: stack)
+            registry = SkillsRegistry(marketplaces: provider, stack: stack, mode: .open)
             endpoint = Endpoint(graph: try SkillsGraph(registry: registry, changeLog: changeLog))
         }
 

@@ -89,7 +89,8 @@ struct SkillWriteOperationsTests {
         let answer = try await fixture.call(Self.addArguments(layer: Self.badLayer))
 
         #expect(
-            answer == "The layer `\(Self.badLayer)` is not valid. Give `user` or `project`, or leave it out for `user`.")
+            answer == "The layer `\(Self.badLayer)` is not valid. Give `user` or `project`, or leave it out for `user`."
+        )
     }
 
     @Test func addSkillWithABadLayerWritesNothing() async throws {
@@ -166,7 +167,8 @@ struct SkillWriteOperationsTests {
             Self.editArguments(path: Self.referencePath, content: Self.referenceText, layer: Self.badLayer))
 
         #expect(
-            answer == "The layer `\(Self.badLayer)` is not valid. Give `user` or `project`, or leave it out for `user`.")
+            answer == "The layer `\(Self.badLayer)` is not valid. Give `user` or `project`, or leave it out for `user`."
+        )
     }
 
     @Test func editSkillWithABadLayerWritesNothing() async throws {
@@ -221,7 +223,8 @@ struct SkillWriteOperationsTests {
         let answer = try await fixture.call(Self.removeArguments(layer: Self.badLayer))
 
         #expect(
-            answer == "The layer `\(Self.badLayer)` is not valid. Give `user` or `project`, or leave it out for `user`.")
+            answer == "The layer `\(Self.badLayer)` is not valid. Give `user` or `project`, or leave it out for `user`."
+        )
     }
 
     @Test func removeSkillWithABadLayerKeepsTheFolder() async throws {
@@ -351,7 +354,7 @@ private struct WriteFixture {
     init() throws {
         directories = try LayerFixtureSupport.makeLayerDirectories(count: Self.sources.count)
         registry = SkillsRegistry(
-            layers: zip(Self.sources, directories).map { DotfolderStack.Layer(source: $0, root: $1) })
+            layers: zip(Self.sources, directories).map { DotfolderStack.Layer(source: $0, root: $1) }, mode: .open)
         tool = try SkillsTool.make(context: ResourceTestSupport.makeContext(registry: registry))
     }
 
@@ -425,4 +428,3 @@ private struct WriteFixture {
         directories.flatMap { FileManager.default.subpaths(atPath: $0.path) ?? [] }.sorted()
     }
 }
-

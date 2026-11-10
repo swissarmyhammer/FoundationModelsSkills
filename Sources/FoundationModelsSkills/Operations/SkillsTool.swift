@@ -1,4 +1,5 @@
 import FoundationModels
+import FoundationModelsExtras
 import Operations
 
 /// Builds the fused `skills` tool: `SearchSkill`, `ListSkill`, `UseSkill`,
@@ -26,11 +27,16 @@ public enum SkillsTool {
 
     /// Builds the fused `skills` tool over `context`.
     ///
-    /// The nine operations dispatch through `AnyOperation` against the
-    /// shared `context`, in the order `search` / `list` / `use` / `list
-    /// resource` / `read resource` / `run script` / `add skill` / `edit
-    /// skill` / `remove skill` -- the order the fused schema's `op` enum and
-    /// any unknown-operation corrective list them in.
+    /// The operations dispatch through `AnyOperation` against the shared
+    /// `context`, in the order `search` / `list` / `use` / `list resource` /
+    /// `read resource` / `run script` / `add skill` / `edit skill` / `remove
+    /// skill` -- the order the fused schema's `op` enum and any
+    /// unknown-operation corrective list them in.
+    ///
+    /// `context.mode` picks the set. In `ToolMode.open` the tool has all nine
+    /// operations. In `ToolMode.sandboxed` it has no `run script`: the App
+    /// Sandbox does not let a script of a skill run, thus the schema, the
+    /// unknown-operation corrective and the description do not name it.
     ///
     /// The description comes from the catalog one time, here:
     /// `context.registry.metadata()`, filtered by
@@ -72,23 +78,33 @@ public enum SkillsTool {
             name: toolName,
             description: SkillsToolDescription.make(catalog: catalog, characterLimit: catalogCharacterLimit),
             context: context,
-            operations: [
-                AnyOperation(SearchSkill.self),
-                AnyOperation(ListSkill.self),
-                AnyOperation(UseSkill.self),
-                AnyOperation(ListResource.self),
-                AnyOperation(ReadResource.self),
-                AnyOperation(RunScript.self),
-                AnyOperation(AddSkill.self),
-                AnyOperation(EditSkill.self),
-                AnyOperation(RemoveSkill.self),
-            ],
+            operations: operations(for: context.mode),
             resolver: resolver
         )
         return try SkillsCatalogTool(
             operationTool: operationTool, skillIDs: catalog.map(\.id), resolver: resolver,
             catalogNoticeBoard: context.catalogNoticeBoard,
             skillsGraph: SkillsGraph(registry: context.registry))
+    }
+
+    /// The operations of the tool in `mode`, in schema order.
+    ///
+    /// - Parameter mode: The mode of the tools of the host.
+    /// - Returns: All nine operations in `ToolMode.open`; each operation but
+    ///   `RunScript` in `ToolMode.sandboxed`.
+    private static func operations(for mode: ToolMode) -> [AnyOperation<SkillsToolContext>] {
+        let scriptOperations = mode == .open ? [AnyOperation(RunScript.self)] : []
+        return [
+            AnyOperation(SearchSkill.self),
+            AnyOperation(ListSkill.self),
+            AnyOperation(UseSkill.self),
+            AnyOperation(ListResource.self),
+            AnyOperation(ReadResource.self),
+        ] + scriptOperations + [
+            AnyOperation(AddSkill.self),
+            AnyOperation(EditSkill.self),
+            AnyOperation(RemoveSkill.self),
+        ]
     }
 
     /// Builds the forgiving resolver `make(context:)` fuses the tool with.

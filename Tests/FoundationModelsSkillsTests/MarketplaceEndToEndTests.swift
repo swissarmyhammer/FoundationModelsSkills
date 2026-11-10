@@ -160,7 +160,9 @@ struct MarketplaceEndToEndTests {
         #expect(status.latest == second)
         #expect(status.updateAvailable)
         #expect(
-            await fixture.events.waitForEvent(where: { $0 == .updateAvailable(id: marketplaceAID, from: first, to: second) })
+            await fixture.events.waitForEvent(where: {
+                $0 == .updateAvailable(id: marketplaceAID, from: first, to: second)
+            })
                 == .updateAvailable(id: marketplaceAID, from: first, to: second))
 
         let events = await fixture.store.update()
@@ -196,7 +198,8 @@ struct MarketplaceEndToEndTests {
         let movedDirectoryName = fixture.marketplaceA.directory.lastPathComponent
         #expect(
             failureText(ofFirst: events).contains(movedDirectoryName),
-            "the event says the libgit2 message, which names the path that failed; got: \(failureText(ofFirst: events))")
+            "the event says the libgit2 message, which names the path that failed; got: \(failureText(ofFirst: events))"
+        )
         let failureDiagnostics = fixture.store.diagnostics.filter {
             $0.severity == .error && $0.marketplaceID == marketplaceAID
         }
@@ -299,14 +302,15 @@ struct MarketplaceEndToEndTests {
 
             var stack = DotfolderStack(name: "skills", workingDirectory: cache.localRoot, environment: [:])
             stack.layers = [DotfolderStack.Layer(source: .user, root: cache.localRoot)]
-            registry = SkillsRegistry(marketplaces: cache.store, stack: stack)
+            registry = SkillsRegistry(marketplaces: cache.store, stack: stack, mode: .open)
 
             let searcher = MetadataSearcher(
                 items: registry.metadata().filter(\.isModelVisible),
                 weights: Weights(cosine: 0),
                 embedder: FakeEmbedder(vectorLength: embeddingVectorLength))
             let agent = SkillSearchAgent(searcher: searcher)
-            tool = try SkillsTool.make(context: SkillsToolContext(registry: registry, searchAgent: agent))
+            tool = try SkillsTool.make(
+                context: try SkillsToolContext(registry: registry, searchAgent: agent, mode: registry.mode))
             subscriptions = [
                 eventTask,
                 ReloadTestSupport.tally(registry.onReload, into: reloads),

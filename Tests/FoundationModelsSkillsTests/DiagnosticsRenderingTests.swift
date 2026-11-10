@@ -45,7 +45,7 @@ struct DiagnosticsRenderingTests {
         try "---\nname: [unterminated\n---\nBody.\n".write(
             to: skillDirectory.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
 
-        let registry = SkillsRegistry(roots: [root])
+        let registry = SkillsRegistry(roots: [root], mode: .open)
 
         let skipDiagnostic = try #require(registry.diagnostics.first { $0.severity == .skip })
         #expect(skipDiagnostic.skillID == "broken")

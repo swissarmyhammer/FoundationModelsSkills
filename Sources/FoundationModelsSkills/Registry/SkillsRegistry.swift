@@ -139,8 +139,9 @@ public struct SkillsRegistry: Sendable {
     /// The layers this registry was constructed over, lowest precedence
     /// first -- each with its `DotfolderStack.Source` and its root.
     ///
-    /// `init(layers:policy:watch:)` and `init(stack:policy:watch:)` keep the
-    /// source of each layer that they get. `init(roots:policy:watch:)` gets
+    /// `init(layers:mode:policy:watch:templateContext:)` and
+    /// `init(stack:mode:policy:watch:templateContext:)` keep the source of each
+    /// layer that they get. `init(roots:mode:policy:watch:templateContext:)` gets
     /// bare roots, which carry no source, thus it labels each root
     /// `.project` (`untrustedLayers(for:)`), and such a registry has no
     /// `.user` layer. A marketplace-backed registry holds the marketplace
@@ -156,8 +157,9 @@ public struct SkillsRegistry: Sendable {
     public let layers: [DotfolderStack.Layer]
 
     /// The root of each layer of `layers`, lowest precedence first --
-    /// exactly as given to `init(roots:policy:watch:)`, or derived from a
-    /// `DotfolderStack` by `init(stack:policy:watch:)`.
+    /// exactly as given to `init(roots:mode:policy:watch:templateContext:)`, or
+    /// derived from a `DotfolderStack` by
+    /// `init(stack:mode:policy:watch:templateContext:)`.
     public var roots: [URL] {
         layers.map(\.root)
     }
@@ -168,6 +170,19 @@ public struct SkillsRegistry: Sendable {
     /// a script/shell-disabled registry can never be re-enabled by a holder
     /// after construction.
     public let policy: RenderPolicy
+
+    /// The mode of the tools of the host: `ToolMode.open` or
+    /// `ToolMode.sandboxed`.
+    ///
+    /// The render pipeline gets it: in `ToolMode.sandboxed`, `ShellInjection`
+    /// (pass 2) starts no process and leaves each injection site of a body
+    /// unchanged. `SkillsToolContext` requires the same mode, thus the
+    /// `skills` tool over this registry has no `run script` operation in
+    /// `ToolMode.sandboxed`.
+    ///
+    /// A construction-time invariant, the same as `policy`: a holder cannot
+    /// change the mode after the pipeline captured it.
+    public let mode: ToolMode
 
     /// Every diagnostic `SkillValidator` raised while building this
     /// registry's current catalog generation, each carrying the winning
@@ -257,7 +272,7 @@ public struct SkillsRegistry: Sendable {
     /// reads the bootstrapped tracer, the factory of the current task and a
     /// new logger of the label `SkillsTracing.LoggerLabel.registry` when a
     /// load starts. A test gives explicit values through
-    /// `init(layers:policy:watch:telemetry:)`.
+    /// `init(layers:mode:policy:watch:telemetry:templateContext:)`.
     private let telemetry: SkillsTracing.Telemetry
 
     /// This registry's current catalog generation, keyed by id.
@@ -289,7 +304,7 @@ public struct SkillsRegistry: Sendable {
     /// renders under Stencil's untrusted rule -- there is no
     /// "shipped defaults" concept this initializer can recognize on its
     /// own. A host that already tracks that distinction (e.g. by way of a
-    /// `DotfolderStack`) uses `init(stack:policy:)` instead, which
+    /// `DotfolderStack`) uses `init(stack:mode:policy:watch:templateContext:)` instead, which
     /// preserves each layer's own trust tag rather than assuming every
     /// root is untrusted.
     ///
@@ -297,8 +312,11 @@ public struct SkillsRegistry: Sendable {
     ///   - roots: The layer roots to build the catalog over, lowest
     ///     precedence first; a later root's copy of an id fully replaces an
     ///     earlier root's copy of the same id.
+    ///   - mode: The mode of the tools of the host. In `ToolMode.sandboxed`
+    ///     a body render starts no process. It has no default: each host
+    ///     states its mode.
     ///   - policy: The render policy every render call this registry makes
-    ///     honors. Defaults to the permissive `RenderPolicy()`.
+    ///     honors. Defaults to `RenderPolicy()`, the default limits.
     ///   - watch: Whether to watch every root and rebuild the catalog on
     ///     change. Defaults to `false` -- a static catalog,
     ///     matching this initializer's prior behavior.
@@ -309,18 +327,19 @@ public struct SkillsRegistry: Sendable {
     ///     an `{% include %}` names. It sits below the named arguments of a
     ///     skill and above the environment. Defaults to empty.
     public init(
-        roots: [URL], policy: RenderPolicy = RenderPolicy(), watch: Bool = false,
+        roots: [URL], mode: ToolMode, policy: RenderPolicy = RenderPolicy(), watch: Bool = false,
         templateContext: [String: TemplateValue] = [:]
     ) {
         self.init(
-            layers: Self.untrustedLayers(for: roots), policy: policy, watch: watch, templateContext: templateContext)
+            layers: Self.untrustedLayers(for: roots), mode: mode, policy: policy, watch: watch,
+            templateContext: templateContext)
     }
 
     /// Creates a `SkillsRegistry` over a `DotfolderStack`'s own layers,
     /// building its catalog once, immediately.
     ///
     /// A one-line convenience for hosts that already use `DotfolderStack`
-    /// to compute their layer roots -- and, unlike `init(roots:policy:)`,
+    /// to compute their layer roots -- and, unlike `init(roots:mode:policy:watch:templateContext:)`,
     /// this one preserves each layer's real trust tag rather than
     /// assuming every root is untrusted: the layer the host tagged as its
     /// shipped-defaults directory renders trusted, every other layer
@@ -328,8 +347,11 @@ public struct SkillsRegistry: Sendable {
     ///
     /// - Parameters:
     ///   - stack: The dotfolder stack to build the catalog over.
+    ///   - mode: The mode of the tools of the host. In `ToolMode.sandboxed`
+    ///     a body render starts no process. It has no default: each host
+    ///     states its mode.
     ///   - policy: The render policy every render call this registry makes
-    ///     honors. Defaults to the permissive `RenderPolicy()`.
+    ///     honors. Defaults to `RenderPolicy()`, the default limits.
     ///   - watch: Whether to watch every layer root and rebuild the catalog
     ///     on change. Defaults to `false` -- a static catalog,
     ///     matching this initializer's prior behavior.
@@ -340,17 +362,17 @@ public struct SkillsRegistry: Sendable {
     ///     an `{% include %}` names. It sits below the named arguments of a
     ///     skill and above the environment. Defaults to empty.
     public init(
-        stack: DotfolderStack, policy: RenderPolicy = RenderPolicy(), watch: Bool = false,
+        stack: DotfolderStack, mode: ToolMode, policy: RenderPolicy = RenderPolicy(), watch: Bool = false,
         templateContext: [String: TemplateValue] = [:]
     ) {
-        self.init(layers: stack.layers, policy: policy, watch: watch, templateContext: templateContext)
+        self.init(layers: stack.layers, mode: mode, policy: policy, watch: watch, templateContext: templateContext)
     }
 
     /// Creates a `SkillsRegistry` over explicitly trust-labeled layers,
     /// building its catalog once, immediately.
     ///
-    /// The general constructor `init(roots:policy:watch:)` and
-    /// `init(stack:policy:watch:)` both funnel through: a host that wants a
+    /// The general constructor `init(roots:mode:policy:watch:templateContext:)`
+    /// and `init(stack:mode:policy:watch:templateContext:)` both funnel through: a host that wants a
     /// bare-`[URL]` root labeled `.defaults` (so its skills render Stencil-
     /// trusted) without going through a full
     /// `DotfolderStack` builds its own `[DotfolderStack.Layer]` and calls
@@ -362,8 +384,11 @@ public struct SkillsRegistry: Sendable {
     ///   - layers: The layers to build the catalog over, lowest precedence
     ///     first; a later layer's copy of an id fully replaces an earlier
     ///     layer's copy of the same id.
+    ///   - mode: The mode of the tools of the host. In `ToolMode.sandboxed`
+    ///     a body render starts no process. It has no default: each host
+    ///     states its mode.
     ///   - policy: The render policy every render call this registry makes
-    ///     honors. Defaults to the permissive `RenderPolicy()`.
+    ///     honors. Defaults to `RenderPolicy()`, the default limits.
     ///   - watch: Whether to watch every layer root and rebuild the catalog
     ///     on change. Defaults to `false` -- a static catalog.
     ///   - templateContext: The session template context of the host: the
@@ -373,18 +398,18 @@ public struct SkillsRegistry: Sendable {
     ///     an `{% include %}` names. It sits below the named arguments of a
     ///     skill and above the environment. Defaults to empty.
     public init(
-        layers: [DotfolderStack.Layer], policy: RenderPolicy = RenderPolicy(), watch: Bool = false,
+        layers: [DotfolderStack.Layer], mode: ToolMode, policy: RenderPolicy = RenderPolicy(), watch: Bool = false,
         templateContext: [String: TemplateValue] = [:]
     ) {
         self.init(
-            layers: layers, policy: policy, watch: watch, telemetry: SkillsTracing.Telemetry(),
+            layers: layers, mode: mode, policy: policy, watch: watch, telemetry: SkillsTracing.Telemetry(),
             templateContext: templateContext)
     }
 
     /// Creates a `SkillsRegistry` over explicitly trust-labeled layers, with
     /// explicit telemetry.
     ///
-    /// `init(layers:policy:watch:)` calls this one with the default
+    /// `init(layers:mode:policy:watch:templateContext:)` calls this one with the default
     /// telemetry. A test gives its own tracer, metrics factory or logger, and
     /// reads the records back. The rebuild of a hot reload runs on the queue
     /// of the watcher, where no task-local tracer or factory reaches, thus a
@@ -393,6 +418,9 @@ public struct SkillsRegistry: Sendable {
     /// - Parameters:
     ///   - layers: The layers to build the catalog over, lowest precedence
     ///     first.
+    ///   - mode: The mode of the tools of the host. In `ToolMode.sandboxed`
+    ///     a body render starts no process. It has no default: each host
+    ///     states its mode.
     ///   - policy: The render policy every render call this registry makes
     ///     honors.
     ///   - watch: Whether to watch every layer root and rebuild the catalog
@@ -402,12 +430,12 @@ public struct SkillsRegistry: Sendable {
     ///   - templateContext: The session template context of every render.
     ///     Defaults to empty.
     init(
-        layers: [DotfolderStack.Layer], policy: RenderPolicy, watch: Bool, telemetry: SkillsTracing.Telemetry,
-        templateContext: [String: TemplateValue] = [:]
+        layers: [DotfolderStack.Layer], mode: ToolMode, policy: RenderPolicy, watch: Bool,
+        telemetry: SkillsTracing.Telemetry, templateContext: [String: TemplateValue] = [:]
     ) {
         self.init(
             source: LayerSource(plan: { LayerPlan(localLayers: layers) }, marketplaceUpdates: nil),
-            policy: policy, watch: watch, telemetry: telemetry, templateContext: templateContext)
+            mode: mode, policy: policy, watch: watch, telemetry: telemetry, templateContext: templateContext)
     }
 
     /// Creates a `SkillsRegistry` over a marketplace provider's layers in
@@ -431,8 +459,11 @@ public struct SkillsRegistry: Sendable {
     /// - Parameters:
     ///   - marketplaces: The provider of the marketplace layers.
     ///   - stack: The dotfolder stack whose layers sit above them.
+    ///   - mode: The mode of the tools of the host. In `ToolMode.sandboxed`
+    ///     a body render starts no process. It has no default: each host
+    ///     states its mode.
     ///   - policy: The render policy every render call this registry makes
-    ///     honors. Defaults to the permissive `RenderPolicy()`.
+    ///     honors. Defaults to `RenderPolicy()`, the default limits.
     ///   - watch: Whether to watch every local layer root, and the root of
     ///     each marketplace layer that a folder on this computer backs, and
     ///     rebuild the catalog on change.
@@ -445,7 +476,7 @@ public struct SkillsRegistry: Sendable {
     ///     an `{% include %}` names. It sits below the named arguments of a
     ///     skill and above the environment. Defaults to empty.
     public init(
-        marketplaces: some MarketplaceLayerProviding, stack: DotfolderStack,
+        marketplaces: some MarketplaceLayerProviding, stack: DotfolderStack, mode: ToolMode,
         policy: RenderPolicy = RenderPolicy(), watch: Bool = false,
         templateContext: [String: TemplateValue] = [:]
     ) {
@@ -457,7 +488,8 @@ public struct SkillsRegistry: Sendable {
                         marketplaceLayers: marketplaces.marketplaceLayers(), localLayers: localLayers)
                 },
                 marketplaceUpdates: marketplaces.layerUpdates),
-            policy: policy, watch: watch, telemetry: SkillsTracing.Telemetry(), templateContext: templateContext)
+            mode: mode, policy: policy, watch: watch, telemetry: SkillsTracing.Telemetry(),
+            templateContext: templateContext)
     }
 
     /// Creates a `SkillsRegistry` over whatever computes its layers,
@@ -471,6 +503,9 @@ public struct SkillsRegistry: Sendable {
     /// - Parameters:
     ///   - source: How to compute the layers of each catalog generation,
     ///     and what makes them change.
+    ///   - mode: The mode of the tools of the host. In `ToolMode.sandboxed`
+    ///     a body render starts no process. It has no default: each host
+    ///     states its mode.
     ///   - policy: The render policy every render call this registry makes
     ///     honors.
     ///   - watch: Whether to watch every layer root and rebuild the catalog
@@ -480,12 +515,13 @@ public struct SkillsRegistry: Sendable {
     ///   - templateContext: The session template context of every render,
     ///     which pass 3 interpolates above the environment.
     private init(
-        source: LayerSource, policy: RenderPolicy, watch: Bool, telemetry: SkillsTracing.Telemetry,
-        templateContext: [String: TemplateValue]
+        source: LayerSource, mode: ToolMode, policy: RenderPolicy, watch: Bool,
+        telemetry: SkillsTracing.Telemetry, templateContext: [String: TemplateValue]
     ) {
         let plan = source.plan()
         layers = plan.layers
         self.policy = policy
+        self.mode = mode
         self.telemetry = telemetry
 
         catalogBox = CatalogBox(Self.loadCatalog(plan: plan, telemetry: telemetry))
@@ -496,7 +532,7 @@ public struct SkillsRegistry: Sendable {
         // of values. The session template context of the host sits above
         // the environment, thus an ambient variable never shadows it.
         pipeline = RenderPipeline(
-            argumentSubstitution: ArgumentSubstitution(), shellInjection: ShellInjection(),
+            argumentSubstitution: ArgumentSubstitution(), shellInjection: ShellInjection(mode: mode),
             stencil: StencilPass(
                 layers: plan.layers, environment: ProcessInfo.processInfo.environment,
                 templateContext: templateContext))
@@ -509,7 +545,8 @@ public struct SkillsRegistry: Sendable {
         // every rebuild through the exact same rendering path every other
         // reader uses, without duplicating any of it.
         let reader = SkillsRegistry(
-            catalogBox: catalogBox, pipeline: pipeline, policy: policy, layers: layers, telemetry: telemetry,
+            catalogBox: catalogBox, pipeline: pipeline, policy: policy, mode: mode, layers: layers,
+            telemetry: telemetry,
             reloadBroadcaster: broadcaster)
         let rebuilder = CatalogRebuilder(
             source: source, catalogBox: catalogBox, reader: reader, broadcaster: broadcaster, telemetry: telemetry)
@@ -609,15 +646,18 @@ public struct SkillsRegistry: Sendable {
     ///     view was built from.
     ///   - pipeline: The render pipeline to share.
     ///   - policy: The render policy to share.
+    ///   - mode: The tool mode to share.
     ///   - layers: The layers to share.
     ///   - telemetry: The telemetry to share.
     ///   - reloadBroadcaster: The `onReload` broadcaster to share.
     private init(
-        catalogBox: CatalogBox, pipeline: RenderPipeline, policy: RenderPolicy, layers: [DotfolderStack.Layer],
-        telemetry: SkillsTracing.Telemetry, reloadBroadcaster: EventBroadcaster<[SkillMetadata]>
+        catalogBox: CatalogBox, pipeline: RenderPipeline, policy: RenderPolicy, mode: ToolMode,
+        layers: [DotfolderStack.Layer], telemetry: SkillsTracing.Telemetry,
+        reloadBroadcaster: EventBroadcaster<[SkillMetadata]>
     ) {
         self.layers = layers
         self.policy = policy
+        self.mode = mode
         self.catalogBox = catalogBox
         self.pipeline = pipeline
         self.telemetry = telemetry
@@ -954,7 +994,8 @@ public struct SkillsRegistry: Sendable {
             return nil
         }
         if case .invalid(let message) = document.enablement {
-            diagnostics.append(Self.skipDiagnostic(discovered: discovered, marketplaces: marketplaces, message: message))
+            diagnostics.append(
+                Self.skipDiagnostic(discovered: discovered, marketplaces: marketplaces, message: message))
         }
         let result = SkillValidator.validate(
             discovered: discovered,
@@ -1400,7 +1441,8 @@ public struct SkillsRegistry: Sendable {
     /// alive.
     internal var detachedReader: SkillsRegistry {
         SkillsRegistry(
-            catalogBox: catalogBox, pipeline: pipeline, policy: policy, layers: layers, telemetry: telemetry,
+            catalogBox: catalogBox, pipeline: pipeline, policy: policy, mode: mode, layers: layers,
+            telemetry: telemetry,
             reloadBroadcaster: reloadBroadcaster)
     }
 

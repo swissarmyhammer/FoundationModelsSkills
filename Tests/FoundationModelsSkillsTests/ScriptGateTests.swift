@@ -4,7 +4,7 @@ import Testing
 
 @testable import FoundationModelsSkills
 
-/// Tests that the gates of `run script` read the host `RenderPolicy` and the
+/// Tests that the gates of `run script` read the tool mode of the context and the
 /// `allowed-tools` grant of the skill, and no property of the layer that
 /// gives the script.
 ///
@@ -50,14 +50,11 @@ struct ScriptGateTests {
     /// The commit of the snapshot of that marketplace.
     private static let marketplaceSHA = "sha-1"
 
-    /// The host policy that stops every script.
-    private static let scriptsDisabledPolicy = RenderPolicy(isScriptExecutionDisabled: true)
-
     /// A granted script runs, whichever layer gives it.
     @Test(arguments: LayerKind.allCases)
     func aGrantedScriptRuns(layer: LayerKind) async throws {
         let fixture = try Self.makeFixture(
-            skillGivenBy: layer, allowedTools: ResourceTestSupport.everyScriptGrant, policy: RenderPolicy())
+            skillGivenBy: layer, allowedTools: ResourceTestSupport.everyScriptGrant, mode: .open)
         defer { LayerFixtureSupport.removeDirectories(fixture.directories) }
 
         let output = try await RunScript(id: Self.skillID, path: Self.scriptPath).execute(in: fixture.context)
@@ -68,13 +65,11 @@ struct ScriptGateTests {
         #expect(result.exitCode == 0)
     }
 
-    /// A host policy that stops script execution stops the script, whichever
-    /// layer gives it.
+    /// The sandboxed mode stops the script, whichever layer gives it.
     @Test(arguments: LayerKind.allCases)
-    func aDisabledHostPolicyStopsAGrantedScript(layer: LayerKind) async throws {
+    func theSandboxedModeStopsAGrantedScript(layer: LayerKind) async throws {
         let fixture = try Self.makeFixture(
-            skillGivenBy: layer, allowedTools: ResourceTestSupport.everyScriptGrant,
-            policy: Self.scriptsDisabledPolicy)
+            skillGivenBy: layer, allowedTools: ResourceTestSupport.everyScriptGrant, mode: .sandboxed)
         defer { LayerFixtureSupport.removeDirectories(fixture.directories) }
 
         let output = try await RunScript(id: Self.skillID, path: Self.scriptPath).execute(in: fixture.context)
@@ -82,14 +77,14 @@ struct ScriptGateTests {
         let message = try #require(
             ResourceTestSupport.correctiveMessage(of: output),
             "expected a corrective outcome from \(layer), got \(output)")
-        #expect(message == "Script execution is disabled for this registry.", "\(layer)")
+        #expect(message == "Script execution is not available in the sandboxed mode.", "\(layer)")
     }
 
     /// A skill with no `allowed-tools` grant runs no script, whichever layer
     /// gives it.
     @Test(arguments: LayerKind.allCases)
     func aSkillWithNoGrantRunsNoScript(layer: LayerKind) async throws {
-        let fixture = try Self.makeFixture(skillGivenBy: layer, allowedTools: nil, policy: RenderPolicy())
+        let fixture = try Self.makeFixture(skillGivenBy: layer, allowedTools: nil, mode: .open)
         defer { LayerFixtureSupport.removeDirectories(fixture.directories) }
 
         let output = try await RunScript(id: Self.skillID, path: Self.scriptPath).execute(in: fixture.context)
@@ -120,12 +115,13 @@ struct ScriptGateTests {
     ///   - layer: Which layer of the registry gives the skill.
     ///   - allowedTools: The raw `allowed-tools:` value of the `SKILL.md`,
     ///     or `nil` for a skill with no grant.
-    ///   - policy: The render policy of the registry.
+    ///   - mode: The tool mode of the registry and the context.
     /// - Returns: The fixture.
     /// - Throws: Whatever the fixture writers of `ResourceTestSupport` and
-    ///   `WatcherTestSupport` throw.
+    ///   `WatcherTestSupport` throw, or whatever `SkillsToolContext.init`
+    ///   throws.
     private static func makeFixture(
-        skillGivenBy layer: LayerKind, allowedTools: String?, policy: RenderPolicy
+        skillGivenBy layer: LayerKind, allowedTools: String?, mode: ToolMode
     ) throws -> Fixture {
         let skillRoot = try WatcherTestSupport.makeTempDirectory()
         try ResourceTestSupport.writeMinimalSkillFile(id: Self.skillID, in: skillRoot, allowedTools: allowedTools)
@@ -135,13 +131,13 @@ struct ScriptGateTests {
         switch layer {
         case .local:
             return Fixture(
-                context: ResourceTestSupport.makeContext(roots: [skillRoot], policy: policy),
+                context: try ResourceTestSupport.makeContext(roots: [skillRoot], mode: mode),
                 directories: [skillRoot])
         case .marketplace:
             let localRoot = try WatcherTestSupport.makeTempDirectory()
             return Fixture(
-                context: Self.makeMarketplaceContext(
-                    marketplaceRoot: skillRoot, localRoot: localRoot, policy: policy),
+                context: try Self.makeMarketplaceContext(
+                    marketplaceRoot: skillRoot, localRoot: localRoot, mode: mode),
                 directories: [skillRoot, localRoot])
         }
     }
@@ -153,18 +149,19 @@ struct ScriptGateTests {
     /// - Parameters:
     ///   - marketplaceRoot: The layer root of the marketplace.
     ///   - localRoot: The root of the local project layer.
-    ///   - policy: The render policy of the registry.
+    ///   - mode: The tool mode of the registry and the context.
     /// - Returns: The assembled context.
+    /// - Throws: Whatever `SkillsToolContext.init` throws.
     private static func makeMarketplaceContext(
-        marketplaceRoot: URL, localRoot: URL, policy: RenderPolicy
-    ) -> SkillsToolContext {
+        marketplaceRoot: URL, localRoot: URL, mode: ToolMode
+    ) throws -> SkillsToolContext {
         var stack = DotfolderStack(name: "skills", workingDirectory: localRoot, environment: [:])
         stack.layers = [DotfolderStack.Layer(source: .project, root: localRoot)]
         let provider = FakeMarketplaceProvider(layers: [
             MarketplaceTestSupport.makeMarketplaceLayer(
                 root: marketplaceRoot, id: Self.marketplaceID, sha: Self.marketplaceSHA)
         ])
-        return ResourceTestSupport.makeContext(
-            registry: SkillsRegistry(marketplaces: provider, stack: stack, policy: policy))
+        return try ResourceTestSupport.makeContext(
+            registry: SkillsRegistry(marketplaces: provider, stack: stack, mode: mode))
     }
 }

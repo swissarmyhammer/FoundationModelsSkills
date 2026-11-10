@@ -218,7 +218,7 @@ struct SkillWriterTests {
     @Test func addInTheUserLayerOfARegistryOverBareRootsGivesACorrective() throws {
         let root = try WatcherTestSupport.makeTempDirectory()
         defer { LayerFixtureSupport.removeDirectories([root]) }
-        let writer = SkillWriter(registry: SkillsRegistry(roots: [root]))
+        let writer = SkillWriter(registry: SkillsRegistry(roots: [root], mode: .open))
 
         let outcome = try writer.add(name: Self.skillName, skillMarkdown: Self.markdown())
 
@@ -653,7 +653,7 @@ private struct WriterFixture {
         self.sources = sources
         directories = try LayerFixtureSupport.makeLayerDirectories(count: sources.count)
         registry = SkillsRegistry(
-            layers: zip(sources, directories).map { DotfolderStack.Layer(source: $0, root: $1) })
+            layers: zip(sources, directories).map { DotfolderStack.Layer(source: $0, root: $1) }, mode: .open)
     }
 
     /// Removes each layer folder.

@@ -55,26 +55,24 @@ struct MarketplaceRegistryTests {
         #expect(body.contains("first marketplace body"))
     }
 
-    // MARK: - Shell injection under the host policy
+    // MARK: - Shell injection under the tool mode
 
-    @Test func aMarketplaceSkillRunsItsShellInjectionUnderAPermissiveHostPolicy() async throws {
+    @Test func aMarketplaceSkillRunsItsShellInjectionInTheOpenMode() async throws {
         let fixture = try Fixture(localBody: nil, winningMarketplaceBody: Self.shellBody)
         let registry = fixture.makeRegistry()
 
         let body = try await registry.call(id: Self.sharedSkillID)
 
-        #expect(body.contains(Self.shellOutput))
-        #expect(!body.contains(ShellInjection.disabledMarker))
+        #expect(body == "Greeting: \(Self.shellOutput)\n")
     }
 
-    @Test func aHostPolicyThatDisablesTheShellStopsAMarketplaceSkillInjection() async throws {
+    @Test func theSandboxedModeLeavesTheShellInjectionOfAMarketplaceSkillUnchanged() async throws {
         let fixture = try Fixture(localBody: nil, winningMarketplaceBody: Self.shellBody)
-        let registry = fixture.makeRegistry(policy: RenderPolicy(isShellExecutionDisabled: true))
+        let registry = fixture.makeRegistry(mode: .sandboxed)
 
         let body = try await registry.call(id: Self.sharedSkillID)
 
-        #expect(body.contains(ShellInjection.disabledMarker))
-        #expect(!body.contains(Self.shellOutput))
+        #expect(body == Self.shellBody + "\n")
     }
 
     // MARK: - Shadow message
@@ -190,13 +188,13 @@ struct MarketplaceRegistryTests {
         /// Builds a registry over the provider and a stack whose only layer
         /// is the local project root.
         ///
-        /// - Parameter policy: The host render policy. The default is the
-        ///   permissive `RenderPolicy()`.
+        /// - Parameter mode: The tool mode of the host. The default is
+        ///   `ToolMode.open`.
         /// - Returns: The registry, with watching off.
-        func makeRegistry(policy: RenderPolicy = RenderPolicy()) -> SkillsRegistry {
+        func makeRegistry(mode: ToolMode = .open) -> SkillsRegistry {
             var stack = DotfolderStack(name: "skills", workingDirectory: localRoot, environment: [:])
             stack.layers = [DotfolderStack.Layer(source: .project, root: localRoot)]
-            return SkillsRegistry(marketplaces: provider, stack: stack, policy: policy)
+            return SkillsRegistry(marketplaces: provider, stack: stack, mode: mode)
         }
 
         /// Rewrites the shared skill in the second marketplace root and

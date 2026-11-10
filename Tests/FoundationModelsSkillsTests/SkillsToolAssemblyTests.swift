@@ -27,6 +27,9 @@ struct SkillsToolAssemblyTests {
     /// embedder makes the cosine signal score something.
     private static let cosineOnlyQuery = "xqzjvw"
 
+    /// The op string of the `run script` operation.
+    private static let runScriptOp = "run script"
+
     /// The fixture skill the cosine and selection doubles both point at.
     private static let alignedSkillID = "commit"
 
@@ -42,6 +45,22 @@ struct SkillsToolAssemblyTests {
         let ids = try await Self.searchIDs(through: tool, query: Self.alignedSkillID)
 
         #expect(ids.first == Self.alignedSkillID)
+    }
+
+    // MARK: - The tool mode of the registry
+
+    @Test func theFactoryOverAnOpenRegistryHasRunScript() async throws {
+        let tool = try await SkillsTool.make(registry: Self.makeFixtureRegistry())
+
+        #expect(tool.operations.map(\.opString).contains(Self.runScriptOp))
+    }
+
+    @Test func theFactoryOverASandboxedRegistryHasNoRunScript() async throws {
+        let registry = SkillsRegistry(stack: FixtureLibrary.stack(), mode: .sandboxed)
+
+        let tool = try await SkillsTool.make(registry: registry)
+
+        #expect(!tool.operations.map(\.opString).contains(Self.runScriptOp))
     }
 
     // MARK: - The injected model backs selection
@@ -197,7 +216,7 @@ struct SkillsToolAssemblyTests {
         defer { try? FileManager.default.removeItem(at: root) }
         let model = ScriptedLanguageModel(Self.proseAnswer)
 
-        let tool = try await SkillsTool.make(registry: SkillsRegistry(roots: [root]), model: model)
+        let tool = try await SkillsTool.make(registry: SkillsRegistry(roots: [root], mode: .open), model: model)
         let answer = try await Self.searchText(through: tool, query: Self.anyQuery)
 
         #expect(answer == "No skills are available.")
@@ -282,7 +301,7 @@ struct SkillsToolAssemblyTests {
     ///
     /// - Returns: The registry every case in this suite hands to a factory.
     private static func makeFixtureRegistry() -> SkillsRegistry {
-        SkillsRegistry(stack: FixtureLibrary.stack())
+        SkillsRegistry(stack: FixtureLibrary.stack(), mode: .open)
     }
 
     /// The answer the selection cases give to their `ScriptedLanguageModel`:

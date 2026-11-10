@@ -58,7 +58,8 @@ struct ReadmeExampleTests {
             workingDirectory: projectDirectory,
             defaultsDirectory: shippedSkillsURL,
             userDirectory: userConfigURL)
-        let registry = SkillsRegistry(stack: stack, watch: true)
+        // `.open` runs shell injection and scripts. An App Sandbox host gives `.sandboxed`.
+        let registry = SkillsRegistry(stack: stack, mode: .open, watch: true)
 
         // One fused tool for the full catalog: search, list, use, resources, scripts.
         // The model you supply runs the selection tier. Nothing is hardcoded.
@@ -90,7 +91,7 @@ struct ReadmeExampleTests {
     /// the README names. `SkillsToolAssemblyTests` imports `Operations`,
     /// thus it shows nothing about the import surface a host lives with.
     @Test func theNoModelFormOfTheFactoryRanksTheFixtureCatalogWithNoModel() async throws {
-        let registry = SkillsRegistry(stack: FixtureLibrary.stack())
+        let registry = SkillsRegistry(stack: FixtureLibrary.stack(), mode: .open)
 
         let skillsTool = try await SkillsTool.make(registry: registry)
         let answer = try await skillsTool.call(

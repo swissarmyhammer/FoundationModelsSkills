@@ -42,27 +42,25 @@ import FoundationModelsExtras
 /// by pipeline composition, since `RenderRequest` carries no body-vs-metadata flag for this pass
 /// to check itself.
 ///
+/// **Only in the open mode.** In `ToolMode.sandboxed` the pass starts no process: it returns its input
+/// with each injection site unchanged, thus a body keeps its `` !`command` `` and ` ```! ` text as
+/// the author wrote it. A process that the App Sandbox holds cannot run the commands of a skill, thus
+/// the pass does not try.
+///
 /// **macOS only** -- this package's platform floor already excludes iOS at the
 /// manifest level, so no `#if os(macOS)` guard is needed in this file itself.
 public struct ShellInjection: ShellRenderPass {
     /// The inert text an injection site is replaced with instead of the output of its command,
     /// naming the reason.
     ///
-    /// One shape serves every reason, thus a body reads the same whichever limit or policy
-    /// stopped the command, and a host that scans a rendered body reads one form.
+    /// One shape serves every reason, thus a body reads the same whichever limit stopped the
+    /// command, and a host that scans a rendered body reads one form.
     ///
     /// - Parameter reason: Why the site carries no output.
     /// - Returns: The marker text.
     private static func marker(reason: String) -> String {
         "[shell execution \(reason)]"
     }
-
-    /// The inert text every injection site is replaced with instead of running anything.
-    ///
-    /// Substituted when `RenderPolicy.isShellExecutionDisabled` is `true`; shared by both
-    /// recognized forms (inline and fenced) -- neither is treated differently under the
-    /// disabled policy.
-    public static let disabledMarker = marker(reason: "disabled")
 
     /// The inert text an injection site carries when its command passed
     /// `RenderPolicy.shellCommandTimeout` and the runner killed its whole process group.
@@ -78,11 +76,19 @@ public struct ShellInjection: ShellRenderPass {
     /// body goes on.
     public static let outputOverTheLimitMarker = marker(reason: "output over the limit")
 
+    /// The mode of the tools of the host. In `ToolMode.sandboxed` the pass starts no process.
+    ///
+    /// Immutable: `SkillsRegistry` builds the pass one time, with its own mode, thus each render
+    /// of one registry honors the same mode.
+    public let mode: ToolMode
+
     /// Creates a `ShellInjection` pass.
     ///
-    /// Takes no configuration -- every instance behaves identically, driven entirely by the
-    /// `RenderRequest` each `render(_:request:)` call receives.
-    public init() {}
+    /// - Parameter mode: The mode of the tools of the host. In `ToolMode.open` the pass runs
+    ///   each command; in `ToolMode.sandboxed` it leaves each injection site unchanged.
+    public init(mode: ToolMode) {
+        self.mode = mode
+    }
 
     /// Executes every recognized `` !`command` ``/fenced ` ```! ` injection in `text`, inlining
     /// each command's merged, trimmed output at its injection site.
@@ -97,15 +103,16 @@ public struct ShellInjection: ShellRenderPass {
     ///   - text: The input text to scan -- pass 1's output, since this pass always runs second
     ///     in the body pass-set (`RenderPipeline.renderBody`).
     ///   - request: The render request this pass runs under; `skillDirectory` supplies the
-    ///     working directory every command runs in, and `policy.isShellExecutionDisabled` gates
-    ///     whether anything runs at all.
-    /// - Returns: `text` with every recognized injection (found within an `.original` span)
-    ///   replaced by its command's output (or, under a disabled policy or a limit the command
-    ///   passed, by the matching marker), quarantined.
+    ///     working directory every command runs in, and `policy` supplies the limits of each
+    ///     command.
+    /// - Returns: In `ToolMode.open`, `text` with every recognized injection (found within an
+    ///   `.original` span) replaced by its command's output (or, for a limit the command passed,
+    ///   by the matching marker), quarantined. In `ToolMode.sandboxed`, `text` unchanged.
     /// - Throws: `ProcessRunner.Failure` when a command never reached exec -- for example when
     ///   `request.skillDirectory` does not exist.
     public func render(_ text: QuarantinedText, request: RenderRequest) async throws -> QuarantinedText {
-        try await text.mappingOriginalSpans(awaiting: { spanText, precedingCharacter in
+        guard mode == .open else { return text }
+        return try await text.mappingOriginalSpans(awaiting: { spanText, precedingCharacter in
             try await Self.injectedSpans(in: spanText, precededBy: precedingCharacter, request: request)
         })
     }
@@ -129,7 +136,7 @@ public struct ShellInjection: ShellRenderPass {
     ///   - request: The render request this pass runs under.
     /// - Returns: The spans that replace `text`: literal runs as `.original`, every command's
     ///   output (or the marker that stands in its place) as its own `.quarantined` span.
-    /// - Throws: Whatever `resolvedOutput(forCommand:request:)` throws.
+    /// - Throws: Whatever `run(command:workingDirectory:policy:)` throws.
     private static func injectedSpans(
         in text: String, precededBy precedingCharacter: Character?, request: RenderRequest
     ) async throws -> [QuarantinedText.Span] {
@@ -144,7 +151,9 @@ public struct ShellInjection: ShellRenderPass {
             builder.appendOriginal(scanned[lastEnd..<matchRange.lowerBound])
             lastEnd = matchRange.upperBound
             let command = Self.command(from: match, in: scanned)
-            builder.appendQuarantined(try await Self.resolvedOutput(forCommand: command, request: request))
+            builder.appendQuarantined(
+                try await Self.run(
+                    command: command, workingDirectory: request.skillDirectory, policy: request.policy))
         }
         builder.appendOriginal(scanned[lastEnd...])
         return builder.finish()
@@ -208,24 +217,6 @@ public struct ShellInjection: ShellRenderPass {
     ]
 
     // MARK: - Execution
-
-    /// Resolves one recognized `command`'s substitution: `disabledMarker` under a disabled
-    /// policy, the marker of the limit the command passed, or that command's actual merged,
-    /// trimmed output.
-    ///
-    /// - Parameters:
-    ///   - command: The shell command text captured from either injection form.
-    ///   - request: The render request this pass runs under; `policy.isShellExecutionDisabled`
-    ///     gates execution, the two limits of the policy bound the run, and `skillDirectory`
-    ///     supplies the working directory when it runs.
-    /// - Returns: `disabledMarker`, `timedOutMarker`, `outputOverTheLimitMarker`, or `command`'s
-    ///   captured output.
-    /// - Throws: Whatever `run(command:workingDirectory:policy:)` throws.
-    private static func resolvedOutput(forCommand command: String, request: RenderRequest) async throws -> String {
-        guard !request.policy.isShellExecutionDisabled else { return disabledMarker }
-        return try await run(
-            command: command, workingDirectory: request.skillDirectory, policy: request.policy)
-    }
 
     /// The shell every recognized command runs under.
     private static let shellURL = URL(fileURLWithPath: "/bin/sh")

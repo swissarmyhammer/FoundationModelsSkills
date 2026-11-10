@@ -41,7 +41,7 @@ struct HotReloadTests {
         defer { try? FileManager.default.removeItem(at: root) }
         try ReloadTestSupport.writeSkillFile(id: "alpha", in: root, descriptionSuffix: "v1")
 
-        let registry = SkillsRegistry(roots: [root], watch: true)
+        let registry = SkillsRegistry(roots: [root], mode: .open, watch: true)
         let embedGate = EmbedGate()
         let embedder = FakeEmbedder(vectorLength: 2, gate: embedGate)
         let diagnostics = Recorder<MetadataDiagnostic>()
@@ -64,7 +64,8 @@ struct HotReloadTests {
         let subscription = Self.subscribe(registry, forwardingTo: agent, recordingInto: updates)
         defer { subscription.cancel() }
 
-        let tool = try SkillsTool.make(context: SkillsToolContext(registry: registry, searchAgent: agent))
+        let tool = try SkillsTool.make(
+            context: try SkillsToolContext(registry: registry, searchAgent: agent, mode: registry.mode))
         let schemaBefore = String(describing: tool.parameters)
 
         let preloadedAfterAdd = try await Self.stepOneAdd(
@@ -96,7 +97,7 @@ struct HotReloadTests {
         defer { try? FileManager.default.removeItem(at: root) }
         try ReloadTestSupport.writeSkillFile(id: "alpha", in: root, descriptionSuffix: "v1")
 
-        let registry = SkillsRegistry(roots: [root], watch: true)
+        let registry = SkillsRegistry(roots: [root], mode: .open, watch: true)
         let model = ScriptedLanguageModel(#"{"ids":["alpha"]}"#, #"{"ids":["bravo"]}"#)
         let searcher = MetadataSearcher(
             items: registry.metadata().filter(\.isModelVisible), mode: .selection,
@@ -228,7 +229,8 @@ struct HotReloadTests {
         let countAfterRealEdit = embedder.embeddedTextCount
         #expect(
             countAfterRealEdit == countBeforeEdit + 1,
-            "only the changed, searcher-visible item should re-embed -- charlie is model-hidden and never reaches the embedder")
+            "only the changed, searcher-visible item should re-embed -- charlie is model-hidden and never reaches the embedder"
+        )
 
         let preloadedAfterEdit = await registry.preloadedBodies()
         #expect(preloadedAfterEdit.contains("Preload payload v2 for charlie."))
@@ -393,7 +395,8 @@ struct HotReloadTests {
     /// - Returns: The subscription task; the caller cancels it once done
     ///   observing.
     private static func subscribe(
-        _ registry: SkillsRegistry, forwardingTo agent: SkillSearchAgent, recordingInto recorder: ReloadTestSupport.EventTally
+        _ registry: SkillsRegistry, forwardingTo agent: SkillSearchAgent,
+        recordingInto recorder: ReloadTestSupport.EventTally
     ) -> Task<Void, Never> {
         ReloadTestSupport.forward(registry.onReload, to: agent, recordingInto: recorder)
     }

@@ -1,7 +1,8 @@
 import FoundationModels
-@testable import FoundationModelsSkills
 import Operations
 import Testing
+
+@testable import FoundationModelsSkills
 
 /// Tests for the answers of `search skill` and `list skill` through the fused
 /// `skills` tool.
@@ -174,7 +175,7 @@ struct SearchListPlainTextTests {
     ///
     /// - Returns: The registry that the tool and the expected text share.
     private static func makeFixtureRegistry() -> SkillsRegistry {
-        SkillsRegistry(stack: FixtureLibrary.stack())
+        SkillsRegistry(stack: FixtureLibrary.stack(), mode: .open)
     }
 
     /// Builds the fused tool with a selection double that chooses
@@ -200,7 +201,8 @@ struct SearchListPlainTextTests {
     /// - Returns: One line for each id.
     private static func skillLines(ids: [String], in registry: SkillsRegistry) -> String {
         let descriptions = Dictionary(uniqueKeysWithValues: registry.metadata().map { ($0.id, $0.description) })
-        return ids
+        return
+            ids
             .map { SkillCatalogText.line(id: $0, description: SkillCatalogText.oneLine(descriptions[$0] ?? "")) }
             .joined(separator: SkillCatalogText.lineBreak)
     }

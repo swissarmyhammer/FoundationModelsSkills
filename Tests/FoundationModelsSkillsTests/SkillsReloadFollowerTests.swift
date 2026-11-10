@@ -55,7 +55,7 @@ struct SkillsReloadFollowerTests {
         defer { try? FileManager.default.removeItem(at: root) }
         try ReloadTestSupport.writeSkillFile(id: Self.seededSkillID, in: root)
 
-        let tool = try await SkillsTool.make(registry: SkillsRegistry(roots: [root], watch: true))
+        let tool = try await SkillsTool.make(registry: SkillsRegistry(roots: [root], mode: .open, watch: true))
         try ReloadTestSupport.writeSkillFile(id: Self.reloadedSkillID, in: root)
 
         let answer = try await Self.searchOnceReloaded(through: tool, query: Self.reloadedSkillID) {
@@ -76,7 +76,7 @@ struct SkillsReloadFollowerTests {
         try ReloadTestSupport.writeSkillFile(id: Self.seededSkillID, in: root)
         try ReloadTestSupport.writeSkillFile(id: Self.reloadedSkillID, in: root)
 
-        let tool = try await SkillsTool.make(registry: SkillsRegistry(roots: [root], watch: true))
+        let tool = try await SkillsTool.make(registry: SkillsRegistry(roots: [root], mode: .open, watch: true))
         let seeded = try await Self.searchText(through: tool, query: Self.reloadedSkillID)
         #expect(
             Self.lists(Self.reloadedSkillID, in: seeded),
@@ -99,7 +99,7 @@ struct SkillsReloadFollowerTests {
         defer { try? FileManager.default.removeItem(at: root) }
         try ReloadTestSupport.writeSkillFile(id: Self.seededSkillID, in: root)
 
-        let unwatched = await Self.makeContext(registry: SkillsRegistry(roots: [root], watch: false))
+        let unwatched = try await Self.makeContext(registry: SkillsRegistry(roots: [root], mode: .open, watch: false))
 
         #expect(unwatched.reloadFollower != nil, "reload() rebuilds a registry that does not watch")
     }
@@ -109,8 +109,8 @@ struct SkillsReloadFollowerTests {
         defer { try? FileManager.default.removeItem(at: root) }
         try ReloadTestSupport.writeSkillFile(id: Self.seededSkillID, in: root)
 
-        let context = await Self.makeContext(
-            registry: SkillsRegistry(roots: [root], watch: true), followReloads: false)
+        let context = try await Self.makeContext(
+            registry: SkillsRegistry(roots: [root], mode: .open, watch: true), followReloads: false)
 
         #expect(context.reloadFollower == nil, "a host that pumps the stream itself must get no follower")
     }
@@ -161,10 +161,12 @@ struct SkillsReloadFollowerTests {
     ///   - followReloads: Whether the assembly builds a follower. Defaults
     ///     to `true`, the factories' own default.
     /// - Returns: The assembled context.
+    /// - Throws: Whatever `SkillsTool.makeContext` throws for the mode of
+    ///   `registry`.
     private static func makeContext(
         registry: SkillsRegistry, followReloads: Bool = true
-    ) async -> SkillsToolContext {
-        await SkillsTool.makeContext(
+    ) async throws -> SkillsToolContext {
+        try await SkillsTool.makeContext(
             registry: registry,
             mode: .retrieval,
             embedder: nil,

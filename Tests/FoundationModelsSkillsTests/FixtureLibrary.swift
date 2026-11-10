@@ -56,7 +56,7 @@ enum FixtureLibrary {
     /// hermetic.
     ///
     /// - Parameter thisFile: Forwarded to `root(thisFile:)`.
-    /// - Returns: The fixture stack, ready for `SkillsRegistry(stack:)`.
+    /// - Returns: The fixture stack, ready for `SkillsRegistry(stack:mode:)`.
     static func stack(thisFile: String = #filePath) -> DotfolderStack {
         let libraryRoot = root(thisFile: thisFile)
         return DotfolderStack(
@@ -176,10 +176,14 @@ enum FixtureLibrary {
     /// (a registry the CLI test also drives directly), so the two suites'
     /// dispatch-context construction can never drift.
     ///
+    /// The context gets the mode of `registry`.
+    ///
     /// - Parameter registry: The registry the resulting context wraps.
     /// - Returns: The assembled context.
-    static func makeSkillsToolContext(registry: SkillsRegistry) -> SkillsToolContext {
+    /// - Throws: Whatever `SkillsToolContext.init` throws.
+    static func makeSkillsToolContext(registry: SkillsRegistry) throws -> SkillsToolContext {
         let searcher = MetadataSearcher(items: registry.metadata().filter(\.isModelVisible))
-        return SkillsToolContext(registry: registry, searchAgent: SkillSearchAgent(searcher: searcher))
+        return try SkillsToolContext(
+            registry: registry, searchAgent: SkillSearchAgent(searcher: searcher), mode: registry.mode)
     }
 }

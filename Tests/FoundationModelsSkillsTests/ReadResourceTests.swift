@@ -84,7 +84,7 @@ struct ReadResourceTests {
         defer { try? FileManager.default.removeItem(at: root) }
         let skillDirectory = try ResourceTestSupport.writeMinimalSkillFile(id: id, in: root)
         try prepare(skillDirectory)
-        let context = ResourceTestSupport.makeContext(roots: [root])
+        let context = try ResourceTestSupport.makeContext(roots: [root])
         return try await ReadResource(id: id, path: path, start: start).execute(in: context)
     }
 
@@ -142,7 +142,7 @@ struct ReadResourceTests {
     @Test func readResourceOnAMissingFileDrawsTheUnreadableCorrective() async throws {
         // No file at all is what fails the `fileSize(at:)` stat guard; a
         // dangling link stats to the link's own size and fails at the open.
-        let context = ResourceTestSupport.makeContext(roots: [ResourceTestSupport.projectSkillsRoot])
+        let context = try ResourceTestSupport.makeContext(roots: [ResourceTestSupport.projectSkillsRoot])
 
         let output = try await ReadResource(id: Self.sampleID, path: "references/missing.md").execute(in: context)
 
@@ -237,7 +237,7 @@ struct ReadResourceTests {
     /// gives the same content as the relative read, and the result names the
     /// relative path.
     @Test func anAbsoluteReadGivesTheResultOfTheRelativeRead() async throws {
-        let context = ResourceTestSupport.makeContext(roots: [ResourceTestSupport.projectSkillsRoot])
+        let context = try ResourceTestSupport.makeContext(roots: [ResourceTestSupport.projectSkillsRoot])
 
         let relativeOutput = try await ReadResource(id: Self.sampleID, path: Self.samplePath).execute(in: context)
         let absoluteOutput = try await ReadResource(id: Self.sampleID, path: Self.absoluteSamplePath)
@@ -271,7 +271,7 @@ struct ReadResourceTests {
 
     /// The denied corrective names the path that the model gave.
     @Test func anAbsolutePathOutsideTheSkillDrawsTheDeniedCorrective() async throws {
-        let context = ResourceTestSupport.makeContext(roots: [ResourceTestSupport.projectSkillsRoot])
+        let context = try ResourceTestSupport.makeContext(roots: [ResourceTestSupport.projectSkillsRoot])
         let path = ResourceTestSupport.systemFilePath
 
         let output = try await ReadResource(id: Self.sampleID, path: path).execute(in: context)
@@ -290,7 +290,7 @@ struct ReadResourceTests {
     /// The read of a binary file gives the absolute path of the winning copy.
     /// That path, given back as `path`, gives the same binary result.
     @Test func theAbsolutePathOfABinaryReadGivesTheSameBinaryResult() async throws {
-        let context = ResourceTestSupport.makeContext(roots: [ResourceTestSupport.projectSkillsRoot])
+        let context = try ResourceTestSupport.makeContext(roots: [ResourceTestSupport.projectSkillsRoot])
 
         let firstOutput = try await ReadResource(id: Self.sampleID, path: Self.binaryAssetPath).execute(in: context)
         let firstResult = try #require(ResourceTestSupport.successResult(of: firstOutput))

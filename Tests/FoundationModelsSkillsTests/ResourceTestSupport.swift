@@ -1,4 +1,5 @@
 import Foundation
+import FoundationModelsExtras
 import FoundationModelsMetadataRegistry
 import FoundationModelsSkills
 
@@ -19,7 +20,7 @@ import FoundationModelsSkills
 /// `SkillOverlayTests` and `ResourceIDLookupTests` use them, thus no file keeps
 /// a copy.
 enum ResourceTestSupport {
-    /// Builds a `SkillsToolContext` over `roots`, under `policy`.
+    /// Builds a `SkillsToolContext` over `roots`, in `mode`, under `policy`.
     ///
     /// Wraps a real, GPU-free `.retrieval`-mode `MetadataSearcher` standing
     /// in for the stub-searcher context the resource/run-script op tests
@@ -28,22 +29,31 @@ enum ResourceTestSupport {
     ///
     /// - Parameters:
     ///   - roots: The registry roots to build over.
+    ///   - mode: The tool mode of the registry and the context. Defaults to
+    ///     `ToolMode.open`.
     ///   - policy: The render policy the registry is constructed with.
-    ///     Defaults to the permissive `RenderPolicy()`.
+    ///     Defaults to the default `RenderPolicy()`.
     /// - Returns: The assembled context.
-    static func makeContext(roots: [URL], policy: RenderPolicy = RenderPolicy()) -> SkillsToolContext {
-        makeContext(registry: SkillsRegistry(roots: roots, policy: policy))
+    /// - Throws: Whatever `SkillsToolContext.init` throws.
+    static func makeContext(
+        roots: [URL], mode: ToolMode = .open, policy: RenderPolicy = RenderPolicy()
+    ) throws -> SkillsToolContext {
+        try makeContext(registry: SkillsRegistry(roots: roots, mode: mode, policy: policy))
     }
 
     /// Builds a `SkillsToolContext` over an already-built registry -- what a
-    /// test that needs a registry shape `makeContext(roots:policy:)` cannot
-    /// build (a marketplace-backed one, e.g.) calls.
+    /// test that needs a registry shape `makeContext(roots:mode:policy:)`
+    /// cannot build (a marketplace-backed one, e.g.) calls.
+    ///
+    /// The context gets the mode of `registry`.
     ///
     /// - Parameter registry: The registry the context dispatches against.
     /// - Returns: The assembled context.
-    static func makeContext(registry: SkillsRegistry) -> SkillsToolContext {
+    /// - Throws: Whatever `SkillsToolContext.init` throws.
+    static func makeContext(registry: SkillsRegistry) throws -> SkillsToolContext {
         let searcher = MetadataSearcher(items: registry.metadata().filter(\.isModelVisible))
-        return SkillsToolContext(registry: registry, searchAgent: SkillSearchAgent(searcher: searcher))
+        return try SkillsToolContext(
+            registry: registry, searchAgent: SkillSearchAgent(searcher: searcher), mode: registry.mode)
     }
 
     /// The `allowed-tools:` value that pre-approves every script of a skill.

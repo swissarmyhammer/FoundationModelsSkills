@@ -161,7 +161,7 @@ extension SkillsTool {
         catalogCharacterLimit: Int,
         visibilityPredicate: @escaping @Sendable (SkillMetadata) -> Bool
     ) async throws -> SkillsCatalogTool {
-        let context = await makeContext(
+        let context = try await makeContext(
             registry: registry,
             mode: mode,
             embedder: embedder,
@@ -192,6 +192,9 @@ extension SkillsTool {
     /// publishes on `onReload`, also with `watch: false`, since `reload()`
     /// rebuilds it.
     ///
+    /// The context gets the tool mode of `registry`, thus the tool and the
+    /// body renders of the registry share one mode.
+    ///
     /// The context also gets a `SkillsCatalogNoticeFollower`, on a reload
     /// stream of its own. `followReloads` does not change that: it only says
     /// who pumps the search agent. The notice
@@ -212,6 +215,8 @@ extension SkillsTool {
     ///   - visibilityPredicate: Which catalog entries the assembled tool
     ///     presents.
     /// - Returns: The assembled context.
+    /// - Throws: Whatever `SkillsToolContext.init` throws for the mode of
+    ///   `registry`.
     internal static func makeContext(
         registry: SkillsRegistry,
         mode: SearchMode,
@@ -219,7 +224,7 @@ extension SkillsTool {
         selection: SelectionConfig?,
         followReloads: Bool,
         visibilityPredicate: @escaping @Sendable (SkillMetadata) -> Bool
-    ) async -> SkillsToolContext {
+    ) async throws -> SkillsToolContext {
         let reloads = followReloads ? registry.onReload : nil
         let catalogReloads = registry.onReload
         let index = await MetadataIndex.build(
@@ -233,9 +238,10 @@ extension SkillsTool {
             searcher: searcher, retrievalFallback: retrievalFallback, visibilityPredicate: visibilityPredicate)
         let noticeFollower = SkillsCatalogNoticeFollower(
             reloads: catalogReloads, seed: registry.metadata(), visibilityPredicate: visibilityPredicate)
-        return SkillsToolContext(
+        return try SkillsToolContext(
             registry: registry,
             searchAgent: agent,
+            mode: registry.mode,
             visibilityPredicate: visibilityPredicate,
             reloadFollower: reloads.map { SkillsReloadFollower(reloads: $0, agent: agent) },
             catalogNoticeFollower: noticeFollower)

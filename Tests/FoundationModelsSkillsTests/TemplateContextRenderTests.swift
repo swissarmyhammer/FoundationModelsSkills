@@ -51,7 +51,7 @@ struct TemplateContextRenderTests {
             "\(skillID)/\(referencePath)": reference,
         ])
         let registry = SkillsRegistry(
-            layers: [DotfolderStack.Layer(source: .project, root: root)], templateContext: templateContext)
+            layers: [DotfolderStack.Layer(source: .project, root: root)], mode: .open, templateContext: templateContext)
         return (registry, root)
     }
 
@@ -103,7 +103,8 @@ struct TemplateContextRenderTests {
     }
 
     @Test func aContextValueBeatsAnEnvironmentValueOfTheSameName() throws {
-        let pass = StencilPass(environment: ["HOME": "/from/environment"], templateContext: ["HOME": .string("context")])
+        let pass = StencilPass(
+            environment: ["HOME": "/from/environment"], templateContext: ["HOME": .string("context")])
         let request = RenderRequest(
             text: "{{ HOME }}", skillDirectory: URL(fileURLWithPath: "/tmp/skill", isDirectory: true),
             winningLayer: DotfolderStack.Layer(source: .project, root: URL(fileURLWithPath: "/tmp", isDirectory: true)),

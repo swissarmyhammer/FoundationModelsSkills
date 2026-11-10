@@ -252,7 +252,7 @@ struct StencilPassTests {
             layers: [
                 DotfolderStack.Layer(source: .defaults, root: defaultsRoot),
                 DotfolderStack.Layer(source: .project, root: projectRoot),
-            ])
+            ], mode: .open)
 
         #expect(try await registry.call(id: "trusted-tag") == "no")
 
@@ -272,7 +272,7 @@ struct StencilPassTests {
         // `init(roots:)` (no labels) must keep today's all-untrusted
         // behavior, even for a root that would render trusted if labeled
         // `.defaults`.
-        let registry = SkillsRegistry(roots: [root])
+        let registry = SkillsRegistry(roots: [root], mode: .open)
 
         do {
             _ = try await registry.call(id: "untrusted-tag")
@@ -298,7 +298,7 @@ struct StencilPassTests {
             layers: [
                 DotfolderStack.Layer(source: .project, root: lowPrecedenceRoot),
                 DotfolderStack.Layer(source: .project, root: highPrecedenceRoot),
-            ])
+            ], mode: .open)
 
         #expect(try await registry.call(id: "dotfolder-probe") == "high-precedence")
     }
@@ -320,7 +320,7 @@ struct StencilPassTests {
         // from repointing the stack's layers at real host directories.
         let stack = DotfolderStack(
             name: stackName, workingDirectory: workingDirectory, userDirectory: userDirectory, environment: [:])
-        let registry = SkillsRegistry(stack: stack)
+        let registry = SkillsRegistry(stack: stack, mode: .open)
 
         #expect(try await registry.call(id: "dotfolder-probe") == stackName)
     }

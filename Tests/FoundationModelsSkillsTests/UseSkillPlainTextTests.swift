@@ -219,9 +219,8 @@ struct UseSkillPlainTextTests {
         #expect(!renderedBody.contains(Self.deletedPlanDocument))
     }
 
-    @Test func aDisabledScriptPolicyGivesNoRunCall() async throws {
-        let registry = SkillsRegistry(
-            roots: [ResourceTestSupport.projectSkillsRoot], policy: RenderPolicy(isScriptExecutionDisabled: true))
+    @Test func theSandboxedModeGivesNoRunCall() async throws {
+        let registry = SkillsRegistry(roots: [ResourceTestSupport.projectSkillsRoot], mode: .sandboxed)
         let tool = try Self.makeTool(registry: registry)
         let renderedBody = try await registry.call(id: Self.releaseNotesSkillID, arguments: [])
 
@@ -237,7 +236,7 @@ struct UseSkillPlainTextTests {
         try LayerFixtureSupport.writeTextFile(
             at: Self.generatedReferencePath,
             in: directories[0].appendingPathComponent(Self.generatedSkillID, isDirectory: true))
-        let registry = SkillsRegistry(roots: directories)
+        let registry = SkillsRegistry(roots: directories, mode: .open)
 
         let answer = try await Self.useAnswer(id: Self.generatedSkillID, registry: registry)
 
@@ -252,7 +251,7 @@ struct UseSkillPlainTextTests {
         try LayerFixtureSupport.writeTextFile(
             at: Self.generatedReferencePath, in: lower.appendingPathComponent(Self.generatedSkillID, isDirectory: true))
         try ResourceTestSupport.writeMinimalSkillFile(id: Self.generatedSkillID, in: higher)
-        let registry = SkillsRegistry(roots: [lower, higher])
+        let registry = SkillsRegistry(roots: [lower, higher], mode: .open)
 
         let answer = try await Self.useAnswer(id: Self.generatedSkillID, registry: registry)
 
@@ -269,7 +268,7 @@ struct UseSkillPlainTextTests {
         for path in paths {
             try LayerFixtureSupport.writeTextFile(at: path, in: skillDirectory)
         }
-        let registry = SkillsRegistry(roots: directories)
+        let registry = SkillsRegistry(roots: directories, mode: .open)
 
         let answer = try await Self.useAnswer(id: Self.generatedSkillID, registry: registry)
 
@@ -324,7 +323,7 @@ struct UseSkillPlainTextTests {
     ///
     /// - Returns: The registry that the tool and the expected body share.
     private static func makeFixtureRegistry() -> SkillsRegistry {
-        SkillsRegistry(roots: [FixtureLibrary.url(relativePath: "project/.skills")])
+        SkillsRegistry(roots: [FixtureLibrary.url(relativePath: "project/.skills")], mode: .open)
     }
 
     /// Builds the fused `skills` tool over `registry`, with the model-facing

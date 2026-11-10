@@ -109,7 +109,7 @@ struct MarketplaceProvenanceDisplayTests {
         func makeRegistry() -> SkillsRegistry {
             var stack = DotfolderStack(name: "skills", workingDirectory: localRoot, environment: [:])
             stack.layers = [DotfolderStack.Layer(source: .project, root: localRoot)]
-            return SkillsRegistry(marketplaces: provider, stack: stack)
+            return SkillsRegistry(marketplaces: provider, stack: stack, mode: .open)
         }
 
         /// Dispatches one `list skill` operation through the fused tool and

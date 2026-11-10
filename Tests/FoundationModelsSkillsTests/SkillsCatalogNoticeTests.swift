@@ -76,7 +76,8 @@ struct SkillsCatalogNoticeTests {
     func oneWriteThroughTheToolOfAWatchedRegistryPostsExactlyOneNotice() async throws {
         let root = try HotReloadTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
-        let registry = SkillsRegistry(layers: [DotfolderStack.Layer(source: .user, root: root)], watch: true)
+        let registry = SkillsRegistry(
+            layers: [DotfolderStack.Layer(source: .user, root: root)], mode: .open, watch: true)
         let tool = try await SkillsTool.make(registry: registry)
         let session = Session()
         session.mount(tool)
@@ -225,7 +226,7 @@ struct SkillsCatalogNoticeTests {
         let root = try HotReloadTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         try ReloadTestSupport.writeSkillFile(id: Self.seededSkillID, in: root)
-        let registry = SkillsRegistry(roots: [root])
+        let registry = SkillsRegistry(roots: [root], mode: .open)
         let seed = registry.metadata()
         let (reloads, publish) = AsyncStream.makeStream(of: [SkillMetadata].self)
         let session = Session()
@@ -236,9 +237,10 @@ struct SkillsCatalogNoticeTests {
                 reloads: reloads, seed: seed, visibilityPredicate: { $0.isModelVisible })
             board = follower.board
             let tool = try SkillsTool.make(
-                context: SkillsToolContext(
+                context: try SkillsToolContext(
                     registry: registry,
                     searchAgent: SkillSearchAgent(searcher: MetadataSearcher(items: seed, mode: .retrieval)),
+                    mode: registry.mode,
                     catalogNoticeFollower: follower))
             session.mount(tool)
             publish.yield(seed + [Self.visibleSkill(Self.firstAddedSkillID)])
@@ -259,7 +261,7 @@ struct SkillsCatalogNoticeTests {
         defer { try? FileManager.default.removeItem(at: root) }
         try ReloadTestSupport.writeSkillFile(id: Self.seededSkillID, in: root)
 
-        let unwatched = await Self.makeContext(registry: SkillsRegistry(roots: [root], watch: false))
+        let unwatched = try await Self.makeContext(registry: SkillsRegistry(roots: [root], mode: .open, watch: false))
 
         let follower = try #require(unwatched.catalogNoticeFollower)
         #expect(follower.board === unwatched.catalogNoticeBoard)
@@ -270,8 +272,8 @@ struct SkillsCatalogNoticeTests {
         defer { try? FileManager.default.removeItem(at: root) }
         try ReloadTestSupport.writeSkillFile(id: Self.seededSkillID, in: root)
 
-        let context = await Self.makeContext(
-            registry: SkillsRegistry(roots: [root], watch: true), followReloads: false)
+        let context = try await Self.makeContext(
+            registry: SkillsRegistry(roots: [root], mode: .open, watch: true), followReloads: false)
 
         #expect(context.reloadFollower == nil)
         #expect(context.catalogNoticeFollower != nil, "followReloads names the search agent, not the notices")
@@ -281,7 +283,7 @@ struct SkillsCatalogNoticeTests {
         let root = try HotReloadTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         try ReloadTestSupport.writeSkillFile(id: Self.seededSkillID, in: root)
-        let context = ResourceTestSupport.makeContext(roots: [root])
+        let context = try ResourceTestSupport.makeContext(roots: [root])
 
         let first = try SkillsTool.make(context: context)
         let second = try SkillsTool.make(context: context)
@@ -366,10 +368,12 @@ struct SkillsCatalogNoticeTests {
     ///   - followReloads: Whether the assembly builds a reload follower for
     ///     the search agent. Defaults to `true`, the factories' own default.
     /// - Returns: The assembled context.
+    /// - Throws: Whatever `SkillsTool.makeContext` throws for the mode of
+    ///   `registry`.
     private static func makeContext(
         registry: SkillsRegistry, followReloads: Bool = true
-    ) async -> SkillsToolContext {
-        await SkillsTool.makeContext(
+    ) async throws -> SkillsToolContext {
+        try await SkillsTool.makeContext(
             registry: registry,
             mode: .retrieval,
             embedder: nil,
@@ -400,7 +404,7 @@ struct SkillsCatalogNoticeTests {
         init() async throws {
             root = try HotReloadTestSupport.makeTempDirectory()
             try ReloadTestSupport.writeSkillFile(id: SkillsCatalogNoticeTests.seededSkillID, in: root)
-            registry = SkillsRegistry(roots: [root], watch: true)
+            registry = SkillsRegistry(roots: [root], mode: .open, watch: true)
             tool = try await SkillsTool.make(registry: registry)
         }
 

@@ -1,33 +1,23 @@
 import Foundation
 import FoundationModelsExtras
 
-/// Policy flags that gate side-effecting render-pipeline passes.
+/// The limits of the shell commands that the render pipeline starts.
 ///
 /// Set once at `SkillsRegistry` construction so every render path --
 /// model-driven `use skill`, user-driven `/command`, and the CLI -- honors
-/// the same policy. `ShellInjection` (pass 2)
-/// reads `isShellExecutionDisabled`; `isScriptExecutionDisabled` is read by
-/// the `run script` resource operation, outside this pipeline entirely.
+/// the same limits. `ShellInjection` (pass 2) reads both limits.
+///
+/// The policy holds no switch that turns shell injection or `run script` off.
+/// The `ToolMode` of the registry does that: in `ToolMode.sandboxed`, pass 2
+/// starts no process and the `skills` tool has no `run script` operation.
 public struct RenderPolicy: Sendable, Equatable {
-    /// Asserts `` !`command` ``/fenced shell injection (pass 2) is disabled.
-    ///
-    /// When `true`, the pass substitutes an inert marker instead of running
-    /// anything. Immutable: a `RenderPolicy` is a
-    /// construction-time invariant, never mutated after `SkillsRegistry`
-    /// captures it.
-    public let isShellExecutionDisabled: Bool
-    /// Asserts the `run script` resource operation is disabled.
-    ///
-    /// Enforced downstream, not by this pipeline.
-    /// Immutable for the same reason as `isShellExecutionDisabled`.
-    public let isScriptExecutionDisabled: Bool
-
     /// How long one `` !`command` ``/fenced shell command can run before
     /// `ShellInjection` kills its whole process group.
     ///
     /// A command that passes this limit writes no output into the body: the
     /// pass writes an inert marker in its place and renders the rest of the
-    /// body. Immutable for the same reason as the two flags.
+    /// body. Immutable: a `RenderPolicy` is a construction-time invariant,
+    /// never mutated after `SkillsRegistry` captures it.
     public let shellCommandTimeout: Duration
 
     /// The most bytes of merged output `ShellInjection` holds for one
@@ -36,8 +26,8 @@ public struct RenderPolicy: Sendable, Equatable {
     /// The read of the output stops at this limit, thus a command that
     /// writes without end cannot grow the memory of the host. A command that
     /// passes the limit writes no output into the body: the pass writes an
-    /// inert marker in its place. Immutable for the same reason as the two
-    /// flags.
+    /// inert marker in its place. Immutable for the same reason as
+    /// `shellCommandTimeout`.
     public let shellOutputByteLimit: Int
 
     /// The seconds that `defaultShellCommandTimeout` is made of.
@@ -63,25 +53,17 @@ public struct RenderPolicy: Sendable, Equatable {
 
     /// Creates a `RenderPolicy`.
     ///
-    /// Both flags default to `false`, the permissive default -- hosts opt
-    /// into restriction explicitly. Both limits default to the safe values
-    /// above, which a host overrides to widen or to narrow them.
+    /// Both limits default to the safe values above, which a host overrides
+    /// to widen or to narrow them.
     ///
     /// - Parameters:
-    ///   - isShellExecutionDisabled: Disables pass 2 when `true`.
-    ///   - isScriptExecutionDisabled: Disables the `run script` operation
-    ///     when `true`.
     ///   - shellCommandTimeout: How long one shell command of pass 2 can run.
     ///   - shellOutputByteLimit: The most bytes of output pass 2 holds for one
     ///     command.
     public init(
-        isShellExecutionDisabled: Bool = false,
-        isScriptExecutionDisabled: Bool = false,
         shellCommandTimeout: Duration = RenderPolicy.defaultShellCommandTimeout,
         shellOutputByteLimit: Int = RenderPolicy.defaultShellOutputByteLimit
     ) {
-        self.isShellExecutionDisabled = isShellExecutionDisabled
-        self.isScriptExecutionDisabled = isScriptExecutionDisabled
         self.shellCommandTimeout = shellCommandTimeout
         self.shellOutputByteLimit = shellOutputByteLimit
     }
@@ -152,8 +134,7 @@ public struct RenderRequest: Sendable {
     /// The render policy every pass must honor.
     ///
     /// Threaded unchanged to every pass invocation in this render call --
-    /// gates pass 2 (`isShellExecutionDisabled`) and the `run script`
-    /// operation outside this pipeline (`isScriptExecutionDisabled`).
+    /// pass 2 reads the limits of each shell command from it.
     public var policy: RenderPolicy
 
     /// Creates a `RenderRequest`.

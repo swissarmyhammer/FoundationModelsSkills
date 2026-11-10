@@ -5,11 +5,11 @@ import Testing
 
 /// Tests for `ShellInjection`, pass 2 of the render pipeline:
 /// the recognition grammar (inline vs. fenced vs. mid-word rejection), real execution (merged
-/// output, working directory, inherited environment), the `isShellExecutionDisabled` policy,
+/// output, working directory, inherited environment), the `ToolMode.sandboxed` mode,
 /// re-execution with no caching, and the single-shot no-re-scan invariant end to end through
 /// the full pipeline.
 struct ShellInjectionTests {
-    private let pass = ShellInjection()
+    private let pass = ShellInjection(mode: .open)
 
     /// Creates a fresh, empty temporary directory, resolved to its real (symlink-free) path so
     /// tests that shell out to `pwd` can compare against it directly.
@@ -105,7 +105,7 @@ struct ShellInjectionTests {
     /// carries Stencil syntax, and the span matrix is this pass's own.
     private func passOneAndTwoPipeline() -> RenderPipeline {
         RenderPipeline(
-            argumentSubstitution: ArgumentSubstitution(), shellInjection: ShellInjection(),
+            argumentSubstitution: ArgumentSubstitution(), shellInjection: ShellInjection(mode: .open),
             stencil: IdentityRenderPass())
     }
 
@@ -204,20 +204,38 @@ struct ShellInjectionTests {
         #expect(result == "hello-env")
     }
 
-    // MARK: - isShellExecutionDisabled: inert marker, nothing runs
+    // MARK: - The sandboxed mode: each injection site unchanged, nothing runs
 
-    @Test func disabledPolicyRendersTheInertMarkerAndRunsNothing() async throws {
+    @Test func theSandboxedModeLeavesAnInlineInjectionUnchanged() async throws {
+        let workingDirectory = try makeTempDirectory()
+        let body = "Before !`touch sideeffect.txt` after"
+
+        let result = try await ShellInjection(mode: .sandboxed).render(
+            QuarantinedText(original: body), request: request(text: body, workingDirectory: workingDirectory)
+        ).flattened
+
+        #expect(result == body)
+    }
+
+    @Test func theSandboxedModeLeavesAFencedInjectionUnchanged() async throws {
+        let workingDirectory = try makeTempDirectory()
+        let body = "Before\n```!\ntouch sideeffect.txt\n```\nafter"
+
+        let result = try await ShellInjection(mode: .sandboxed).render(
+            QuarantinedText(original: body), request: request(text: body, workingDirectory: workingDirectory)
+        ).flattened
+
+        #expect(result == body)
+    }
+
+    @Test func theSandboxedModeRunsNothing() async throws {
         let workingDirectory = try makeTempDirectory()
         let probeFile = workingDirectory.appendingPathComponent("sideeffect.txt")
-        let body = "!`touch sideeffect.txt`"
+        let body = "!`touch sideeffect.txt`\n```!\ntouch sideeffect.txt\n```"
 
-        let result = try await render(
-            body,
-            request: request(
-                text: body, workingDirectory: workingDirectory,
-                policy: RenderPolicy(isShellExecutionDisabled: true)))
+        _ = try await ShellInjection(mode: .sandboxed).render(
+            QuarantinedText(original: body), request: request(text: body, workingDirectory: workingDirectory))
 
-        #expect(result == ShellInjection.disabledMarker)
         #expect(!FileManager.default.fileExists(atPath: probeFile.path))
     }
 
@@ -244,7 +262,7 @@ struct ShellInjectionTests {
         let probeFile = workingDirectory.appendingPathComponent("metadata-sideeffect.txt")
         let text = "!`touch metadata-sideeffect.txt`"
         let pipeline = RenderPipeline(
-            argumentSubstitution: ArgumentSubstitution(), shellInjection: ShellInjection(),
+            argumentSubstitution: ArgumentSubstitution(), shellInjection: ShellInjection(mode: .open),
             stencil: IdentityRenderPass())
 
         let result = try pipeline.renderMetadata(request(text: text, workingDirectory: workingDirectory))
@@ -276,7 +294,7 @@ struct ShellInjectionTests {
         // value that a template of this render could resolve. The assertion
         // below then proves the quarantine, and not an empty ladder.
         let pipeline = RenderPipeline(
-            argumentSubstitution: ArgumentSubstitution(), shellInjection: ShellInjection(),
+            argumentSubstitution: ArgumentSubstitution(), shellInjection: ShellInjection(mode: .open),
             stencil: StencilPass(environment: ProcessInfo.processInfo.environment))
         var renderRequest = request(text: body, workingDirectory: workingDirectory)
         renderRequest.arguments = ["real-value"]
@@ -423,7 +441,7 @@ struct ShellInjectionTests {
         #expect(skill.frontmatter.preload == true)
 
         let pipeline = RenderPipeline(
-            argumentSubstitution: ArgumentSubstitution(), shellInjection: ShellInjection(),
+            argumentSubstitution: ArgumentSubstitution(), shellInjection: ShellInjection(mode: .open),
             stencil: IdentityRenderPass())
         let result = try await pipeline.renderBody(
             request(

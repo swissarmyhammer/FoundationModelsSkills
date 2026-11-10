@@ -47,12 +47,13 @@ struct HotReloadLiveTests {
         let config = SelectionConfig(model: SystemLanguageModel.default)
         // `watch: true` -- the twin's whole point is to drive a REAL reload
         // through the registry, not to read a catalog frozen at construction
-        // time. `SkillsRegistry(roots:)` alone defaults to `watch: false`
+        // time. `SkillsRegistry(roots:mode:)` alone defaults to `watch: false`
         // (`metadata()` never changes after `init`, regardless of later
         // filesystem writes). With a frozen catalog, `toolA` stays in the
         // catalog, and the removal assertion below proves nothing.
-        let registry = SkillsRegistry(roots: [root], watch: true)
-        let searcher = MetadataSearcher(items: registry.metadata().filter(\.isModelVisible), mode: .selection, selection: config)
+        let registry = SkillsRegistry(roots: [root], mode: .open, watch: true)
+        let searcher = MetadataSearcher(
+            items: registry.metadata().filter(\.isModelVisible), mode: .selection, selection: config)
         let agent = SkillSearchAgent(searcher: searcher)
         var reloads = registry.onReload.makeAsyncIterator()
 

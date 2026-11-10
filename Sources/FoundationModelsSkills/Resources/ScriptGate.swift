@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import FoundationModelsExtras
 
 /// The outcome of evaluating `ScriptGate`'s two code-enforced gates.
 internal enum ScriptGateResult {
@@ -13,18 +14,19 @@ internal enum ScriptGateResult {
 /// The triple gate `run script` enforces at dispatch, before ever touching
 /// the filesystem for the requested script:
 ///
-/// 1. **Host policy** -- `RenderPolicy.isScriptExecutionDisabled`, set once
-///    at registry construction, so every dispatch path (model, `/command`,
-///    CLI) honors the same host-level kill switch.
+/// 1. **Tool mode** -- `SkillsToolContext.mode`, set once at composition.
+///    `SkillsTool.make(context:catalogCharacterLimit:)` does not register
+///    `run script` in `ToolMode.sandboxed`; this gate refuses a `RunScript`
+///    that a host dispatches against a sandboxed context some other way.
 /// 2. **Per-skill grant** -- the skill's `allowed-tools:` frontmatter must
 ///    contain a `Script(<glob>)` token whose glob matches the requested
 ///    path, or a bare `Script` token (grants everything under `scripts/`).
 ///    A skill without a matching grant has not pre-approved script
 ///    execution.
 /// 3. **Trust posture** -- the guidance that a host should not
-///    construct a script-enabled registry over an untrusted project root at
-///    all. This is documentation-only: neither `evaluateHostPolicy(
-///    isScriptExecutionDisabled:)` nor `evaluateGrant(path:allowedTools:)`
+///    construct an open-mode registry over an untrusted project root at
+///    all. This is documentation-only: neither `evaluateMode(_:)` nor
+///    `evaluateGrant(path:allowedTools:)`
 ///    has any way to observe how trustworthy its own registry's roots are,
 ///    so there is no third code path here to enforce it -- a host that
 ///    needs this guarantee enforces it itself, at the point it decides
@@ -35,21 +37,20 @@ internal enum ScriptGateResult {
 /// call below matches a path against the glob of an `allowed-tools` grant,
 /// which is text work on two strings.
 internal enum ScriptGate {
-    /// Evaluates gate 1 (host policy) alone, independent of any id/path
+    /// Evaluates gate 1 (tool mode) alone, independent of any id/path
     /// resolution.
     ///
     /// Callable before `RunScript.execute(in:)` ever looks up the requested
-    /// id or resolves its path, so a script-disabled registry returns the
-    /// identical corrective for any path -- valid, bogus, or
-    /// confinement-escaping alike -- rather than leaking a path-shaped
-    /// corrective ahead of the policy check ("triple-gated, every check at
-    /// dispatch").
+    /// id or resolves its path, so a sandboxed context returns the identical
+    /// corrective for any path -- valid, bogus, or confinement-escaping alike
+    /// -- rather than leaking a path-shaped corrective ahead of the mode
+    /// check ("triple-gated, every check at dispatch").
     ///
-    /// - Parameter isScriptExecutionDisabled: The host policy's kill switch.
-    /// - Returns: `.granted` when script execution is enabled;
-    ///   `.corrective(_:)` naming the host policy when it is not.
-    internal static func evaluateHostPolicy(isScriptExecutionDisabled: Bool) -> ScriptGateResult {
-        isScriptExecutionDisabled ? .corrective(Self.hostPolicyDisabledMessage) : .granted
+    /// - Parameter mode: The mode of the tools of the host.
+    /// - Returns: `.granted` in `ToolMode.open`; `.corrective(_:)` naming the
+    ///   mode in `ToolMode.sandboxed`.
+    internal static func evaluateMode(_ mode: ToolMode) -> ScriptGateResult {
+        mode == .open ? .granted : .corrective(Self.sandboxedModeMessage)
     }
 
     /// Evaluates gate 2 (per-skill grant) alone.
@@ -64,9 +65,10 @@ internal enum ScriptGate {
             ? .granted : .corrective(Self.noGrantMessage(path: path))
     }
 
-    /// The corrective message for gate 1: script execution disabled at the
-    /// host level.
-    private static let hostPolicyDisabledMessage = "Script execution is disabled for this registry."
+    /// The corrective message for gate 1: no script runs in the sandboxed
+    /// mode.
+    internal static let sandboxedModeMessage =
+        "Script execution is not available in the \(ToolMode.sandboxed.rawValue) mode."
 
     /// The corrective message for gate 2: no matching `allowed-tools:` grant.
     ///

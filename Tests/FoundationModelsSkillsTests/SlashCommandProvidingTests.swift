@@ -27,19 +27,19 @@ struct SlashCommandProvidingTests {
     // MARK: - commands(workingDirectory:) snapshot
 
     @Test func commandsOverTheFixtureStackListsExactlyTheUserInvocableSkills() async {
-        let registry = SkillsRegistry(roots: Self.fixtureRoots)
+        let registry = SkillsRegistry(roots: Self.fixtureRoots, mode: .open)
         let commands = await registry.commands(workingDirectory: Self.fixtureRoots[0])
         #expect(Set(commands.map(\.name)) == Self.expectedCommandIDs)
     }
 
     @Test func commandsExcludeAModelVisibleButUserHiddenSkill() async {
-        let registry = SkillsRegistry(roots: Self.fixtureRoots)
+        let registry = SkillsRegistry(roots: Self.fixtureRoots, mode: .open)
         let commands = await registry.commands(workingDirectory: Self.fixtureRoots[0])
         #expect(!commands.contains { $0.name == "lint" })
     }
 
     @Test func commandsCarryTheRenderedDescriptionFromCommandListing() async throws {
-        let registry = SkillsRegistry(roots: Self.fixtureRoots)
+        let registry = SkillsRegistry(roots: Self.fixtureRoots, mode: .open)
         let commands = await registry.commands(workingDirectory: Self.fixtureRoots[0])
         let commit = try #require(commands.first { $0.name == "commit" })
         #expect(
@@ -54,7 +54,7 @@ struct SlashCommandProvidingTests {
         // thus `$ARGUMENTS` gets it as typed and `$0` gets its first
         // shell-style token. The result is what `call(id:arguments:)` gives
         // for the same text.
-        let registry = SkillsRegistry(roots: Self.fixtureRoots)
+        let registry = SkillsRegistry(roots: Self.fixtureRoots, mode: .open)
         let commit = try await Self.command(named: "commit", in: registry)
         let typed = "\"fix the off-by-one bug\""
 
@@ -70,7 +70,7 @@ struct SlashCommandProvidingTests {
     @Test func commandBodyWithUnquotedTextGivesTheFirstWordToDollarZero() async throws {
         // Text with no quotation marks splits with shell-style quoting: `$0`
         // gets the first word only, and `$ARGUMENTS` gets the text as typed.
-        let registry = SkillsRegistry(roots: Self.fixtureRoots)
+        let registry = SkillsRegistry(roots: Self.fixtureRoots, mode: .open)
         let commit = try await Self.command(named: "commit", in: registry)
         let typed = "fix the bug"
 
@@ -84,7 +84,7 @@ struct SlashCommandProvidingTests {
     @Test func commandBodyWithNoTypedTextRendersWithNoArgumentsAppend() async throws {
         // `/commit` with nothing after it is a call with no arguments, not a
         // call with one empty argument: the `ARGUMENTS:` fallback stays out.
-        let registry = SkillsRegistry(roots: Self.fixtureRoots)
+        let registry = SkillsRegistry(roots: Self.fixtureRoots, mode: .open)
         let commit = try await Self.command(named: "commit", in: registry)
 
         let rendered = try await Self.render(commit, typed: "")
@@ -94,7 +94,7 @@ struct SlashCommandProvidingTests {
     }
 
     @Test func commandBodyRunsShellInjection() async throws {
-        let registry = SkillsRegistry(roots: Self.fixtureRoots)
+        let registry = SkillsRegistry(roots: Self.fixtureRoots, mode: .open)
         let gitContext = try await Self.command(named: "git-context", in: registry)
 
         let rendered = try await Self.render(gitContext, typed: "")
@@ -104,7 +104,7 @@ struct SlashCommandProvidingTests {
     }
 
     @Test func commandBodyRunsStencil() async throws {
-        let registry = SkillsRegistry(roots: Self.fixtureRoots)
+        let registry = SkillsRegistry(roots: Self.fixtureRoots, mode: .open)
         let envReport = try await Self.command(named: "env-report", in: registry)
 
         let rendered = try await Self.render(envReport, typed: "")
@@ -117,14 +117,14 @@ struct SlashCommandProvidingTests {
     // MARK: - argumentHint assembly
 
     @Test func commandWithASingleHintedParameterGetsThatPlaceholderAsItsHint() async throws {
-        let registry = SkillsRegistry(roots: Self.fixtureRoots)
+        let registry = SkillsRegistry(roots: Self.fixtureRoots, mode: .open)
         let commands = await registry.commands(workingDirectory: Self.fixtureRoots[0])
         let commit = try #require(commands.first { $0.name == "commit" })
         #expect(commit.argumentHint == "<message>")
     }
 
     @Test func commandWithNoParametersGetsANilArgumentHint() async throws {
-        let registry = SkillsRegistry(roots: Self.fixtureRoots)
+        let registry = SkillsRegistry(roots: Self.fixtureRoots, mode: .open)
         let commands = await registry.commands(workingDirectory: Self.fixtureRoots[0])
         let baseStyle = try #require(commands.first { $0.name == "base-style" })
         #expect(baseStyle.argumentHint == nil)
@@ -151,7 +151,7 @@ struct SlashCommandProvidingTests {
                 """,
             in: root)
 
-        let registry = SkillsRegistry(roots: [root])
+        let registry = SkillsRegistry(roots: [root], mode: .open)
         let commands = await registry.commands(workingDirectory: root)
         let command = try #require(commands.first { $0.name == "multi-arg" })
         #expect(command.argumentHint == "<target> [mode] files...")
@@ -173,7 +173,7 @@ struct SlashCommandProvidingTests {
                 """,
             in: root)
 
-        let registry = SkillsRegistry(roots: [root])
+        let registry = SkillsRegistry(roots: [root], mode: .open)
         let commands = await registry.commands(workingDirectory: root)
         let command = try #require(commands.first { $0.name == "unhinted" })
         #expect(command.argumentHint == "[target]")
@@ -219,7 +219,7 @@ struct SlashCommandProvidingTests {
         let root = try makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         try writeEditedCommand(description: "before edit", in: root)
-        let registry = SkillsRegistry(roots: [root], watch: watch)
+        let registry = SkillsRegistry(roots: [root], mode: .open, watch: watch)
         let stream = try #require(registry.commandUpdates)
         let recorder = SlashCommandUpdateRecorder()
         let subscription = Task {

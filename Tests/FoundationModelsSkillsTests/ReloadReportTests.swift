@@ -99,6 +99,6 @@ import Testing
     ///
     /// - Returns: The registry every case in this suite reports over.
     private static func makeFixtureRegistry() -> SkillsRegistry {
-        SkillsRegistry(stack: FixtureLibrary.stack())
+        SkillsRegistry(stack: FixtureLibrary.stack(), mode: .open)
     }
 }

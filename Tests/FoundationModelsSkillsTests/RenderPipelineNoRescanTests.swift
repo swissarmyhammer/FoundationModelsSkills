@@ -51,7 +51,7 @@ struct RenderPipelineNoRescanTests {
     /// then proves the quarantine, and not an empty ladder.
     private func realPipeline() -> RenderPipeline {
         RenderPipeline(
-            argumentSubstitution: ArgumentSubstitution(), shellInjection: ShellInjection(),
+            argumentSubstitution: ArgumentSubstitution(), shellInjection: ShellInjection(mode: .open),
             stencil: StencilPass(environment: ProcessInfo.processInfo.environment))
     }
 
@@ -155,7 +155,7 @@ struct RenderPipelineNoRescanTests {
         let skillDirectory = try makeTempDirectory()
         let body = "before !`true`after"
 
-        let injected = try await ShellInjection().render(
+        let injected = try await ShellInjection(mode: .open).render(
             QuarantinedText(original: body), request: request(text: body, skillDirectory: skillDirectory))
 
         #expect(injected.spans == [.original("before after")])

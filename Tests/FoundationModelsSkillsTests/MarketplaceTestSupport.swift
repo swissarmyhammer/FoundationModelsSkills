@@ -95,7 +95,7 @@ extension MarketplaceStoreFixture {
             name: dotfolderName, workingDirectory: localRoot,
             environment: [:])
         stack.layers = [DotfolderStack.Layer(source: .project, root: localRoot)]
-        return SkillsRegistry(marketplaces: store, stack: stack, watch: watch)
+        return SkillsRegistry(marketplaces: store, stack: stack, mode: .open, watch: watch)
     }
 }
 
@@ -147,6 +147,6 @@ final class FakeMarketplaceProvider: MarketplaceLayerProviding, Sendable {
     func makeRegistry(projectRoot root: URL) -> SkillsRegistry {
         var stack = DotfolderStack(name: "skills", workingDirectory: root, environment: [:])
         stack.layers = [DotfolderStack.Layer(source: .project, root: root)]
-        return SkillsRegistry(marketplaces: self, stack: stack)
+        return SkillsRegistry(marketplaces: self, stack: stack, mode: .open)
     }
 }

@@ -110,7 +110,7 @@ struct SkillEnablementTests {
         try LayerFixtureSupport.writeTextFile(
             Self.offStub, at: "\(Self.offSkillID)/\(SkillDiscovery.skillFileName)", in: directories[1])
 
-        let registry = SkillsRegistry(roots: directories)
+        let registry = SkillsRegistry(roots: directories, mode: .open)
 
         #expect(registry.metadata().map(\.id) == [Self.onSkillID])
         #expect(registry.diagnostics.isEmpty)
@@ -224,7 +224,7 @@ struct SkillEnablementTests {
                     id: SkillEnablementTests.offSkillID, in: root, extraFrontmatter: testedFrontmatter,
                     body: SkillEnablementTests.offSkillBody)
             }
-            registry = SkillsRegistry(roots: [root])
+            registry = SkillsRegistry(roots: [root], mode: .open)
         }
 
         /// Deletes the temporary root.

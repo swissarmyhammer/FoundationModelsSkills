@@ -15,7 +15,7 @@ enum FixtureStack {
     ///
     /// - Parameter thisFile: The calling source file's path; defaults to the
     ///   call site's `#filePath`.
-    /// - Returns: The fixture stack, ready for `SkillsRegistry(stack:)`.
+    /// - Returns: The fixture stack, ready for `SkillsRegistry(stack:mode:)`.
     static func make(thisFile: String = #filePath) -> DotfolderStack {
         let libraryRoot = URL(fileURLWithPath: thisFile)
             .deletingLastPathComponent()  // <file>.swift -> skills-demo/

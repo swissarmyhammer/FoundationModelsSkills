@@ -95,7 +95,7 @@ struct SkillsCatalogToolTests {
         let root = try HotReloadTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         try ReloadTestSupport.writeSkillFile(id: Self.skillBeforeReload, in: root)
-        let registry = SkillsRegistry(roots: [root], watch: true)
+        let registry = SkillsRegistry(roots: [root], mode: .open, watch: true)
         let tool = try await SkillsTool.make(registry: registry)
         let tally = ReloadTestSupport.EventTally()
         let subscription = ReloadTestSupport.tally(registry.onReload, into: tally)
@@ -128,7 +128,7 @@ struct SkillsCatalogToolTests {
         let root = try HotReloadTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
 
-        let tool = try await SkillsTool.make(registry: SkillsRegistry(roots: [root]))
+        let tool = try await SkillsTool.make(registry: SkillsRegistry(roots: [root], mode: .open))
         let idProperty = try Self.property(named: Self.idFieldName, in: tool.parameters)
 
         #expect(tool.description.hasSuffix(Self.noSkillsLine))
@@ -167,7 +167,7 @@ struct SkillsCatalogToolTests {
     ///
     /// - Returns: The registry the cases hand to a factory.
     private static func makeFixtureRegistry() -> SkillsRegistry {
-        SkillsRegistry(stack: FixtureLibrary.stack())
+        SkillsRegistry(stack: FixtureLibrary.stack(), mode: .open)
     }
 
     /// Reads the top-level properties of `schema` from its JSON form.

@@ -28,7 +28,7 @@ struct SkillsRegistryReloadTests {
         defer { try? FileManager.default.removeItem(at: root) }
         try ReloadTestSupport.writeSkillFile(id: "editable-skill", in: root, descriptionSuffix: "before edit")
 
-        let registry = SkillsRegistry(roots: [root], watch: true)
+        let registry = SkillsRegistry(roots: [root], mode: .open, watch: true)
         let recorder = MetadataUpdateRecorder()
         let subscription = Self.subscribe(registry, to: recorder)
         defer { subscription.cancel() }
@@ -59,7 +59,7 @@ struct SkillsRegistryReloadTests {
         try ReloadTestSupport.writeSkillFile(
             id: "preload-skill", in: root, extraFrontmatter: "preload: true\n", body: "Preload body v1.")
 
-        let registry = SkillsRegistry(roots: [root], watch: true)
+        let registry = SkillsRegistry(roots: [root], mode: .open, watch: true)
         #expect(await registry.preloadedBodies().contains("Preload body v1."))
         #expect(registry.diagnostics.isEmpty)
 
@@ -102,7 +102,7 @@ struct SkillsRegistryReloadTests {
         defer { try? FileManager.default.removeItem(at: root) }
         try ReloadTestSupport.writeSkillFile(id: "well-formed-skill", in: root)
 
-        let registry = SkillsRegistry(roots: [root], watch: true)
+        let registry = SkillsRegistry(roots: [root], mode: .open, watch: true)
         #expect(registry.diagnostics.isEmpty)
 
         let recorder = MetadataUpdateRecorder()
@@ -141,7 +141,7 @@ struct SkillsRegistryReloadTests {
         defer { try? FileManager.default.removeItem(at: root) }
         try ReloadTestSupport.writeSkillFile(id: "callable-skill", in: root, body: "v1")
 
-        let registry = SkillsRegistry(roots: [root], watch: true)
+        let registry = SkillsRegistry(roots: [root], mode: .open, watch: true)
         let recorder = MetadataUpdateRecorder()
         let subscription = Self.subscribe(registry, to: recorder)
         defer { subscription.cancel() }
@@ -183,7 +183,7 @@ struct SkillsRegistryReloadTests {
 
         let tracer = InMemoryTracer()
         let registry = SkillsRegistry(
-            layers: [DotfolderStack.Layer(source: .project, root: root)], policy: RenderPolicy(),
+            layers: [DotfolderStack.Layer(source: .project, root: root)], mode: .open, policy: RenderPolicy(),
             watch: true,
             telemetry: SkillsTracing.Telemetry(tracer: tracer))
 
@@ -213,7 +213,7 @@ struct SkillsRegistryReloadTests {
         defer { try? FileManager.default.removeItem(at: root) }
         try ReloadTestSupport.writeSkillFile(id: "existing-skill", in: root, descriptionSuffix: "v1")
 
-        let registry = SkillsRegistry(roots: [root], watch: true)
+        let registry = SkillsRegistry(roots: [root], mode: .open, watch: true)
         let recorder = MetadataUpdateRecorder()
         let subscription = Self.subscribe(registry, to: recorder)
         defer { subscription.cancel() }
@@ -231,7 +231,7 @@ struct SkillsRegistryReloadTests {
         try ReloadTestSupport.writeSkillFile(id: "surviving-skill", in: root, descriptionSuffix: "v1")
         try ReloadTestSupport.writeSkillFile(id: "doomed-skill", in: root, descriptionSuffix: "v1")
 
-        let registry = SkillsRegistry(roots: [root], watch: true)
+        let registry = SkillsRegistry(roots: [root], mode: .open, watch: true)
         let recorder = MetadataUpdateRecorder()
         let subscription = Self.subscribe(registry, to: recorder)
         defer { subscription.cancel() }
@@ -253,7 +253,7 @@ struct SkillsRegistryReloadTests {
             try ReloadTestSupport.writeSkillFile(id: id, in: root, descriptionSuffix: "v1")
         }
 
-        let registry = SkillsRegistry(roots: [root], watch: true)
+        let registry = SkillsRegistry(roots: [root], mode: .open, watch: true)
         let readerDeadline = ContinuousClock.now.advanced(by: .milliseconds(600))
 
         try await withThrowingTaskGroup(of: Void.self) { group in
@@ -302,7 +302,7 @@ struct SkillsRegistryReloadTests {
         defer { try? FileManager.default.removeItem(at: root) }
         try ReloadTestSupport.writeSkillFile(id: "static-skill", in: root, descriptionSuffix: "v1")
 
-        let registry = SkillsRegistry(roots: [root])
+        let registry = SkillsRegistry(roots: [root], mode: .open)
         let tally = ReloadTestSupport.EventTally()
         let subscription = ReloadTestSupport.tally(registry.onReload, into: tally)
         defer { subscription.cancel() }
@@ -316,7 +316,7 @@ struct SkillsRegistryReloadTests {
         defer { try? FileManager.default.removeItem(at: root) }
         try ReloadTestSupport.writeSkillFile(id: "static-skill", in: root, descriptionSuffix: "before edit")
 
-        let registry = SkillsRegistry(roots: [root], watch: false)
+        let registry = SkillsRegistry(roots: [root], mode: .open, watch: false)
 
         try ReloadTestSupport.writeSkillFile(id: "static-skill", in: root, descriptionSuffix: "after edit")
         // Gives an incorrectly-wired watcher a chance to fire before asserting nothing changed.
@@ -334,7 +334,7 @@ struct SkillsRegistryReloadTests {
     @Test func reloadPutsAWrittenSkillIntoMetadataBeforeItReturns() throws {
         let root = try WatcherTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
-        let registry = SkillsRegistry(roots: [root], watch: false)
+        let registry = SkillsRegistry(roots: [root], mode: .open, watch: false)
 
         try ReloadTestSupport.writeSkillFile(id: "written-skill", in: root)
         registry.reload()
@@ -349,7 +349,7 @@ struct SkillsRegistryReloadTests {
         defer { try? FileManager.default.removeItem(at: root) }
         try ReloadTestSupport.writeSkillFile(
             id: "editable-skill", in: root, descriptionSuffix: "before edit")
-        let registry = SkillsRegistry(roots: [root], watch: false)
+        let registry = SkillsRegistry(roots: [root], mode: .open, watch: false)
         let tally = ReloadTestSupport.EventTally()
         let subscription = ReloadTestSupport.tally(registry.onReload, into: tally)
         defer { subscription.cancel() }
@@ -369,7 +369,7 @@ struct SkillsRegistryReloadTests {
         defer { try? FileManager.default.removeItem(at: root) }
         try ReloadTestSupport.writeSkillFile(
             id: "editable-skill", in: root, descriptionSuffix: "before edit")
-        let registry = SkillsRegistry(roots: [root], watch: true)
+        let registry = SkillsRegistry(roots: [root], mode: .open, watch: true)
         let tally = ReloadTestSupport.EventTally()
         let subscription = ReloadTestSupport.tally(registry.onReload, into: tally)
         defer { subscription.cancel() }
@@ -386,7 +386,7 @@ struct SkillsRegistryReloadTests {
         let root = try WatcherTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         try ReloadTestSupport.writeSkillFile(id: "static-skill", in: root)
-        let registry = SkillsRegistry(roots: [root], watch: false)
+        let registry = SkillsRegistry(roots: [root], mode: .open, watch: false)
         let tally = ReloadTestSupport.EventTally()
         let subscription = ReloadTestSupport.tally(registry.onReload, into: tally)
         defer { subscription.cancel() }
@@ -408,7 +408,7 @@ struct SkillsRegistryReloadTests {
         defer { try? FileManager.default.removeItem(at: root) }
         try ReloadTestSupport.writeSkillFile(
             id: "raced-skill", in: root, descriptionSuffix: "before edit")
-        let registry = SkillsRegistry(roots: [root], watch: true)
+        let registry = SkillsRegistry(roots: [root], mode: .open, watch: true)
         let tally = ReloadTestSupport.EventTally()
         let subscription = ReloadTestSupport.tally(registry.onReload, into: tally)
         defer { subscription.cancel() }
@@ -433,7 +433,7 @@ struct SkillsRegistryReloadTests {
         defer { try? FileManager.default.removeItem(at: privateDirectory) }
         let lateRoot = privateDirectory.appendingPathComponent("skills-arrive-later", isDirectory: true)
 
-        let registry = SkillsRegistry(roots: [lateRoot], watch: true)
+        let registry = SkillsRegistry(roots: [lateRoot], mode: .open, watch: true)
         #expect(registry.metadata().isEmpty)
         let recorder = MetadataUpdateRecorder()
         let subscription = Self.subscribe(registry, to: recorder)
@@ -452,7 +452,7 @@ struct SkillsRegistryReloadTests {
         defer { try? FileManager.default.removeItem(at: root) }
         try ReloadTestSupport.writeSkillFile(id: "burst-skill", in: root, descriptionSuffix: "v0")
 
-        let registry = SkillsRegistry(roots: [root], watch: true)
+        let registry = SkillsRegistry(roots: [root], mode: .open, watch: true)
         let onReloadTally = ReloadTestSupport.EventTally()
         let onReloadSubscription = ReloadTestSupport.tally(registry.onReload, into: onReloadTally)
         defer { onReloadSubscription.cancel() }
@@ -480,7 +480,7 @@ struct SkillsRegistryReloadTests {
         defer { try? FileManager.default.removeItem(at: root) }
         try ReloadTestSupport.writeSkillFile(id: "late-subscriber-skill", in: root, descriptionSuffix: "v0")
 
-        let registry = SkillsRegistry(roots: [root], watch: true)
+        let registry = SkillsRegistry(roots: [root], mode: .open, watch: true)
         let earlyTally = ReloadTestSupport.EventTally()
         let earlySubscription = ReloadTestSupport.tally(registry.commandUpdates, into: earlyTally)
         defer { earlySubscription.cancel() }
@@ -508,7 +508,7 @@ struct SkillsRegistryReloadTests {
         defer { try? FileManager.default.removeItem(at: root) }
         try ReloadTestSupport.writeSkillFile(id: "deinit-fanout-skill", in: root, descriptionSuffix: "v0")
 
-        var registry: SkillsRegistry? = SkillsRegistry(roots: [root], watch: true)
+        var registry: SkillsRegistry? = SkillsRegistry(roots: [root], mode: .open, watch: true)
         let onReloadStream = try #require(registry?.onReload)
         let commandUpdatesStream = try #require(registry?.commandUpdates)
         registry = nil
@@ -538,7 +538,7 @@ struct SkillsRegistryReloadTests {
         defer { try? FileManager.default.removeItem(at: root) }
         try ReloadTestSupport.writeSkillFile(id: "short-lived-skill", in: root, descriptionSuffix: "v1")
 
-        var registry: SkillsRegistry? = SkillsRegistry(roots: [root], watch: true)
+        var registry: SkillsRegistry? = SkillsRegistry(roots: [root], mode: .open, watch: true)
         let stream = try #require(registry?.onReload)
         registry = nil
 
@@ -656,7 +656,8 @@ struct SkillsRegistryReloadTests {
     {
         await ReloadTestSupport.expectExactlyOneEvent(
             countGetter: { await recorder.publications.count }, since: baseline,
-            signalTimeout: ReloadTestSupport.expectedSignalTimeout, settleWindow: ReloadTestSupport.noFurtherSignalWindow)
+            signalTimeout: ReloadTestSupport.expectedSignalTimeout,
+            settleWindow: ReloadTestSupport.noFurtherSignalWindow)
     }
 
     /// Writes `id/SKILL.md` directly under `directory` with no `description:`

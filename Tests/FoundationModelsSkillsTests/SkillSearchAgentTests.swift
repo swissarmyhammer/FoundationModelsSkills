@@ -50,7 +50,7 @@ struct SkillSearchAgentTests {
     // MARK: - Seeding filters to the model-visible subset
 
     @Test func seedingIncludesModelVisibleLintButExcludesModelHiddenDeploy() async throws {
-        let registry = SkillsRegistry(roots: [Self.projectSkillsRoot])
+        let registry = SkillsRegistry(roots: [Self.projectSkillsRoot], mode: .open)
         let searcher = MetadataSearcher(items: registry.metadata().filter(\.isModelVisible))
         let agent = SkillSearchAgent(searcher: searcher)
 
@@ -64,7 +64,7 @@ struct SkillSearchAgentTests {
     // MARK: - Keyword query ranking
 
     @Test func keywordQueryOverTheFixtureCatalogRanksCommitFirstWithTheExpectedTotal() async throws {
-        let registry = SkillsRegistry(roots: [Self.projectSkillsRoot])
+        let registry = SkillsRegistry(roots: [Self.projectSkillsRoot], mode: .open)
         let searcher = MetadataSearcher(items: registry.metadata().filter(\.isModelVisible))
         let agent = SkillSearchAgent(searcher: searcher)
 

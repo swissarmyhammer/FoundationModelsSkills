@@ -159,7 +159,8 @@ public struct UseSkill: OperationDefinition {
     ///   - context: The shared context that gives the visibility predicate.
     /// - Returns: `.corrective(_:)` with the text.
     private func unusableIDCorrective(catalog: [SkillMetadata], context: SkillsToolContext) -> UseSkillOutput {
-        .corrective(UnusableSkillIDText.message(id: id, catalog: catalog, visibilityPredicate: context.visibilityPredicate))
+        .corrective(
+            UnusableSkillIDText.message(id: id, catalog: catalog, visibilityPredicate: context.visibilityPredicate))
     }
 
     // MARK: - The files of the skill
@@ -173,12 +174,12 @@ public struct UseSkill: OperationDefinition {
     /// operation opens no file.
     ///
     /// - Parameter context: The shared context supplying the registry and the
-    ///   host policy.
-    /// - Returns: The text of `SkillFilesText.text(id:rows:isScriptExecutionDisabled:)`.
+    ///   tool mode.
+    /// - Returns: The text of `SkillFilesText.text(id:rows:mode:)`.
     private func filesText(in context: SkillsToolContext) -> String? {
         let overlay = ResourceIDLookup.overlay(id: id, context: context)
         return SkillFilesText.text(
             id: id, rows: ListResource.listedRows(in: overlay),
-            isScriptExecutionDisabled: context.registry.policy.isScriptExecutionDisabled)
+            mode: context.mode)
     }
 }

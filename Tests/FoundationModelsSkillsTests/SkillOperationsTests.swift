@@ -20,8 +20,10 @@ struct SkillOperationsTests {
     /// `deploy` / `lint` / … skills, with a real, GPU-free `.retrieval`-mode
     /// `MetadataSearcher` (no embedder, no session) standing in for the
     /// stub-searcher context the acceptance criteria call for.
-    private static func makeFixtureContext() -> SkillsToolContext {
-        FixtureLibrary.makeSkillsToolContext(registry: SkillsRegistry(roots: [projectSkillsRoot]))
+    ///
+    /// - Throws: Whatever `SkillsToolContext.init` throws.
+    private static func makeFixtureContext() throws -> SkillsToolContext {
+        try FixtureLibrary.makeSkillsToolContext(registry: SkillsRegistry(roots: [projectSkillsRoot], mode: .open))
     }
 
     /// Builds the fused `skills` tool over `makeFixtureContext()`.
@@ -37,7 +39,7 @@ struct SkillOperationsTests {
     /// - Returns: The rendered body.
     /// - Throws: Whatever `SkillsRegistry.call(id:arguments:)` throws.
     private static func renderedCommitBody() async throws -> String {
-        try await SkillsRegistry(roots: [projectSkillsRoot]).call(id: "commit", arguments: ["fix parser"])
+        try await SkillsRegistry(roots: [projectSkillsRoot], mode: .open).call(id: "commit", arguments: ["fix parser"])
     }
 
     /// The value of a successful outcome of any operation.
@@ -153,9 +155,10 @@ struct SkillOperationsTests {
         // as the last line of defense.
         let hidden = SkillMetadata(id: "hidden-tool", description: "A hidden diagnostic tool.", isModelVisible: false)
         let visible = SkillMetadata(id: "visible-tool", description: "A visible diagnostic tool.", isModelVisible: true)
-        let registry = SkillsRegistry(roots: [Self.projectSkillsRoot])
+        let registry = SkillsRegistry(roots: [Self.projectSkillsRoot], mode: .open)
         let searcher = MetadataSearcher(items: [hidden, visible])
-        let context = SkillsToolContext(registry: registry, searchAgent: SkillSearchAgent(searcher: searcher))
+        let context = try SkillsToolContext(
+            registry: registry, searchAgent: SkillSearchAgent(searcher: searcher), mode: registry.mode)
 
         let output = try await SearchSkill(query: "diagnostic tool", limit: nil).execute(in: context)
 
@@ -168,9 +171,10 @@ struct SkillOperationsTests {
         let items = (1...5).map { index in
             SkillMetadata(id: "widget-\(index)", description: "Handles widget tasks.", isModelVisible: true)
         }
-        let registry = SkillsRegistry(roots: [Self.projectSkillsRoot])
+        let registry = SkillsRegistry(roots: [Self.projectSkillsRoot], mode: .open)
         let searcher = MetadataSearcher(items: items)
-        let context = SkillsToolContext(registry: registry, searchAgent: SkillSearchAgent(searcher: searcher))
+        let context = try SkillsToolContext(
+            registry: registry, searchAgent: SkillSearchAgent(searcher: searcher), mode: registry.mode)
 
         let output = try await SearchSkill(query: "widget", limit: 2).execute(in: context)
 
@@ -233,7 +237,7 @@ struct SkillOperationsTests {
     @Test func useSkillOnAModelVisibleButUserHiddenSkillStillSucceeds() async throws {
         // `lint` carries `user-invocable: false` but stays fully model-visible
         // -- confirms the model-hidden guard doesn't over-reject.
-        let context = Self.makeFixtureContext()
+        let context = try Self.makeFixtureContext()
 
         let output = try await UseSkill(id: "lint", arguments: nil).execute(in: context)
 
@@ -243,7 +247,7 @@ struct SkillOperationsTests {
     @Test func useSkillWithNoArgumentForADeclaredNameRendersThatNameEmpty() async throws {
         // `commit` declares `arguments: [message]` / `argument-hint: "<message>"`.
         // No argument is required: `$0` renders as an empty string.
-        let context = Self.makeFixtureContext()
+        let context = try Self.makeFixtureContext()
 
         let output = try await UseSkill(id: "commit", arguments: []).execute(in: context)
 
@@ -307,7 +311,7 @@ struct SkillOperationsTests {
         argumentsLine: String = "", argumentHintLine: String = "", body: String = "Body text.\n"
     ) throws -> (context: SkillsToolContext, cleanup: () -> Void) {
         let root = try writeWidgetSkill(argumentsLine: argumentsLine, argumentHintLine: argumentHintLine, body: body)
-        let context = FixtureLibrary.makeSkillsToolContext(registry: SkillsRegistry(roots: [root]))
+        let context = try FixtureLibrary.makeSkillsToolContext(registry: SkillsRegistry(roots: [root], mode: .open))
         return (context, { try? FileManager.default.removeItem(at: root) })
     }
 
@@ -424,13 +428,13 @@ struct SkillOperationsTests {
         // snapshot, so `widget` still lists as usable there.
         let root = try Self.writeWidgetSkill()
         defer { try? FileManager.default.removeItem(at: root) }
-        let registry = SkillsRegistry(roots: [root], watch: true)
+        let registry = SkillsRegistry(roots: [root], mode: .open, watch: true)
         #expect(registry.metadata().map(\.id) == [Self.widgetSkillID])
 
         let searcher = MetadataSearcher(items: registry.metadata())
-        let context = SkillsToolContext(
+        let context = try SkillsToolContext(
             registry: registry,
-            searchAgent: SkillSearchAgent(searcher: searcher),
+            searchAgent: SkillSearchAgent(searcher: searcher), mode: registry.mode,
             visibilityPredicate: Self.makeCatalogRemovalPredicate(
                 registry: registry, skillDirectory: root.appendingPathComponent(Self.widgetSkillID, isDirectory: true)))
 
@@ -447,7 +451,8 @@ struct SkillOperationsTests {
         #expect(
             message
                 == "The skill id `\(id)` is not currently usable. Closest usable ids: \(id). "
-                + #"To find a skill, call the `skills` tool with {"op": "search skill", "query": "<the kind of work>"}."#)
+                + #"To find a skill, call the `skills` tool with {"op": "search skill", "query": "<the kind of work>"}."#
+        )
     }
 
     // MARK: - Resolver: canonical + forgiving spellings
@@ -604,7 +609,7 @@ struct SkillOperationsTests {
     /// A skill id that no layer of the fixture library holds.
     private static let missingSkillID = "no-such-skill"
 
-    /// The layer of the fixture registry: `SkillsRegistry(roots:)` labels
+    /// The layer of the fixture registry: `SkillsRegistry(roots:mode:)` labels
     /// each root `project`. Each case below names it, thus a write gives the
     /// corrective of `SkillWriter` and the fixture library stays the same.
     private static let fixtureLayer = "project"

@@ -1,3 +1,5 @@
+import FoundationModelsExtras
+
 /// Builds the plain text that follows the body in the answer of `use skill`:
 /// the list of the files of the skill, and the calls that read a file or run
 /// a script.
@@ -29,22 +31,22 @@ internal enum SkillFilesText {
     /// The list gives the first `ListResource.rowCap` rows. When the skill has
     /// more files, a line gives their count and the `list resource` call that
     /// shows them. The `run script` call follows the read call only when a row
-    /// of the skill is a script and the host policy permits scripts. The check
+    /// of the skill is a script and the mode is `ToolMode.open`: in
+    /// `ToolMode.sandboxed` the tool has no `run script` operation. The check
     /// reads each row, also a row after the row limit.
     ///
     /// - Parameters:
     ///   - id: The skill id, which each call names.
     ///   - rows: Each row of `ListResource.listedRows(in:)`, in path order,
     ///     with no row limit.
-    ///   - isScriptExecutionDisabled: The `run script` kill switch of the host
-    ///     policy.
+    ///   - mode: The mode of the tools of the host.
     /// - Returns: The list, a blank line, and the calls; or `nil` for no row.
-    internal static func text(id: String, rows: [ResourceRow], isScriptExecutionDisabled: Bool) -> String? {
+    internal static func text(id: String, rows: [ResourceRow], mode: ToolMode) -> String? {
         guard !rows.isEmpty else {
             return nil
         }
         let hasScript = rows.contains { $0.kind == ListResource.scriptKind }
-        let permitsRun = hasScript && !isScriptExecutionDisabled
+        let permitsRun = hasScript && mode == .open
         let callLines = [readInstruction(id: id)] + (permitsRun ? [runInstruction(id: id)] : [])
         return list(id: id, rows: rows) + SkillCatalogText.partBreak
             + callLines.joined(separator: SkillCatalogText.lineBreak)
@@ -56,7 +58,7 @@ internal enum SkillFilesText {
     /// with no line break at its end gets two. The body itself does not change.
     ///
     /// - Parameters:
-    ///   - filesText: The text of `text(id:rows:isScriptExecutionDisabled:)`,
+    ///   - filesText: The text of `text(id:rows:mode:)`,
     ///     or `nil` for a skill with no file other than `SKILL.md`.
     ///   - body: The rendered body of the skill.
     /// - Returns: The body, then the files text; or `body` with no change when

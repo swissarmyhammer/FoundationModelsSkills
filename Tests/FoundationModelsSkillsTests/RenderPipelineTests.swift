@@ -87,7 +87,7 @@ struct RenderPipelineTests {
         // a value that a template of this render could resolve. The assertion
         // below then proves the quarantine, and not an empty ladder.
         let pipeline = RenderPipeline(
-            argumentSubstitution: ArgumentSubstitution(), shellInjection: ShellInjection(),
+            argumentSubstitution: ArgumentSubstitution(), shellInjection: ShellInjection(mode: .open),
             stencil: StencilPass(environment: ProcessInfo.processInfo.environment))
         let maliciousArgument = "!`echo pwned` {{ HOME }}"
 
@@ -130,7 +130,7 @@ struct RenderPipelineTests {
         ])
         try ReloadTestSupport.writeSkillFile(
             id: includingSkillID, in: root, descriptionSuffix: descriptionSuffix, body: body)
-        let registry = SkillsRegistry(layers: [DotfolderStack.Layer(source: .project, root: root)])
+        let registry = SkillsRegistry(layers: [DotfolderStack.Layer(source: .project, root: root)], mode: .open)
         return (registry: registry, root: root)
     }
 
@@ -161,7 +161,7 @@ struct RenderPipelineTests {
             argumentSubstitution: RecordingPass(name: "argumentSubstitution", recorder: recorder),
             shellInjection: RecordingPass(name: "shellInjection", recorder: recorder),
             stencil: RecordingPass(name: "stencil", recorder: recorder))
-        let policy = RenderPolicy(isShellExecutionDisabled: true, isScriptExecutionDisabled: true)
+        let policy = RenderPolicy(shellOutputByteLimit: RenderPolicy.defaultShellOutputByteLimit + 1)
 
         _ = try await pipeline.renderBody(request(policy: policy))
 
@@ -177,7 +177,7 @@ struct RenderPipelineTests {
             argumentSubstitution: RecordingPass(name: "argumentSubstitution", recorder: recorder),
             shellInjection: RecordingPass(name: "shellInjection", recorder: recorder),
             stencil: RecordingPass(name: "stencil", recorder: recorder))
-        let policy = RenderPolicy(isShellExecutionDisabled: true, isScriptExecutionDisabled: true)
+        let policy = RenderPolicy(shellOutputByteLimit: RenderPolicy.defaultShellOutputByteLimit + 1)
 
         _ = try pipeline.renderMetadata(request(policy: policy))
 

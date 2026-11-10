@@ -17,7 +17,7 @@ struct SkillsCLITests {
     /// Builds a fresh registry over the fixture library's `commit` /
     /// `deploy` / `lint` / … skills.
     private static func makeFixtureRegistry() -> SkillsRegistry {
-        SkillsRegistry(roots: [Self.projectSkillsRoot])
+        SkillsRegistry(roots: [Self.projectSkillsRoot], mode: .open)
     }
 
     /// Builds the CLI driver over a fresh fixture registry.
@@ -89,19 +89,16 @@ struct SkillsCLITests {
                 == Self.makeFixtureRegistry().call(id: "deploy", arguments: ["production"]))
     }
 
-    @Test func useVerbHonorsShellExecutionDisabledPolicy() async throws {
-        // Coverage gap: the disable flag was previously never
-        // proven on the CLI path -- `skill use` dispatches through the exact
-        // same `call(id:arguments:)` render call the model surface uses.
-        let registry = SkillsRegistry(
-            roots: [Self.projectSkillsRoot], policy: RenderPolicy(isShellExecutionDisabled: true))
+    @Test func useVerbHonorsTheSandboxedMode() async throws {
+        // `skill use` dispatches through the exact same
+        // `call(id:arguments:)` render call the model surface uses, thus the
+        // sandboxed mode leaves the injection of the body unchanged here too.
+        let registry = SkillsRegistry(roots: [Self.projectSkillsRoot], mode: .sandboxed)
         let driver = try SkillsCLI.makeDriver(registry: registry)
 
         let result = await driver.run(arguments: ["skill", "use", "--id", "git-context"])
 
-        #expect(result.exitCode == 0)
-        #expect(result.output.contains(ShellInjection.disabledMarker))
-        #expect(!result.output.contains("on branch main, working tree clean"))
+        #expect(try Self.decodedText(result.output).contains("!`echo \"on branch main, working tree clean\"`"))
     }
 
     // MARK: - Visibility matrix
@@ -228,7 +225,8 @@ struct SkillsCLITests {
         let modelTool = try Self.makeModelTool(registry: registry)
 
         let cliResult = await driver.run(arguments: ["skill", "search", "--query", "commit"])
-        let modelOutput = try await modelTool.call(arguments: GeneratedContent(properties: ["op": "search skill", "query": "commit"]))
+        let modelOutput = try await modelTool.call(
+            arguments: GeneratedContent(properties: ["op": "search skill", "query": "commit"]))
 
         // The CLI prints the JSON string of the answer; the model gets the
         // same answer as plain text.
@@ -245,7 +243,8 @@ struct SkillsCLITests {
         // agree is visible -- the two dispatch paths must therefore agree on
         // the whole payload, not merely overlap.
         let cliResult = await driver.run(arguments: ["skill", "list", "--filter", "commit"])
-        let modelOutput = try await modelTool.call(arguments: GeneratedContent(properties: ["op": "list skill", "filter": "commit"]))
+        let modelOutput = try await modelTool.call(
+            arguments: GeneratedContent(properties: ["op": "list skill", "filter": "commit"]))
 
         #expect(cliResult.exitCode == 0)
         #expect(try Self.decodedText(cliResult.output) == modelOutput)

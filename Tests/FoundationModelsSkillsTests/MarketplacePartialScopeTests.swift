@@ -79,7 +79,7 @@ struct MarketplacePartialScopeTests {
                 DotfolderStack.Layer(
                     source: .marketplace, root: root.appendingPathComponent(marketplaceBFolder, isDirectory: true)),
                 DotfolderStack.Layer(source: .project, root: projectRoot),
-            ])
+            ], mode: .open)
         return (registry: registry, root: root)
     }
 
@@ -147,7 +147,7 @@ struct MarketplacePartialScopeTests {
             layers: [
                 DotfolderStack.Layer(source: .marketplace, root: marketplaceRoot),
                 DotfolderStack.Layer(source: .defaults, root: defaultsRoot),
-            ])
+            ], mode: .open)
 
         let error = try await #require(throws: TemplateEngineError.self) {
             try await registry.call(id: Self.sharedSkillID)

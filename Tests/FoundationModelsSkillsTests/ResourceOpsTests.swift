@@ -16,15 +16,16 @@ struct ResourceOpsTests {
     private static let projectSkillsRoot = FixtureLibrary.url(relativePath: "project/.skills")
 
     /// Builds a `SkillsToolContext` over `roots`, via the shared
-    /// `ResourceTestSupport.makeContext(roots:policy:)` -- `RunScriptTests`
-    /// builds one the identical way, differing only in its `policy`
-    /// parameter.
+    /// `ResourceTestSupport.makeContext(roots:mode:policy:)` --
+    /// `RunScriptTests` builds one the identical way, differing only in its
+    /// `mode` parameter.
     ///
     /// - Parameter roots: The registry roots to build over. Defaults to the
     ///   fixture library.
     /// - Returns: The assembled context.
-    private static func makeContext(roots: [URL] = [Self.projectSkillsRoot]) -> SkillsToolContext {
-        ResourceTestSupport.makeContext(roots: roots)
+    /// - Throws: Whatever `SkillsToolContext.init` throws.
+    private static func makeContext(roots: [URL] = [Self.projectSkillsRoot]) throws -> SkillsToolContext {
+        try ResourceTestSupport.makeContext(roots: roots)
     }
 
     /// Builds the fused `skills` tool over `makeContext(roots:)`.
@@ -521,14 +522,15 @@ struct ResourceOpsTests {
     /// - Parameter roots: The registry roots to build over. Defaults to the
     ///   fixture library.
     /// - Returns: The assembled user-surface context.
-    private static func makeUserSurfaceContext(roots: [URL] = [Self.projectSkillsRoot]) -> SkillsToolContext {
-        let registry = SkillsRegistry(roots: roots)
+    /// - Throws: Whatever `SkillsToolContext.init` throws.
+    private static func makeUserSurfaceContext(roots: [URL] = [Self.projectSkillsRoot]) throws -> SkillsToolContext {
+        let registry = SkillsRegistry(roots: roots, mode: .open)
         let userVisibleIDs = Set(registry.commandListing().map(\.id))
         let isUserVisible: @Sendable (SkillMetadata) -> Bool = { userVisibleIDs.contains($0.id) }
         let searcher = MetadataSearcher(items: registry.metadata().filter(isUserVisible))
-        return SkillsToolContext(
+        return try SkillsToolContext(
             registry: registry,
-            searchAgent: SkillSearchAgent(searcher: searcher, visibilityPredicate: isUserVisible),
+            searchAgent: SkillSearchAgent(searcher: searcher, visibilityPredicate: isUserVisible), mode: registry.mode,
             visibilityPredicate: isUserVisible)
     }
 
@@ -593,7 +595,6 @@ struct ResourceOpsTests {
         #expect(usableIDsList.contains("deploy"))
         #expect(!usableIDsList.contains("lint"))
     }
-
 
     // MARK: - The combined view of the layer directories
 

@@ -44,7 +44,7 @@ let stack = DotfolderStack(
     userDirectory: userConfigURL)
 
 // This call reads only the cache. It never waits on the network.
-let registry = SkillsRegistry(marketplaces: store, stack: stack, watch: true)
+let registry = SkillsRegistry(marketplaces: store, stack: stack, mode: .open, watch: true)
 
 // Fetch a cold cache and check each remote one time. The registry rebuilds
 // its catalog on each update.
@@ -318,10 +318,10 @@ that the registry reads:
 A marketplace layer always renders untrusted, as a `user` layer and a
 `project` layer do. It gets no permission switch of its own.
 
-The host `RenderPolicy` is the one gate of the shell injection and of
-`run script`, for every layer. A skill of a marketplace runs a shell
-injection when the host policy permits the shell, and runs a script when the
-host policy permits scripts. The `allowed-tools: Script(<glob>)` grant of the
+The `ToolMode` of the host is the one gate of the shell injection and of
+`run script`, for every layer. In `.open`, a skill of a marketplace runs its
+shell injection and can run a script. In `.sandboxed`, no skill runs a shell
+injection or a script. The `allowed-tools: Script(<glob>)` grant of the
 skill is still necessary for `run script`. That grant comes from the winning
 `SKILL.md` of the skill, and never from the layer that gives the script. Thus a
 marketplace that adds a script to a local skill cannot grant that script to
