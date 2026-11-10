@@ -20,6 +20,10 @@ struct SkillsCatalogToolEndpointTests {
     /// A fixture skill that the endpoint gives by its id.
     private static let fixtureSkillID = "lint"
 
+    /// The skill that each write case writes through the tool. `WriteCase`
+    /// reads it too, thus it is `fileprivate`.
+    fileprivate static let writtenSkillID = "written"
+
     // MARK: - The endpoint of the tool
 
     @Test func theToolGivesTheSkillsEndpointWithItsNameVersionAndScope() async throws {
@@ -58,12 +62,82 @@ struct SkillsCatalogToolEndpointTests {
         let response = try await endpoint.execute(
             query: "{ skill(id: \"\(Self.fixtureSkillID)\") { id } }", variables: [:], operationName: nil,
             viewer: nil)
-        let root = try #require(
-            try JSONSerialization.jsonObject(with: Data(response.utf8)) as? [String: Any])
-        let data = try #require(root["data"] as? [String: Any])
-        let skill = try #require(data["skill"] as? [String: Any])
+        let skill = try #require(try Self.data(of: response)["skill"] as? [String: Any])
 
         #expect(skill["id"] as? String == Self.fixtureSkillID)
+    }
+
+    // MARK: - A write through the tool
+
+    /// Each write through the tool gives one change event on the `skills`
+    /// endpoint of the same tool, with the id of the skill in the field of
+    /// its kind of change.
+    ///
+    /// The case of `edit skill` and `remove skill` first adds the skill. It
+    /// takes the cursor after that add, thus the event is the event of the
+    /// write under test.
+    @Test(.timeLimit(.minutes(1)), arguments: WriteCase.allCases)
+    func eachWriteThroughTheToolGivesOneChangeEventOnTheEndpoint(write: WriteCase) async throws {
+        let root = try WatcherTestSupport.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let tool = try await SkillsTool.make(
+            registry: SkillsRegistry(layers: [DotfolderStack.Layer(source: .user, root: root)]))
+        let endpoint = try Self.onlyEndpoint(of: tool)
+        if write != .add {
+            _ = try await tool.call(arguments: WriteCase.add.arguments)
+        }
+        let start = try await Self.cursor(of: endpoint)
+        let stream = try await endpoint.subscribe(
+            query: "subscription { changes(after: \"\(start)\") { cursor \(write.changeField) } }", variables: [:],
+            operationName: nil, viewer: nil)
+        var events = stream.makeAsyncIterator()
+
+        _ = try await tool.call(arguments: write.arguments)
+        let event = try Self.changeEvent(in: try #require(try await events.next()))
+
+        #expect(event[write.changeField] as? [String] == [Self.writtenSkillID])
+        #expect(try await Self.cursor(of: endpoint) == event["cursor"] as? String)
+    }
+
+    /// One write operation of the tool, with its payload for
+    /// ``writtenSkillID`` and the field of the change event that names the
+    /// skill.
+    enum WriteCase: CaseIterable, Sendable {
+        /// `add skill`, which adds the skill.
+        case add
+
+        /// `edit skill`, which changes the description of the skill.
+        case edit
+
+        /// `remove skill`, which deletes the skill.
+        case remove
+
+        /// The payload of the write.
+        var arguments: GeneratedContent {
+            let id = SkillsCatalogToolEndpointTests.writtenSkillID
+            switch self {
+            case .add:
+                return GeneratedContent(properties: [
+                    "op": "add skill", "id": id, "content": ReloadTestSupport.skillFileContents(id: id),
+                ])
+            case .edit:
+                return GeneratedContent(properties: [
+                    "op": "edit skill", "id": id,
+                    "content": ReloadTestSupport.skillFileContents(id: id, descriptionSuffix: "edited"),
+                ])
+            case .remove:
+                return GeneratedContent(properties: ["op": "remove skill", "id": id])
+            }
+        }
+
+        /// The field of the change event that names the skill.
+        var changeField: String {
+            switch self {
+            case .add: "added"
+            case .edit: "changed"
+            case .remove: "removed"
+            }
+        }
     }
 
     // MARK: - Fixtures
@@ -73,6 +147,36 @@ struct SkillsCatalogToolEndpointTests {
     /// - Returns: The registry the cases hand to the factory.
     private static func makeFixtureRegistry() -> SkillsRegistry {
         SkillsRegistry(stack: FixtureLibrary.stack())
+    }
+
+    /// Queries the root `cursor` of `endpoint`.
+    ///
+    /// - Parameter endpoint: The endpoint.
+    /// - Returns: The cursor of the newest event.
+    /// - Throws: An error of the endpoint, or a `#require` failure when the
+    ///   response has no cursor.
+    private static func cursor(of endpoint: SkillsGraph) async throws -> String {
+        let response = try await endpoint.execute(query: "{ cursor }", variables: [:], operationName: nil, viewer: nil)
+        return try #require(try data(of: response)["cursor"] as? String)
+    }
+
+    /// Reads the `changes` event of one subscription response.
+    ///
+    /// - Parameter response: The JSON text of the response.
+    /// - Returns: The event object.
+    /// - Throws: A `#require` failure when the response has no event.
+    private static func changeEvent(in response: String) throws -> [String: Any] {
+        try #require(try data(of: response)["changes"] as? [String: Any])
+    }
+
+    /// Reads the `data` object of one GraphQL response.
+    ///
+    /// - Parameter response: The JSON text of the response.
+    /// - Returns: The `data` object.
+    /// - Throws: A `#require` failure when the response has no `data` object.
+    private static func data(of response: String) throws -> [String: Any] {
+        let root = try #require(try JSONSerialization.jsonObject(with: Data(response.utf8)) as? [String: Any])
+        return try #require(root["data"] as? [String: Any])
     }
 
     /// Finds the endpoints of `tool` the way a host does, and requires

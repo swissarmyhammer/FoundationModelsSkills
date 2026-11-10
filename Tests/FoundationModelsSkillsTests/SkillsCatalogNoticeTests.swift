@@ -70,6 +70,32 @@ struct SkillsCatalogNoticeTests {
         #expect(notice.text.contains("New: `\(Self.firstAddedSkillID)`"))
     }
 
+    // MARK: - A write through the tool
+
+    /// `add skill` writes the file and reloads the registry, and the watcher
+    /// of the registry sees the same file. The two give one reload, thus the
+    /// session gets exactly one notice.
+    @Test(.timeLimit(.minutes(1)))
+    func oneWriteThroughTheToolOfAWatchedRegistryPostsExactlyOneNotice() async throws {
+        let root = try HotReloadTestSupport.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let registry = SkillsRegistry(layers: [DotfolderStack.Layer(source: .user, root: root)], watch: true)
+        let tool = try await SkillsTool.make(registry: registry)
+        let session = Session()
+        session.mount(tool)
+
+        _ = try await tool.call(
+            arguments: GeneratedContent(properties: [
+                "op": "add skill", "id": Self.firstAddedSkillID,
+                "content": ReloadTestSupport.skillFileContents(id: Self.firstAddedSkillID),
+            ]))
+
+        await ReloadTestSupport.expectExactlyOneEvent(
+            countGetter: { await session.sink.notices.count }, since: 0,
+            signalTimeout: ReloadTestSupport.expectedSignalTimeout,
+            settleWindow: ReloadTestSupport.noFurtherSignalWindow)
+    }
+
     // MARK: - The enabled key
 
     @Test(.timeLimit(.minutes(1)))

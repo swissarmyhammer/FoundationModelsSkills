@@ -82,6 +82,15 @@ and the `search skill` call. `catalogCharacterLimit` (8,000 characters by
 default) limits the list. See
 [`docs/operations.md`](docs/operations.md).
 
+The model can also write skills. `add skill` makes a new skill from the full
+text of its `SKILL.md`, `edit skill` writes one file of a skill, and
+`remove skill` deletes a skill folder. Each one has the optional `layer`
+option: `user` (the user folder, for all projects) or `project` (the `.skills`
+folder of this project). A call with no `layer` writes `user`. After each
+write the registry reloads, thus `use skill` of a new skill works in the same
+session. The `defaults` and `marketplace` layers are read-only. See
+[`docs/operations.md`](docs/operations.md#write-a-skill).
+
 For each prompt, the selection tier makes a new `LanguageModelSession` on the
 model, and the guided generation of that session holds the answer to the
 `{"ids": [...]}` shape. The tier drops an id that is not a candidate. If the
@@ -120,7 +129,7 @@ SkillsTool.make(registry: registry, model: SystemLanguageModel.default)
 
 ## Documentation
 
-- [`docs/operations.md`](docs/operations.md) — the six operations, verb
+- [`docs/operations.md`](docs/operations.md) — the nine operations, verb
   aliases, and the visibility table.
 - [`docs/marketplaces.md`](docs/marketplaces.md) — remote skill marketplaces
   (implemented in FoundationModelsExtras): the sources, the layer order, the

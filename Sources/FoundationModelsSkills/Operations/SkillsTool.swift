@@ -2,8 +2,9 @@ import FoundationModels
 import Operations
 
 /// Builds the fused `skills` tool: `SearchSkill`, `ListSkill`, `UseSkill`,
-/// and the three resource operations presented to a model (or the CLI) as
-/// one `SkillsCatalogTool` over one `OperationTool`.
+/// the three resource operations, and the three write operations
+/// (`AddSkill`, `EditSkill`, `RemoveSkill`) presented to a model (or the CLI)
+/// as one `SkillsCatalogTool` over one `OperationTool`.
 ///
 /// The forgiving op/parameter resolution and the return-don't-throw retry
 /// cap are inherited from the upstream `Operations` runtime. This type
@@ -25,10 +26,11 @@ public enum SkillsTool {
 
     /// Builds the fused `skills` tool over `context`.
     ///
-    /// The six operations dispatch through `AnyOperation` against the
+    /// The nine operations dispatch through `AnyOperation` against the
     /// shared `context`, in the order `search` / `list` / `use` / `list
-    /// resource` / `read resource` / `run script` -- the order the fused
-    /// schema's `op` enum and any unknown-operation corrective list them in.
+    /// resource` / `read resource` / `run script` / `add skill` / `edit
+    /// skill` / `remove skill` -- the order the fused schema's `op` enum and
+    /// any unknown-operation corrective list them in.
     ///
     /// The description comes from the catalog one time, here:
     /// `context.registry.metadata()`, filtered by
@@ -77,6 +79,9 @@ public enum SkillsTool {
                 AnyOperation(ListResource.self),
                 AnyOperation(ReadResource.self),
                 AnyOperation(RunScript.self),
+                AnyOperation(AddSkill.self),
+                AnyOperation(EditSkill.self),
+                AnyOperation(RemoveSkill.self),
             ],
             resolver: resolver
         )
@@ -96,9 +101,10 @@ public enum SkillsTool {
 
     /// The verb aliases this tool's operation set needs, layered onto
     /// `OperationResolver.defaultVerbAliases`: `find`/
-    /// `discover` → `search` and `call`/`invoke`/`get` → `use`, plus a
-    /// `"read"` self-mapping override (below) `ReadResource` needs to be
-    /// reachable at all.
+    /// `discover` → `search`, `call`/`invoke`/`get` → `use`, `update` →
+    /// `edit`, plus a `"read"` self-mapping override (below) `ReadResource`
+    /// needs to be reachable at all, and the `remove` overrides (below) that
+    /// `RemoveSkill` needs.
     ///
     /// Derived from the operations' own `verb` statics so this table cannot
     /// drift from them (matches the sibling `FileTool`'s
@@ -123,6 +129,14 @@ public enum SkillsTool {
     /// be rewritten to `"get resource"` before matching and never reach it,
     /// since nothing here is registered under verb `"get"` for the
     /// `"resource"` noun. Pinned by `ResourceOpsTests`.
+    ///
+    /// The same rule holds for `RemoveSkill`. The defaults map `remove`,
+    /// `rm` and `del` to `delete`, and no operation here has the verb
+    /// `delete`. Thus `"remove"` maps to itself, and `delete`, `rm` and `del`
+    /// map to `remove`. The default `create`/`new` → `add` aliases reach
+    /// `AddSkill` with no override. No default maps `edit` or `update`, thus
+    /// `update` → `edit` is safe: no operation has the verb `update`. Pinned
+    /// by `SkillOperationsTests`.
     private static let verbAliasOverrides: [String: String] = [
         "find": SearchSkill.verb,
         "discover": SearchSkill.verb,
@@ -130,5 +144,10 @@ public enum SkillsTool {
         "invoke": UseSkill.verb,
         "get": UseSkill.verb,
         "read": ReadResource.verb,
+        "update": EditSkill.verb,
+        "remove": RemoveSkill.verb,
+        "delete": RemoveSkill.verb,
+        "rm": RemoveSkill.verb,
+        "del": RemoveSkill.verb,
     ]
 }

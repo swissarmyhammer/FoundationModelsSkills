@@ -1,6 +1,6 @@
 # Operations
 
-The `skills` tool is one fused tool with six operations. The schema is a
+The `skills` tool is one fused tool with nine operations. The schema is a
 flat union: an `op` discriminator plus every field as an optional. The `id`
 field is a plain string. An invalid input does not throw. The tool returns a
 corrective message that tells the model how to correct the call.
@@ -71,6 +71,9 @@ whole session:
 | `list resource` | `id` (req) | Lists each file of the combined view of the skill except `SKILL.md`. The list stops at 100 rows. |
 | `read resource` | `id` (req), `path` (req), `start?`, `end?` | Returns the winning copy of a file verbatim, in a line window: 500 lines maximum and 1,000,000 content bytes maximum for each call. The tool never renders the file. It streams the file in 64 KiB parts and never loads the full file. `totalLines` is exact. See [development.md](development.md) for the exact byte-budget rules. `path` is relative to the skill directory. The tool also accepts an absolute path in a layer directory of the skill, and the result gives the relative path; each other absolute path is refused. A file that is not UTF-8 text is binary, and a binary file gives its absolute path and its size, not its content: the result has `binary: true`, `absolutePath` (the winning copy) and `byteSize`, and `start`, `end` and `totalLines` are `0`. Give that absolute path to a different tool, or to `read resource` again. A text read gives `binary: false`. |
 | `run script` | `id` (req), `path` (req, in `scripts/`), `arguments?`, `timeout?` | Runs the winning copy of the file directly, in the layer directory that gave the winning copy. The file must have the executable bit and a shebang. Three gates apply: the host policy, the skill's `allowed-tools: Script(<glob>)` grant, and the host trust posture. The process runs in its own process group. A timeout sends `SIGKILL`. The tool also accepts an absolute path in a layer directory of the skill, and the result gives the relative path; each other absolute path is refused. The host policy gate applies before the path check. |
+| `add skill` | `id` (req), `content` (req, the full `SKILL.md`), `layer?` | Makes the folder `<id>/` and its `SKILL.md` in one writable layer. The layer must not hold the folder yet. The `SKILL.md` must load with no warning and no skip. The answer is one plain-text sentence that names the skill, the layer and the path of the file. After the write, `use skill` of the new id gives its body in the same session. See [Write a skill](#write-a-skill). |
+| `edit skill` | `id` (req), `path?` (default `SKILL.md`), `content` (req), `layer?` | Writes one file of the skill folder of one writable layer. The layer must hold the folder. `path` uses the path rules of `read resource`, but it must be relative. A write of `SKILL.md` must load with no warning and no skip. The answer is one plain-text sentence that names the skill, the layer and the path of the file. |
+| `remove skill` | `id` (req), `layer?` | Deletes the folder of the skill, with all its files, from one writable layer. A copy in another layer stays. The answer is one plain-text sentence that names the skill, the layer and the path of the folder. |
 
 ## The combined view of a skill
 
@@ -110,6 +113,35 @@ directories, lowest precedence first. A layer that holds the directory but no
 The layer that gives the winning `SKILL.md` gives the frontmatter, the body and
 the provenance of the skill. Thus the `allowed-tools` grant of a script comes
 from that one file, and never from the layer that gives the script.
+
+## Write a skill
+
+`add skill`, `edit skill` and `remove skill` write through `SkillWriter`.
+Each one has the optional string parameter `layer`, with the values `user`
+and `project`. The guide text of `layer` is:
+
+```text
+Optional. Where to write: user (the user folder, for all projects) or project (the .skills folder of this project). Leave it out for user.
+```
+
+The `agents` tool uses the same words, with `.agents` in place of `.skills`.
+
+- A call with no `layer` writes the `user` layer.
+- A `layer` value that is not `user` or `project`, for example `global`, gives
+  the corrective ``The layer `global` is not valid. Give `user` or `project`,
+  or leave it out for `user`.`` The call writes nothing.
+- The root of a layer is the root of the highest-precedence layer of that
+  source in the registry. The host gives the roots. A registry with no layer
+  of that source gives a corrective that names the writable layers it has.
+- The `defaults` and `marketplace` layers are read-only. To change a skill
+  that only a read-only layer holds, use `add skill` with the same id in a
+  writable layer. The new copy overrides it.
+- Each refused write changes no file and gives a corrective sentence.
+- After each write, the registry reloads one time. Thus one write gives one
+  catalog-change notice when the listed catalog changes, and one change event
+  on the `skills` GraphQL endpoint.
+- No gate stands in front of a write. The host shows each write on the tool
+  call card of the session.
 
 ## The `use skill` answer
 
@@ -257,7 +289,8 @@ or update a marketplace: that work belongs to the host. See
 
 `find` and `discover` resolve to `search`. `call`, `invoke`, and `get`
 resolve to `use`. The `run` verb belongs to `run script`, thus `run skill`
-does not resolve to `use skill`.
+does not resolve to `use skill`. `create` and `new` resolve to `add`.
+`update` resolves to `edit`. `delete`, `rm`, and `del` resolve to `remove`.
 
 ## Visibility
 

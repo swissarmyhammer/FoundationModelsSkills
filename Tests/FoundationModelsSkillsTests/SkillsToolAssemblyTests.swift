@@ -249,7 +249,8 @@ struct SkillsToolAssemblyTests {
     /// The operations of the fused tool, in the order `SkillsTool.make`
     /// lists them. The marketplace does not change the model surface.
     private static let expectedOperationNames = [
-        "search skill", "list skill", "use skill", "list resource", "read resource", "run script",
+        "search skill", "list skill", "use skill", "list resource", "read resource", "run script", "add skill",
+        "edit skill", "remove skill",
     ]
 
     /// The parameter names of each operation of the fused tool, keyed by the
@@ -261,6 +262,9 @@ struct SkillsToolAssemblyTests {
         "list resource": ["id"],
         "read resource": ["id", "path", "start", "end"],
         "run script": ["id", "path", "arguments", "timeout"],
+        "add skill": ["id", "content", "layer"],
+        "edit skill": ["id", "path", "content", "layer"],
+        "remove skill": ["id", "layer"],
     ]
 
     @Test func theMarketplaceSourceTextLeavesTheOperationNamesAndParametersAlone() async throws {

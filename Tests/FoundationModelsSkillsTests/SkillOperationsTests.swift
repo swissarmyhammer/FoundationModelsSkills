@@ -599,6 +599,59 @@ struct SkillOperationsTests {
         #expect(json == (try await Self.renderedCommitBody()))
     }
 
+    // MARK: - Resolver: the write operations
+
+    /// A skill id that no layer of the fixture library holds.
+    private static let missingSkillID = "no-such-skill"
+
+    /// The layer of the fixture registry: `SkillsRegistry(roots:)` labels
+    /// each root `project`. Each case below names it, thus a write gives the
+    /// corrective of `SkillWriter` and the fixture library stays the same.
+    private static let fixtureLayer = "project"
+
+    @Test(arguments: ["remove skill", "delete skill", "rm skill", "del skill"])
+    func eachRemoveSpellingResolvesToRemoveSkill(op: String) async throws {
+        let tool = try Self.makeFixtureTool()
+        let arguments = GeneratedContent(
+            properties: ["op": op, "id": Self.missingSkillID, "layer": Self.fixtureLayer])
+
+        let answer = try await tool.call(arguments: arguments)
+
+        #expect(answer == "The skill `\(Self.missingSkillID)` is not in the project layer.")
+    }
+
+    @Test(arguments: ["add skill", "create skill", "new skill"])
+    func eachAddSpellingResolvesToAddSkill(op: String) async throws {
+        let tool = try Self.makeFixtureTool()
+        let arguments = GeneratedContent(
+            properties: ["op": op, "id": "commit", "content": "Body.", "layer": Self.fixtureLayer])
+
+        let answer = try await tool.call(arguments: arguments)
+
+        #expect(answer.hasPrefix("The skill `commit` is already in the project layer."))
+    }
+
+    @Test(arguments: ["edit skill", "update skill"])
+    func eachEditSpellingResolvesToEditSkill(op: String) async throws {
+        let tool = try Self.makeFixtureTool()
+        let arguments = GeneratedContent(
+            properties: ["op": op, "id": Self.missingSkillID, "content": "Body.", "layer": Self.fixtureLayer])
+
+        let answer = try await tool.call(arguments: arguments)
+
+        #expect(answer == "The skill `\(Self.missingSkillID)` is not in the project layer. Use `add` to make it.")
+    }
+
+    @Test(arguments: ["list resource", "read resource", "run script"])
+    func eachResourceOpStillResolvesBesideTheWriteAliases(op: String) async throws {
+        let tool = try Self.makeFixtureTool()
+        let arguments = GeneratedContent(properties: ["op": op, "id": "commit", "path": "scripts/none.sh"])
+
+        let answer = try await tool.call(arguments: arguments)
+
+        #expect(!answer.contains("Unknown operation"), "\(op) should resolve, got: \(answer)")
+    }
+
     // MARK: - generatedContent / init(_:) round trips
 
     @Test func searchSkillRoundTripsThroughGeneratedContentWithLimitPresent() throws {
@@ -655,12 +708,13 @@ struct SkillOperationsTests {
 
     // MARK: - The fused tool exposes exactly one core Tool with the flat-union schema
 
-    @Test func fusedToolExposesExactlyTheSixCanonicalOps() throws {
+    @Test func fusedToolExposesExactlyTheNineCanonicalOps() throws {
         let tool = try Self.makeFixtureTool()
 
         #expect(
             tool.operations.map(\.opString) == [
                 "search skill", "list skill", "use skill", "list resource", "read resource", "run script",
+                "add skill", "edit skill", "remove skill",
             ])
         #expect(tool.name == "skills")
     }

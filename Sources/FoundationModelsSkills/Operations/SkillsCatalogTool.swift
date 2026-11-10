@@ -2,7 +2,7 @@ import FoundationModels
 import FoundationModelsExtras
 import Operations
 
-/// The fused `skills` tool that `SkillsTool.make` gives a host: the six
+/// The fused `skills` tool that `SkillsTool.make` gives a host: the nine
 /// skill operations, with the visible catalog in the description.
 ///
 /// A model reads the name, the description, and the schema of a tool before
@@ -26,9 +26,10 @@ import Operations
 /// `Operations` runtime. It resolves the payload, dispatches the operation,
 /// and keeps the retry cap.
 ///
-/// The answers of `search skill`, `list skill`, and `use skill` are plain
-/// text: the lines of the skills with the load instruction, the rendered body
-/// of the skill, or a corrective sentence. The runtime encodes each one as a
+/// The answers of `search skill`, `list skill`, `use skill`, `add skill`,
+/// `edit skill`, and `remove skill` are plain text: the lines of the skills
+/// with the load instruction, the rendered body of the skill, the sentence of
+/// a write, or a corrective sentence. The runtime encodes each one as a
 /// JSON string, and this tool gives the decoded text (`PlainTextOperations`).
 /// The answer of each resource operation is JSON, as the runtime gives it.
 public struct SkillsCatalogTool: Tool {
@@ -70,8 +71,8 @@ public struct SkillsCatalogTool: Tool {
     /// host gets one endpoint for the registry.
     private let skillsGraph: SkillsGraph
 
-    /// Finds the payloads of `search skill`, `list skill`, and `use skill`,
-    /// and decodes their answers to plain text.
+    /// Finds the payloads of the operations whose answer is plain text, and
+    /// decodes their answers to plain text.
     private let plainTextOperations: PlainTextOperations
 
     /// Wraps `operationTool` and builds the schema of its operations.
@@ -132,7 +133,8 @@ public struct SkillsCatalogTool: Tool {
     }
 
     /// Dispatches `arguments` with `dispatch`, and gives the answer as plain
-    /// text when the payload is `search skill`, `list skill`, or `use skill`.
+    /// text when the payload names an operation whose answer is plain text
+    /// (`PlainTextOperations`).
     ///
     /// `call(arguments:)` and `perform(_:)` dispatch through a different
     /// method of `operationTool`. Both then decode the answer here, thus the
