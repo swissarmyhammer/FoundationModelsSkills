@@ -211,9 +211,11 @@ struct SkillsToolAssemblyTests {
     ///
     /// The proof is a pair. `cosineOnlyQuery` has no keyword and no trigram
     /// overlap, thus the same factory with no embedder gives no match. The
-    /// same factory with the double gives exactly the aligned skill. Only
-    /// the cosine signal can make that difference, thus the `embedder:`
-    /// parameter the `async` signature exists for is honored.
+    /// same factory with the double ranks the aligned skill first. Each
+    /// other skill embeds orthogonally, and a zero cosine score is still a
+    /// cosine rank, thus those skills follow it. Only the cosine signal can
+    /// make that difference, thus the `embedder:` parameter the `async`
+    /// signature exists for is honored.
     @Test func theEmbedderReachesTheSearcherAndItsCosineSignalRanksAMatch() async throws {
         let registry = Self.makeFixtureRegistry()
         let embedder = AxisAlignedEmbedder(
@@ -225,7 +227,7 @@ struct SkillsToolAssemblyTests {
         let cosineIDs = try await Self.searchIDs(through: withEmbedder, query: Self.cosineOnlyQuery)
 
         #expect(keywordOnlyIDs.isEmpty)
-        #expect(cosineIDs == [Self.alignedSkillID])
+        #expect(cosineIDs.first == Self.alignedSkillID)
     }
 
     // MARK: - The default visibility predicate

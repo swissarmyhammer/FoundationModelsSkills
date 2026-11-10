@@ -79,7 +79,7 @@ struct SkillSearchAgentTests {
         let alpha = SkillMetadata(
             id: "alpha", description: "Handles repository snapshot creation.", isModelVisible: true)
         let beta = SkillMetadata(
-            id: "beta", description: "Reports current working tree status.", isModelVisible: true)
+            id: "beta", description: "Lists branch names.", isModelVisible: true)
         let query = "save my work"
 
         let embedder = FakeEmbedder(
