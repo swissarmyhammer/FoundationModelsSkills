@@ -277,28 +277,6 @@ struct SkillsGraphChangesTests {
         return "\(cursor[..<separator])\(cursorSeparator)\(sequence + 1)"
     }
 
-    /// The text of one GraphQL response.
-    private enum ResponseText {
-        /// Reads a response as a JSON object.
-        ///
-        /// - Parameter text: The JSON text.
-        /// - Returns: The object.
-        /// - Throws: A failure of `#require` when the text is not an object.
-        static func object(_ text: String) throws -> [String: Any] {
-            try #require(try JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any])
-        }
-
-        /// Gives the `extensions.code` of each error of a response.
-        ///
-        /// - Parameter text: The JSON text.
-        /// - Returns: The codes, in order.
-        /// - Throws: A failure of `#require` when the text is not an object.
-        static func codes(_ text: String) throws -> [String] {
-            let errors = try object(text)["errors"] as? [[String: Any]] ?? []
-            return errors.compactMap { error in (error["extensions"] as? [String: Any])?["code"] as? String }
-        }
-    }
-
     /// One event of the `changes` subscription.
     private struct ChangeEvent {
         /// The cursor that resumes after the event.
@@ -312,20 +290,10 @@ struct SkillsGraphChangesTests {
         /// - Parameter text: The JSON text of the response.
         /// - Throws: A failure of `#require` when the response has no event.
         init(response text: String) throws {
-            let event = try Self.event(in: text)
+            let event = try GraphQLTestSupport.changeEvent(in: text)
             cursor = try #require(event["cursor"] as? String)
             _ = try #require(event["at"] as? String)
             ids = Self.ids(of: event)
-        }
-
-        /// Reads the event object of a response.
-        ///
-        /// - Parameter text: The JSON text of the response.
-        /// - Returns: The event object.
-        /// - Throws: A failure of `#require` when the response has no event.
-        private static func event(in text: String) throws -> [String: Any] {
-            let data = try #require(try ResponseText.object(text)["data"] as? [String: Any])
-            return try #require(data["changes"] as? [String: Any])
         }
 
         /// Reads the ids of an event object.
@@ -352,9 +320,7 @@ struct SkillsGraphChangesTests {
         /// - Returns: The cursor of the newest event.
         /// - Throws: An error of the endpoint, or a failure of `#require`.
         func cursor() async throws -> String {
-            let response = try await graph.execute(query: "{ cursor }", variables: [:], operationName: nil, viewer: nil)
-            let data = try #require(try ResponseText.object(response)["data"] as? [String: Any])
-            return try #require(data["cursor"] as? String)
+            try await GraphQLTestSupport.cursor(of: graph)
         }
 
         /// Waits for an event after a cursor, then gives the first one.
@@ -382,7 +348,8 @@ struct SkillsGraphChangesTests {
         ///   response.
         /// - Throws: An error of the endpoint, or a failure of `#require`.
         func codes(after cursor: String) async throws -> [String] {
-            try await ResponseText.codes(firstResponse(of: "subscription { changes(after: \"\(cursor)\") { cursor } }"))
+            try await GraphQLTestSupport.codes(
+                of: firstResponse(of: "subscription { changes(after: \"\(cursor)\") { cursor } }"))
         }
 
         /// Starts a subscription, and gives its first response.

@@ -32,6 +32,38 @@ comments:
     - evidence: `swift test` 780 tests in 67 suites passed, 0 issues, no compiler warning from the package (only the SwiftPM `missing creator` line of the mlx bundle, which was there before). Files: Sources/FoundationModelsSkills/Operations/{AddSkill,EditSkill,RemoveSkill,SkillWriteSupport}.swift (new), SkillsTool.swift, PlainTextOperations.swift, SkillsCatalogTool.swift; Tests/FoundationModelsSkillsTests/SkillWriteOperationsTests.swift (new), SkillOperationsTests.swift, SkillsCatalogNoticeTests.swift, SkillsCatalogToolEndpointTests.swift, SkillsToolAssemblyTests.swift; docs/operations.md; README.md.
     - next: /review
   timestamp: 2026-11-10T16:40:08.906079+00:00
+- actor: claude-code
+  id: 01m735gwfqe81easvfk49v4c1y
+  text: |-
+    ### review — findings
+    - evidence: review sha HEAD~1..HEAD (76393d0); 5 findings (5 confirmed, 6 refuted) — Tests/FoundationModelsSkillsTests/SkillsCatalogNoticeTests.swift:93, Tests/FoundationModelsSkillsTests/SkillsCatalogToolEndpointTests.swift:158 (x2), Tests/FoundationModelsSkillsTests/SkillsCatalogToolEndpointTests.swift:168 (x2)
+    - next: implement the open items of "Review Findings (2026-11-10 10:40)". Put the cursor read and the change-event read in one shared test support file. Put the one-notice check in one helper that takes the trigger.
+  timestamp: 2026-11-10T16:44:07.543409+00:00
+- actor: claude-code
+  id: 01m735hdv75sn2rydvnhkcneqj
+  text: |-
+    ### finish iteration 1 — findings
+    - implement: changed — 14 files
+    - test: green — swift test, 780 passed in 67 suites, 0 warnings
+    - commit: 76393d0
+    - review: findings — Tests/FoundationModelsSkillsTests/SkillsCatalogNoticeTests.swift:93, Tests/FoundationModelsSkillsTests/SkillsCatalogToolEndpointTests.swift:158 (x2), Tests/FoundationModelsSkillsTests/SkillsCatalogToolEndpointTests.swift:168 (x2)
+  timestamp: 2026-11-10T16:44:25.319346+00:00
+- actor: claude-code
+  id: 01m735teg4qzwwb7kj75gsdbk1
+  text: |-
+    Review findings of 2026-11-10 10:40 are fixed.
+    - New `Tests/FoundationModelsSkillsTests/GraphQLTestSupport.swift`: `object(_:)`, `data(of:)`, `codes(of:)`, `changeEvent(in:)`, `cursor(of:)`. Both `SkillsGraphChangesTests` and `SkillsCatalogToolEndpointTests` use it. `SkillsGraphChangesTests` lost its private `ResponseText` and `ChangeEvent.event(in:)`; `Endpoint.cursor()` forwards to the shared helper. The endpoint suite lost its private `cursor(of:)`, `changeEvent(in:)` and `data(of:)`.
+    - `SkillsCatalogNoticeTests`: new private `expectExactlyOneNotice(on:after:)` takes the trigger as a closure. The two tests call it, thus the four-argument `expectExactlyOneEvent` call is written once.
+    - Discovery: the first full run failed the `edit` and `remove` cases of `eachWriteThroughTheToolGivesOneChangeEventOnTheEndpoint`. `SkillChangeFeed` appends events on its own task, thus the cursor read after the setup `add` can come before the event of that add, and the subscription then gave the add event. The previous run passed by chance. The test now subscribes from the first cursor before the setup `add`, and reads the add event from the stream; no poll, no time value.
+    - Do not run `swift format` with no configuration: the default is 2 spaces and 100 columns, and it keeps the line breaks it adds. Use a configuration with `lineLength: 120` and `indentation.spaces: 4`.
+  timestamp: 2026-11-10T16:49:20.900965+00:00
+- actor: claude-code
+  id: 01m735tgs9cg647qajgcfvnfcq
+  text: |-
+    ### implement — changed
+    - evidence: `swift test` 780 tests in 67 suites passed, 0 issues, no compiler warning (only the SwiftPM `missing creator` line of the mlx bundle, which was there before). Files: Tests/FoundationModelsSkillsTests/GraphQLTestSupport.swift (new), SkillsCatalogNoticeTests.swift, SkillsCatalogToolEndpointTests.swift, SkillsGraphChangesTests.swift. Findings: 5 of 5 checked.
+    - next: /review
+  timestamp: 2026-11-10T16:49:23.241041+00:00
 depends_on:
 - 01M7301PF00406K3KN37EW4CHN
 position_column: doing
@@ -66,3 +98,20 @@ Part of SK-6. Put the writes of `SkillWriter` (SK-6b) on the `skills` tool.
 
 ## Workflow
 - Use `/tdd` — write failing tests first, then implement to make them pass. #step1
+
+## Review Findings (2026-11-10 10:40)
+
+> Scope: `review sha HEAD~1..HEAD` — reviewed the diffs only — lines this change added or modified. 12 file(s) reviewed, 4 not reviewed.
+
+> 2 file(s) not reviewed — excluded by an ignore rule:
+> - `.kanban/ (from .reviewignore)` — 2 file(s)
+
+> 2 file(s) not reviewed — no validator matched:
+> - `README.md` — no validator matches this file
+> - `docs/operations.md` — no validator matches this file
+
+- [x] `Tests/FoundationModelsSkillsTests/SkillsCatalogNoticeTests.swift:93` `duplication/duplication` — The new test `oneWriteThroughTheToolOfAWatchedRegistryPostsExactlyOneNotice` repeats the `expectExactlyOneEvent` argument list from the test just above it. The only difference is the trigger. The argument list is the same: `countGetter`, `since: 0`, `signalTimeout`, and `settleWindow`. Move the repeated check into a helper that takes the trigger as a closure, for example `expectOneNoticeAfter(session:, trigger:)`. Both tests then call it with their own trigger, and the four-argument call is written once.
+- [x] `Tests/FoundationModelsSkillsTests/SkillsCatalogToolEndpointTests.swift:158` `duplication/duplication` — The new private helper `cursor(of:)` repeats the body of `Endpoint.cursor()` in SkillsGraphChangesTests.swift. Both send the query `{ cursor }`, read `data`, and read the `cursor` field. The two copies can drift apart. Move the cursor query into one shared test helper that both suites call, and delete the copy this change added. Editing SkillsGraphChangesTests.swift to use the shared helper is a separate task, because that file is outside this change. Within this change, the new suite should call the shared helper and not keep its own copy.
+- [x] `Tests/FoundationModelsSkillsTests/SkillsCatalogToolEndpointTests.swift:158` `reuse/reuse` — The new private static `cursor(of:)` helper repeats the logic of the existing `cursor()` helper on the endpoint in SkillsGraphChangesTests. Two copies of the same GraphQL cursor read can drift apart. Move the cursor read into one shared test helper, for example in a support file, and call it from both suites. Or make the existing `Endpoint.cursor()` reachable from here and drop this copy.
+- [x] `Tests/FoundationModelsSkillsTests/SkillsCatalogToolEndpointTests.swift:168` `duplication/duplication` — The new helper `changeEvent(in:)` repeats the logic of the private `ChangeEvent.event(in:)` in SkillsGraphChangesTests.swift. Both read the `data` object and then the `changes` object of a subscription response. Put the response-to-event read in one shared test helper, and have both suites call it. The `ChangeEvent.event` copy is `private`, so this suite cannot call it as it stands. Move the helper to shared test support, and make the change to SkillsGraphChangesTests.swift a separate task.
+- [x] `Tests/FoundationModelsSkillsTests/SkillsCatalogToolEndpointTests.swift:168` `reuse/reuse` — The new `changeEvent(in:)` helper repeats the event-reading logic of the existing `ChangeEvent.event(in:)` helper in SkillsGraphChangesTests. It parses the same `changes` field from a subscription response. Share one subscription-event parser between the two suites, in a common test support file. Keep only one copy.

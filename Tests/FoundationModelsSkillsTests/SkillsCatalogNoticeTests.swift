@@ -58,12 +58,9 @@ struct SkillsCatalogNoticeTests {
         let session = Session()
         session.mount(fixture.tool)
 
-        try ReloadTestSupport.writeSkillFile(id: Self.firstAddedSkillID, in: fixture.root)
-
-        await ReloadTestSupport.expectExactlyOneEvent(
-            countGetter: { await session.sink.notices.count }, since: 0,
-            signalTimeout: ReloadTestSupport.expectedSignalTimeout,
-            settleWindow: ReloadTestSupport.noFurtherSignalWindow)
+        try await Self.expectExactlyOneNotice(on: session) {
+            try ReloadTestSupport.writeSkillFile(id: Self.firstAddedSkillID, in: fixture.root)
+        }
         let notice = try #require(await session.sink.notices.first)
         #expect(notice.kind == .skills)
         #expect(notice.added.map(\.name) == [Self.firstAddedSkillID])
@@ -84,16 +81,13 @@ struct SkillsCatalogNoticeTests {
         let session = Session()
         session.mount(tool)
 
-        _ = try await tool.call(
-            arguments: GeneratedContent(properties: [
-                "op": "add skill", "id": Self.firstAddedSkillID,
-                "content": ReloadTestSupport.skillFileContents(id: Self.firstAddedSkillID),
-            ]))
-
-        await ReloadTestSupport.expectExactlyOneEvent(
-            countGetter: { await session.sink.notices.count }, since: 0,
-            signalTimeout: ReloadTestSupport.expectedSignalTimeout,
-            settleWindow: ReloadTestSupport.noFurtherSignalWindow)
+        try await Self.expectExactlyOneNotice(on: session) {
+            _ = try await tool.call(
+                arguments: GeneratedContent(properties: [
+                    "op": "add skill", "id": Self.firstAddedSkillID,
+                    "content": ReloadTestSupport.skillFileContents(id: Self.firstAddedSkillID),
+                ]))
+        }
     }
 
     // MARK: - The enabled key
@@ -297,6 +291,24 @@ struct SkillsCatalogNoticeTests {
     }
 
     // MARK: - Helpers
+
+    /// Runs `trigger`, and asserts that `session` then gets exactly one
+    /// notice and no second one.
+    ///
+    /// - Parameters:
+    ///   - session: The session that mounted the tool. Its sink holds no
+    ///     notice before the call.
+    ///   - trigger: The change under test.
+    /// - Throws: Whatever `trigger` throws.
+    private static func expectExactlyOneNotice(
+        on session: Session, after trigger: () async throws -> Void
+    ) async rethrows {
+        try await trigger()
+        await ReloadTestSupport.expectExactlyOneEvent(
+            countGetter: { await session.sink.notices.count }, since: 0,
+            signalTimeout: ReloadTestSupport.expectedSignalTimeout,
+            settleWindow: ReloadTestSupport.noFurtherSignalWindow)
+    }
 
     /// Builds a tool over a watched registry, applies `change` to its root,
     /// and asserts that the change posts no notice.
