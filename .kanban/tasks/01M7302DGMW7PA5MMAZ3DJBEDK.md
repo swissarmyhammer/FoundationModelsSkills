@@ -64,10 +64,26 @@ comments:
     - evidence: `swift test` 780 tests in 67 suites passed, 0 issues, no compiler warning (only the SwiftPM `missing creator` line of the mlx bundle, which was there before). Files: Tests/FoundationModelsSkillsTests/GraphQLTestSupport.swift (new), SkillsCatalogNoticeTests.swift, SkillsCatalogToolEndpointTests.swift, SkillsGraphChangesTests.swift. Findings: 5 of 5 checked.
     - next: /review
   timestamp: 2026-11-10T16:49:23.241041+00:00
+- actor: claude-code
+  id: 01m735wsjrkecngkyekxwrpnzw
+  text: |-
+    ### review — clean
+    - evidence: review sha HEAD~1..HEAD (e6864ec): 0 findings, 0 confirmed, 1 refuted, 7 attempted, 0 failed. All 5 prior findings are checked.
+    - next: none. The task is in done.
+  timestamp: 2026-11-10T16:50:37.784837+00:00
+- actor: claude-code
+  id: 01m735x2ese6b9gsqfkkf8eq0r
+  text: |-
+    ### finish iteration 2 — clean
+    - implement: changed — 4 test files
+    - test: green — swift test, 780 passed in 67 suites, 0 warnings
+    - commit: e6864ec
+    - review: clean — 0 findings; task in done
+  timestamp: 2026-11-10T16:50:46.873778+00:00
 depends_on:
 - 01M7301PF00406K3KN37EW4CHN
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: ffac80
 title: 'SK-6c: The skills tool gets the add, edit and remove operations with the layer option'
 ---
 ## What
