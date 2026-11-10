@@ -22,6 +22,33 @@ comments:
     - evidence: 19 files. Sources: Registry/SkillsRegistry.swift, Registry/SkillsRegistry+SlashCommands.swift, Registry/EventBroadcaster.swift, GraphQL/SkillChangeFeed.swift, Operations/SkillsToolAssembly.swift, Operations/SkillsToolContext.swift, Search/SkillsReloadFollower.swift; Examples/skills-demo/WatchMode.swift. Tests: EventBroadcasterTests.swift (new), ReloadTestSupport.swift, SkillsRegistryReloadTests.swift, SkillsGraphChangesTests.swift, SlashCommandProvidingTests.swift, HotReloadTests.swift, HotReloadLiveTests.swift, MarketplaceLocalSourceTests.swift, MarketplaceRegistryTests.swift, SkillsReloadFollowerTests.swift, SkillsCatalogNoticeTests.swift. `swift test`: 701 tests in 65 suites passed, 0 issues, no compiler warnings.
     - next: /review
   timestamp: 2026-11-10T15:58:27.871142+00:00
+- actor: claude-code
+  id: 01m7335wqq3d5td49bykd5b0g5
+  text: |-
+    ### review — findings
+    - evidence: review sha HEAD~1..HEAD (c04d4cc); 2 findings (2 confirmed, 4 refuted) — Sources/FoundationModelsSkills/Registry/SkillsRegistry.swift:1444, Sources/FoundationModelsSkills/Registry/SkillsRegistry.swift:1447
+    - next: Remove the assign-only properties `contents` and `diagnostics`, or read them, then run the review again.
+  timestamp: 2026-11-10T16:03:10.199718+00:00
+- actor: claude-code
+  id: 01m7336ftg0zsfmf4ztcyw7ag4
+  text: |-
+    ### finish iteration 1 — findings
+    - implement: changed — 19 files
+    - test: green — swift test, 701 passed in 65 suites, 0 warnings
+    - commit: c04d4cc
+    - review: findings — Sources/FoundationModelsSkills/Registry/SkillsRegistry.swift:1444, Sources/FoundationModelsSkills/Registry/SkillsRegistry.swift:1447
+  timestamp: 2026-11-10T16:03:29.744960+00:00
+- actor: claude-code
+  id: 01m733cc27swtq7w41n3f9b6ax
+  text: 'Review findings fix. Cause: the only reader of `CatalogFingerprint.contents` and `CatalogFingerprint.diagnostics` was the synthesized `==` of `Equatable`. Periphery cannot see synthesized reads. Fix: `CatalogFingerprint` now has an explicit `static func ==` that compares `metadata`, `contents` and `diagnostics`. Thus the comparison reads each property that it stores, and a rebuild still publishes only when the catalog changed. I did not use `// periphery:ignore`, because an explicit read removes the cause and a marker only hides it. No other private `Equatable`/`Hashable` type is in the file (the public types are retained by `--retain-public`). Proof: `periphery scan --skip-build --index-store-path .build/out --retain-public` gives the two findings on the old code (git stash) and zero findings in SkillsRegistry.swift on the new code. Note: on Swift 6.4 the index store is `.build/out` (it holds `v5`), not `.build/debug/index/store`. Periphery reports other assign-only properties in other files (Examples/skills-demo/WatchMode.swift, Tests/.../ScriptedLanguageModel.swift); they are not in this file and not in the findings.'
+  timestamp: 2026-11-10T16:06:42.503303+00:00
+- actor: claude-code
+  id: 01m733cdm19ck252qy8nanqfek
+  text: |-
+    ### implement — changed
+    - evidence: 1 file — Sources/FoundationModelsSkills/Registry/SkillsRegistry.swift (explicit `CatalogFingerprint.==`). `swift test`: 701 tests in 65 suites passed, 0 compiler warnings. Periphery: 0 findings in SkillsRegistry.swift. Both review findings checked.
+    - next: /review
+  timestamp: 2026-11-10T16:06:44.097802+00:00
 position_column: doing
 position_ordinal: '80'
 title: 'SK-6a: SkillsRegistry gets a public reload that always sends a change event'
@@ -51,3 +78,13 @@ Change `Sources/FoundationModelsSkills/Registry/SkillsRegistry.swift`:
 
 ## Workflow
 - Use `/tdd` — write failing tests first, then implement to make them pass. #step1
+
+## Review Findings (2026-11-10 10:00)
+
+> Scope: `review sha HEAD~1..HEAD` — reviewed the diffs only — lines this change added or modified. 19 file(s) reviewed, 14 not reviewed.
+
+> 14 file(s) not reviewed — excluded by an ignore rule:
+> - `.kanban/ (from .reviewignore)` — 14 file(s)
+
+- [x] `Sources/FoundationModelsSkills/Registry/SkillsRegistry.swift:1444` `code-hygiene/dead-code-swift` — var.instance `contents` is assignOnlyProperty.
+- [x] `Sources/FoundationModelsSkills/Registry/SkillsRegistry.swift:1447` `code-hygiene/dead-code-swift` — var.instance `diagnostics` is assignOnlyProperty.

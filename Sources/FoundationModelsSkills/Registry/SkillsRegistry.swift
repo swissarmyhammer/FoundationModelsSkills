@@ -1455,6 +1455,17 @@ public struct SkillsRegistry: Sendable {
             contents = registry.skillContents()
             diagnostics = registry.diagnostics
         }
+
+        /// Tells if two fingerprints show the same catalog: the same
+        /// metadata, the same skill contents, and the same diagnostics.
+        ///
+        /// - Parameters:
+        ///   - lhs: The first fingerprint.
+        ///   - rhs: The second fingerprint.
+        /// - Returns: `true` when all three parts are equal.
+        static func == (lhs: CatalogFingerprint, rhs: CatalogFingerprint) -> Bool {
+            lhs.metadata == rhs.metadata && lhs.contents == rhs.contents && lhs.diagnostics == rhs.diagnostics
+        }
     }
 
     /// Runs each rebuild of one registry: loads the layers, swaps in the new
