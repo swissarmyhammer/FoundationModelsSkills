@@ -49,8 +49,24 @@ comments:
     - evidence: 1 file — Sources/FoundationModelsSkills/Registry/SkillsRegistry.swift (explicit `CatalogFingerprint.==`). `swift test`: 701 tests in 65 suites passed, 0 compiler warnings. Periphery: 0 findings in SkillsRegistry.swift. Both review findings checked.
     - next: /review
   timestamp: 2026-11-10T16:06:44.097802+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01m733e88c7hfn6sta5qgaeghf
+  text: |-
+    ### review — clean
+    - evidence: review sha HEAD~1..HEAD (bbe799a) — 0 findings (0 confirmed, 0 refuted, 7 attempted, 0 failed). All prior Review Findings items are checked.
+    - next: The task is in done. Task 01M7301PF00406K3KN37EW4CHN is not blocked by this task now.
+  timestamp: 2026-11-10T16:07:44.140788+00:00
+- actor: claude-code
+  id: 01m733em79jp0f4jar4yfawh6a
+  text: |-
+    ### finish iteration 2 — clean
+    - implement: changed — 1 file (SkillsRegistry.swift)
+    - test: green — swift test, 701 passed in 65 suites, 0 warnings
+    - commit: bbe799a
+    - review: clean — 0 findings; task in done
+  timestamp: 2026-11-10T16:07:56.393243+00:00
+position_column: done
+position_ordinal: ffaa80
 title: 'SK-6a: SkillsRegistry gets a public reload that always sends a change event'
 ---
 ## What
