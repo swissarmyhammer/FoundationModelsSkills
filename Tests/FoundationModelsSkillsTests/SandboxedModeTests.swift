@@ -45,8 +45,10 @@ struct SandboxedModeTests {
     ///
     /// Each `\s*` also matches a line break, thus the pattern finds a default
     /// with any space around `:` and `=`, and a default on the next line.
+    /// The optional `?` or `!` after the type finds a default on an optional
+    /// `ToolMode` too.
     private static var defaultModePattern: Regex<Substring> {
-        #/mode\s*:\s*ToolMode\s*=/#
+        #/mode\s*:\s*ToolMode[?!]?\s*=/#
     }
 
     /// The source directory of the library, relative to the package root.
@@ -191,6 +193,18 @@ struct SandboxedModeTests {
 
     @Test func theScanFlagsADefaultOnTheNextLine() {
         #expect(Self.modeDefaultLines(in: "init(\n    mode: ToolMode\n        = .open)") == [2])
+    }
+
+    @Test func theScanFlagsADefaultOnAnOptionalMode() {
+        #expect(Self.modeDefaultLines(in: "init(mode: ToolMode? = nil)") == [1])
+    }
+
+    @Test func theScanFlagsADefaultOnAnImplicitlyUnwrappedMode() {
+        #expect(Self.modeDefaultLines(in: "init(mode: ToolMode! = .open)") == [1])
+    }
+
+    @Test func theScanDoesNotFlagAnOptionalModeWithNoDefault() {
+        #expect(Self.modeDefaultLines(in: "init(mode: ToolMode?, probe: SandboxProbe = .live)").isEmpty)
     }
 
     @Test func theScanDoesNotFlagAModeWithNoDefault() {
