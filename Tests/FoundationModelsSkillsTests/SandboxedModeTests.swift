@@ -41,6 +41,12 @@ struct SandboxedModeTests {
     /// The name of the `op` field of the fused schema.
     private static let opFieldName = "op"
 
+    /// The text of a parameter that gives `mode` a default value.
+    private static let defaultModeMarker = "mode: ToolMode = "
+
+    /// The source directory of the library, relative to the package root.
+    private static let librarySourcesPath = "Sources/FoundationModelsSkills"
+
     // MARK: - Schema and description
 
     @Test func theSchemaHasNoRunScriptOp() async throws {
@@ -166,6 +172,20 @@ struct SandboxedModeTests {
         #expect(throws: SkillsToolContext.ModeMismatchError(registryMode: .open, contextMode: .sandboxed)) {
             try fixture.makeContext(contextMode: .sandboxed)
         }
+    }
+
+    // MARK: - No default mode
+
+    @Test func noLineUnderTheLibrarySourcesGivesModeADefault() throws {
+        let offenders = try SwiftSourceScan.reportedLines(
+            inDirectory: Self.librarySourcesPath, matching: { $0.contains(Self.defaultModeMarker) })
+
+        #expect(
+            offenders.isEmpty,
+            """
+            No line under \(Self.librarySourcesPath)/ may give `mode` a default value. Each host \
+            states its mode; found: \(offenders.joined(separator: ", "))
+            """)
     }
 
     // MARK: - Helpers

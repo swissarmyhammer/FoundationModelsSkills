@@ -327,7 +327,7 @@ public struct SkillsRegistry: Sendable {
     ///     an `{% include %}` names. It sits below the named arguments of a
     ///     skill and above the environment. Defaults to empty.
     public init(
-        roots: [URL], mode: ToolMode = .open, policy: RenderPolicy = RenderPolicy(), watch: Bool = false,
+        roots: [URL], mode: ToolMode, policy: RenderPolicy = RenderPolicy(), watch: Bool = false,
         templateContext: [String: TemplateValue] = [:]
     ) {
         self.init(
@@ -362,7 +362,7 @@ public struct SkillsRegistry: Sendable {
     ///     an `{% include %}` names. It sits below the named arguments of a
     ///     skill and above the environment. Defaults to empty.
     public init(
-        stack: DotfolderStack, mode: ToolMode = .open, policy: RenderPolicy = RenderPolicy(), watch: Bool = false,
+        stack: DotfolderStack, mode: ToolMode, policy: RenderPolicy = RenderPolicy(), watch: Bool = false,
         templateContext: [String: TemplateValue] = [:]
     ) {
         self.init(layers: stack.layers, mode: mode, policy: policy, watch: watch, templateContext: templateContext)
@@ -398,7 +398,7 @@ public struct SkillsRegistry: Sendable {
     ///     an `{% include %}` names. It sits below the named arguments of a
     ///     skill and above the environment. Defaults to empty.
     public init(
-        layers: [DotfolderStack.Layer], mode: ToolMode = .open, policy: RenderPolicy = RenderPolicy(), watch: Bool = false,
+        layers: [DotfolderStack.Layer], mode: ToolMode, policy: RenderPolicy = RenderPolicy(), watch: Bool = false,
         templateContext: [String: TemplateValue] = [:]
     ) {
         self.init(
@@ -476,7 +476,7 @@ public struct SkillsRegistry: Sendable {
     ///     an `{% include %}` names. It sits below the named arguments of a
     ///     skill and above the environment. Defaults to empty.
     public init(
-        marketplaces: some MarketplaceLayerProviding, stack: DotfolderStack, mode: ToolMode = .open,
+        marketplaces: some MarketplaceLayerProviding, stack: DotfolderStack, mode: ToolMode,
         policy: RenderPolicy = RenderPolicy(), watch: Bool = false,
         templateContext: [String: TemplateValue] = [:]
     ) {
