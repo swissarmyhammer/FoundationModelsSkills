@@ -130,7 +130,7 @@ public struct SkillsToolContext: Sendable {
     public init(
         registry: SkillsRegistry,
         searchAgent: SkillSearchAgent,
-        mode: ToolMode,
+        mode: ToolMode = .open,
         sandboxProbe: SandboxProbe = .live,
         visibilityPredicate: @escaping @Sendable (SkillMetadata) -> Bool = { $0.isModelVisible },
         reloadFollower: SkillsReloadFollower? = nil,
