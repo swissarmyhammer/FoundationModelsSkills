@@ -172,7 +172,8 @@ struct SkillsReloadFollowerTests {
             embedder: nil,
             selection: nil,
             followReloads: followReloads,
-            visibilityPredicate: { $0.isModelVisible })
+            visibilityPredicate: { $0.isModelVisible },
+            sandboxProbe: .fixed(false))
     }
 
     // MARK: - Dispatch

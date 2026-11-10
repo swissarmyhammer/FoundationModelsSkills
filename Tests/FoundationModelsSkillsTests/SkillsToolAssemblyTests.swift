@@ -62,6 +62,51 @@ struct SkillsToolAssemblyTests {
         #expect(!tool.operations.map(\.opString).contains(Self.runScriptOp))
     }
 
+    // MARK: - The sandbox probe of the host
+
+    @Test func theNoModelFactoryOverAnOpenRegistryComposesWhenTheProbeSaysNotSandboxed() async throws {
+        await #expect(throws: Never.self) {
+            try await SkillsTool.make(registry: Self.makeFixtureRegistry(), sandboxProbe: .fixed(false))
+        }
+    }
+
+    @Test func theModelFactoryOverAnOpenRegistryComposesWhenTheProbeSaysNotSandboxed() async throws {
+        await #expect(throws: Never.self) {
+            try await SkillsTool.make(
+                registry: Self.makeFixtureRegistry(), model: ScriptedLanguageModel(Self.selectionAnswer),
+                sandboxProbe: .fixed(false))
+        }
+    }
+
+    @Test func theNoModelFactoryOverAnOpenRegistryThrowsWhenTheProbeSaysSandboxed() async throws {
+        await #expect(throws: ToolModeError.openModeInSandbox) {
+            try await SkillsTool.make(registry: Self.makeFixtureRegistry(), sandboxProbe: .fixed(true))
+        }
+    }
+
+    @Test func theModelFactoryOverAnOpenRegistryThrowsWhenTheProbeSaysSandboxed() async throws {
+        await #expect(throws: ToolModeError.openModeInSandbox) {
+            try await SkillsTool.make(
+                registry: Self.makeFixtureRegistry(), model: ScriptedLanguageModel(Self.selectionAnswer),
+                sandboxProbe: .fixed(true))
+        }
+    }
+
+    @Test func theNoModelFactoryOverASandboxedRegistryComposesWhenTheProbeSaysSandboxed() async throws {
+        await #expect(throws: Never.self) {
+            try await SkillsTool.make(registry: Self.makeFixtureRegistry(mode: .sandboxed), sandboxProbe: .fixed(true))
+        }
+    }
+
+    @Test func theModelFactoryOverASandboxedRegistryComposesWhenTheProbeSaysSandboxed() async throws {
+        await #expect(throws: Never.self) {
+            try await SkillsTool.make(
+                registry: Self.makeFixtureRegistry(mode: .sandboxed),
+                model: ScriptedLanguageModel(Self.selectionAnswer),
+                sandboxProbe: .fixed(true))
+        }
+    }
+
     // MARK: - The injected model backs selection
 
     @Test func theInjectedModelIsTheOneThatBacksSelection() async throws {

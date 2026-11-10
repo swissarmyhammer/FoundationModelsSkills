@@ -1,0 +1,1 @@
+{"id":"01M73B4PS0XJV1JC38P97ZHBRJ","timestamp":"2026-11-10T18:22:19.936625Z","op":"create","item_id":"01M73B4PS05BDCRJKN5CMTNPDX","forward_patch":"--- original\n+++ modified\n@@ -0,0 +1,2 @@\n+color: bfd4f2\n+tag_name: needs-agents-mode\n","reverse_patch":"--- original\n+++ modified\n@@ -1,2 +0,0 @@\n-color: bfd4f2\n-tag_name: needs-agents-mode\n","transaction_id":null}

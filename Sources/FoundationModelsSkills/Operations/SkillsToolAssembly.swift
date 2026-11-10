@@ -58,17 +58,23 @@ extension SkillsTool {
     ///   - visibilityPredicate: Which catalog entries this tool presents.
     ///     Defaults to `SkillMetadata.isModelVisible`, the model-facing
     ///     surface.
+    ///   - sandboxProbe: The probe that tells if the process is sandboxed.
+    ///     Defaults to `SandboxProbe.live`, which reads the current process.
+    ///     A host or a test gives its own probe here.
     /// - Returns: The fused `skills` tool, ready to register on a
     ///   `LanguageModelSession`.
-    /// - Throws: Whatever `SkillsTool.make(context:catalogCharacterLimit:)`
-    ///   throws.
+    /// - Throws: `ToolModeError.openModeInSandbox` when the mode of
+    ///   `registry` is `ToolMode.open` and `sandboxProbe` tells that the
+    ///   process is sandboxed. Also whatever `SkillsTool.make(context:
+    ///   catalogCharacterLimit:)` throws.
     public static func make(
         registry: SkillsRegistry,
         model: any LanguageModel,
         embedder: (any PooledEmbedding)? = nil,
         followReloads: Bool = true,
         catalogCharacterLimit: Int = defaultCatalogCharacterLimit,
-        visibilityPredicate: @escaping @Sendable (SkillMetadata) -> Bool = { $0.isModelVisible }
+        visibilityPredicate: @escaping @Sendable (SkillMetadata) -> Bool = { $0.isModelVisible },
+        sandboxProbe: SandboxProbe = .live
     ) async throws -> SkillsCatalogTool {
         try await assemble(
             registry: registry,
@@ -77,7 +83,8 @@ extension SkillsTool {
             selection: SelectionConfig(model: model),
             followReloads: followReloads,
             catalogCharacterLimit: catalogCharacterLimit,
-            visibilityPredicate: visibilityPredicate)
+            visibilityPredicate: visibilityPredicate,
+            sandboxProbe: sandboxProbe)
     }
 
     /// Builds the fused `skills` tool over `registry` with no model at all:
@@ -109,16 +116,22 @@ extension SkillsTool {
     ///   - visibilityPredicate: Which catalog entries this tool presents.
     ///     Defaults to `SkillMetadata.isModelVisible`, the model-facing
     ///     surface.
+    ///   - sandboxProbe: The probe that tells if the process is sandboxed.
+    ///     Defaults to `SandboxProbe.live`, which reads the current process.
+    ///     A host or a test gives its own probe here.
     /// - Returns: The fused `skills` tool, ready to drive from a host with
     ///   no model.
-    /// - Throws: Whatever `SkillsTool.make(context:catalogCharacterLimit:)`
-    ///   throws.
+    /// - Throws: `ToolModeError.openModeInSandbox` when the mode of
+    ///   `registry` is `ToolMode.open` and `sandboxProbe` tells that the
+    ///   process is sandboxed. Also whatever `SkillsTool.make(context:
+    ///   catalogCharacterLimit:)` throws.
     public static func make(
         registry: SkillsRegistry,
         embedder: (any PooledEmbedding)? = nil,
         followReloads: Bool = true,
         catalogCharacterLimit: Int = defaultCatalogCharacterLimit,
-        visibilityPredicate: @escaping @Sendable (SkillMetadata) -> Bool = { $0.isModelVisible }
+        visibilityPredicate: @escaping @Sendable (SkillMetadata) -> Bool = { $0.isModelVisible },
+        sandboxProbe: SandboxProbe = .live
     ) async throws -> SkillsCatalogTool {
         try await assemble(
             registry: registry,
@@ -127,7 +140,8 @@ extension SkillsTool {
             selection: nil,
             followReloads: followReloads,
             catalogCharacterLimit: catalogCharacterLimit,
-            visibilityPredicate: visibilityPredicate)
+            visibilityPredicate: visibilityPredicate,
+            sandboxProbe: sandboxProbe)
     }
 
     /// The assembly steps both factories above share.
@@ -149,9 +163,12 @@ extension SkillsTool {
     ///     the tool description may have.
     ///   - visibilityPredicate: Which catalog entries the assembled tool
     ///     presents.
+    ///   - sandboxProbe: The probe that tells if the process is sandboxed.
     /// - Returns: The fused `skills` tool.
-    /// - Throws: Whatever `SkillsTool.make(context:catalogCharacterLimit:)`
-    ///   throws.
+    /// - Throws: `ToolModeError.openModeInSandbox` when the mode of
+    ///   `registry` is `ToolMode.open` and `sandboxProbe` tells that the
+    ///   process is sandboxed. Also whatever `SkillsTool.make(context:
+    ///   catalogCharacterLimit:)` throws.
     private static func assemble(
         registry: SkillsRegistry,
         mode: SearchMode,
@@ -159,7 +176,8 @@ extension SkillsTool {
         selection: SelectionConfig?,
         followReloads: Bool,
         catalogCharacterLimit: Int,
-        visibilityPredicate: @escaping @Sendable (SkillMetadata) -> Bool
+        visibilityPredicate: @escaping @Sendable (SkillMetadata) -> Bool,
+        sandboxProbe: SandboxProbe
     ) async throws -> SkillsCatalogTool {
         let context = try await makeContext(
             registry: registry,
@@ -167,7 +185,8 @@ extension SkillsTool {
             embedder: embedder,
             selection: selection,
             followReloads: followReloads,
-            visibilityPredicate: visibilityPredicate)
+            visibilityPredicate: visibilityPredicate,
+            sandboxProbe: sandboxProbe)
         return try make(context: context, catalogCharacterLimit: catalogCharacterLimit)
     }
 
@@ -214,16 +233,19 @@ extension SkillsTool {
     ///     twice.
     ///   - visibilityPredicate: Which catalog entries the assembled tool
     ///     presents.
+    ///   - sandboxProbe: The probe that `SkillsToolContext.init` gives to
+    ///     `ToolMode.validate(probe:)`.
     /// - Returns: The assembled context.
     /// - Throws: Whatever `SkillsToolContext.init` throws for the mode of
-    ///   `registry`.
+    ///   `registry` and `sandboxProbe`.
     internal static func makeContext(
         registry: SkillsRegistry,
         mode: SearchMode,
         embedder: (any PooledEmbedding)?,
         selection: SelectionConfig?,
         followReloads: Bool,
-        visibilityPredicate: @escaping @Sendable (SkillMetadata) -> Bool
+        visibilityPredicate: @escaping @Sendable (SkillMetadata) -> Bool,
+        sandboxProbe: SandboxProbe
     ) async throws -> SkillsToolContext {
         let reloads = followReloads ? registry.onReload : nil
         let catalogReloads = registry.onReload
@@ -242,6 +264,7 @@ extension SkillsTool {
             registry: registry,
             searchAgent: agent,
             mode: registry.mode,
+            sandboxProbe: sandboxProbe,
             visibilityPredicate: visibilityPredicate,
             reloadFollower: reloads.map { SkillsReloadFollower(reloads: $0, agent: agent) },
             catalogNoticeFollower: noticeFollower)
