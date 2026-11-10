@@ -2,21 +2,24 @@
 
 ## Security
 
-- **No OS sandbox in v1.** `` !`shell` `` injection and `run
-  script` run as usual child processes with the host's own
-  privileges. They get the full environment. There is no filesystem or
-  network restriction beyond the script's own working-directory
-  discipline. `sandbox-exec` is deprecated API over a private profile
-  language. Containment here is gates (the tool mode plus the skill's
-  `allowed-tools` grants) and process control, not an OS sandbox. Examine
-  this again when Apple ships a supported per-process confinement API.
-- **The sandboxed mode starts no process.** In `ToolMode.sandboxed`, the
-  `skills` tool has no `run script` operation, and the shell injection of a
-  body leaves each `` !`command` `` and ` ```! ` block as text. A host in the
-  App Sandbox gives `.sandboxed`. `SkillsToolContext` refuses `.open` in a
-  sandboxed process with `ToolModeError.openModeInSandbox`.
-- **Every child process has a group, a timeout and an output limit.** Both
-  paths start their process with the `ProcessRunner` of
+- **The `ToolMode` of the host controls each process.** The host gives one
+  of two modes, `open` or `sandboxed`. The mode controls the `` !`shell` ``
+  injection and `run script`. No other switch turns them on or off.
+- **The open mode runs child processes with the rights of the user.** In
+  `ToolMode.open`, the `` !`shell` `` injection and `run script` run as
+  child processes with the rights of the user that runs the host. Each child
+  process gets the full environment. This package adds no filesystem limit
+  and no network limit. The gates are the tool mode, the `allowed-tools`
+  grants of the skill for a script, and the process control that follows.
+- **The sandboxed mode starts no process.** In `ToolMode.sandboxed`, the App
+  Sandbox is the sandbox. The `skills` tool has no `run script` operation,
+  and the shell injection of a body leaves each `` !`command` `` and
+  ` ```! ` block as text. A host in the App Sandbox gives `.sandboxed`.
+  `SkillsToolContext` refuses `.open` in a sandboxed process with
+  `ToolModeError.openModeInSandbox`.
+- **Every child process has a group, a timeout and an output limit.** This
+  applies to the open mode. Both paths start their process with the
+  `ProcessRunner` of
   `FoundationModelsExtras`. Each command runs in a process group of its own,
   its pid stands in `ProcessRegistry.global` while it runs, and the whole
   group dies with `SIGKILL` at the timeout. The read of the merged output
@@ -62,8 +65,8 @@
   directory from a freshly cloned repository can inject instructions into
   a session. `SkillsRegistry` gets its layer roots as a plain,
   caller-supplied list. It has no opinion about which directories are
-  safe. Thus a host must only construct a registry (specially a
-  script-enabled one) over roots it trusts. Each `SkillDiagnostic`
+  safe. Thus a host must only construct a registry (specially one in the
+  open mode) over roots it trusts. Each `SkillDiagnostic`
   carries the winning layer's provenance
   (`SkillDiagnostic.Provenance.root`), thus a host can show *where* a
   skill came from.
@@ -122,8 +125,8 @@ hold for every marketplace:
    `commit/scripts/publish.sh` adds that script to a local skill `commit`,
    also when the local layers hold no such path. The local `SKILL.md` still
    decides the frontmatter, thus a script runs only when that local
-   `SKILL.md` grants `allowed-tools: Script(<glob>)` for its path and the host
-   policy permits scripts. Read `list resource` of a skill to see each file
+   `SKILL.md` grants `allowed-tools: Script(<glob>)` for its path and the
+   tool mode of the host is `open`. Read `list resource` of a skill to see each file
    that the combined view gives.
 
 ## Context compaction (note for hosts)

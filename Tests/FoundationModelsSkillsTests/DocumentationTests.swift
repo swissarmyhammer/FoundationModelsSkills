@@ -1,4 +1,5 @@
 import Foundation
+import FoundationModelsExtras
 import Testing
 
 @testable import FoundationModelsSkills
@@ -183,6 +184,35 @@ struct DocumentationTests {
         earlierRuleWordings.map { DocumentClaim(document: document, text: $0) }
     }
 
+    // MARK: - The sandbox of the security document
+
+    /// Each wording of the operating system sandbox that shipped before. The
+    /// `ToolMode` of the host is the containment now, thus the security
+    /// document names no other sandbox.
+    ///
+    /// The comparison ignores case, thus each wording also stops the same
+    /// words with a capital letter.
+    private static let removedSandboxWordings = [
+        "sandbox-exec",
+        "Seatbelt",
+        "OS sandbox in v1",
+    ]
+
+    /// One row for each wording of the operating system sandbox that shipped
+    /// before.
+    private static let removedSandboxRows: [DocumentClaim] = removedSandboxWordings.map {
+        DocumentClaim(document: securityPath, text: $0)
+    }
+
+    /// One row for each name that the security document must give: the name
+    /// of the mode type, and the raw value of each mode. Each name comes from
+    /// the type itself, thus a rename or a new mode makes this suite fail
+    /// until the security document names it.
+    private static let toolModeRows: [DocumentClaim] =
+        ([String(describing: ToolMode.self)] + ToolMode.allCases.map(\.rawValue)).map {
+            DocumentClaim(document: securityPath, text: $0)
+        }
+
     // MARK: - The cases
 
     @Test(arguments: earlierRuleRows)
@@ -228,5 +258,19 @@ struct DocumentationTests {
             DiscoveredSkill carries no [\(Self.contributingDirectoryTypeName)] field, thus the \
             cases that hold the documents to naming that field prove nothing
             """)
+    }
+
+    @Test(arguments: removedSandboxRows)
+    func theSecurityDocumentNamesNoOperatingSystemSandbox(row: DocumentClaim) throws {
+        try row.expectAbsent(
+            because: """
+                the ToolMode of the host is the containment: the sandboxed mode starts no \
+                process, and the App Sandbox is the sandbox
+                """)
+    }
+
+    @Test(arguments: toolModeRows)
+    func theSecurityDocumentNamesEachToolMode(row: DocumentClaim) throws {
+        try row.expectPresent()
     }
 }
