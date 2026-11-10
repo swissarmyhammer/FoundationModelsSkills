@@ -68,10 +68,27 @@ comments:
     - evidence: 3 files — Tests/FoundationModelsSkillsTests/SandboxedModeTests.swift, Tests/FoundationModelsSkillsTests/ShellInjectionTests.swift, Tests/FoundationModelsSkillsTests/SkillsToolAssemblyTests.swift. `swift test`: 799 tests in 68 suites passed (797 before, plus 2 new), 0 compiler warnings. The one SwiftPM "missing creator for mutated node" line on mlx-swift_Cmlx.bundle is the known dependency build-system message.
     - next: /review
   timestamp: 2026-11-10T17:28:34.995797+00:00
+- actor: claude-code
+  id: 01m7384j69r624tra29sqftknr
+  text: |-
+    ### review — clean
+    - evidence: review sha HEAD~1..HEAD (dbed415): 0 findings, 0 confirmed, 0 refuted; 3 files reviewed, 7 attempted, 0 failed. All 6 prior findings are checked.
+    - next: none. The task is in done. Follow-up task ^na244z4 removes the temporary `mode: ToolMode = .open` default.
+  timestamp: 2026-11-10T17:29:49.513016+00:00
+- actor: claude-code
+  id: 01m73850wvde8fmyk0620ndd98
+  text: |-
+    ### finish iteration 2 — clean
+    - implement: changed — 3 test files
+    - test: green — swift test, 799 passed in 68 suites, 0 warnings
+    - commit: dbed415
+    - review: clean — 0 findings; task in done
+    - note: hotfix 73ebb7a (temporary `mode = .open` default) is pushed; ^na244z4 removes it after ACPAgent ^bwgmkc0.
+  timestamp: 2026-11-10T17:30:04.571545+00:00
 depends_on:
 - 01M7302DGMW7PA5MMAZ3DJBEDK
-position_column: doing
-position_ordinal: '80'
+position_column: done
+position_ordinal: ffad80
 title: 'SK-7a: Skill scripts and shell injection only in open mode (ToolMode)'
 ---
 ## What
