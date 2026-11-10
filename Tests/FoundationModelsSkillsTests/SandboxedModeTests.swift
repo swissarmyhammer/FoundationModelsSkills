@@ -43,12 +43,18 @@ struct SandboxedModeTests {
 
     /// Matches a `mode` parameter that has a default value.
     ///
-    /// Each `\s*` also matches a line break, thus the pattern finds a default
-    /// with any space around `:` and `=`, and a default on the next line.
-    /// The optional `?` or `!` after the type finds a default on an optional
-    /// `ToolMode` too.
+    /// The rule: a parameter named `mode`, with any type that names `ToolMode`,
+    /// followed by `=`. The type is all the text between `:` and `=` that has
+    /// no `,`, `)` or `=`. Thus the pattern finds `ToolMode`, `ToolMode?`,
+    /// `ToolMode!`, `Optional<ToolMode>`, `Swift.Optional<ToolMode>` and
+    /// `FoundationModelsExtras.ToolMode`, with any space and line breaks. A
+    /// `,` or `)` ends the type, thus a default on the next parameter is not
+    /// a match.
+    ///
+    /// Each `\b` is a simple word boundary. The default Unicode boundary does
+    /// not break at the `.` of `FoundationModelsExtras.ToolMode`.
     private static var defaultModePattern: Regex<Substring> {
-        #/mode\s*:\s*ToolMode[?!]?\s*=/#
+        #/\bmode\s*:[^,)=]*\bToolMode\b[^,)=]*=/#.wordBoundaryKind(.simple)
     }
 
     /// The source directory of the library, relative to the package root.
@@ -201,6 +207,23 @@ struct SandboxedModeTests {
 
     @Test func theScanFlagsADefaultOnAnImplicitlyUnwrappedMode() {
         #expect(Self.modeDefaultLines(in: "init(mode: ToolMode! = .open)") == [1])
+    }
+
+    @Test func theScanFlagsADefaultOnAGenericOptionalMode() {
+        #expect(Self.modeDefaultLines(in: "init(mode: Optional<ToolMode> = nil)") == [1])
+    }
+
+    @Test func theScanFlagsADefaultOnAModuleQualifiedMode() {
+        #expect(Self.modeDefaultLines(in: "init(mode: FoundationModelsExtras.ToolMode = .open)") == [1])
+    }
+
+    @Test func theScanDoesNotFlagALastModeWithNoDefault() {
+        #expect(Self.modeDefaultLines(in: "init(mode: ToolMode)").isEmpty)
+    }
+
+    @Test func theScanDoesNotFlagAProbeDefaultOnTheLineAfterTheMode() {
+        #expect(
+            Self.modeDefaultLines(in: "init(\n    mode: ToolMode,\n    sandboxProbe: SandboxProbe = .live)").isEmpty)
     }
 
     @Test func theScanDoesNotFlagAnOptionalModeWithNoDefault() {
