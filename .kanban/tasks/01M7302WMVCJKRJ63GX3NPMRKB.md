@@ -35,9 +35,26 @@ comments:
     - evidence: 62 files changed + new Tests/FoundationModelsSkillsTests/SandboxedModeTests.swift (11 tests). Sources: RenderPipeline.swift, ShellInjection.swift, SkillsRegistry.swift, SkillsToolContext.swift, SkillsTool.swift, SkillsToolAssembly.swift, SkillFilesText.swift, UseSkill.swift, ScriptGate.swift, RunScript.swift, SkillsCLI.swift; Examples/skills-demo; README.md, docs/operations.md, docs/security.md, docs/marketplaces.md; each test caller. `swift test`: 797 tests in 68 suites passed, 0 compiler warnings.
     - next: /review
   timestamp: 2026-11-10T17:16:09.104409+00:00
+- actor: claude-code
+  id: 01m737v15zvagvrtkfghy8ys1t
+  text: |-
+    ### review — findings
+    - evidence: review sha HEAD~1..HEAD — 6 findings (6 confirmed, 9 refuted). Tests/FoundationModelsSkillsTests/SandboxedModeTests.swift:104, Tests/FoundationModelsSkillsTests/SandboxedModeTests.swift:119, Tests/FoundationModelsSkillsTests/ShellInjectionTests.swift:213, Tests/FoundationModelsSkillsTests/ShellInjectionTests.swift:265, Tests/FoundationModelsSkillsTests/ShellInjectionTests.swift:444, Tests/FoundationModelsSkillsTests/SkillsToolAssemblyTests.swift:59.
+    - acceptance: the reviewer examined each acceptance criterion and test item against the code and ticked all 8. `swift test`: 797 tests in 68 suites pass. The build has no compiler warning. The build gives one SwiftPM build-system warning ("missing creator for mutated node") on the dependency product `mlx-swift_Cmlx.bundle`. That warning does not come from the source of this package.
+    - next: correct the 6 findings in the dated Review Findings section, then run /review again.
+  timestamp: 2026-11-10T17:24:37.183648+00:00
+- actor: claude-code
+  id: 01m737vsamfjsfzx95d2k0m5x0
+  text: |-
+    ### finish iteration 1 — findings
+    - implement: changed — 62 files + SandboxedModeTests.swift
+    - test: green — swift test, 797 passed in 68 suites, 0 warnings
+    - commit: 6c5d30d (pushed at once: the code meets each criterion, and ACPAgent waits for the mode API)
+    - review: findings — Tests/FoundationModelsSkillsTests/SandboxedModeTests.swift:104, :119; ShellInjectionTests.swift:213, :265, :444; SkillsToolAssemblyTests.swift:59
+  timestamp: 2026-11-10T17:25:01.908724+00:00
 depends_on:
 - 01M7302DGMW7PA5MMAZ3DJBEDK
-position_column: doing
+position_column: review
 position_ordinal: '80'
 title: 'SK-7a: Skill scripts and shell injection only in open mode (ToolMode)'
 ---
@@ -57,16 +74,36 @@ Change:
 - In `.open`, nothing changes.
 
 ## Acceptance Criteria
-- [ ] In `.sandboxed`, the `skills` tool schema has no `run script` op, and the description does not name it.
-- [ ] In `.sandboxed`, `use skill` of a body with `` !`echo hi` `` and a ` ```! ` block gives both unchanged.
-- [ ] In `.sandboxed`, the files text of `use skill` has no "To run a script" line.
-- [ ] In `.sandboxed`, no operation of the `skills` tool starts a process (spec requirement).
-- [ ] In `.open`, the existing `RunScriptTests`, `ShellInjectionTests` and `SkillFilesTextTests` pass unchanged in behavior.
+- [x] In `.sandboxed`, the `skills` tool schema has no `run script` op, and the description does not name it.
+- [x] In `.sandboxed`, `use skill` of a body with `` !`echo hi` `` and a ` ```! ` block gives both unchanged.
+- [x] In `.sandboxed`, the files text of `use skill` has no "To run a script" line.
+- [x] In `.sandboxed`, no operation of the `skills` tool starts a process (spec requirement).
+- [x] In `.open`, the existing `RunScriptTests`, `ShellInjectionTests` and `SkillFilesTextTests` pass unchanged in behavior.
 
 ## Tests
-- [ ] `Tests/FoundationModelsSkillsTests/SandboxedModeTests.swift`: build the tool in `.sandboxed` over a fixture skill with a script and both injection forms. Call every op of the tool. Assert that `ProcessRegistry.global` gets no pid, and that a marker file which each command would write does not exist after the calls. Also assert the schema, the body text and the files text above.
-- [ ] Update `RunScriptTests`, `ShellInjectionTests`, `SkillFilesTextTests`, `SkillsToolAssemblyTests` for the `mode` parameter.
-- [ ] `swift test` passes with no warnings.
+- [x] `Tests/FoundationModelsSkillsTests/SandboxedModeTests.swift`: build the tool in `.sandboxed` over a fixture skill with a script and both injection forms. Call every op of the tool. Assert that `ProcessRegistry.global` gets no pid, and that a marker file which each command would write does not exist after the calls. Also assert the schema, the body text and the files text above.
+- [x] Update `RunScriptTests`, `ShellInjectionTests`, `SkillFilesTextTests`, `SkillsToolAssemblyTests` for the `mode` parameter.
+- [x] `swift test` passes with no warnings.
 
 ## Workflow
 - Use `/tdd` — write failing tests first, then implement to make them pass. #step1
+
+## Review Findings (2026-11-10 11:16)
+
+> Scope: `review sha HEAD~1..HEAD` — reviewed the diffs only — lines this change added or modified. 57 file(s) reviewed, 6 not reviewed.
+
+> 2 file(s) not reviewed — excluded by an ignore rule:
+> - `.kanban/ (from .reviewignore)` — 2 file(s)
+
+> 4 file(s) not reviewed — no validator matched:
+> - `README.md` — no validator matches this file
+> - `docs/marketplaces.md` — no validator matches this file
+> - `docs/operations.md` — no validator matches this file
+> - `docs/security.md` — no validator matches this file
+
+- [ ] `Tests/FoundationModelsSkillsTests/SandboxedModeTests.swift:104` `test-integrity/no-test-cheating` — The test name `noOpPutsAPidOfTheFixtureInTheProcessRegistry` says a pid is put in the process registry, but the body asserts `pids.isEmpty`, which expects no pid. The name describes the opposite of what is proven, so a reader would believe the registry path is covered when the test only checks that nothing was registered. Rename the test to a name that matches the assertion, such as `noOpLeavesNoPidOfTheFixtureInTheProcessRegistry`. Keep the assertion, which is the meaningful check.
+- [ ] `Tests/FoundationModelsSkillsTests/SandboxedModeTests.swift:119` `test-integrity/no-test-cheating` — The test `runScriptGivenASandboxedContextDirectlyStartsNoProcess` asserts only that the output holds a corrective message. It never checks that no process started, no marker file was written, or the process registry is empty. The test name claims a property that the assertion does not prove, so the test would still pass if a process had started. Add an assertion that proves the name. Run the call under `ProcessRegistryWatch.pidsSeen` and assert the result is empty, or assert `fixture.existingMarkers()` is empty after the call. Keep the corrective-message check as a second assertion, or rename the test to say it only checks the corrective message.
+- [ ] `Tests/FoundationModelsSkillsTests/ShellInjectionTests.swift:213` `reuse/reuse` — The sandboxed inline test builds its own render call. The existing private helper `render(_:request:)` already wraps this call, but it always uses the `pass` property, which is fixed to `.open`. The helper is a near-match that was not extended with a mode. Each sandboxed test repeats the wrap and the flatten. Extend the helper with a mode or pass parameter, for example `render(_ text: String, mode: ToolMode = .open, request:)`, and call it from the sandboxed tests. Use the same change for the fenced test at line 224.
+- [ ] `Tests/FoundationModelsSkillsTests/ShellInjectionTests.swift:265` `reuse/reuse` — The new test rebuilds the `RenderPipeline` of open-mode argument substitution, open-mode shell injection, and identity Stencil. A helper that builds exactly this pipeline already exists, so the new copy diverges from it at once. Replace the inline construction with `let pipeline = passOneAndTwoPipeline()`.
+- [ ] `Tests/FoundationModelsSkillsTests/ShellInjectionTests.swift:444` `reuse/reuse` — The git-context fixture test rebuilds the same identity-Stencil pipeline that `passOneAndTwoPipeline()` already returns, so the copy is a duplicate of an existing helper. Replace the inline construction with `let pipeline = passOneAndTwoPipeline()`.
+- [ ] `Tests/FoundationModelsSkillsTests/SkillsToolAssemblyTests.swift:59` `reuse/reuse` — The sandboxed case builds its registry inline with SkillsRegistry(stack: FixtureLibrary.stack(), mode: .sandboxed). This is the same construction as makeFixtureRegistry() in this file, which differs only in the mode argument. A parallel copy lets the two fixtures drift apart. Give makeFixtureRegistry a mode parameter with a default of .open, for example makeFixtureRegistry(mode: ProbeMode = .open). Then call makeFixtureRegistry(mode: .sandboxed) at line 59 instead of building the registry inline.
