@@ -182,20 +182,44 @@ struct SlashCommandProvidingTests {
     // MARK: - commandUpdates reload tick
 
     @Test func editingASkillFileProducesACommandUpdatesTickWithTheChangedCommandSet() async throws {
-        let root = try Self.makeTempDirectory()
-        defer { try? FileManager.default.removeItem(at: root) }
-        try Self.writeSkillFixture(
-            id: "editable-command",
-            skillMarkdown: """
-                ---
-                name: editable-command
-                description: before edit
-                ---
-                Body text.
-                """,
-            in: root)
+        let command = try await Self.onlyCommandUpdateAfterAnEdit(watch: true) { _ in }
+        #expect(command.description == Self.editedDescription)
+    }
 
-        let registry = SkillsRegistry(roots: [root], watch: true)
+    @Test func watchFalseRegistryTicksCommandUpdatesAfterAWriteAndReload() async throws {
+        let command = try await Self.onlyCommandUpdateAfterAnEdit(watch: false) { registry in
+            registry.reload()
+        }
+        #expect(command.description == Self.editedDescription)
+    }
+
+    // MARK: - Test helpers
+
+    /// The id of the skill that `onlyCommandUpdateAfterAnEdit(watch:afterEdit:)`
+    /// edits.
+    private static let editedCommandID = "editable-command"
+
+    /// The `description:` of that skill after the edit.
+    private static let editedDescription = "after edit"
+
+    /// Writes one skill, builds a registry over its root, subscribes to
+    /// `commandUpdates`, edits the skill's `description:` to
+    /// ``editedDescription``, and runs `afterEdit`. Asserts that exactly one
+    /// command set arrives.
+    ///
+    /// - Parameters:
+    ///   - watch: Whether the registry watches the root.
+    ///   - afterEdit: What the test does after the edit, for example
+    ///     `reload()` on a registry that does not watch.
+    /// - Returns: The command of the edited skill in the one command set.
+    /// - Throws: Whatever a file write throws, or a failure of `#require`.
+    private static func onlyCommandUpdateAfterAnEdit(
+        watch: Bool, afterEdit: (SkillsRegistry) -> Void
+    ) async throws -> SlashCommand {
+        let root = try makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try writeEditedCommand(description: "before edit", in: root)
+        let registry = SkillsRegistry(roots: [root], watch: watch)
         let stream = try #require(registry.commandUpdates)
         let recorder = SlashCommandUpdateRecorder()
         let subscription = Task {
@@ -203,32 +227,34 @@ struct SlashCommandProvidingTests {
         }
         defer { subscription.cancel() }
 
-        try Self.writeSkillFixture(
-            id: "editable-command",
+        try writeEditedCommand(description: editedDescription, in: root)
+        afterEdit(registry)
+
+        let count = await waitForPublicationCount(
+            recorder, atLeast: 1, timeout: ReloadTestSupport.expectedSignalTimeout)
+        #expect(count == 1)
+        let updated = try #require(await recorder.publications.first)
+        return try #require(updated.first { $0.name == editedCommandID })
+    }
+
+    /// Writes the ``editedCommandID`` skill with `description` under `root`.
+    ///
+    /// - Parameters:
+    ///   - description: The `description:` of the skill.
+    ///   - root: The root to write under.
+    /// - Throws: Whatever the file write throws.
+    private static func writeEditedCommand(description: String, in root: URL) throws {
+        try writeSkillFixture(
+            id: editedCommandID,
             skillMarkdown: """
                 ---
-                name: editable-command
-                description: after edit
+                name: \(editedCommandID)
+                description: \(description)
                 ---
                 Body text.
                 """,
             in: root)
-
-        let count = await Self.waitForPublicationCount(recorder, atLeast: 1, timeout: .seconds(10))
-        #expect(count == 1)
-
-        let publications = await recorder.publications
-        let updated = try #require(publications.first)
-        let command = try #require(updated.first { $0.name == "editable-command" })
-        #expect(command.description == "after edit")
     }
-
-    @Test func watchFalseRegistryHasANilCommandUpdates() {
-        let registry = SkillsRegistry(roots: Self.fixtureRoots, watch: false)
-        #expect(registry.commandUpdates == nil)
-    }
-
-    // MARK: - Test helpers
 
     /// The error a test throws when a command carries a body of a kind other
     /// than `.rendered`.

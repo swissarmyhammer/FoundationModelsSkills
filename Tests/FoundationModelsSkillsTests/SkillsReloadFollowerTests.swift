@@ -94,16 +94,14 @@ struct SkillsReloadFollowerTests {
 
     // MARK: - Which registry gets a follower
 
-    @Test func theFollowerStandsOnAWatchedRegistryAndNowhereElse() async throws {
+    @Test func theFollowerStandsOnARegistryThatDoesNotWatch() async throws {
         let root = try HotReloadTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         try ReloadTestSupport.writeSkillFile(id: Self.seededSkillID, in: root)
 
-        let watched = await Self.makeContext(registry: SkillsRegistry(roots: [root], watch: true))
         let unwatched = await Self.makeContext(registry: SkillsRegistry(roots: [root], watch: false))
 
-        #expect(watched.reloadFollower != nil)
-        #expect(unwatched.reloadFollower == nil, "a registry that never reloads has nothing to follow")
+        #expect(unwatched.reloadFollower != nil, "reload() rebuilds a registry that does not watch")
     }
 
     @Test func askingForNoFollowedReloadsLeavesTheFollowerNil() async throws {

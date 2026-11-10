@@ -188,12 +188,13 @@ extension SkillsTool {
     /// The reload stream is taken before the seed catalog is read, and that
     /// order matters: `registry.onReload` carries every publication from the
     /// point of subscription forward, thus reading `metadata()` first would
-    /// drop a reload that lands between the two reads. A `watch: false`
-    /// registry answers `nil` there, and gets no follower.
+    /// drop a reload that lands between the two reads. Every registry
+    /// publishes on `onReload`, also with `watch: false`, since `reload()`
+    /// rebuilds it.
     ///
     /// The context also gets a `SkillsCatalogNoticeFollower`, on a reload
-    /// stream of its own, whenever the registry reloads. `followReloads` does
-    /// not change that: it only says who pumps the search agent. The notice
+    /// stream of its own. `followReloads` does not change that: it only says
+    /// who pumps the search agent. The notice
     /// follower reads its seed catalog last, after the index is built, thus
     /// the seed is as close as it can be to the catalog that the description
     /// of the tool lists.
@@ -230,10 +231,8 @@ extension SkillsTool {
         }
         let agent = SkillSearchAgent(
             searcher: searcher, retrievalFallback: retrievalFallback, visibilityPredicate: visibilityPredicate)
-        let noticeFollower = catalogReloads.map {
-            SkillsCatalogNoticeFollower(
-                reloads: $0, seed: registry.metadata(), visibilityPredicate: visibilityPredicate)
-        }
+        let noticeFollower = SkillsCatalogNoticeFollower(
+            reloads: catalogReloads, seed: registry.metadata(), visibilityPredicate: visibilityPredicate)
         return SkillsToolContext(
             registry: registry,
             searchAgent: agent,

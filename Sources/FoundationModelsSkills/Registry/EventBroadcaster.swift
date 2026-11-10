@@ -25,6 +25,10 @@ internal final class EventBroadcaster<Element: Sendable>: Sendable {
 
         /// The id of the next subscriber.
         var nextID = 0
+
+        /// Whether ``finishAll()`` ran. A subscriber that comes after it
+        /// gets a stream that is already finished.
+        var isFinished = false
     }
 
     /// The subscribers of this broadcaster.
@@ -35,14 +39,20 @@ internal final class EventBroadcaster<Element: Sendable>: Sendable {
     ///
     /// - Returns: The stream of the subscriber. It finishes on its own
     ///   `onTermination`, that is, when the caller cancels or drops it, or
-    ///   when ``finishAll()`` runs.
+    ///   when ``finishAll()`` runs. After ``finishAll()``, the stream is
+    ///   already finished.
     func subscribe() -> AsyncStream<Element> {
         let (stream, continuation) = AsyncStream<Element>.makeStream()
-        let id = subscribers.withLock { state in
+        let id: Int? = subscribers.withLock { state in
+            guard !state.isFinished else { return nil }
             let id = state.nextID
             state.nextID += 1
             state.continuations[id] = continuation
             return id
+        }
+        guard let id else {
+            continuation.finish()
+            return stream
         }
         continuation.onTermination = { [weak self] _ in self?.unsubscribe(id: id) }
         return stream
@@ -58,9 +68,11 @@ internal final class EventBroadcaster<Element: Sendable>: Sendable {
     }
 
     /// Finishes every current subscriber and stops accepting new
-    /// publications.
+    /// publications. Every later subscriber gets a stream that is already
+    /// finished.
     func finishAll() {
         let current = subscribers.withLock { state in
+            state.isFinished = true
             defer { state.continuations.removeAll() }
             return Array(state.continuations.values)
         }

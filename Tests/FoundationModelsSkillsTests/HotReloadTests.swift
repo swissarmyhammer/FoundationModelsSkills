@@ -200,7 +200,8 @@ struct HotReloadTests {
     /// indexes -- `SkillMetadata.renderBlock()` never includes a skill's
     /// body) and `charlie`'s preloaded body, confirming only the changed
     /// searcher-visible item re-embeds, then re-writes `bravo` with
-    /// identical content, confirming zero further re-embeds.
+    /// identical content, confirming that the rebuild finds the same catalog
+    /// and gives no `update(items:)` call and zero further re-embeds.
     ///
     /// - Parameters:
     ///   - root: The watched temp root.
@@ -235,9 +236,9 @@ struct HotReloadTests {
 
         let secondBaseline = await updates.count
         try ReloadTestSupport.writeSkillFile(id: "bravo", in: root, descriptionSuffix: "v2")
-        await Self.expectExactlyOneUpdate(updates, since: secondBaseline)
+        await ReloadTestSupport.expectNoEvent(updates, since: secondBaseline)
         // No async catch-up follows a no-op touch, so there is nothing to
-        // poll for -- the noFurtherSignalWindow the update-count wait above
+        // poll for -- the noFurtherSignalWindow the no-update wait above
         // already spent is long enough for a wrongly-triggered re-embed to
         // have started.
         #expect(embedder.embeddedTextCount == countAfterRealEdit, "a no-op touch (unchanged content) must not re-embed")

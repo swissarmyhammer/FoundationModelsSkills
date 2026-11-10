@@ -7,11 +7,12 @@ import Testing
 /// The `changes(after:)` subscription and the root `cursor` of the `skills`
 /// endpoint: rule 9 of EXTRAS-9, fed from the reloads of the registry.
 ///
-/// A test of one file change uses ``WatchedFixture``: a registry that watches
-/// its folder, thus a write to `SKILL.md` reloads it. A test that needs one
-/// reload of several changes, or a reload that changes nothing, uses
-/// ``ProviderFixture``: a registry that does not watch, and that reloads one
-/// time for each ``ProviderFixture/reload()``, whatever the files hold then.
+/// A test of one file change uses ``FolderFixture``: a registry over one
+/// folder, which watches it by default, thus a write to `SKILL.md` reloads
+/// it. A test that needs one reload of several changes, or a reload that
+/// changes nothing, uses ``ProviderFixture``: a registry that does not watch,
+/// and that rebuilds one time for each ``ProviderFixture/reload()``, whatever
+/// the files hold then.
 struct SkillsGraphChangesTests {
     // MARK: - Constants
 
@@ -42,7 +43,7 @@ struct SkillsGraphChangesTests {
     /// A new `SKILL.md` in the watched folder gives one event with its id in
     /// `added`.
     @Test func addingASkillFileGivesItsIDInAdded() async throws {
-        let fixture = try WatchedFixture()
+        let fixture = try FolderFixture()
         defer { fixture.remove() }
         let start = try await fixture.endpoint.cursor()
 
@@ -55,7 +56,7 @@ struct SkillsGraphChangesTests {
     /// An edit of a `SKILL.md` in the watched folder gives one event with
     /// its id in `changed`.
     @Test func editingASkillFileGivesItsIDInChanged() async throws {
-        let fixture = try WatchedFixture()
+        let fixture = try FolderFixture()
         defer { fixture.remove() }
         let start = try await fixture.endpoint.cursor()
 
@@ -68,7 +69,7 @@ struct SkillsGraphChangesTests {
     /// The removal of a skill folder from the watched folder gives one event
     /// with its id in `removed`.
     @Test func removingASkillFolderGivesItsIDInRemoved() async throws {
-        let fixture = try WatchedFixture()
+        let fixture = try FolderFixture()
         defer { fixture.remove() }
         let start = try await fixture.endpoint.cursor()
 
@@ -81,7 +82,7 @@ struct SkillsGraphChangesTests {
     /// A skill that its `enabled` key turns off is still a skill of the
     /// endpoint, thus turning it off changes it and removes nothing.
     @Test func turningASkillOffGivesItsIDInChanged() async throws {
-        let fixture = try WatchedFixture()
+        let fixture = try FolderFixture()
         defer { fixture.remove() }
         let start = try await fixture.endpoint.cursor()
 
@@ -114,8 +115,9 @@ struct SkillsGraphChangesTests {
         #expect(try await fixture.endpoint.cursor() == event.cursor)
     }
 
-    /// A reload that changes no skill gives no event: the first event after
-    /// it is the one of the next reload that changes a skill.
+    /// A rebuild that changes no skill gives no `onReload` value and no
+    /// event: the first event after it is the one of the next rebuild that
+    /// changes a skill.
     @Test func aReloadWithNoDifferenceGivesNoEvent() async throws {
         let fixture = try ProviderFixture()
         defer { fixture.remove() }
@@ -125,12 +127,27 @@ struct SkillsGraphChangesTests {
         defer { subscription.cancel() }
 
         fixture.reload()
-        await ReloadTestSupport.expectExactlyOneEvent(reloads)
+        await ReloadTestSupport.expectNoEvent(reloads)
         try ReloadTestSupport.writeSkillFile(id: Self.addedSkillID, in: fixture.root)
         fixture.reload()
         let event = try await fixture.endpoint.firstEvent(after: start)
 
         #expect(event.ids == ChangedIDs(added: [Self.addedSkillID]))
+    }
+
+    /// A registry that does not watch gets one change log entry after a
+    /// write and one `reload()`.
+    @Test func aWriteAndReloadOnARegistryThatDoesNotWatchGivesOneEvent() async throws {
+        let fixture = try FolderFixture(watch: false)
+        defer { fixture.remove() }
+        let start = try await fixture.endpoint.cursor()
+
+        try ReloadTestSupport.writeSkillFile(id: Self.addedSkillID, in: fixture.root)
+        fixture.registry.reload()
+        let event = try await fixture.endpoint.firstEvent(after: start)
+
+        #expect(event.ids == ChangedIDs(added: [Self.addedSkillID]))
+        #expect(try await fixture.endpoint.cursor() == event.cursor)
     }
 
     // MARK: - Resume after a cursor
@@ -381,23 +398,29 @@ struct SkillsGraphChangesTests {
         }
     }
 
-    /// A temporary folder with ``firstSkillID``, a registry that watches it,
-    /// and the endpoint over that registry.
-    private struct WatchedFixture {
+    /// A temporary folder with ``firstSkillID``, a registry over it, and the
+    /// endpoint over that registry.
+    private struct FolderFixture {
         /// The temporary layer root.
         let root: URL
+
+        /// The registry under the endpoint.
+        let registry: SkillsRegistry
 
         /// The endpoint under test.
         let endpoint: Endpoint
 
         /// Writes the skill into a new root, and builds the endpoint.
         ///
+        /// - Parameter watch: Whether the registry watches the root. The
+        ///   default is `true`, thus a write to `SKILL.md` reloads it.
         /// - Throws: Whatever the directory, the file write, or the schema
         ///   builder throws.
-        init() throws {
+        init(watch: Bool = true) throws {
             root = try WatcherTestSupport.makeTempDirectory()
             try ReloadTestSupport.writeSkillFile(id: SkillsGraphChangesTests.firstSkillID, in: root)
-            endpoint = Endpoint(graph: try SkillsGraph(registry: SkillsRegistry(roots: [root], watch: true)))
+            registry = SkillsRegistry(roots: [root], watch: watch)
+            endpoint = Endpoint(graph: try SkillsGraph(registry: registry))
         }
 
         /// Deletes the temporary root.
@@ -413,8 +436,7 @@ struct SkillsGraphChangesTests {
     /// The registry does not watch the folder. A fake marketplace provider
     /// with no layer backs it, and each update of the provider runs the same
     /// rebuild that a file change runs. Thus several file changes give one
-    /// reload, and a reload with no file change gives a reload that changes
-    /// nothing.
+    /// reload, and a rebuild with no file change gives no reload.
     private struct ProviderFixture {
         /// The temporary layer root.
         let root: URL

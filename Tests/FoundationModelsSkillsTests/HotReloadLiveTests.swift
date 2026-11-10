@@ -54,8 +54,7 @@ struct HotReloadLiveTests {
         let registry = SkillsRegistry(roots: [root], watch: true)
         let searcher = MetadataSearcher(items: registry.metadata().filter(\.isModelVisible), mode: .selection, selection: config)
         let agent = SkillSearchAgent(searcher: searcher)
-        let reloadStream = try #require(registry.onReload, "watch: true must publish onReload")
-        var reloads = reloadStream.makeAsyncIterator()
+        var reloads = registry.onReload.makeAsyncIterator()
 
         // The MCP-style burst pattern `HotReloadTests`' deterministic
         // scenario and `FoundationModelsMetadataRegistryTests.HotReloadTests

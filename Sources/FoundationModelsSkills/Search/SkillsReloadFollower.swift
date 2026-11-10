@@ -2,8 +2,9 @@
 /// as soon as it is released.
 ///
 /// `SkillsRegistry.onReload` publishes the refreshed metadata list once for
-/// every watcher-driven rebuild, and `SkillSearchAgent.update(items:)` is
-/// what makes that list searchable. Neither type joins the two on its own.
+/// every rebuild that changes the catalog, and
+/// `SkillSearchAgent.update(items:)` is what makes that list searchable.
+/// Neither type joins the two on its own.
 /// Before this class, every host wrote that loop itself. A host that builds
 /// its tool through one of the `SkillsTool` factories now gets this class
 /// instead, held on the `SkillsToolContext` the factory builds, thus the

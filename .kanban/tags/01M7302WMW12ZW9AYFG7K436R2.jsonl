@@ -1,0 +1,1 @@
+{"id":"01M7302WMWSNWK2RQKYTAKF0SK","timestamp":"2026-11-10T15:09:06.076610Z","op":"create","item_id":"01M7302WMW12ZW9AYFG7K436R2","forward_patch":"--- original\n+++ modified\n@@ -0,0 +1,2 @@\n+color: c5def5\n+tag_name: needs-extras-12\n","reverse_patch":"--- original\n+++ modified\n@@ -1,2 +0,0 @@\n-color: c5def5\n-tag_name: needs-extras-12\n","transaction_id":null}

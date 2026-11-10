@@ -29,10 +29,7 @@ enum WatchMode {
         // status 0, not terminate the process with the default disposition.
         Self.installTerminationHandler()
         let registry = SkillsDemoAssembly.makeRegistry(watch: true)
-        guard let reloads = registry.onReload else {
-            StandardStream.output.write(line: "Watch mode requires a watched registry.")
-            return
-        }
+        let reloads = registry.onReload
 
         do {
             // The tool follows the reloads itself, thus this loop only

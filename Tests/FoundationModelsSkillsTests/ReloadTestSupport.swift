@@ -40,7 +40,7 @@ enum ReloadTestSupport {
     ///
     /// - Parameters:
     ///   - stream: The already-subscribed stream to iterate, or `nil` for a
-    ///     `watch: false` registry.
+    ///     stream that is absent, which records nothing.
     ///   - tally: The tally each element is recorded into.
     /// - Returns: The subscription task; the caller cancels it once done
     ///   observing.
@@ -51,10 +51,10 @@ enum ReloadTestSupport {
         }
     }
 
-    /// Starts a background task that iterates `stream` (when non-`nil`),
-    /// forwards each published metadata list into `agent.update(items:)`,
-    /// and records one event into `tally` for each forward -- the wiring
-    /// that a real host is responsible for.
+    /// Starts a background task that iterates `stream`, forwards each
+    /// published metadata list into `agent.update(items:)`, and records one
+    /// event into `tally` for each forward -- the wiring that a real host is
+    /// responsible for.
     ///
     /// The caller evaluates `stream` on its own thread, for the reason
     /// ``tally(_:into:)`` gives.
@@ -64,17 +64,15 @@ enum ReloadTestSupport {
     /// helper is here and not in one of the two suites.
     ///
     /// - Parameters:
-    ///   - stream: The already-subscribed reload stream to iterate, or `nil`
-    ///     for a registry that never reloads.
+    ///   - stream: The already-subscribed reload stream to iterate.
     ///   - agent: The search agent each publication is forwarded to.
     ///   - tally: The tally each forward is recorded into.
     /// - Returns: The subscription task; the caller cancels it once done
     ///   observing.
     static func forward(
-        _ stream: AsyncStream<[SkillMetadata]>?, to agent: SkillSearchAgent, recordingInto tally: EventTally
+        _ stream: AsyncStream<[SkillMetadata]>, to agent: SkillSearchAgent, recordingInto tally: EventTally
     ) -> Task<Void, Never> {
         Task {
-            guard let stream else { return }
             for await metadata in stream {
                 await agent.update(items: metadata)
                 await tally.record()
@@ -192,6 +190,18 @@ enum ReloadTestSupport {
         await expectExactlyOneEvent(
             countGetter: { await tally.count }, since: baseline,
             signalTimeout: expectedSignalTimeout, settleWindow: noFurtherSignalWindow)
+    }
+
+    /// Asserts that no new event lands on `tally` after `baseline` through
+    /// ``noFurtherSignalWindow``.
+    ///
+    /// - Parameters:
+    ///   - tally: The tally to assert against.
+    ///   - baseline: The count observed before the action under test. The
+    ///     default is `0`, for a tally that the action started empty.
+    static func expectNoEvent(_ tally: EventTally, since baseline: Int = 0) async {
+        let settled = await poll({ await tally.count }, until: { $0 > baseline }, timeout: noFurtherSignalWindow)
+        #expect(settled == baseline)
     }
 
     // MARK: - Fixture file helpers

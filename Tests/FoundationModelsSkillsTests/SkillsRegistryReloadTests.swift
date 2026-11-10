@@ -1,6 +1,9 @@
 import Foundation
-import FoundationModelsSkills
+import FoundationModelsExtras
+import InMemoryTracing
 import Testing
+
+@testable import FoundationModelsSkills
 
 /// Tests for `SkillsRegistry`'s reloadable half: `watch: true` wires a
 /// `DotfolderWatcher` of `FoundationModelsExtras` over every layer root and
@@ -165,6 +168,11 @@ struct SkillsRegistryReloadTests {
     /// level below the root. A watch that armed the skill directories alone
     /// would pass each of those and miss the reference files, the partials and
     /// the scripts that a skill reads at render time.
+    ///
+    /// A reference file is not part of the catalog, thus the rebuild finds the
+    /// same catalog and publishes no `onReload` value. The test counts the
+    /// catalog-load spans instead: the build at construction gives one, and
+    /// each rebuild gives one more.
     @Test func writingAFileDeepInsideASkillDirectoryGivesExactlyOneRebuild() async throws {
         let root = try WatcherTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -173,15 +181,29 @@ struct SkillsRegistryReloadTests {
             .appendingPathComponent(Self.referencesDirectoryName, isDirectory: true)
         try FileManager.default.createDirectory(at: references, withIntermediateDirectories: true)
 
-        let registry = SkillsRegistry(roots: [root], watch: true)
-        let recorder = MetadataUpdateRecorder()
-        let subscription = Self.subscribe(registry, to: recorder)
-        defer { subscription.cancel() }
+        let tracer = InMemoryTracer()
+        let registry = SkillsRegistry(
+            layers: [DotfolderStack.Layer(source: .project, root: root)], policy: RenderPolicy(),
+            watch: true,
+            telemetry: SkillsTracing.Telemetry(tracer: tracer))
 
         try "Reference text.\n".write(
             to: references.appendingPathComponent("notes.md"), atomically: true, encoding: .utf8)
 
-        await Self.expectExactlyOnePublication(recorder, since: 0)
+        await ReloadTestSupport.expectExactlyOneEvent(
+            countGetter: { Self.rebuildCount(tracer) }, since: 0,
+            signalTimeout: ReloadTestSupport.expectedSignalTimeout,
+            settleWindow: ReloadTestSupport.noFurtherSignalWindow)
+        withExtendedLifetime(registry) {}
+    }
+
+    /// The number of rebuilds that a registry over `tracer` ran: its
+    /// catalog-load spans less the one of the build at construction.
+    ///
+    /// - Parameter tracer: The tracer of the registry.
+    /// - Returns: The number of rebuilds.
+    private static func rebuildCount(_ tracer: InMemoryTracer) -> Int {
+        tracer.finishedSpans.filter { $0.operationName == SkillsTracing.SpanName.catalogLoad }.count - 1
     }
 
     // MARK: - Add / remove propagate to metadata() and commandListing()
@@ -275,13 +297,18 @@ struct SkillsRegistryReloadTests {
 
     // MARK: - watch: false performs no watching
 
-    @Test func watchDefaultsToFalseWhenOmitted() throws {
+    @Test func watchDefaultsToFalseWhenOmitted() async throws {
         let root = try WatcherTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         try ReloadTestSupport.writeSkillFile(id: "static-skill", in: root, descriptionSuffix: "v1")
 
         let registry = SkillsRegistry(roots: [root])
-        #expect(registry.onReload == nil)
+        let tally = ReloadTestSupport.EventTally()
+        let subscription = ReloadTestSupport.tally(registry.onReload, into: tally)
+        defer { subscription.cancel() }
+
+        try ReloadTestSupport.writeSkillFile(id: "static-skill", in: root, descriptionSuffix: "v2")
+        await ReloadTestSupport.expectNoEvent(tally)
     }
 
     @Test func watchFalseEditingATempFileChangesNothing() async throws {
@@ -290,7 +317,6 @@ struct SkillsRegistryReloadTests {
         try ReloadTestSupport.writeSkillFile(id: "static-skill", in: root, descriptionSuffix: "before edit")
 
         let registry = SkillsRegistry(roots: [root], watch: false)
-        #expect(registry.onReload == nil)
 
         try ReloadTestSupport.writeSkillFile(id: "static-skill", in: root, descriptionSuffix: "after edit")
         // Gives an incorrectly-wired watcher a chance to fire before asserting nothing changed.
@@ -299,6 +325,105 @@ struct SkillsRegistryReloadTests {
         let entry = try #require(registry.metadata().first { $0.id == "static-skill" })
         #expect(entry.description.contains("before edit"))
         #expect(!entry.description.contains("after edit"))
+    }
+
+    // MARK: - reload()
+
+    /// `reload()` reads the disk before it returns, thus a skill written
+    /// before the call is in `metadata()` right after it.
+    @Test func reloadPutsAWrittenSkillIntoMetadataBeforeItReturns() throws {
+        let root = try WatcherTestSupport.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let registry = SkillsRegistry(roots: [root], watch: false)
+
+        try ReloadTestSupport.writeSkillFile(id: "written-skill", in: root)
+        registry.reload()
+
+        #expect(registry.metadata().map(\.id) == ["written-skill"])
+    }
+
+    /// A registry that does not watch still publishes on `onReload`: one
+    /// write and one `reload()` give exactly one value.
+    @Test func watchFalseWriteAndReloadPublishExactlyOnce() async throws {
+        let root = try WatcherTestSupport.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try ReloadTestSupport.writeSkillFile(
+            id: "editable-skill", in: root, descriptionSuffix: "before edit")
+        let registry = SkillsRegistry(roots: [root], watch: false)
+        let tally = ReloadTestSupport.EventTally()
+        let subscription = ReloadTestSupport.tally(registry.onReload, into: tally)
+        defer { subscription.cancel() }
+
+        try ReloadTestSupport.writeSkillFile(
+            id: "editable-skill", in: root, descriptionSuffix: "after edit")
+        registry.reload()
+
+        await ReloadTestSupport.expectExactlyOneEvent(tally)
+    }
+
+    /// On a registry that watches, the watcher event of a write and the
+    /// explicit `reload()` of the same write give one value, not two: the
+    /// second rebuild finds no difference and publishes nothing.
+    @Test func watchTrueWriteAndReloadPublishExactlyOnce() async throws {
+        let root = try WatcherTestSupport.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try ReloadTestSupport.writeSkillFile(
+            id: "editable-skill", in: root, descriptionSuffix: "before edit")
+        let registry = SkillsRegistry(roots: [root], watch: true)
+        let tally = ReloadTestSupport.EventTally()
+        let subscription = ReloadTestSupport.tally(registry.onReload, into: tally)
+        defer { subscription.cancel() }
+
+        try ReloadTestSupport.writeSkillFile(
+            id: "editable-skill", in: root, descriptionSuffix: "after edit")
+        registry.reload()
+
+        await ReloadTestSupport.expectExactlyOneEvent(tally)
+    }
+
+    /// A `reload()` with no change on disk publishes nothing.
+    @Test func reloadWithNoChangeOnDiskPublishesNothing() async throws {
+        let root = try WatcherTestSupport.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try ReloadTestSupport.writeSkillFile(id: "static-skill", in: root)
+        let registry = SkillsRegistry(roots: [root], watch: false)
+        let tally = ReloadTestSupport.EventTally()
+        let subscription = ReloadTestSupport.tally(registry.onReload, into: tally)
+        defer { subscription.cancel() }
+
+        registry.reload()
+
+        await ReloadTestSupport.expectNoEvent(tally)
+    }
+
+    /// The number of `reload()` calls that
+    /// `concurrentReloadsAndAWatcherRebuildEndWithTheNewestCatalog` runs at
+    /// the same time as the watcher rebuild.
+    private static let concurrentReloadCount = 8
+
+    /// Many `reload()` calls at the same time as the watcher rebuild of one
+    /// write give one value, and the catalog after them holds the write.
+    @Test func concurrentReloadsAndAWatcherRebuildEndWithTheNewestCatalog() async throws {
+        let root = try WatcherTestSupport.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try ReloadTestSupport.writeSkillFile(
+            id: "raced-skill", in: root, descriptionSuffix: "before edit")
+        let registry = SkillsRegistry(roots: [root], watch: true)
+        let tally = ReloadTestSupport.EventTally()
+        let subscription = ReloadTestSupport.tally(registry.onReload, into: tally)
+        defer { subscription.cancel() }
+
+        try ReloadTestSupport.writeSkillFile(
+            id: "raced-skill", in: root, descriptionSuffix: "after edit")
+        await withTaskGroup(of: Void.self) { group in
+            for _ in 0..<Self.concurrentReloadCount {
+                group.addTask { registry.reload() }
+            }
+        }
+        await ReloadTestSupport.expectExactlyOneEvent(tally)
+
+        let entry = try #require(registry.metadata().first { $0.id == "raced-skill" })
+        #expect(entry.description.contains("after edit"))
     }
 
     // MARK: - Late root creation: end-to-end through the registry
@@ -490,8 +615,8 @@ struct SkillsRegistryReloadTests {
         }
     }
 
-    /// Starts a background task that iterates `registry.onReload` (when
-    /// non-`nil`) and records every published metadata list into `recorder`.
+    /// Starts a background task that iterates `registry.onReload` and
+    /// records every published metadata list into `recorder`.
     ///
     /// The stream is subscribed on the caller's thread, before the task is
     /// created, for the reason `ReloadTestSupport.tally(_:into:)` states: a
@@ -508,7 +633,6 @@ struct SkillsRegistryReloadTests {
     ) -> Task<Void, Never> {
         let stream = registry.onReload
         return Task {
-            guard let stream else { return }
             for await metadata in stream {
                 await recorder.record(metadata)
             }

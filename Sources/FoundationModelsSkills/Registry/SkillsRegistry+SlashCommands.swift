@@ -27,18 +27,19 @@ extension SkillsRegistry: SlashCommandProviding {
         slashCommands()
     }
 
-    /// Republishes this registry's full command set after every
-    /// watcher-driven catalog rebuild, bridged from `onReload`.
+    /// Republishes this registry's full command set after every catalog
+    /// rebuild that changes the catalog, bridged from `onReload`.
     ///
-    /// `nil` when this registry was constructed with `watch: false`, same
-    /// as `onReload` itself. Accessing this property registers a fresh
-    /// subscription over `onReload` -- itself now a multicast-safe fresh
-    /// subscription per access (`ReloadBroadcaster`) -- so this property can
+    /// Never `nil`: every registry publishes on `onReload`, whatever
+    /// `watch` is. The type is optional only because `SlashCommandProviding`
+    /// declares it so. Accessing this property registers a fresh
+    /// subscription over `onReload` -- itself a multicast-safe fresh
+    /// subscription per access (`EventBroadcaster`) -- so this property can
     /// be accessed any number of times, or alongside `onReload` itself,
     /// with every subscriber observing every publication in full; none
     /// steals another's elements.
     public var commandUpdates: AsyncStream<[SlashCommand]>? {
-        guard let onReload else { return nil }
+        let onReload = onReload
         let (stream, continuation) = AsyncStream<[SlashCommand]>.makeStream()
         // Captures `detachedReader`, never `self`/`self.slashCommands`:
         // `self` is a value-type copy that would carry its own strong

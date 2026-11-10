@@ -43,17 +43,16 @@ public struct SkillsToolContext: Sendable {
     /// makes the forwarding loop live exactly as long as the tool this
     /// context was built for.
     ///
-    /// `nil` for a `watch: false` registry, which never reloads, and for a
-    /// host that asked the factory for `followReloads: false` because it
-    /// pumps the stream itself.
+    /// `nil` for a host that asked the factory for `followReloads: false`
+    /// because it pumps the stream itself, and for a context that a host
+    /// builds without one.
     public let reloadFollower: SkillsReloadFollower?
 
     /// The follower that posts a catalog-change notice for each reload that
     /// changes the listed catalog, or `nil` when no notice is posted.
     ///
-    /// Held for its lifetime alone, the same as `reloadFollower`. `nil` for a
-    /// `watch: false` registry, which never reloads, and for a context that a
-    /// host builds without one.
+    /// Held for its lifetime alone, the same as `reloadFollower`. `nil` only
+    /// for a context that a host builds without one.
     public let catalogNoticeFollower: SkillsCatalogNoticeFollower?
 
     /// The board of the catalog notices. `SkillsTool.make(context:)` gives it

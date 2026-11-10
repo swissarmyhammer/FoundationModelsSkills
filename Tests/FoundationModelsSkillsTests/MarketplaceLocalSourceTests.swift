@@ -77,7 +77,7 @@ struct MarketplaceLocalSourceTests {
         let fixture = try MarketplaceStoreFixture(
             sources: [MarketplaceSource(Self.url(ofFolder: folder))])
         let registry = fixture.makeRegistry(watch: true)
-        let stream = try #require(registry.onReload, "a watched registry publishes reloads")
+        let stream = registry.onReload
         let tally = ReloadTestSupport.EventTally()
         let subscription = ReloadTestSupport.tally(stream, into: tally)
         defer { subscription.cancel() }
@@ -114,7 +114,7 @@ struct MarketplaceLocalSourceTests {
         var stack = DotfolderStack(name: "skills", workingDirectory: localRoot, environment: [:])
         stack.layers = [DotfolderStack.Layer(source: .project, root: localRoot)]
         let registry = SkillsRegistry(marketplaces: provider, stack: stack, watch: true)
-        let stream = try #require(registry.onReload, "a watched registry publishes reloads")
+        let stream = registry.onReload
         let tally = ReloadTestSupport.EventTally()
         let subscription = ReloadTestSupport.tally(stream, into: tally)
         defer { subscription.cancel() }

@@ -234,17 +234,15 @@ struct SkillsCatalogNoticeTests {
 
     // MARK: - Assembly
 
-    @Test func aWatchedRegistryGetsANoticeFollowerAndAnUnwatchedOneNone() async throws {
+    @Test func aRegistryThatDoesNotWatchGetsANoticeFollowerOnTheBoardOfItsContext() async throws {
         let root = try HotReloadTestSupport.makeTempDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         try ReloadTestSupport.writeSkillFile(id: Self.seededSkillID, in: root)
 
-        let watched = await Self.makeContext(registry: SkillsRegistry(roots: [root], watch: true))
         let unwatched = await Self.makeContext(registry: SkillsRegistry(roots: [root], watch: false))
 
-        let follower = try #require(watched.catalogNoticeFollower)
-        #expect(follower.board === watched.catalogNoticeBoard)
-        #expect(unwatched.catalogNoticeFollower == nil, "a registry that never reloads posts no notice")
+        let follower = try #require(unwatched.catalogNoticeFollower)
+        #expect(follower.board === unwatched.catalogNoticeBoard)
     }
 
     @Test func aHostThatPumpsTheSearchAgentItselfStillGetsANoticeFollower() async throws {

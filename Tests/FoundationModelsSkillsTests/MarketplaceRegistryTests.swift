@@ -118,8 +118,7 @@ struct MarketplaceRegistryTests {
         let bodyBefore = try await registry.call(id: Self.sharedSkillID)
         #expect(bodyBefore.contains("second marketplace body"))
 
-        let stream = try #require(
-            registry.onReload, "a marketplace-backed registry publishes reloads even with watch: false")
+        let stream = registry.onReload
         let tally = ReloadTestSupport.EventTally()
         let subscription = ReloadTestSupport.tally(stream, into: tally)
         defer { subscription.cancel() }

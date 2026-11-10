@@ -19,9 +19,8 @@ import FoundationModelsExtras
 /// whose event the feed did not append yet. That client gets the event after
 /// the cursor, thus it sees the change two times and never misses it.
 final class SkillChangeFeed: Sendable {
-    /// The task that appends the events, or `nil` for a registry that never
-    /// reloads.
-    private let task: Task<Void, Never>?
+    /// The task that appends the events.
+    private let task: Task<Void, Never>
 
     /// Starts to feed a change log from the reloads of a registry.
     ///
@@ -33,10 +32,7 @@ final class SkillChangeFeed: Sendable {
     ///   - changeLog: The change log that gets one event for each reload that
     ///     changes a skill.
     init(registry: SkillsRegistry, changeLog: ChangeLog<ChangedIDs>) {
-        guard let reloads = registry.onReload else {
-            task = nil
-            return
-        }
+        let reloads = registry.onReload
         let reader = registry.detachedReader
         let seed = reader.skillContents()
         task = Task {
@@ -53,7 +49,7 @@ final class SkillChangeFeed: Sendable {
 
     /// Stops the feed: the task ends at its next wait on `onReload`.
     deinit {
-        task?.cancel()
+        task.cancel()
     }
 
     /// Gives the change between two snapshots, by id.

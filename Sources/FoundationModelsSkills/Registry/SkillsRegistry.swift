@@ -1,5 +1,6 @@
 import Foundation
 import FoundationModelsExtras
+import Synchronization
 import Tracing
 
 /// One catalog row `SkillsRegistry.metadata()` returns: a skill's id, its
@@ -117,20 +118,23 @@ public struct UnknownSkillError: Error, Sendable, Equatable {
 /// method below only ever sees the skills that survived validation
 /// un-hidden.
 ///
-/// With `watch: false` (the default), the catalog never changes after
-/// `init` returns. With `watch: true`, a `DotfolderWatcher` of
-/// `FoundationModelsExtras` observes every layer root and rebuilds the
-/// catalog on its coalesced signal; the rebuild swaps in a whole new
+/// With `watch: false` (the default), the catalog changes only when the
+/// host calls `reload()` (or, for a marketplace-backed registry, on a
+/// provider update). With `watch: true`, a `DotfolderWatcher` of
+/// `FoundationModelsExtras` also observes every layer root and rebuilds the
+/// catalog on its coalesced signal. Each rebuild swaps in a whole new
 /// catalog atomically, so `metadata()`,
 /// `commandListing()`, `preloadedBodies()`, `call(id:arguments:)`, and
 /// `diagnostics` always read one complete generation of the catalog, never
 /// a partially-rebuilt one, regardless of how many readers query
-/// concurrently with a rebuild. `onReload` publishes the refreshed
-/// `[SkillMetadata]` once per rebuild -- the seam a future
-/// `SkillSearchAgent`'s `update(items:)` and preload refresh hang off. The watcher this registry wires
-/// is owned by it: every
-/// copy of a `watch: true` registry shares one underlying watcher, stopped
-/// (and `onReload` finished) once the last copy is deinitialized.
+/// concurrently with a rebuild. Rebuilds run one at a time, thus an older
+/// load never replaces a newer catalog. `onReload` publishes the refreshed
+/// `[SkillMetadata]` once for each rebuild that changes the catalog -- the
+/// seam a `SkillSearchAgent`'s `update(items:)` and preload refresh hang
+/// off. A rebuild that finds the same catalog publishes nothing. The watcher
+/// this registry wires is owned by it: every copy of a `watch: true`
+/// registry shares one underlying watcher, stopped (and `onReload` finished)
+/// once the last copy is deinitialized.
 public struct SkillsRegistry: Sendable {
     /// The layer roots this registry was constructed over, lowest
     /// precedence first -- exactly as given to `init(roots:policy:watch:)`,
@@ -155,30 +159,46 @@ public struct SkillsRegistry: Sendable {
     ///
     /// Reflects the same catalog generation `metadata()`,
     /// `commandListing()`, and `preloadedBodies()` currently read --
-    /// refreshed after every watcher-driven rebuild, same as they are.
+    /// refreshed after every rebuild, same as they are.
     public var diagnostics: [SkillDiagnostic] {
         catalogBox.snapshot.diagnostics
     }
 
     /// A fresh subscription to this registry's refreshed metadata list, one
-    /// publication per watcher-driven rebuild. One registry can have more
-    /// than one consumer at the same time; `commandUpdates` is another.
+    /// publication for each rebuild that changes the catalog. One registry
+    /// can have more than one consumer at the same time; `commandUpdates` is
+    /// another.
     ///
     /// Each access registers an independent subscriber stream against the
-    /// shared `ReloadCoordinator`, so any number of concurrent readers --
+    /// shared broadcaster, so any number of concurrent readers --
     /// this property accessed twice, or alongside `commandUpdates` -- each
     /// observe every publication in full; none steals another's elements.
     /// Each element is the full, current `metadata()` list -- not an
     /// incremental diff, the same full-catalog contract `metadata()` itself
-    /// carries. `nil` when this registry was constructed with `watch:
-    /// false` and no marketplace provider, since a registry that never
-    /// reloads has nothing to publish; a marketplace-backed registry
-    /// publishes on every provider update, thus `onReload` is never `nil`
-    /// for `init(marketplaces:stack:policy:watch:)`, whatever `watch` is.
-    /// Every subscription finishes once this
-    /// registry (and every copy sharing its coordinator) is deinitialized.
-    public var onReload: AsyncStream<[SkillMetadata]>? {
-        reloadCoordinator?.subscribe()
+    /// carries. A rebuild comes from `reload()`, from the watcher of a
+    /// `watch: true` registry, and from each update of a marketplace
+    /// provider, thus every registry publishes here, whatever `watch` is.
+    /// Every subscription finishes once this registry (and every copy
+    /// sharing its coordinator) is deinitialized.
+    public var onReload: AsyncStream<[SkillMetadata]> {
+        reloadBroadcaster.subscribe()
+    }
+
+    /// Reads every layer again, now, and swaps in the new catalog before it
+    /// returns.
+    ///
+    /// This is the same rebuild that the watcher and a marketplace update
+    /// run. A host calls it after it writes a skill, thus a registry with
+    /// `watch: false` sees the write too. The rebuild publishes one
+    /// `onReload` value only when the new catalog differs from the current
+    /// one, thus a write that the watcher of a `watch: true` registry also
+    /// sees still gives exactly one value, and a `reload()` with no change
+    /// on disk gives none.
+    ///
+    /// A read-only view (`detachedReader`) does not own the coordinator, and
+    /// its `reload()` does nothing.
+    public func reload() {
+        reloadCoordinator?.reload()
     }
 
     /// This registry's render pipeline, wired to the real passes 1-3.
@@ -192,14 +212,21 @@ public struct SkillsRegistry: Sendable {
     /// immediately visible to every other copy.
     private let catalogBox: CatalogBox
 
-    /// Owns the `DotfolderWatcher` and the `onReload` continuation for a
-    /// `watch: true` registry; `nil` for `watch: false`.
+    /// Gives each `onReload` subscriber every publication of a rebuild.
     ///
-    /// Retained purely for its lifetime: `ReloadCoordinator.deinit` stops
-    /// the watcher and finishes `onReload`, so keeping this field alive for
-    /// as long as any copy of the registry exists is what makes the
-    /// watcher's lifecycle "owned by the registry" a real guarantee rather
-    /// than a comment.
+    /// Every copy of a registry, and every read-only view of it, shares this
+    /// one broadcaster.
+    private let reloadBroadcaster: EventBroadcaster<[SkillMetadata]>
+
+    /// Owns the rebuild, the `DotfolderWatcher` of a `watch: true` registry,
+    /// and the end of `onReload`. Every registry that an initializer gives
+    /// has one; `nil` only for a read-only view.
+    ///
+    /// Retained for its lifetime: `ReloadCoordinator.deinit` stops the
+    /// watcher and finishes `onReload`, so keeping this field alive for as
+    /// long as any copy of the registry exists is what makes the watcher's
+    /// lifecycle "owned by the registry" a real guarantee rather than a
+    /// comment.
     private let reloadCoordinator: ReloadCoordinator?
 
     /// The tracer, the metrics factory and the logger of each catalog load
@@ -382,8 +409,8 @@ public struct SkillsRegistry: Sendable {
     /// each value of `marketplaces.layerUpdates` -- not the watcher -- asks
     /// the provider for its layers again (the commit and the catalog
     /// version change) and then runs exactly the rebuild the watcher runs:
-    /// one atomic catalog swap and one `onReload` publication, also when
-    /// `watch` is `false`. Thus `onReload` is never `nil` here.
+    /// one atomic catalog swap, and one `onReload` publication when the
+    /// catalog changed, also when `watch` is `false`.
     ///
     /// - Parameters:
     ///   - marketplaces: The provider of the marketplace layers.
@@ -458,20 +485,21 @@ public struct SkillsRegistry: Sendable {
                 layers: plan.layers, environment: ProcessInfo.processInfo.environment,
                 templateContext: templateContext))
 
-        guard watch || source.marketplaceUpdates != nil else {
-            reloadCoordinator = nil
-            return
-        }
+        let broadcaster = EventBroadcaster<[SkillMetadata]>()
+        reloadBroadcaster = broadcaster
 
         // A read-only view sharing this registry's own `catalogBox`, given
-        // to `ReloadCoordinator` so it can recompute `metadata()` after
+        // to `CatalogRebuilder` so it can recompute `metadata()` after
         // every rebuild through the exact same rendering path every other
         // reader uses, without duplicating any of it.
         let reader = SkillsRegistry(
-            catalogBox: catalogBox, pipeline: pipeline, policy: policy, roots: roots, telemetry: telemetry)
+            catalogBox: catalogBox, pipeline: pipeline, policy: policy, roots: roots, telemetry: telemetry,
+            reloadBroadcaster: broadcaster)
+        let rebuilder = CatalogRebuilder(
+            source: source, catalogBox: catalogBox, reader: reader, broadcaster: broadcaster, telemetry: telemetry)
         let coordinator = ReloadCoordinator(
-            source: source, watchedRoots: watch ? plan.watchedRoots : nil, catalogBox: catalogBox,
-            reader: reader, telemetry: telemetry)
+            rebuilder: rebuilder, watchedRoots: watch ? plan.watchedRoots : nil,
+            marketplaceUpdates: source.marketplaceUpdates, broadcaster: broadcaster)
         coordinator.start()
         reloadCoordinator = coordinator
     }
@@ -556,7 +584,7 @@ public struct SkillsRegistry: Sendable {
     }
 
     /// Builds a read-only view of an existing registry's live catalog, with
-    /// reload disabled -- `ReloadCoordinator`'s own vantage point for
+    /// reload disabled -- `CatalogRebuilder`'s own vantage point for
     /// recomputing `metadata()` after a rebuild via the registry's real
     /// rendering path, rather than a duplicate of it.
     ///
@@ -567,15 +595,17 @@ public struct SkillsRegistry: Sendable {
     ///   - policy: The render policy to share.
     ///   - roots: The layer roots to share.
     ///   - telemetry: The telemetry to share.
+    ///   - reloadBroadcaster: The `onReload` broadcaster to share.
     private init(
         catalogBox: CatalogBox, pipeline: RenderPipeline, policy: RenderPolicy, roots: [URL],
-        telemetry: SkillsTracing.Telemetry
+        telemetry: SkillsTracing.Telemetry, reloadBroadcaster: EventBroadcaster<[SkillMetadata]>
     ) {
         self.roots = roots
         self.policy = policy
         self.catalogBox = catalogBox
         self.pipeline = pipeline
         self.telemetry = telemetry
+        self.reloadBroadcaster = reloadBroadcaster
         reloadCoordinator = nil
     }
 
@@ -1353,7 +1383,9 @@ public struct SkillsRegistry: Sendable {
     /// same `catalogBox`), it simply never itself keeps the coordinator
     /// alive.
     internal var detachedReader: SkillsRegistry {
-        SkillsRegistry(catalogBox: catalogBox, pipeline: pipeline, policy: policy, roots: roots, telemetry: telemetry)
+        SkillsRegistry(
+            catalogBox: catalogBox, pipeline: pipeline, policy: policy, roots: roots, telemetry: telemetry,
+            reloadBroadcaster: reloadBroadcaster)
     }
 
     // MARK: - Reload
@@ -1395,35 +1427,131 @@ public struct SkillsRegistry: Sendable {
         }
     }
 
-    /// Owns the `DotfolderWatcher` and the `EventBroadcaster` for a
-    /// `watch: true` registry: rebuilds `catalogBox` on every coalesced
-    /// watcher signal and publishes the refreshed metadata list to every
-    /// current subscriber.
+    /// What one catalog generation shows a reader: the `onReload` list, the
+    /// content of each skill, and the diagnostics.
+    ///
+    /// `CatalogRebuilder` compares the fingerprint before and after a
+    /// rebuild, and publishes only when the two differ. The content of each
+    /// skill holds the frontmatter and the body, thus an edit that no
+    /// metadata row shows still changes the fingerprint; the diagnostics
+    /// hold a skill that does not load, and the marketplace commit of each
+    /// layer that they name.
+    private struct CatalogFingerprint: Sendable, Equatable {
+        /// The `metadata()` rows, which `onReload` publishes.
+        let metadata: [SkillMetadata]
+
+        /// The `skillContents()` values, the skills that are off included.
+        let contents: [String: SkillContent]
+
+        /// The `diagnostics` of the generation.
+        let diagnostics: [SkillDiagnostic]
+
+        /// Reads the fingerprint of the current catalog generation of
+        /// `registry`.
+        ///
+        /// - Parameter registry: The registry to read.
+        init(of registry: SkillsRegistry) {
+            metadata = registry.metadata()
+            contents = registry.skillContents()
+            diagnostics = registry.diagnostics
+        }
+    }
+
+    /// Runs each rebuild of one registry: loads the layers, swaps in the new
+    /// catalog, and publishes the new metadata when the catalog changed.
+    ///
+    /// A rebuild holds `published` from the load to the publication, thus
+    /// rebuilds run one at a time. A watcher signal, a marketplace update,
+    /// and a `reload()` that come at the same time each load in turn, and
+    /// the last load reads the newest files: an older load never replaces a
+    /// newer catalog. Two rebuilds of one write give one publication, since
+    /// the second finds the catalog that the first published.
+    ///
+    /// The watcher closure and the marketplace task capture this object, not
+    /// the `ReloadCoordinator`, thus neither keeps the coordinator alive.
+    private final class CatalogRebuilder: Sendable {
+        /// How to compute the layers of each rebuild.
+        private let source: LayerSource
+
+        /// The catalog holder to replace on every rebuild.
+        private let catalogBox: CatalogBox
+
+        /// A read-only registry view sharing `catalogBox`, used to read the
+        /// fingerprint via the real rendering path.
+        private let reader: SkillsRegistry
+
+        /// Gives each publication to every `onReload` subscriber.
+        private let broadcaster: EventBroadcaster<[SkillMetadata]>
+
+        /// The tracer and the metrics factory of each rebuild.
+        private let telemetry: SkillsTracing.Telemetry
+
+        /// The fingerprint of the catalog that subscribers have now: the
+        /// one at construction, or the one of the last publication.
+        private let published: Mutex<CatalogFingerprint>
+
+        /// Creates a `CatalogRebuilder`, and reads the fingerprint of the
+        /// catalog that `catalogBox` holds now.
+        ///
+        /// - Parameters:
+        ///   - source: How to compute the layers of each rebuild.
+        ///   - catalogBox: The catalog holder to replace on every rebuild.
+        ///   - reader: A read-only registry view sharing `catalogBox`.
+        ///   - broadcaster: The `onReload` broadcaster.
+        ///   - telemetry: The tracer and the metrics factory of each
+        ///     rebuild.
+        init(
+            source: LayerSource, catalogBox: CatalogBox, reader: SkillsRegistry,
+            broadcaster: EventBroadcaster<[SkillMetadata]>, telemetry: SkillsTracing.Telemetry
+        ) {
+            self.source = source
+            self.catalogBox = catalogBox
+            self.reader = reader
+            self.broadcaster = broadcaster
+            self.telemetry = telemetry
+            published = Mutex(CatalogFingerprint(of: reader))
+        }
+
+        /// Loads the layers, swaps in the new catalog, and publishes its
+        /// metadata when it differs from the catalog of the last
+        /// publication.
+        func rebuild() {
+            published.withLock { current in
+                catalogBox.replace(with: SkillsRegistry.loadCatalog(plan: source.plan(), telemetry: telemetry))
+                let next = CatalogFingerprint(of: reader)
+                guard next != current else { return }
+                current = next
+                broadcaster.publish(next.metadata)
+            }
+        }
+    }
+
+    /// Owns the rebuild of a registry, the `DotfolderWatcher` of a
+    /// `watch: true` registry, the task that follows the marketplace
+    /// updates, and the end of `onReload`.
     ///
     /// A `final class` rather than a value type since its lifetime -- when
     /// the watcher starts and, more importantly, when it stops -- is what
     /// `SkillsRegistry` needs to own; a struct has no `deinit` to hang that
     /// stop on.
     ///
-    /// `@unchecked Sendable`: every stored property (`watcher`,
-    /// `broadcaster`, `marketplaceUpdates`) is an immutable `let` referring
-    /// to a type that is itself safe under concurrent use --
-    /// `DotfolderWatcher` is `@unchecked Sendable` and serializes its own
-    /// mutable state on a private queue, `EventBroadcaster` locks its own
-    /// mutable state, and
-    /// `Task` is `Sendable`. This class itself declares no other stored
-    /// state: the rebuild closure wired up in `init` captures
-    /// `source`/`catalogBox`/`reader`/`broadcaster`/`telemetry` directly rather than
-    /// `self`, so no `ReloadCoordinator` instance property is ever read or
-    /// written outside of `init`/`start()`/`subscribe()`/`deinit`, none of
-    /// which race with each other (`start()` and `deinit` are only ever
-    /// called from the owning `SkillsRegistry`'s single construction and
-    /// deinitialization points).
-    private final class ReloadCoordinator: @unchecked Sendable {
-        /// The watcher over the local layer roots, or `nil` for a registry
-        /// that only a marketplace update rebuilds.
+    /// Every stored property is an immutable `let` of a type that is safe
+    /// under concurrent use -- `DotfolderWatcher` is `@unchecked Sendable`
+    /// and serializes its own mutable state on a private queue,
+    /// `CatalogRebuilder` and `EventBroadcaster` lock their own mutable
+    /// state, and `Task` is `Sendable` -- which gives the class a plain
+    /// `Sendable` conformance that the compiler checks.
+    private final class ReloadCoordinator: Sendable {
+        /// Runs each rebuild.
+        private let rebuilder: CatalogRebuilder
+
+        /// The watcher over the watched roots, or `nil` for a registry with
+        /// `watch: false`.
         private let watcher: DotfolderWatcher?
+
+        /// The `onReload` broadcaster, finished at deinit.
         private let broadcaster: EventBroadcaster<[SkillMetadata]>
+
         /// The task that rebuilds on each marketplace update, or `nil` when
         /// no provider backs this registry.
         private let marketplaceUpdates: Task<Void, Never>?
@@ -1431,40 +1559,27 @@ public struct SkillsRegistry: Sendable {
         /// Creates a `ReloadCoordinator`, wires (but does not yet start)
         /// its watcher, and begins following the marketplace updates.
         ///
-        /// One rebuild closure serves both the watcher and the marketplace
-        /// updates, thus a marketplace update goes through exactly the
-        /// catalog swap and the publication a file change goes through, and
-        /// one update gives one `onReload` value. The closure captures
-        /// `source`, `catalogBox`, `reader`, `broadcaster`, and `telemetry` directly
-        /// rather than `self`, so it creates no retain cycle between this
-        /// coordinator and its own watcher or task.
+        /// The watcher, the marketplace updates, and `reload()` all run
+        /// `rebuilder.rebuild()`, thus each goes through exactly the same
+        /// catalog swap and publication.
         ///
         /// - Parameters:
-        ///   - source: How to compute the layers of each rebuild, and what
-        ///     makes them change.
+        ///   - rebuilder: Runs each rebuild.
         ///   - watchedRoots: The roots to watch, or `nil` for no watching.
-        ///   - catalogBox: The catalog holder to atomically replace on
-        ///     every rebuild.
-        ///   - reader: A read-only registry view sharing `catalogBox`, used
-        ///     to recompute `metadata()` after each rebuild via the real
-        ///     rendering path.
-        ///   - telemetry: The tracer and the metrics factory of each
-        ///     rebuild.
+        ///   - marketplaceUpdates: One value for each marketplace update, or
+        ///     `nil` when no provider backs this registry.
+        ///   - broadcaster: The `onReload` broadcaster to finish at deinit.
         init(
-            source: LayerSource, watchedRoots: [URL]?, catalogBox: CatalogBox, reader: SkillsRegistry,
-            telemetry: SkillsTracing.Telemetry
+            rebuilder: CatalogRebuilder, watchedRoots: [URL]?, marketplaceUpdates: AsyncStream<Void>?,
+            broadcaster: EventBroadcaster<[SkillMetadata]>
         ) {
-            let broadcaster = EventBroadcaster<[SkillMetadata]>()
+            self.rebuilder = rebuilder
             self.broadcaster = broadcaster
-            let rebuild: @Sendable () -> Void = {
-                catalogBox.replace(with: SkillsRegistry.loadCatalog(plan: source.plan(), telemetry: telemetry))
-                broadcaster.publish(reader.metadata())
-            }
-            watcher = watchedRoots.map { DotfolderWatcher(roots: $0, onChange: rebuild) }
-            marketplaceUpdates = source.marketplaceUpdates.map { updates in
+            watcher = watchedRoots.map { DotfolderWatcher(roots: $0, onChange: rebuilder.rebuild) }
+            self.marketplaceUpdates = marketplaceUpdates.map { updates in
                 Task {
                     for await _ in updates {
-                        rebuild()
+                        rebuilder.rebuild()
                     }
                 }
             }
@@ -1475,13 +1590,9 @@ public struct SkillsRegistry: Sendable {
             watcher?.start()
         }
 
-        /// Registers a fresh subscriber stream against this coordinator's
-        /// broadcaster.
-        ///
-        /// - Returns: A stream receiving every publication from this point
-        ///   forward, independent of any other subscriber.
-        func subscribe() -> AsyncStream<[SkillMetadata]> {
-            broadcaster.subscribe()
+        /// Runs one rebuild now, on the caller's thread.
+        func reload() {
+            rebuilder.rebuild()
         }
 
         /// Stops the underlying watcher, cancels the marketplace-update
