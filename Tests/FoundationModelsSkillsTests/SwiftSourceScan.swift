@@ -10,9 +10,10 @@ import Foundation
 /// libgit2; `NoStandardOutWriteTests`, which holds it to one line writer;
 /// `SandboxedModeTests`, which holds each `mode` parameter to no default; and
 /// `SkillsTracingTests`, which holds the package to one logging API, swift-log.
-/// Each one gives a test of a line, and this file does the two steps under it
-/// -- it counts the lines of a text, and it walks the Swift files of a
-/// directory. Thus no suite keeps a copy of those steps.
+/// Each one gives a test of a line, or a pattern that can match over more than
+/// one line, and this file does the two steps under it -- it counts the lines
+/// of a text, and it walks the Swift files of a directory. Thus no suite keeps a
+/// copy of those steps.
 enum SwiftSourceScan {
     /// The number of the first line of a file.
     private static let firstLineNumber = 1
@@ -46,6 +47,19 @@ enum SwiftSourceScan {
             .map { $0.offset + firstLineNumber }
     }
 
+    /// Finds each match of `pattern` in `text`.
+    ///
+    /// The pattern reads the whole text, thus a match can go across lines.
+    ///
+    /// - Parameters:
+    ///   - text: The source text to read.
+    ///   - pattern: Matches a text that breaks the rule.
+    /// - Returns: The number of the line where each match starts. The first
+    ///   line is 1.
+    static func lineNumbers(in text: String, ofMatchesOf pattern: Regex<Substring>) -> [Int] {
+        text.matches(of: pattern).map { text[..<$0.range.lowerBound].filter(\.isNewline).count + firstLineNumber }
+    }
+
     /// Finds each reported line of each Swift file under `directory`.
     ///
     /// - Parameters:
@@ -61,6 +75,41 @@ enum SwiftSourceScan {
     static func reportedLines(
         inDirectory directory: String, matching isReported: (String) -> Bool
     ) throws -> [String] {
+        try reportedLines(inDirectory: directory) { lineNumbers(in: $0, matching: isReported) }
+    }
+
+    /// Finds each match of `pattern` in each Swift file under `directory`.
+    ///
+    /// The pattern reads the whole text of a file, thus a match can go across
+    /// lines.
+    ///
+    /// - Parameters:
+    ///   - directory: A directory path relative to the package root, such as
+    ///     `"Sources"`.
+    ///   - pattern: Matches a text that breaks the rule.
+    /// - Returns: One text for each match, in the form
+    ///   `<directory>/<relative path>:<line number>`, with the line where the
+    ///   match starts.
+    /// - Throws: The errors of ``reportedLines(inDirectory:matching:)``.
+    static func reportedLines(
+        inDirectory directory: String, matchingPattern pattern: Regex<Substring>
+    ) throws -> [String] {
+        try reportedLines(inDirectory: directory) { lineNumbers(in: $0, ofMatchesOf: pattern) }
+    }
+
+    /// Walks each Swift file under `directory` and names each line that
+    /// `reportedLineNumbers` gives for the text of the file.
+    ///
+    /// - Parameters:
+    ///   - directory: A directory path relative to the package root.
+    ///   - reportedLineNumbers: Gives the number of each reported line of the
+    ///     text of one file.
+    /// - Returns: One text for each reported line, in the form
+    ///   `<directory>/<relative path>:<line number>`.
+    /// - Throws: The errors of ``reportedLines(inDirectory:matching:)``.
+    private static func reportedLines(
+        inDirectory directory: String, lineNumbersOf reportedLineNumbers: (String) -> [Int]
+    ) throws -> [String] {
         let root = FixtureLibrary.packageRoot().appendingPathComponent(directory, isDirectory: true)
         let files = try FileManager.default.subpathsOfDirectory(atPath: root.path)
             .filter { $0.hasSuffix(swiftFileSuffix) }
@@ -68,7 +117,7 @@ enum SwiftSourceScan {
 
         return try files.flatMap { relativePath in
             let text = try String(contentsOf: root.appendingPathComponent(relativePath), encoding: .utf8)
-            return lineNumbers(in: text, matching: isReported).map { "\(directory)/\(relativePath):\($0)" }
+            return reportedLineNumbers(text).map { "\(directory)/\(relativePath):\($0)" }
         }
     }
 }

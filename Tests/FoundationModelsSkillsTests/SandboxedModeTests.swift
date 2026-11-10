@@ -41,8 +41,13 @@ struct SandboxedModeTests {
     /// The name of the `op` field of the fused schema.
     private static let opFieldName = "op"
 
-    /// The text of a parameter that gives `mode` a default value.
-    private static let defaultModeMarker = "mode: ToolMode = "
+    /// Matches a `mode` parameter that has a default value.
+    ///
+    /// Each `\s*` also matches a line break, thus the pattern finds a default
+    /// with any space around `:` and `=`, and a default on the next line.
+    private static var defaultModePattern: Regex<Substring> {
+        #/mode\s*:\s*ToolMode\s*=/#
+    }
 
     /// The source directory of the library, relative to the package root.
     private static let librarySourcesPath = "Sources/FoundationModelsSkills"
@@ -176,9 +181,25 @@ struct SandboxedModeTests {
 
     // MARK: - No default mode
 
+    @Test func theScanFlagsACompactDefault() {
+        #expect(Self.modeDefaultLines(in: "init(mode: ToolMode=.open)") == [1])
+    }
+
+    @Test func theScanFlagsADefaultWithSpaceBeforeTheColon() {
+        #expect(Self.modeDefaultLines(in: "init(mode :ToolMode = .open)") == [1])
+    }
+
+    @Test func theScanFlagsADefaultOnTheNextLine() {
+        #expect(Self.modeDefaultLines(in: "init(\n    mode: ToolMode\n        = .open)") == [2])
+    }
+
+    @Test func theScanDoesNotFlagAModeWithNoDefault() {
+        #expect(Self.modeDefaultLines(in: "init(mode: ToolMode, probe: SandboxProbe = .live)").isEmpty)
+    }
+
     @Test func noLineUnderTheLibrarySourcesGivesModeADefault() throws {
         let offenders = try SwiftSourceScan.reportedLines(
-            inDirectory: Self.librarySourcesPath, matching: { $0.contains(Self.defaultModeMarker) })
+            inDirectory: Self.librarySourcesPath, matchingPattern: Self.defaultModePattern)
 
         #expect(
             offenders.isEmpty,
@@ -189,6 +210,15 @@ struct SandboxedModeTests {
     }
 
     // MARK: - Helpers
+
+    /// Finds each `mode` parameter of `text` that has a default value.
+    ///
+    /// - Parameter text: The source text to read.
+    /// - Returns: The number of the line where each such parameter starts.
+    ///   The first line is 1.
+    private static func modeDefaultLines(in text: String) -> [Int] {
+        SwiftSourceScan.lineNumbers(in: text, ofMatchesOf: defaultModePattern)
+    }
 
     /// Reads the values of the `op` enum of the fused schema.
     ///

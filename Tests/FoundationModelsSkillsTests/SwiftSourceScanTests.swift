@@ -36,21 +36,50 @@ struct SwiftSourceScanTests {
         #expect(SwiftSourceScan.lineNumbers(in: "one line") { _ in false }.isEmpty)
     }
 
+    @Test func aPatternMatchGivesTheLineWhereTheMatchStarts() {
+        let text = """
+            let first = "alpha"
+            let second =
+                "bravo"
+            """
+
+        #expect(SwiftSourceScan.lineNumbers(in: text, ofMatchesOf: #/second\s*=\s*"bravo"/#) == [2])
+    }
+
+    @Test func aTextWithNoPatternMatchGivesNoNumber() {
+        #expect(SwiftSourceScan.lineNumbers(in: "one line", ofMatchesOf: #/two/#).isEmpty)
+    }
+
+    @Test func theWalkWithAPatternNamesTheDirectoryThePathAndTheLineNumber() throws {
+        let reported = try SwiftSourceScan.reportedLines(
+            inDirectory: Self.exampleDirectory, matchingPattern: #/import\s+/#)
+
+        #expect(!reported.isEmpty, "each file of the example imports, or this case proves nothing")
+        #expect(reported.allSatisfy(Self.namesTheExampleFileAndALine))
+    }
+
     @Test func theWalkNamesTheDirectoryThePathAndTheLineNumber() throws {
         let reported = try SwiftSourceScan.reportedLines(inDirectory: Self.exampleDirectory) {
             $0.hasPrefix(Self.importMarker)
         }
 
         #expect(!reported.isEmpty, "each file of the example imports, or this case proves nothing")
-        #expect(
-            reported.allSatisfy {
-                $0.hasPrefix("\(Self.exampleDirectory)/") && $0.contains(Self.lineNumberMarker)
-            })
+        #expect(reported.allSatisfy(Self.namesTheExampleFileAndALine))
     }
 
     @Test func aWalkThatFindsNoSwiftFileStops() {
         #expect(throws: SwiftSourceScan.ScanError.self) {
             try SwiftSourceScan.reportedLines(inDirectory: Self.directoryWithNoSwiftFile) { _ in true }
         }
+    }
+
+    /// Tells whether one reported text names a file of the example directory
+    /// and a line number.
+    ///
+    /// - Parameter reported: One text that a walk gives.
+    /// - Returns: `true` when the text has the form
+    ///   `<directory>/<relative path>.swift:<line number>`.
+    private static func namesTheExampleFileAndALine(_ reported: String) -> Bool {
+        reported.hasPrefix("\(exampleDirectory)/") && reported.contains(lineNumberMarker)
     }
 }
