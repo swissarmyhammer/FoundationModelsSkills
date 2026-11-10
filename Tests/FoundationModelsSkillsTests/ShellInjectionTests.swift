@@ -9,8 +9,6 @@ import Testing
 /// re-execution with no caching, and the single-shot no-re-scan invariant end to end through
 /// the full pipeline.
 struct ShellInjectionTests {
-    private let pass = ShellInjection(mode: .open)
-
     /// Creates a fresh, empty temporary directory, resolved to its real (symlink-free) path so
     /// tests that shell out to `pwd` can compare against it directly.
     ///
@@ -54,10 +52,17 @@ struct ShellInjectionTests {
             policy: policy)
     }
 
-    /// Runs `pass.render` over `text`, wrapping/flattening `QuarantinedText` so every call site
-    /// below can pass/receive plain `String`s.
-    private func render(_ text: String, request: RenderRequest) async throws -> String {
-        try await pass.render(QuarantinedText(original: text), request: request).flattened
+    /// Runs `ShellInjection.render` in `mode` over `text`, wrapping/flattening `QuarantinedText` so
+    /// every call site below can pass/receive plain `String`s.
+    ///
+    /// - Parameters:
+    ///   - text: The text to render.
+    ///   - mode: The tool mode of the pass. Defaults to `.open`.
+    ///   - request: The render request.
+    /// - Returns: The flattened result of the pass.
+    /// - Throws: Whatever `ShellInjection.render` throws.
+    private func render(_ text: String, mode: ToolMode = .open, request: RenderRequest) async throws -> String {
+        try await ShellInjection(mode: mode).render(QuarantinedText(original: text), request: request).flattened
     }
 
     // MARK: - Recognition grammar
@@ -101,12 +106,15 @@ struct ShellInjectionTests {
     /// A pipeline of the REAL passes 1 and 2 -- pass 1 splits the body into
     /// `.original`/`.quarantined` spans around every `$ARGUMENTS` splice, so
     /// pass 2 scans span edges that sit mid-word, after whitespace, or after
-    /// a newline in the flattened text. Pass 3 stays identity: nothing below
+    /// a newline in the flattened text. Pass 3 stays identity by default: nothing below
     /// carries Stencil syntax, and the span matrix is this pass's own.
-    private func passOneAndTwoPipeline() -> RenderPipeline {
+    ///
+    /// - Parameter stencil: Pass 3. Defaults to `IdentityRenderPass`.
+    /// - Returns: The pipeline, with the shell injection in the `.open` mode.
+    private func passOneAndTwoPipeline(stencil: any RenderPass = IdentityRenderPass()) -> RenderPipeline {
         RenderPipeline(
             argumentSubstitution: ArgumentSubstitution(), shellInjection: ShellInjection(mode: .open),
-            stencil: IdentityRenderPass())
+            stencil: stencil)
     }
 
     @Test(
@@ -210,9 +218,8 @@ struct ShellInjectionTests {
         let workingDirectory = try makeTempDirectory()
         let body = "Before !`touch sideeffect.txt` after"
 
-        let result = try await ShellInjection(mode: .sandboxed).render(
-            QuarantinedText(original: body), request: request(text: body, workingDirectory: workingDirectory)
-        ).flattened
+        let result = try await render(
+            body, mode: .sandboxed, request: request(text: body, workingDirectory: workingDirectory))
 
         #expect(result == body)
     }
@@ -221,9 +228,8 @@ struct ShellInjectionTests {
         let workingDirectory = try makeTempDirectory()
         let body = "Before\n```!\ntouch sideeffect.txt\n```\nafter"
 
-        let result = try await ShellInjection(mode: .sandboxed).render(
-            QuarantinedText(original: body), request: request(text: body, workingDirectory: workingDirectory)
-        ).flattened
+        let result = try await render(
+            body, mode: .sandboxed, request: request(text: body, workingDirectory: workingDirectory))
 
         #expect(result == body)
     }
@@ -233,8 +239,7 @@ struct ShellInjectionTests {
         let probeFile = workingDirectory.appendingPathComponent("sideeffect.txt")
         let body = "!`touch sideeffect.txt`\n```!\ntouch sideeffect.txt\n```"
 
-        _ = try await ShellInjection(mode: .sandboxed).render(
-            QuarantinedText(original: body), request: request(text: body, workingDirectory: workingDirectory))
+        _ = try await render(body, mode: .sandboxed, request: request(text: body, workingDirectory: workingDirectory))
 
         #expect(!FileManager.default.fileExists(atPath: probeFile.path))
     }
@@ -261,9 +266,7 @@ struct ShellInjectionTests {
         let workingDirectory = try makeTempDirectory()
         let probeFile = workingDirectory.appendingPathComponent("metadata-sideeffect.txt")
         let text = "!`touch metadata-sideeffect.txt`"
-        let pipeline = RenderPipeline(
-            argumentSubstitution: ArgumentSubstitution(), shellInjection: ShellInjection(mode: .open),
-            stencil: IdentityRenderPass())
+        let pipeline = passOneAndTwoPipeline()
 
         let result = try pipeline.renderMetadata(request(text: text, workingDirectory: workingDirectory))
 
@@ -293,9 +296,7 @@ struct ShellInjectionTests {
         // Pass 3 gets the real process environment, thus `{{ HOME }}` names a
         // value that a template of this render could resolve. The assertion
         // below then proves the quarantine, and not an empty ladder.
-        let pipeline = RenderPipeline(
-            argumentSubstitution: ArgumentSubstitution(), shellInjection: ShellInjection(mode: .open),
-            stencil: StencilPass(environment: ProcessInfo.processInfo.environment))
+        let pipeline = passOneAndTwoPipeline(stencil: StencilPass(environment: ProcessInfo.processInfo.environment))
         var renderRequest = request(text: body, workingDirectory: workingDirectory)
         renderRequest.arguments = ["real-value"]
 
@@ -440,9 +441,7 @@ struct ShellInjectionTests {
 
         #expect(skill.frontmatter.preload == true)
 
-        let pipeline = RenderPipeline(
-            argumentSubstitution: ArgumentSubstitution(), shellInjection: ShellInjection(mode: .open),
-            stencil: IdentityRenderPass())
+        let pipeline = passOneAndTwoPipeline()
         let result = try await pipeline.renderBody(
             request(
                 text: skill.body,

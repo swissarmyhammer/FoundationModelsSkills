@@ -101,7 +101,7 @@ struct SandboxedModeTests {
         #expect(fixture.existingMarkers().isEmpty)
     }
 
-    @Test func noOpPutsAPidOfTheFixtureInTheProcessRegistry() async throws {
+    @Test func noOpLeavesNoPidOfTheFixtureInTheProcessRegistry() async throws {
         let fixture = try SandboxFixture()
         defer { fixture.remove() }
 
@@ -110,13 +110,33 @@ struct SandboxedModeTests {
         #expect(pids.isEmpty)
     }
 
-    @Test func runScriptGivenASandboxedContextDirectlyStartsNoProcess() async throws {
+    // MARK: - run script given a sandboxed context directly
+
+    @Test func runScriptGivenASandboxedContextDirectlyGivesACorrective() async throws {
         let fixture = try SandboxFixture()
         defer { fixture.remove() }
 
-        let output = try await RunScript(id: Self.skillID, path: Self.scriptPath).execute(in: fixture.makeContext())
+        let run = try await fixture.runScriptDirectly()
 
-        #expect(ResourceTestSupport.correctiveMessage(of: output) != nil)
+        #expect(ResourceTestSupport.correctiveMessage(of: run.output) != nil)
+    }
+
+    @Test func runScriptGivenASandboxedContextDirectlyWritesNoMarkerFile() async throws {
+        let fixture = try SandboxFixture()
+        defer { fixture.remove() }
+
+        _ = try await fixture.runScriptDirectly()
+
+        #expect(fixture.existingMarkers().isEmpty)
+    }
+
+    @Test func runScriptGivenASandboxedContextDirectlyLeavesNoPidInTheProcessRegistry() async throws {
+        let fixture = try SandboxFixture()
+        defer { fixture.remove() }
+
+        let run = try await fixture.runScriptDirectly()
+
+        #expect(run.pids.isEmpty)
     }
 
     // MARK: - Composition
@@ -253,12 +273,37 @@ private struct SandboxFixture {
     /// - Throws: Whatever `SkillsCatalogTool.call(arguments:)` throws.
     func callEveryOp() async throws -> Set<pid_t> {
         let tool = try makeTool()
-        let watch = ProcessRegistryWatch(directory: root, releaseFile: releaseFile)
-        return try await watch.pidsSeen {
+        return try await makeWatch().pidsSeen {
             for arguments in everyOpArguments() {
                 _ = try await tool.call(arguments: arguments)
             }
         }
+    }
+
+    /// Runs `RunScript` of the fixture script against the context directly,
+    /// with no tool, under a `ProcessRegistryWatch`.
+    ///
+    /// A host can dispatch `RunScript` with no `skills` tool, thus the
+    /// operation itself must start no process in the sandboxed mode.
+    ///
+    /// - Returns: The outcome of the operation, and each pid of the fixture
+    ///   that the watch saw.
+    /// - Throws: Whatever `makeContext()` or `RunScript.execute(in:)` throws.
+    func runScriptDirectly() async throws -> (output: RunScriptOutput, pids: Set<pid_t>) {
+        let context = try makeContext()
+        let operation = RunScript(id: SandboxedModeTests.skillID, path: SandboxedModeTests.scriptPath)
+        var output: RunScriptOutput?
+        let pids = try await makeWatch().pidsSeen {
+            output = try await operation.execute(in: context)
+        }
+        return (try #require(output), pids)
+    }
+
+    /// Builds a watch over the fixture folder.
+    ///
+    /// - Returns: The watch.
+    private func makeWatch() -> ProcessRegistryWatch {
+        ProcessRegistryWatch(directory: root, releaseFile: releaseFile)
     }
 
     /// The marker files that exist.

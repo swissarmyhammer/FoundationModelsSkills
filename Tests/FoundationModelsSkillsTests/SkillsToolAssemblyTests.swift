@@ -1,5 +1,6 @@
 import Foundation
 import FoundationModels
+import FoundationModelsExtras
 import FoundationModelsSkills
 import Operations
 import Testing
@@ -56,9 +57,7 @@ struct SkillsToolAssemblyTests {
     }
 
     @Test func theFactoryOverASandboxedRegistryHasNoRunScript() async throws {
-        let registry = SkillsRegistry(stack: FixtureLibrary.stack(), mode: .sandboxed)
-
-        let tool = try await SkillsTool.make(registry: registry)
+        let tool = try await SkillsTool.make(registry: Self.makeFixtureRegistry(mode: .sandboxed))
 
         #expect(!tool.operations.map(\.opString).contains(Self.runScriptOp))
     }
@@ -299,9 +298,10 @@ struct SkillsToolAssemblyTests {
 
     /// Builds a registry over the `Examples/skill-library` fixture stack.
     ///
+    /// - Parameter mode: The tool mode of the registry. Defaults to `.open`.
     /// - Returns: The registry every case in this suite hands to a factory.
-    private static func makeFixtureRegistry() -> SkillsRegistry {
-        SkillsRegistry(stack: FixtureLibrary.stack(), mode: .open)
+    private static func makeFixtureRegistry(mode: ToolMode = .open) -> SkillsRegistry {
+        SkillsRegistry(stack: FixtureLibrary.stack(), mode: mode)
     }
 
     /// The answer the selection cases give to their `ScriptedLanguageModel`:
