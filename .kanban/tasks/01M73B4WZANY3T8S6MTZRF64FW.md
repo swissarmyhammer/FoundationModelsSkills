@@ -18,8 +18,24 @@ comments:
     - evidence: 4 files — Sources/FoundationModelsSkills/Operations/SkillsToolAssembly.swift, Tests/FoundationModelsSkillsTests/SkillsToolAssemblyTests.swift (6 new tests: open + .fixed(false) composes, open + .fixed(true) throws openModeInSandbox, sandboxed + .fixed(true) composes, for each overload), Tests/FoundationModelsSkillsTests/SkillsReloadFollowerTests.swift, Tests/FoundationModelsSkillsTests/SkillsCatalogNoticeTests.swift. RED: build failed with "extra argument 'sandboxProbe' in call". GREEN: SkillsToolAssemblyTests 22/22 passed. Full `swift test`: 807 tests in 68 suites passed, no compiler warnings.
     - next: /review. The orchestrator relays the new signature to foundationmodelsagents-d7.
   timestamp: 2026-11-10T18:25:24.533922+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01m73bft7p6cnsfmebxcrcgjh8
+  text: |-
+    ### review — clean
+    - evidence: review sha HEAD~1..HEAD (b1b3121). 0 findings (confirmed 0, refuted 0, attempted 7, failed 0). 4 source and test files reviewed; 6 .kanban files not reviewed (.reviewignore). There are no prior Review Findings sections. All 5 subtask boxes are ticked after a check against the code: both public make overloads in Sources/FoundationModelsSkills/Operations/SkillsToolAssembly.swift take `sandboxProbe: SandboxProbe = .live` and give it through assemble and makeContext to SkillsToolContext.init. SkillsToolAssemblyTests.swift has 6 new tests (open + .fixed(false) composes, open + .fixed(true) throws ToolModeError.openModeInSandbox, sandboxed + .fixed(true) composes; each for both overloads). `swift test`: 807 tests in 68 suites passed, 0 failures. No compiler warning. The only build line is the known SwiftPM "missing creator for mutated node" line for mlx-swift_Cmlx.bundle, from the dependency build graph, not from this change.
+    - next: The task is in done. The Change list item "Tell foundationmodelsagents-d7 the new parameter" has no checkbox and is not code; the orchestrator must do it.
+  timestamp: 2026-11-10T18:28:23.926957+00:00
+- actor: claude-code
+  id: 01m73bg7x50t0mcrcj9qkd5vzt
+  text: |-
+    ### finish iteration 1 — clean
+    - implement: changed — 4 files
+    - test: green — swift test, 807 passed in 68 suites, 0 compiler warnings
+    - commit: b1b3121
+    - review: clean — 0 findings; task in done
+  timestamp: 2026-11-10T18:28:37.925809+00:00
+position_column: done
+position_ordinal: ffaf80
 title: 'SK-7d: SkillsTool.make(registry:) takes a sandboxProbe, so a host probe reaches the skills tool'
 ---
 ## What
@@ -31,13 +47,13 @@ Change:
 - Tell foundationmodelsagents-d7 the new parameter, so that `AgentEnvironment.make` can take a probe and give it through.
 
 ## Acceptance Criteria
-- [ ] Both public `SkillsTool.make(registry:...)` overloads take `sandboxProbe:` with the default `.live`.
-- [ ] `SkillsTool.make(registry:, sandboxProbe: .fixed(true))` with an `.open` registry throws `ToolModeError.openModeInSandbox`.
-- [ ] With `.sandboxed` registry and `.fixed(true)`, `make` succeeds.
+- [x] Both public `SkillsTool.make(registry:...)` overloads take `sandboxProbe:` with the default `.live`.
+- [x] `SkillsTool.make(registry:, sandboxProbe: .fixed(true))` with an `.open` registry throws `ToolModeError.openModeInSandbox`.
+- [x] With `.sandboxed` registry and `.fixed(true)`, `make` succeeds.
 
 ## Tests
-- [ ] `Tests/FoundationModelsSkillsTests/SkillsToolAssemblyTests.swift`: one test for each criterion above, for each overload.
-- [ ] `swift test` passes with no warnings.
+- [x] `Tests/FoundationModelsSkillsTests/SkillsToolAssemblyTests.swift`: one test for each criterion above, for each overload.
+- [x] `swift test` passes with no warnings.
 
 ## Workflow
 - Use `/tdd` — write failing tests first, then implement to make them pass. #step1
