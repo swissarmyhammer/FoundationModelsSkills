@@ -136,15 +136,31 @@ public struct UnknownSkillError: Error, Sendable, Equatable {
 /// registry shares one underlying watcher, stopped (and `onReload` finished)
 /// once the last copy is deinitialized.
 public struct SkillsRegistry: Sendable {
-    /// The layer roots this registry was constructed over, lowest
-    /// precedence first -- exactly as given to `init(roots:policy:watch:)`,
-    /// or derived from a `DotfolderStack` by `init(stack:policy:watch:)`.
+    /// The layers this registry was constructed over, lowest precedence
+    /// first -- each with its `DotfolderStack.Source` and its root.
     ///
-    /// A construction-time invariant: fixed for
-    /// this registry's lifetime, so no holder can silently repoint it at a
-    /// different set of roots after the catalog and every render pass
-    /// (`StencilPass`'s partials stack) have already captured it.
-    public let roots: [URL]
+    /// `init(layers:policy:watch:)` and `init(stack:policy:watch:)` keep the
+    /// source of each layer that they get. `init(roots:policy:watch:)` gets
+    /// bare roots, which carry no source, thus it labels each root
+    /// `.project` (`untrustedLayers(for:)`), and such a registry has no
+    /// `.user` layer. A marketplace-backed registry holds the marketplace
+    /// layers of its first plan in front of the local layers.
+    ///
+    /// `SkillWriter` reads these layers to find the `.user` or `.project`
+    /// layer that it writes. It never computes a path of its own.
+    ///
+    /// A construction-time invariant: fixed for this registry's lifetime, so
+    /// no holder can silently repoint it at a different set of layers after
+    /// the catalog and every render pass (`StencilPass`'s partials stack)
+    /// have already captured it.
+    public let layers: [DotfolderStack.Layer]
+
+    /// The root of each layer of `layers`, lowest precedence first --
+    /// exactly as given to `init(roots:policy:watch:)`, or derived from a
+    /// `DotfolderStack` by `init(stack:policy:watch:)`.
+    public var roots: [URL] {
+        layers.map(\.root)
+    }
 
     /// The render policy every render call this registry makes honors.
     ///
@@ -448,7 +464,7 @@ public struct SkillsRegistry: Sendable {
     /// building its catalog once, immediately -- the one designated
     /// initializer every other one funnels through.
     ///
-    /// `roots` and the render pipeline are construction-time invariants, thus they come from the first plan and
+    /// `layers` and the render pipeline are construction-time invariants, thus they come from the first plan and
     /// never move; a later rebuild changes only the catalog and its
     /// diagnostics.
     ///
@@ -468,7 +484,7 @@ public struct SkillsRegistry: Sendable {
         templateContext: [String: TemplateValue]
     ) {
         let plan = source.plan()
-        roots = plan.layers.map(\.root)
+        layers = plan.layers
         self.policy = policy
         self.telemetry = telemetry
 
@@ -493,7 +509,7 @@ public struct SkillsRegistry: Sendable {
         // every rebuild through the exact same rendering path every other
         // reader uses, without duplicating any of it.
         let reader = SkillsRegistry(
-            catalogBox: catalogBox, pipeline: pipeline, policy: policy, roots: roots, telemetry: telemetry,
+            catalogBox: catalogBox, pipeline: pipeline, policy: policy, layers: layers, telemetry: telemetry,
             reloadBroadcaster: broadcaster)
         let rebuilder = CatalogRebuilder(
             source: source, catalogBox: catalogBox, reader: reader, broadcaster: broadcaster, telemetry: telemetry)
@@ -593,14 +609,14 @@ public struct SkillsRegistry: Sendable {
     ///     view was built from.
     ///   - pipeline: The render pipeline to share.
     ///   - policy: The render policy to share.
-    ///   - roots: The layer roots to share.
+    ///   - layers: The layers to share.
     ///   - telemetry: The telemetry to share.
     ///   - reloadBroadcaster: The `onReload` broadcaster to share.
     private init(
-        catalogBox: CatalogBox, pipeline: RenderPipeline, policy: RenderPolicy, roots: [URL],
+        catalogBox: CatalogBox, pipeline: RenderPipeline, policy: RenderPolicy, layers: [DotfolderStack.Layer],
         telemetry: SkillsTracing.Telemetry, reloadBroadcaster: EventBroadcaster<[SkillMetadata]>
     ) {
-        self.roots = roots
+        self.layers = layers
         self.policy = policy
         self.catalogBox = catalogBox
         self.pipeline = pipeline
@@ -1384,7 +1400,7 @@ public struct SkillsRegistry: Sendable {
     /// alive.
     internal var detachedReader: SkillsRegistry {
         SkillsRegistry(
-            catalogBox: catalogBox, pipeline: pipeline, policy: policy, roots: roots, telemetry: telemetry,
+            catalogBox: catalogBox, pipeline: pipeline, policy: policy, layers: layers, telemetry: telemetry,
             reloadBroadcaster: reloadBroadcaster)
     }
 

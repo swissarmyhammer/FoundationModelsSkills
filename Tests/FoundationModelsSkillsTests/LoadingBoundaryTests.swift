@@ -15,6 +15,12 @@ import Testing
 /// | render with Stencil, with the trust of the layer | Extras, `StenciledDotfolderStack` |
 /// | everything above: the skill schema | here |
 ///
+/// A write is not a load. `SkillWriter` makes, writes and deletes the files of
+/// a skill in a writable layer, and Extras gives no such write, thus that one
+/// file is exempt from the `FileManager` rule. It checks the text of a new
+/// `SKILL.md` before the file exists, thus no stack can read it, and it is
+/// exempt from the `FrontmatterDocument.split` rule too.
+///
 /// This suite is the one guard of that whole boundary. It gives
 /// `SwiftSourceScan` a test of a line, and that reader walks every Swift file
 /// under `Sources/FoundationModelsSkills/`. The walk reads the full text of
@@ -46,6 +52,12 @@ struct LoadingBoundaryTests {
     /// The one line writer of the console, which names `FileHandle` for the
     /// two standard streams and loads nothing.
     private static let standardStreamFile = "\(sourcesPath)/CLI/StandardStream.swift"
+
+    /// The writer of a skill folder, which makes, writes and deletes the
+    /// files of a skill in a writable layer. Extras gives no write of a skill
+    /// folder, and the writer checks a new `SKILL.md` with the split of
+    /// Extras before the file exists, thus no stack can read it yet.
+    private static let skillWriterFile = "\(sourcesPath)/Registry/SkillWriter.swift"
 
     /// The re-export file, whose comment tells a host which names of Extras
     /// one `import FoundationModelsSkills` gives it.
@@ -109,7 +121,7 @@ struct LoadingBoundaryTests {
         Rule(
             name: "FileManager",
             reason: "the stack of Extras opens each directory and each file of a skill",
-            exemptFiles: []),
+            exemptFiles: [skillWriterFile]),
         fileHandleRule,
         Rule(
             name: "String(contentsOf",
@@ -146,7 +158,7 @@ struct LoadingBoundaryTests {
         Rule(
             name: "FrontmatterDocument.split",
             reason: "FrontmatterDocumentStack of Extras splits the frontmatter from the body",
-            exemptFiles: []),
+            exemptFiles: [skillWriterFile]),
         Rule(
             name: "TemplateEngine",
             reason: "StenciledDotfolderStack of Extras runs each render",

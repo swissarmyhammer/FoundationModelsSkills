@@ -27,6 +27,36 @@ struct SkillsRegistryTests {
         "base-style", "commit", "deploy", "env-report", "git-context", "lint", "release-notes", "spec-clean",
     ]
 
+    // MARK: - Layers
+
+    /// The sources of the fixture stack's three layers, lowest precedence
+    /// first.
+    private static let fixtureSources: [DotfolderStack.Source] = [.defaults, .user, .project]
+
+    @Test func layersKeepTheSourceOfEachGivenLayerInOrder() {
+        let layers = zip(Self.fixtureSources, Self.fixtureRoots).map { DotfolderStack.Layer(source: $0, root: $1) }
+
+        let registry = SkillsRegistry(layers: layers)
+
+        #expect(registry.layers.map(\.source) == Self.fixtureSources)
+    }
+
+    @Test func layersKeepTheRootOfEachGivenLayerInOrder() {
+        let layers = zip(Self.fixtureSources, Self.fixtureRoots).map { DotfolderStack.Layer(source: $0, root: $1) }
+
+        let registry = SkillsRegistry(layers: layers)
+
+        #expect(registry.layers.map(\.root) == Self.fixtureRoots)
+    }
+
+    /// A bare root carries no source, thus `init(roots:)` labels each root
+    /// `.project`, and the registry has no `.user` layer.
+    @Test func layersOfARegistryOverBareRootsAreAllProjectLayers() {
+        let registry = SkillsRegistry(roots: Self.fixtureRoots)
+
+        #expect(registry.layers.map(\.source) == Self.fixtureRoots.map { _ in .project })
+    }
+
     // MARK: - Construction snapshot
 
     @Test func constructionOverFixtureRootsBuildsACatalogEntryForEveryStructuralSkill() {
