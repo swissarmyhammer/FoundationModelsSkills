@@ -85,8 +85,9 @@ enum ResourceTestSupport {
         return nil
     }
 
-    /// The message of a corrective outcome of `run script` or
-    /// `read resource`, or `nil` for a success outcome.
+    /// The message of a corrective outcome of one operation -- for example
+    /// `run script`, `read resource` or a `SkillWriter` write -- or `nil` for
+    /// a success outcome.
     ///
     /// The counterpart of `successResult(of:)`, for a test that holds the
     /// operation to a corrective message.

@@ -98,7 +98,7 @@ struct SkillWriterTests {
 
         let outcome = try fixture.writer.add(name: Self.skillName, skillMarkdown: Self.markdown())
 
-        #expect(Self.correctiveMessage(outcome) != nil)
+        #expect(ResourceTestSupport.correctiveMessage(of: outcome) != nil)
     }
 
     @Test func addOfAFolderThatIsAlreadyInThatLayerKeepsTheOldFile() throws {
@@ -133,7 +133,7 @@ struct SkillWriterTests {
 
         let outcome = try fixture.writer.add(name: name, skillMarkdown: Self.markdown())
 
-        #expect(Self.correctiveMessage(outcome) != nil)
+        #expect(ResourceTestSupport.correctiveMessage(of: outcome) != nil)
     }
 
     @Test(arguments: SkillWriterTests.badNames)
@@ -152,7 +152,7 @@ struct SkillWriterTests {
 
         let outcome = try fixture.writer.add(name: Self.skillName, skillMarkdown: Self.unparseableMarkdown)
 
-        #expect(Self.correctiveMessage(outcome) != nil)
+        #expect(ResourceTestSupport.correctiveMessage(of: outcome) != nil)
     }
 
     @Test func addOfMarkdownWhoseFrontmatterDoesNotParseWritesNothing() throws {
@@ -172,7 +172,7 @@ struct SkillWriterTests {
 
         let outcome = try fixture.writer.add(name: Self.skillName, skillMarkdown: Self.noDescriptionMarkdown)
 
-        #expect(Self.correctiveMessage(outcome)?.contains("description") == true)
+        #expect(ResourceTestSupport.correctiveMessage(of: outcome)?.contains("description") == true)
     }
 
     @Test func addOfMarkdownThatTheValidatorWarnsAboutWritesNothing() throws {
@@ -201,7 +201,7 @@ struct SkillWriterTests {
 
         let outcome = try fixture.writer.add(name: Self.skillName, skillMarkdown: Self.markdown())
 
-        #expect(Self.correctiveMessage(outcome)?.contains("user") == true)
+        #expect(ResourceTestSupport.correctiveMessage(of: outcome)?.contains("user") == true)
     }
 
     @Test func addToALayerThatTheRegistryDoesNotHaveWritesNothing() throws {
@@ -222,7 +222,7 @@ struct SkillWriterTests {
 
         let outcome = try writer.add(name: Self.skillName, skillMarkdown: Self.markdown())
 
-        #expect(Self.correctiveMessage(outcome) != nil)
+        #expect(ResourceTestSupport.correctiveMessage(of: outcome) != nil)
     }
 
     @Test func addPutsTheNewSkillIntoMetadata() throws {
@@ -322,7 +322,7 @@ struct SkillWriterTests {
 
         let outcome = try fixture.writer.edit(name: Self.skillName, path: path, content: Self.referenceText)
 
-        #expect(Self.correctiveMessage(outcome) != nil)
+        #expect(ResourceTestSupport.correctiveMessage(of: outcome) != nil)
     }
 
     @Test(arguments: SkillWriterTests.escapingPaths)
@@ -345,7 +345,7 @@ struct SkillWriterTests {
         let outcome = try fixture.writer.edit(
             name: Self.skillName, path: Self.skillFileName, content: Self.markdown(descriptionSuffix: "after"))
 
-        #expect(Self.correctiveMessage(outcome)?.contains("defaults") == true)
+        #expect(ResourceTestSupport.correctiveMessage(of: outcome)?.contains("defaults") == true)
     }
 
     @Test func editOfASkillThatIsOnlyInAReadOnlyLayerTellsTheModelToUseAdd() throws {
@@ -356,7 +356,7 @@ struct SkillWriterTests {
         let outcome = try fixture.writer.edit(
             name: Self.skillName, path: Self.skillFileName, content: Self.markdown(descriptionSuffix: "after"))
 
-        #expect(Self.correctiveMessage(outcome)?.contains("`add`") == true)
+        #expect(ResourceTestSupport.correctiveMessage(of: outcome)?.contains("`add`") == true)
     }
 
     @Test func editRefusesASkillThatIsOnlyInAMarketplaceLayerWithACorrectiveThatNamesTheLayer() throws {
@@ -367,7 +367,7 @@ struct SkillWriterTests {
         let outcome = try fixture.writer.edit(
             name: Self.skillName, path: Self.skillFileName, content: Self.markdown(descriptionSuffix: "after"))
 
-        #expect(Self.correctiveMessage(outcome)?.contains("marketplace") == true)
+        #expect(ResourceTestSupport.correctiveMessage(of: outcome)?.contains("marketplace") == true)
     }
 
     @Test func editOfASkillThatIsOnlyInAMarketplaceLayerWritesNothing() throws {
@@ -392,7 +392,7 @@ struct SkillWriterTests {
         let outcome = try fixture.writer.edit(
             name: Self.skillName, path: Self.skillFileName, content: Self.markdown(descriptionSuffix: "after"))
 
-        #expect(Self.correctiveMessage(outcome)?.contains("project") == true)
+        #expect(ResourceTestSupport.correctiveMessage(of: outcome)?.contains("project") == true)
     }
 
     @Test func editOfASkillThatIsOnlyInTheOtherWritableLayerWritesNothing() throws {
@@ -425,7 +425,7 @@ struct SkillWriterTests {
 
         let outcome = try fixture.writer.edit(name: name, path: Self.referencePath, content: Self.referenceText)
 
-        #expect(Self.correctiveMessage(outcome) != nil)
+        #expect(ResourceTestSupport.correctiveMessage(of: outcome) != nil)
     }
 
     @Test func editOfALayerThatTheRegistryDoesNotHaveGivesACorrectiveThatNamesIt() throws {
@@ -435,7 +435,7 @@ struct SkillWriterTests {
         let outcome = try fixture.writer.edit(
             name: Self.skillName, path: Self.skillFileName, content: Self.markdown(), layer: .project)
 
-        #expect(Self.correctiveMessage(outcome)?.contains("project") == true)
+        #expect(ResourceTestSupport.correctiveMessage(of: outcome)?.contains("project") == true)
     }
 
     @Test func editPutsTheChangeIntoMetadata() throws {
@@ -516,7 +516,7 @@ struct SkillWriterTests {
 
         let outcome = try fixture.writer.remove(name: Self.skillName)
 
-        #expect(Self.correctiveMessage(outcome) != nil)
+        #expect(ResourceTestSupport.correctiveMessage(of: outcome) != nil)
     }
 
     @Test func removeRefusesASkillThatIsOnlyInTheDefaultsLayerWithACorrectiveThatNamesTheLayer() throws {
@@ -526,7 +526,7 @@ struct SkillWriterTests {
 
         let outcome = try fixture.writer.remove(name: Self.skillName)
 
-        #expect(Self.correctiveMessage(outcome)?.contains("defaults") == true)
+        #expect(ResourceTestSupport.correctiveMessage(of: outcome)?.contains("defaults") == true)
     }
 
     @Test(arguments: SkillWriterTests.badNames)
@@ -536,7 +536,7 @@ struct SkillWriterTests {
 
         let outcome = try fixture.writer.remove(name: name)
 
-        #expect(Self.correctiveMessage(outcome) != nil)
+        #expect(ResourceTestSupport.correctiveMessage(of: outcome) != nil)
     }
 
     /// A name of `.` names the layer root itself, thus a writer that did not
@@ -557,7 +557,7 @@ struct SkillWriterTests {
 
         let outcome = try fixture.writer.remove(name: Self.skillName)
 
-        #expect(Self.correctiveMessage(outcome)?.contains("user") == true)
+        #expect(ResourceTestSupport.correctiveMessage(of: outcome)?.contains("user") == true)
     }
 
     @Test func removeTakesTheSkillOutOfMetadata() throws {
@@ -614,15 +614,6 @@ struct SkillWriterTests {
     /// - Returns: The text of the skill file.
     private static func markdown(descriptionSuffix: String = "") -> String {
         ReloadTestSupport.skillFileContents(id: skillName, descriptionSuffix: descriptionSuffix)
-    }
-
-    /// The corrective message of `outcome`, or `nil` for a successful write.
-    ///
-    /// - Parameter outcome: The outcome of one write.
-    /// - Returns: The corrective message, or `nil`.
-    private static func correctiveMessage(_ outcome: SkillWriteOutcome) -> String? {
-        guard case .corrective(let message) = outcome else { return nil }
-        return message
     }
 
     /// The description of the skill `id` in the metadata of `registry`.
