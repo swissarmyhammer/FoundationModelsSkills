@@ -31,12 +31,10 @@ enum TemplateContextTestSupport {
         argumentNames: [String] = [], templateContext: [String: TemplateValue]
     ) throws -> (registry: SkillsRegistry, root: URL) {
         let arguments = argumentNames.isEmpty ? "" : "arguments: [\(argumentNames.joined(separator: ", "))]\n"
-        var layerFiles = [
-            "\(skillID)/SKILL.md": "---\nname: \(skillID)\ndescription: \"\(description)\"\n\(arguments)---\n\(body)"
-        ]
-        for (path, text) in files {
-            layerFiles["\(skillID)/\(path)"] = text
-        }
+        let skillFile = "---\nname: \(skillID)\ndescription: \"\(description)\"\n\(arguments)---\n\(body)"
+        let layerFiles = ["\(skillID)/SKILL.md": skillFile].merging(
+            files.map { ("\(skillID)/\($0.key)", $0.value) }
+        ) { _, more in more }
         let root = try MarketplaceTestSupport.makeTempDirectory(withFiles: layerFiles)
         let registry = SkillsRegistry(
             layers: [DotfolderStack.Layer(source: .project, root: root)], mode: .open, templateContext: templateContext)
