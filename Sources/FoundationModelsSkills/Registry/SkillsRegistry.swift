@@ -696,6 +696,23 @@ public struct SkillsRegistry: Sendable {
         reloadCoordinator = nil
     }
 
+    /// Builds a view of `base` that renders with `pipeline`: every other
+    /// stored value, the reload coordinator too, is the one of `base`.
+    ///
+    /// - Parameters:
+    ///   - base: The registry to share the catalog and the reload of.
+    ///   - pipeline: The render pipeline of the view.
+    private init(base: SkillsRegistry, pipeline: RenderPipeline) {
+        layers = base.layers
+        policy = base.policy
+        mode = base.mode
+        catalogBox = base.catalogBox
+        self.pipeline = pipeline
+        telemetry = base.telemetry
+        reloadBroadcaster = base.reloadBroadcaster
+        reloadCoordinator = base.reloadCoordinator
+    }
+
     /// Wraps every root in a `DotfolderStack.Layer` under Stencil's
     /// untrusted source, so `StencilPass` (partials resolution and the
     /// per-skill trust lookup) and each catalog entry's `winningLayer` have
@@ -1382,18 +1399,53 @@ public struct SkillsRegistry: Sendable {
     ///   - id: The skill id to call -- the directory name.
     ///   - arguments: The arguments to substitute into the rendered body. Defaults to
     ///     empty.
+    ///   - templateContext: The template values of this one call, for
+    ///     example of one agent run. They replace the template values of the
+    ///     registry for this render, partials too (see
+    ///     `with(templateContext:)`). Defaults to `nil`, which keeps the
+    ///     template values of the registry.
     /// - Returns: The fully rendered body.
     /// - Throws: `UnknownSkillError` when `id` is not in the catalog --
     ///   unknown outright, or fully hidden from every surface. Otherwise,
     ///   any error a render pass raises.
-    public func call(id: String, arguments: [String] = []) async throws -> String {
-        try await TracedCall.run(
+    public func call(
+        id: String, arguments: [String] = [], templateContext: [String: TemplateValue]? = nil
+    ) async throws -> String {
+        let renderer = templateContext.map { with(templateContext: $0) } ?? self
+        return try await TracedCall.run(
             SkillsTracing.SpanName.skillLoad, tracer: telemetry.tracer,
             logger: telemetry.logger(label: SkillsTracing.LoggerLabel.registry),
             attributes: { $0[SkillsTracing.AttributeKey.skillID] = id }
         ) { _ in
-            try await renderedCall(id: id, arguments: arguments)
+            try await renderer.renderedCall(id: id, arguments: arguments)
         }
+    }
+
+    /// Gives this registry with other template values: a view that renders
+    /// with `templateContext` in place of the template values of this
+    /// registry.
+    ///
+    /// The view shares the catalog, the rebuild, the watcher and `onReload`
+    /// of this registry, thus it is cheap to make one view for each agent
+    /// run. Only pass 3 changes: each body, each partial and each metadata
+    /// text that the view renders interpolates `templateContext` above the
+    /// environment and below the named arguments of the skill. The
+    /// fingerprint that decides an `onReload` value stays on the values of
+    /// this registry.
+    ///
+    /// - Parameter templateContext: The template values of the view. They
+    ///   replace the template values of this registry; they do not merge.
+    /// - Returns: A registry view that renders with `templateContext`.
+    public func with(templateContext: [String: TemplateValue]) -> SkillsRegistry {
+        var renderPipeline = pipeline
+        // `init(source:...)` is the only place that makes `pipeline`, and
+        // it always gives a `StencilPass` as pass 3, thus this cast always
+        // succeeds for a registry of a public initializer.
+        if var stencil = renderPipeline.stencil as? StencilPass {
+            stencil.templateContext = templateContext
+            renderPipeline.stencil = stencil
+        }
+        return SkillsRegistry(base: self, pipeline: renderPipeline)
     }
 
     /// Renders the body of the skill `id` with `arguments`: the work of

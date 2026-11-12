@@ -63,11 +63,13 @@ struct LoadingBoundaryTests {
     /// one `import FoundationModelsSkills` gives it.
     private static let seamReexportsFile = "\(sourcesPath)/SeamReexports.swift"
 
-    /// The files that carry the session template context of a host, as
-    /// `TemplateValue`s, from `SkillsRegistry` into the `values` of the
+    /// The files that carry the session template context of a host, and the
+    /// template values of one agent run, as `TemplateValue`s, from
+    /// `SkillsRegistry` and `SkillsCatalogTool` into the `values` of the
     /// stenciled stack. They pass the values on; they build no template
     /// context of their own.
     private static let templateContextCarrierFiles = [
+        "\(sourcesPath)/Operations/SkillsCatalogTool.swift",
         "\(sourcesPath)/Registry/SkillsRegistry.swift",
         "\(sourcesPath)/Render/StencilPass.swift",
     ]

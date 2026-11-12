@@ -75,6 +75,14 @@ public struct SkillsCatalogTool: Tool {
     /// decodes their answers to plain text.
     private let plainTextOperations: PlainTextOperations
 
+    /// The context of `operationTool`, which
+    /// `with(templateContext:)` copies with a registry view.
+    private let context: SkillsToolContext
+
+    /// The resolver of `operationTool`, which `with(templateContext:)`
+    /// gives to the tool of each run.
+    private let resolver: OperationResolver
+
     /// Wraps `operationTool` and builds the schema of its operations.
     ///
     /// - Parameters:
@@ -86,13 +94,16 @@ public struct SkillsCatalogTool: Tool {
     ///   - catalogNoticeBoard: The board of the catalog-change notices.
     ///   - skillsGraph: The `skills` GraphQL endpoint over the registry of
     ///     the context of `operationTool`.
+    ///   - context: The context of `operationTool`.
     /// - Throws: Whatever `SkillsToolSchema.make(name:operations:)` or
     ///   `PlainTextOperations.init(resolver:)` throws.
     internal init(
         operationTool: OperationTool<SkillsToolContext>, skillIDs: [String], resolver: OperationResolver,
-        catalogNoticeBoard: CatalogNoticeBoard, skillsGraph: SkillsGraph
+        catalogNoticeBoard: CatalogNoticeBoard, skillsGraph: SkillsGraph, context: SkillsToolContext
     ) throws {
         self.operationTool = operationTool
+        self.context = context
+        self.resolver = resolver
         self.skillIDs = skillIDs
         self.catalogNoticeBoard = catalogNoticeBoard
         self.skillsGraph = skillsGraph
@@ -119,6 +130,35 @@ public struct SkillsCatalogTool: Tool {
     /// Every operation of the tool, in tool order.
     public var operations: [AnyOperation<SkillsToolContext>] {
         operationTool.operations
+    }
+
+    /// Gives this tool for one agent run: each skill that the run loads
+    /// renders with `templateContext`.
+    ///
+    /// The tool of the run shares the search agent (its index and its
+    /// embedder), the reload follow, the notice board, the `skills` GraphQL
+    /// endpoint, the description and the schema of this tool. Only the
+    /// registry of its context changes, to
+    /// `SkillsRegistry.with(templateContext:)`, thus `use skill` and each
+    /// other render of the run interpolate `templateContext` in place of
+    /// the template values of the registry. The description stays the one
+    /// of this tool, as the catalog of the time the tool was made.
+    ///
+    /// - Parameter templateContext: The template values of the run. They
+    ///   replace the template values of the registry; they do not merge.
+    /// - Returns: The tool of the run.
+    /// - Throws: Whatever `OperationTool.init` or
+    ///   `SkillsCatalogTool.init` throws: the schema errors that this tool
+    ///   already passed when it was made.
+    public func with(templateContext: [String: TemplateValue]) throws -> SkillsCatalogTool {
+        let runContext = context.replacingRegistry(context.registry.with(templateContext: templateContext))
+        let runTool = try OperationTool(
+            name: operationTool.name, description: operationTool.description, context: runContext,
+            operations: operationTool.operations, resolver: resolver,
+            includesSchemaInInstructions: operationTool.includesSchemaInInstructions)
+        return try SkillsCatalogTool(
+            operationTool: runTool, skillIDs: skillIDs, resolver: resolver, catalogNoticeBoard: catalogNoticeBoard,
+            skillsGraph: skillsGraph, context: runContext)
     }
 
     /// Resolves `arguments` to one operation and dispatches it through

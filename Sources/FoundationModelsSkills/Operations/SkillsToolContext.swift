@@ -148,4 +148,32 @@ public struct SkillsToolContext: Sendable {
         self.catalogNoticeFollower = catalogNoticeFollower
         catalogNoticeBoard = catalogNoticeFollower?.board ?? CatalogNoticeBoard()
     }
+    /// Gives this context with `registry` in place of its registry. Every
+    /// other value -- the search agent, the followers and the notice board
+    /// too -- is the one of this context.
+    ///
+    /// `SkillsCatalogTool.with(templateContext:)` gives it a view of the
+    /// same registry (`SkillsRegistry.with(templateContext:)`), thus the
+    /// mode stays the mode of the registry and needs no new check.
+    ///
+    /// - Parameter registry: The registry of the new context.
+    /// - Returns: The context with `registry`.
+    func replacingRegistry(_ registry: SkillsRegistry) -> SkillsToolContext {
+        SkillsToolContext(copying: self, registry: registry)
+    }
+
+    /// Copies `base`, with `registry` in place of its registry.
+    ///
+    /// - Parameters:
+    ///   - base: The context to copy.
+    ///   - registry: The registry of the copy.
+    private init(copying base: SkillsToolContext, registry: SkillsRegistry) {
+        mode = base.mode
+        self.registry = registry
+        searchAgent = base.searchAgent
+        visibilityPredicate = base.visibilityPredicate
+        reloadFollower = base.reloadFollower
+        catalogNoticeFollower = base.catalogNoticeFollower
+        catalogNoticeBoard = base.catalogNoticeBoard
+    }
 }

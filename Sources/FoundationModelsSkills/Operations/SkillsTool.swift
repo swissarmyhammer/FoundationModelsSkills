@@ -84,7 +84,7 @@ public enum SkillsTool {
         return try SkillsCatalogTool(
             operationTool: operationTool, skillIDs: catalog.map(\.id), resolver: resolver,
             catalogNoticeBoard: context.catalogNoticeBoard,
-            skillsGraph: SkillsGraph(registry: context.registry))
+            skillsGraph: SkillsGraph(registry: context.registry), context: context)
     }
 
     /// The operations of the tool in `mode`, in schema order.
