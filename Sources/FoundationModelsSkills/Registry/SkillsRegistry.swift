@@ -134,7 +134,9 @@ public struct UnknownSkillError: Error, Sendable, Equatable {
 /// off. A rebuild that finds the same catalog publishes nothing. The watcher
 /// this registry wires is owned by it: every copy of a `watch: true`
 /// registry shares one underlying watcher, stopped (and `onReload` finished)
-/// once the last copy is deinitialized.
+/// once the last copy is deinitialized. `stopWatching()` stops the watcher
+/// and the follow of the marketplace updates before that, for a registry
+/// that a host keeps but does not use, for example for a closed session.
 public struct SkillsRegistry: Sendable {
     /// The layers this registry was constructed over, lowest precedence
     /// first -- each with its `DotfolderStack.Source` and its root.
@@ -230,6 +232,35 @@ public struct SkillsRegistry: Sendable {
     /// its `reload()` does nothing.
     public func reload() {
         reloadCoordinator?.reload()
+    }
+
+    /// Stops the follow of the changes: the watcher of the layer roots and
+    /// the task of the marketplace updates.
+    ///
+    /// A host calls it when it does not use the registry for a time but
+    /// keeps it, for example for a closed session. After the call, a change
+    /// of a layer gives no rebuild and no `onReload` value. `metadata()` and
+    /// each other read give the last catalog. A later `reload()` reads the
+    /// layers again and publishes its catalog, but it does not start the
+    /// watcher again.
+    ///
+    /// The call waits until a rebuild that a change started is complete.
+    /// Thus no `onReload` value of a change comes after the call returns.
+    ///
+    /// A second call does nothing. A registry with `watch: false` and no
+    /// marketplace provider follows no change, thus the call does nothing.
+    /// A read-only view (`detachedReader`) does not own the coordinator,
+    /// and its call does nothing.
+    public func stopWatching() async {
+        await reloadCoordinator?.stopWatching()
+    }
+
+    /// Whether this registry follows the changes of its layers now: its
+    /// watcher runs, or its task follows the marketplace updates.
+    ///
+    /// Internal, for `@testable` access only.
+    var isFollowingChanges: Bool {
+        reloadCoordinator?.isFollowingChanges ?? false
     }
 
     /// This registry's render pipeline, wired to the real passes 1-3.
@@ -1608,7 +1639,7 @@ public struct SkillsRegistry: Sendable {
     /// under concurrent use -- `DotfolderWatcher` is `@unchecked Sendable`
     /// and serializes its own mutable state on a private queue,
     /// `CatalogRebuilder` and `EventBroadcaster` lock their own mutable
-    /// state, and `Task` is `Sendable` -- which gives the class a plain
+    /// state, `Mutex` locks `following`, and `Task` is `Sendable` -- which gives the class a plain
     /// `Sendable` conformance that the compiler checks.
     private final class ReloadCoordinator: Sendable {
         /// Runs each rebuild.
@@ -1644,7 +1675,9 @@ public struct SkillsRegistry: Sendable {
         ) {
             self.rebuilder = rebuilder
             self.broadcaster = broadcaster
-            watcher = watchedRoots.map { DotfolderWatcher(roots: $0, onChange: rebuilder.rebuild) }
+            let watcher = watchedRoots.map { DotfolderWatcher(roots: $0, onChange: rebuilder.rebuild) }
+            self.watcher = watcher
+            following = Mutex(watcher != nil || marketplaceUpdates != nil)
             self.marketplaceUpdates = marketplaceUpdates.map { updates in
                 Task {
                     for await _ in updates {
@@ -1654,9 +1687,40 @@ public struct SkillsRegistry: Sendable {
             }
         }
 
-        /// Starts the underlying watcher, when there is one.
+        /// Whether the watcher or the marketplace task can still start a
+        /// rebuild. `true` from `init` when there is a watcher or a task,
+        /// and `false` for good after `stopWatching()`.
+        private let following: Mutex<Bool>
+
+        /// Whether the watcher or the marketplace task can still start a
+        /// rebuild.
+        var isFollowingChanges: Bool {
+            following.withLock { $0 }
+        }
+
+        /// Starts the underlying watcher, when there is one, and when
+        /// `stopWatching()` did not run.
         func start() {
-            watcher?.start()
+            following.withLock { isFollowing in
+                if isFollowing { watcher?.start() }
+            }
+        }
+
+        /// Stops the watcher and the marketplace task, and waits until a
+        /// rebuild that either one started is complete.
+        ///
+        /// `DotfolderWatcher.stop()` runs on the queue of the watcher, which
+        /// also runs each `onChange`, thus it returns after a rebuild of the
+        /// watcher. The wait on the value of the cancelled task covers a
+        /// rebuild of a marketplace update. Each step is safe to do again,
+        /// thus a second call does nothing new.
+        func stopWatching() async {
+            following.withLock { isFollowing in
+                isFollowing = false
+                watcher?.stop()
+            }
+            marketplaceUpdates?.cancel()
+            await marketplaceUpdates?.value
         }
 
         /// Runs one rebuild now, on the caller's thread.
