@@ -1444,6 +1444,11 @@ public struct SkillsRegistry: Sendable {
         if var stencil = renderPipeline.stencil as? StencilPass {
             stencil.templateContext = templateContext
             renderPipeline.stencil = stencil
+        } else {
+            // A broken shape keeps the registry values, and says so.
+            let message = "SkillsRegistry.with(templateContext:): pass 3 is not a StencilPass"
+            telemetry.logger(label: SkillsTracing.LoggerLabel.registry).error("\(message)")
+            assertionFailure(message)
         }
         return SkillsRegistry(base: self, pipeline: renderPipeline)
     }

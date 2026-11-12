@@ -36,12 +36,7 @@ struct PerRunTemplateContextTests {
     private static func registry(
         templateContext: [String: TemplateValue]
     ) throws -> (registry: SkillsRegistry, root: URL) {
-        let root = try MarketplaceTestSupport.makeTempDirectory(withFiles: [
-            "\(skillID)/SKILL.md": "---\nname: \(skillID)\ndescription: \"fixture.\"\n---\n\(body)"
-        ])
-        let registry = SkillsRegistry(
-            layers: [DotfolderStack.Layer(source: .project, root: root)], mode: .open, templateContext: templateContext)
-        return (registry, root)
+        try TemplateContextTestSupport.registry(skillID: skillID, body: body, templateContext: templateContext)
     }
 
     /// The text that the registry gives with no run values, and the text

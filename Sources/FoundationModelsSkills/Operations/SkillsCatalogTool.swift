@@ -83,29 +83,40 @@ public struct SkillsCatalogTool: Tool {
     /// gives to the tool of each run.
     private let resolver: OperationResolver
 
-    /// Wraps `operationTool` and builds the schema of its operations.
+    /// Builds `operationTool` over `context` and the schema of its
+    /// operations: the one assembly of `SkillsTool.make(context:)` and of
+    /// `with(templateContext:)`.
     ///
     /// - Parameters:
-    ///   - operationTool: The tool that resolves and dispatches each call.
-    ///     Its description is the description of this tool.
+    ///   - context: The context of every operation. Its board becomes
+    ///     `catalogNoticeBoard`.
+    ///   - name: The name of the tool.
+    ///   - description: The description of the tool.
+    ///   - operations: The operations of the tool, in schema order.
+    ///   - resolver: The resolver that resolves and dispatches each call. It
+    ///     also finds the payloads of the skill operations with the same
+    ///     rules as the dispatch.
+    ///   - includesSchemaInInstructions: Whether FoundationModels puts
+    ///     `parameters` into the prompt.
     ///   - skillIDs: The visible skill ids, in catalog order.
-    ///   - resolver: The resolver of `operationTool`. It finds the payloads
-    ///     of the skill operations with the same rules as the dispatch.
-    ///   - catalogNoticeBoard: The board of the catalog-change notices.
     ///   - skillsGraph: The `skills` GraphQL endpoint over the registry of
-    ///     the context of `operationTool`.
-    ///   - context: The context of `operationTool`.
-    /// - Throws: Whatever `SkillsToolSchema.make(name:operations:)` or
+    ///     `context`.
+    /// - Throws: Whatever `OperationTool.init`,
+    ///   `SkillsToolSchema.make(name:operations:)` or
     ///   `PlainTextOperations.init(resolver:)` throws.
     internal init(
-        operationTool: OperationTool<SkillsToolContext>, skillIDs: [String], resolver: OperationResolver,
-        catalogNoticeBoard: CatalogNoticeBoard, skillsGraph: SkillsGraph, context: SkillsToolContext
+        context: SkillsToolContext, name: String, description: String, operations: [AnyOperation<SkillsToolContext>],
+        resolver: OperationResolver, includesSchemaInInstructions: Bool = true, skillIDs: [String],
+        skillsGraph: SkillsGraph
     ) throws {
+        let operationTool = try OperationTool(
+            name: name, description: description, context: context, operations: operations, resolver: resolver,
+            includesSchemaInInstructions: includesSchemaInInstructions)
         self.operationTool = operationTool
         self.context = context
         self.resolver = resolver
         self.skillIDs = skillIDs
-        self.catalogNoticeBoard = catalogNoticeBoard
+        catalogNoticeBoard = context.catalogNoticeBoard
         self.skillsGraph = skillsGraph
         parameters = try SkillsToolSchema.make(name: operationTool.name, operations: operationTool.operations)
         plainTextOperations = try PlainTextOperations(resolver: resolver)
@@ -147,18 +158,14 @@ public struct SkillsCatalogTool: Tool {
     /// - Parameter templateContext: The template values of the run. They
     ///   replace the template values of the registry; they do not merge.
     /// - Returns: The tool of the run.
-    /// - Throws: Whatever `OperationTool.init` or
-    ///   `SkillsCatalogTool.init` throws: the schema errors that this tool
-    ///   already passed when it was made.
+    /// - Throws: Whatever the assembly of the tool throws: the schema
+    ///   errors that this tool already passed when it was made.
     public func with(templateContext: [String: TemplateValue]) throws -> SkillsCatalogTool {
-        let runContext = context.replacingRegistry(context.registry.with(templateContext: templateContext))
-        let runTool = try OperationTool(
-            name: operationTool.name, description: operationTool.description, context: runContext,
-            operations: operationTool.operations, resolver: resolver,
-            includesSchemaInInstructions: operationTool.includesSchemaInInstructions)
-        return try SkillsCatalogTool(
-            operationTool: runTool, skillIDs: skillIDs, resolver: resolver, catalogNoticeBoard: catalogNoticeBoard,
-            skillsGraph: skillsGraph, context: runContext)
+        try SkillsCatalogTool(
+            context: context.replacingRegistry(context.registry.with(templateContext: templateContext)),
+            name: operationTool.name, description: operationTool.description, operations: operationTool.operations,
+            resolver: resolver, includesSchemaInInstructions: operationTool.includesSchemaInInstructions,
+            skillIDs: skillIDs, skillsGraph: skillsGraph)
     }
 
     /// Resolves `arguments` to one operation and dispatches it through

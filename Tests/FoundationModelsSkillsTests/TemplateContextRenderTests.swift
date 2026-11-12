@@ -45,14 +45,9 @@ struct TemplateContextRenderTests {
         body: String, description: String = "fixture.", reference: String = "",
         argumentNames: [String] = [], templateContext: [String: TemplateValue]
     ) throws -> (registry: SkillsRegistry, root: URL) {
-        let arguments = argumentNames.isEmpty ? "" : "arguments: [\(argumentNames.joined(separator: ", "))]\n"
-        let root = try MarketplaceTestSupport.makeTempDirectory(withFiles: [
-            "\(skillID)/SKILL.md": "---\nname: \(skillID)\ndescription: \"\(description)\"\n\(arguments)---\n\(body)",
-            "\(skillID)/\(referencePath)": reference,
-        ])
-        let registry = SkillsRegistry(
-            layers: [DotfolderStack.Layer(source: .project, root: root)], mode: .open, templateContext: templateContext)
-        return (registry, root)
+        try TemplateContextTestSupport.registry(
+            skillID: skillID, body: body, description: description, files: [referencePath: reference],
+            argumentNames: argumentNames, templateContext: templateContext)
     }
 
     /// The context cases: the context, and the text the conditional renders.

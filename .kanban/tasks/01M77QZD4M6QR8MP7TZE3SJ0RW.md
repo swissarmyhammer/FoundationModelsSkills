@@ -1,6 +1,17 @@
 ---
 assignees:
 - claude-code
+comments:
+- actor: claude-code
+  id: 01m77ra9xcbrryd8tqt6rrprnn
+  text: |-
+    ### finish iteration 1 — findings
+    - implement: changed — SkillsRegistry.swift, SkillsCatalogTool.swift, SkillsToolContext.swift, SkillsTool.swift, LoadingBoundaryTests.swift, PerRunTemplateContextTests.swift
+    - test: green — swift test, 830 passed
+    - commit: 950647c
+    - review: findings — SkillsCatalogTool.swift:155 (duplication of the assembly of SkillsTool.make), SkillsRegistry.swift:1444 (cast with no else branch), PerRunTemplateContextTests.swift:36 (fixture helper repeats TemplateContextRenderTests.registry)
+    - note: the names are `with(templateContext:)`, because `withTemplateContext` and `withTemplateValues` break the LoadingBoundaryTests rules on TemplateContext and TemplateValue.
+  timestamp: 2026-11-12T11:29:32.588455+00:00
 position_column: todo
 position_ordinal: '80'
 title: 'SK-9: per-run template context for call(id:) and the skills tool'

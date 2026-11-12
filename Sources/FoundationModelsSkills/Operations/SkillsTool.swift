@@ -73,18 +73,11 @@ public enum SkillsTool {
         context: SkillsToolContext, catalogCharacterLimit: Int = defaultCatalogCharacterLimit
     ) throws -> SkillsCatalogTool {
         let catalog = context.registry.metadata().filter(context.visibilityPredicate)
-        let resolver = makeResolver()
-        let operationTool = try OperationTool(
-            name: toolName,
-            description: SkillsToolDescription.make(catalog: catalog, characterLimit: catalogCharacterLimit),
-            context: context,
-            operations: operations(for: context.mode),
-            resolver: resolver
-        )
         return try SkillsCatalogTool(
-            operationTool: operationTool, skillIDs: catalog.map(\.id), resolver: resolver,
-            catalogNoticeBoard: context.catalogNoticeBoard,
-            skillsGraph: SkillsGraph(registry: context.registry), context: context)
+            context: context, name: toolName,
+            description: SkillsToolDescription.make(catalog: catalog, characterLimit: catalogCharacterLimit),
+            operations: operations(for: context.mode), resolver: makeResolver(), skillIDs: catalog.map(\.id),
+            skillsGraph: SkillsGraph(registry: context.registry))
     }
 
     /// The operations of the tool in `mode`, in schema order.
