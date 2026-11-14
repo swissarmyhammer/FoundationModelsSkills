@@ -292,6 +292,29 @@ resolve to `use`. The `run` verb belongs to `run script`, thus `run skill`
 does not resolve to `use skill`. `create` and `new` resolve to `add`.
 `update` resolves to `edit`. `delete`, `rm`, and `del` resolve to `remove`.
 
+## A payload with no `op`
+
+Some models leave `op` out, or put the whole payload in one `arguments` key.
+The resolver of the `Operations` runtime unwraps a lone `arguments` object,
+and infers a missing `op` from the keys of the payload: an operation fits when
+each key names one of its parameters and the payload holds each of its
+required parameters.
+
+- `{"id": "kanban"}` fits `use skill`, `list resource`, and `remove skill`.
+  The tool sets `use skill` as the `defaultOp` of its resolver, thus the call
+  loads the skill. The default is an operation that only reads, so an
+  inference never writes.
+- `{"id": "kanban", "arguments": []}` fits only `use skill`, and loads the
+  skill with no arguments.
+- `{"arguments": {"op": "use skill", "id": "kanban"}}` is the same call as
+  `{"op": "use skill", "id": "kanban"}`.
+
+The answer of an inferred or unwrapped call is the answer of the operation it
+resolves to: the plain text of a skill operation, or the JSON of a resource
+operation. `PlainTextOperations` resolves each payload over one marker for each
+operation of the tool, with the same resolver, so it finds the same operation
+as the dispatch.
+
 ## Visibility
 
 | Frontmatter | User `/` menu | Model surface | In context at start |

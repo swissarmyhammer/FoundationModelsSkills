@@ -71,8 +71,8 @@ public struct SkillsCatalogTool: Tool {
     /// host gets one endpoint for the registry.
     private let skillsGraph: SkillsGraph
 
-    /// Finds the payloads of the operations whose answer is plain text, and
-    /// decodes their answers to plain text.
+    /// Finds the operation that each payload resolves to, and decodes the
+    /// answer of each operation whose answer is plain text.
     private let plainTextOperations: PlainTextOperations
 
     /// The context of `operationTool`, which
@@ -94,8 +94,8 @@ public struct SkillsCatalogTool: Tool {
     ///   - description: The description of the tool.
     ///   - operations: The operations of the tool, in schema order.
     ///   - resolver: The resolver that resolves and dispatches each call. It
-    ///     also finds the payloads of the skill operations with the same
-    ///     rules as the dispatch.
+    ///     also finds the operation of each payload for
+    ///     `PlainTextOperations`, with the same rules as the dispatch.
     ///   - includesSchemaInInstructions: Whether FoundationModels puts
     ///     `parameters` into the prompt.
     ///   - skillIDs: The visible skill ids, in catalog order.
@@ -103,7 +103,7 @@ public struct SkillsCatalogTool: Tool {
     ///     `context`.
     /// - Throws: Whatever `OperationTool.init`,
     ///   `SkillsToolSchema.make(name:operations:)` or
-    ///   `PlainTextOperations.init(resolver:)` throws.
+    ///   `PlainTextOperations.init(mirroring:resolver:)` throws.
     internal init(
         context: SkillsToolContext, name: String, description: String, operations: [AnyOperation<SkillsToolContext>],
         resolver: OperationResolver, includesSchemaInInstructions: Bool = true, skillIDs: [String],
@@ -119,7 +119,7 @@ public struct SkillsCatalogTool: Tool {
         catalogNoticeBoard = context.catalogNoticeBoard
         self.skillsGraph = skillsGraph
         parameters = try SkillsToolSchema.make(name: operationTool.name, operations: operationTool.operations)
-        plainTextOperations = try PlainTextOperations(resolver: resolver)
+        plainTextOperations = try PlainTextOperations(mirroring: operationTool.operations, resolver: resolver)
     }
 
     /// The model-facing and command-line name of the tool: `skills`.

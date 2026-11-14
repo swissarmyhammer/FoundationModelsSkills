@@ -102,10 +102,17 @@ public enum SkillsTool {
 
     /// Builds the forgiving resolver `make(context:)` fuses the tool with.
     ///
+    /// The resolver infers a missing `op` from the keys of the payload
+    /// (^vm78pnz). A model sends `{"id": "kanban"}` with no `op` to load a
+    /// skill, and those keys fit `use skill`, `list resource`, and
+    /// `remove skill`. `defaultOp` settles such a tie on `use skill`, which
+    /// only reads: the resolver never infers a write.
+    ///
     /// - Returns: A resolver layering `verbAliasOverrides` onto the upstream
-    ///   defaults.
+    ///   defaults, with `use skill` as the op of an op-less payload that fits
+    ///   several operations.
     private static func makeResolver() -> OperationResolver {
-        OperationResolver(verbAliases: verbAliasOverrides)
+        OperationResolver(verbAliases: verbAliasOverrides, defaultOp: UseSkill.opString)
     }
 
     /// The verb aliases this tool's operation set needs, layered onto
