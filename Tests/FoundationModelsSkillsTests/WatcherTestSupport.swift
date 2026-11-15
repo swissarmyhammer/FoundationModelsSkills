@@ -4,8 +4,7 @@ import Foundation
 /// directory tree -- `SkillsRegistryReloadTests` watches one,
 /// `SkillOperationsTests` and `SingleImportTests` only need one -- and
 /// all of them need an identical way to create it (mirrors
-/// `HotReloadTestSupport`, the same pairing for `HotReloadTests`/
-/// `HotReloadLiveTests`).
+/// `HotReloadTestSupport`, the same helper for `HotReloadTests`).
 enum WatcherTestSupport {
     /// Creates a fresh, empty temporary directory for a test root, so one
     /// test's filesystem activity can never be observed by another.

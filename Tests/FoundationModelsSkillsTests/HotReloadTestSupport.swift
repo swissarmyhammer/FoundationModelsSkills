@@ -3,9 +3,10 @@ import FoundationModelsExtras
 import FoundationModelsMetadataRegistry
 import Synchronization
 
-/// Shared fixture-directory helper for `HotReloadTests` and
-/// `HotReloadLiveTests` -- both drive a real, watched temp `.skills` root and
-/// need an identical way to create one.
+/// The fixture-directory helper of `HotReloadTests`, which drives a real,
+/// watched temporary `.skills` root. The live-model twin,
+/// `HotReloadLiveTests`, is in the nested `IntegrationTests` package and has
+/// its own copy of this helper (`TemporaryDirectory`).
 enum HotReloadTestSupport {
     /// Creates a fresh, empty temporary directory for a test root, so one
     /// test's filesystem activity can never be observed by another.

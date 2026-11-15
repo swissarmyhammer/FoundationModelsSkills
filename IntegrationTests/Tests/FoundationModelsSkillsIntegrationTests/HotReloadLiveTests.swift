@@ -4,7 +4,7 @@ import FoundationModelsMetadataRegistry
 import FoundationModelsSkills
 import Testing
 
-/// The live-model twin of `HotReloadTests`:
+/// The live-model twin of `HotReloadTests` (a unit suite of the root package):
 /// the same MCP-style add and remove burst, this time against a
 /// `.selection`-mode `MetadataSearcher` that a real model session backs, not
 /// a scripted fake.
@@ -19,17 +19,13 @@ import Testing
 /// on-device Apple Intelligence model reports each test here as a Swift
 /// Testing skip -- never a failure, and never a silent no-op.
 ///
-/// **The default developer run changed, and the change is deliberate.** An
-/// environment variable used to gate this suite as well, thus a plain `swift
-/// test` never probed on-device model availability at all. Model
-/// availability is now the only gate, thus a plain `swift test` on a machine
-/// that has Apple Intelligence runs this suite by default. That is the trade,
-/// and it is taken on purpose: the suite is one add and one remove burst,
-/// thus it costs little, and a live path that nobody ever runs is a live path
-/// that rots. CI makes the same split by test target instead of by
-/// environment -- `.github/workflows/ci.yml` holds this suite out of the unit
-/// job with `test-skip`, and runs it, and only it, in the integration job
-/// with `integration-filter`.
+/// **Where this suite runs.** It is in the nested `IntegrationTests`
+/// package, not in the root test target. Thus a plain `swift test` at the
+/// repository root never runs it, and
+/// `swift test --package-path IntegrationTests` runs it. In CI, the
+/// `integration-package-path` input of `.github/workflows/ci.yml` makes the
+/// integration job of the shared workflow run this package, on a runner that
+/// has Apple Intelligence.
 @Suite("Gated live-model hot-reload twin")
 struct HotReloadLiveTests {
     @Test(
@@ -40,7 +36,7 @@ struct HotReloadLiveTests {
         )
     )
     func addAndRemoveBurstStaysSearchableThroughARealSelectionSession() async throws {
-        let root = try HotReloadTestSupport.makeTempDirectory()
+        let root = try TemporaryDirectory.make()
         defer { try? FileManager.default.removeItem(at: root) }
         try Self.writeSkillFile(id: "toolA", in: root, descriptionSuffix: "reads a file from disk")
 

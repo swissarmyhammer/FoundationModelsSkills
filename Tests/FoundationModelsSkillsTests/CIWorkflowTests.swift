@@ -3,25 +3,26 @@ import Testing
 
 /// Pins `.github/workflows/ci.yml` to the shared CI shape that the org test
 /// contract (swissarmyhammer/workflows' README) asks for: one job, which
-/// delegates to the shared `swift-ci.yaml` and selects the tests by test
-/// target.
+/// delegates to the shared `swift-ci.yaml` and selects the tests by package
+/// (Shape 2 of the contract: a nested integration package).
 ///
 /// `swift test` at the root runs every suite of the single
-/// `FoundationModelsSkillsTests` target. All but one are unit tests. The
-/// exception is `HotReloadLiveTests`, which drives a real on-device model,
-/// thus `test-skip` holds that suite out of the unit job and
-/// `integration-filter` runs it, and only it, in the integration job.
+/// `FoundationModelsSkillsTests` target, and each of them is a unit test. The
+/// integration tests, for example `HotReloadLiveTests`, which drives a real
+/// on-device model, live in the nested `IntegrationTests` package. The
+/// `integration-package-path` input makes the integration job run that
+/// package.
 ///
-/// This suite pins six properties of that shape: the `uses:` line names the
+/// This suite pins these properties of that shape: the `uses:` line names the
 /// shared workflow at `@main`; exactly one job exists and it has no `steps:`
-/// key, thus every test run is delegated; the two selectors above name the
-/// live-model suite; no other `integration-*` input is present; no source,
-/// test, or workflow file names the environment variable that used to gate
-/// the live-model suite; the triggers are a push to `main`, a pull request,
-/// and a manual dispatch; and a new run of the same ref cancels the run
-/// before it. A later edit that points `uses:` somewhere else, adds a
-/// repository-local job that runs tests, drops a selector, or drops a
-/// trigger, makes this suite fail.
+/// key, thus every test run is delegated; `integration-package-path` names
+/// the nested package, and that package has a manifest; no test selector or
+/// other `integration-*` input is present; no source, test, or workflow file
+/// names the environment variable that used to gate the live-model suite;
+/// the triggers are a push to `main`, a pull request, and a manual dispatch;
+/// and a new run of the same ref cancels the run before it. A later edit that
+/// points `uses:` somewhere else, adds a repository-local job that runs
+/// tests, drops the input, or drops a trigger, makes this suite fail.
 ///
 /// Two more cases pin the reader that the input assertions use, and not the
 /// workflow file: ``inputValues(forKey:in:)`` finds a key in whichever case
@@ -39,36 +40,34 @@ struct CIWorkflowTests {
     /// one, keeps every test run inside the shared workflow.
     private static let allowedJobCount = 1
 
-    /// The selector that names the live-model suite, in the
-    /// `<test-target>.<test-case>/<test>` form the shared workflow's
-    /// `test-filter` input describes. `test-skip` holds the suite out of the
-    /// unit job, and `integration-filter` runs that same suite, and only it,
-    /// in the integration job.
-    private static let liveSuiteSelector = "FoundationModelsSkillsTests.HotReloadLiveTests"
+    /// The path of the nested integration package, relative to the package
+    /// root. It is also the value that `integration-package-path` must have.
+    private static let integrationPackagePath = "IntegrationTests"
 
-    /// The two inputs that `ci.yml` must pass, each with
-    /// ``liveSuiteSelector`` as its value. `test-skip` holds the live-model
-    /// suite out of the unit job, and `integration-filter` runs it, and only
-    /// it, in the integration job.
-    private static let requiredLiveSuiteInputs = ["test-skip", "integration-filter"]
+    /// The inputs that `ci.yml` must pass, each with
+    /// ``integrationPackagePath`` as its value. `integration-package-path`
+    /// starts the integration job and makes it run the nested package.
+    private static let requiredPackageInputs = ["integration-package-path"]
 
-    /// The `integration-*` inputs that `ci.yml` must never pass.
+    /// The selector inputs that `ci.yml` must never pass.
     ///
-    /// `integration-filter` alone starts the integration job and selects the
-    /// live-model suite. `integration-gate-env` is the legacy path, and the
-    /// shared workflow stops the job when it arrives beside a selector.
-    /// `integration-skip` and `integration-package-path` describe a split this
-    /// package does not have: one test target, and one gated suite inside it.
-    private static let forbiddenIntegrationInputs = [
-        "integration-package-path",
+    /// The package boundary alone separates the unit tests from the
+    /// integration tests, thus no test selector is necessary in either job.
+    /// `integration-gate-env` is the legacy path, and the shared workflow
+    /// stops the job when it arrives beside a selector.
+    private static let forbiddenSelectorInputs = [
+        "test-filter",
+        "test-skip",
+        "integration-filter",
         "integration-skip",
         "integration-gate-env",
     ]
 
     /// The directories the removed-gate walk reads: this package's own
-    /// sources, its tests, and its CI definition. The kanban records under
+    /// sources, its tests, the nested integration package, and its CI
+    /// definition. The kanban records under
     /// `.kanban/` are history, and they keep the old name on purpose.
-    private static let scannedDirectories = ["Sources", "Tests", ".github"]
+    private static let scannedDirectories = ["Sources", "Tests", "IntegrationTests/Tests", ".github"]
 
     /// The environment variable that used to gate the live-model suite, and
     /// that no file may name any more.
@@ -85,7 +84,7 @@ struct CIWorkflowTests {
     /// same input as `integration-skip:` does. This fixture is the proof that
     /// ``inputValues(forKey:in:)`` reads such a line, because a reader that
     /// misses it lets a forbidden input go through
-    /// ``passesTheLiveSuiteSelectors()`` without a report.
+    /// ``passesTheIntegrationPackagePath()`` without a report.
     ///
     /// The value on each line is different from the others. Thus a match
     /// against the wrong line is visible in the failure message.
@@ -93,6 +92,7 @@ struct CIWorkflowTests {
         jobs:
           ci:
             with:
+              Test-Filter: mixed-case-test-filter
               Test-Skip: mixed-case-test-skip
               INTEGRATION-FILTER: mixed-case-integration-filter
               Integration-Package-Path: mixed-case-integration-package-path
@@ -103,10 +103,11 @@ struct CIWorkflowTests {
     /// The lowercase input name of each line of ``mixedCaseInputFixture``,
     /// with the value that line carries.
     ///
-    /// The list holds every name of ``requiredLiveSuiteInputs`` and of
-    /// ``forbiddenIntegrationInputs``. Thus each assertion of
-    /// ``passesTheLiveSuiteSelectors()`` has its key covered.
+    /// The list holds every name of ``requiredPackageInputs`` and of
+    /// ``forbiddenSelectorInputs``. Thus each assertion of
+    /// ``passesTheIntegrationPackagePath()`` has its key covered.
     private static let mixedCaseFixtureExpectations = [
+        (input: "test-filter", value: "mixed-case-test-filter"),
         (input: "test-skip", value: "mixed-case-test-skip"),
         (input: "integration-filter", value: "mixed-case-integration-filter"),
         (input: "integration-package-path", value: "mixed-case-integration-package-path"),
@@ -157,30 +158,45 @@ struct CIWorkflowTests {
         )
     }
 
-    @Test("ci.yml holds the live-model suite out of the unit job and runs it in the integration job")
-    func passesTheLiveSuiteSelectors() throws {
+    @Test("ci.yml runs the nested integration package in the integration job, with no test selector")
+    func passesTheIntegrationPackagePath() throws {
         let lines = try Self.workflowLines()
 
-        for key in Self.requiredLiveSuiteInputs {
+        for key in Self.requiredPackageInputs {
             let values = Self.inputValues(forKey: key, in: lines)
             #expect(
-                values == [Self.liveSuiteSelector],
+                values == [Self.integrationPackagePath],
                 """
-                ci.yml must pass "\(key): \(Self.liveSuiteSelector)" exactly once; found: \(values)
+                ci.yml must pass "\(key): \(Self.integrationPackagePath)" exactly once; found: \
+                \(values)
                 """
             )
         }
 
-        for key in Self.forbiddenIntegrationInputs {
+        for key in Self.forbiddenSelectorInputs {
             let values = Self.inputValues(forKey: key, in: lines)
             #expect(
                 values.isEmpty,
                 """
-                ci.yml must pass no "\(key)" input: integration-filter alone selects the gated \
-                suite, and integration-gate-env cannot even be combined with it; found: \(values)
+                ci.yml must pass no "\(key)" input: the package boundary alone separates the unit \
+                tests from the integration tests; found: \(values)
                 """
             )
         }
+    }
+
+    @Test("the nested integration package that ci.yml names has a manifest")
+    func integrationPackageHasAManifest() {
+        let manifest = FixtureLibrary.packageRoot()
+            .appendingPathComponent(Self.integrationPackagePath, isDirectory: true)
+            .appendingPathComponent("Package.swift")
+        #expect(
+            FileManager.default.fileExists(atPath: manifest.path),
+            """
+            integration-package-path names "\(Self.integrationPackagePath)", thus that directory \
+            must hold a Package.swift; found none at \(manifest.path)
+            """
+        )
     }
 
     @Test("an input key resolves in whichever case the workflow file spells it")
@@ -206,11 +222,11 @@ struct CIWorkflowTests {
 
         // ci.yml spells its own keys in lower case, thus this is the other
         // half of the same contract: the asked key may carry any case.
-        for key in Self.requiredLiveSuiteInputs {
+        for key in Self.requiredPackageInputs {
             for spelling in [key.uppercased(), key.capitalized] {
                 let values = Self.inputValues(forKey: spelling, in: lines)
                 #expect(
-                    values == [Self.liveSuiteSelector],
+                    values == [Self.integrationPackagePath],
                     """
                     An input name is case-insensitive on both sides, thus "\(spelling)" must read \
                     the "\(key)" line of ci.yml. A reader that keeps the case of the asked key \
@@ -241,8 +257,7 @@ struct CIWorkflowTests {
             offenders.isEmpty,
             """
             The environment gate is removed: \(Self.removedEnvironmentGate) selects no test any \
-            more, and the shared workflow's integration-filter input selects the live-model suite \
-            instead. No source, test, or workflow file may name it; found: \(offenders)
+            more, and the nested IntegrationTests package holds the live-model suite instead. No source, test, or workflow file may name it; found: \(offenders)
             """
         )
     }
@@ -340,7 +355,7 @@ struct CIWorkflowTests {
     ///
     /// - Parameters:
     ///   - key: An input name, written without its colon, e.g.
-    ///     `"integration-filter"`.
+    ///     `"integration-package-path"`.
     ///   - lines: The lines of the workflow file.
     /// - Returns: The values, in file order, or an empty array when no line
     ///   carries that key.
