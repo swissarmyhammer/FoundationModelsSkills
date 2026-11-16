@@ -62,9 +62,11 @@ extension SkillsTool {
     ///   - sandboxProbe: The probe that tells if the process is sandboxed.
     ///     Defaults to `SandboxProbe.live`, which reads the current process.
     ///     A host or a test gives its own probe here.
-    ///   - marketplaces: The marketplace list that the host keeps. Defaults
-    ///     to `nil`: the tool then has no marketplace operation. See
-    ///     `SkillsToolContext.marketplaces`.
+    ///   - marketplaces: The marketplace list that the host keeps, or `nil`
+    ///     for none: the tool then has no marketplace operation. See
+    ///     `SkillsToolContext.marketplaces`. It has no default, thus the
+    ///     overload with no `marketplaces:` keeps its full name, which a
+    ///     host can keep as a function reference.
     /// - Returns: The fused `skills` tool, ready to register on a
     ///   `LanguageModelSession`.
     /// - Throws: `ToolModeError.openModeInSandbox` when the mode of
@@ -79,7 +81,7 @@ extension SkillsTool {
         catalogCharacterLimit: Int = defaultCatalogCharacterLimit,
         visibilityPredicate: @escaping @Sendable (SkillMetadata) -> Bool = { $0.isModelVisible },
         sandboxProbe: SandboxProbe = .live,
-        marketplaces: MarketplaceRegistry? = nil
+        marketplaces: MarketplaceRegistry?
     ) async throws -> SkillsCatalogTool {
         try await assemble(
             registry: registry,
@@ -91,6 +93,42 @@ extension SkillsTool {
             visibilityPredicate: visibilityPredicate,
             sandboxProbe: sandboxProbe,
             marketplaces: marketplaces)
+    }
+
+    /// Builds the fused `skills` tool over `registry`, with a selection tier
+    /// over `model`, and with no marketplace list.
+    ///
+    /// It is `make(registry:model:embedder:followReloads:catalogCharacterLimit:
+    /// visibilityPredicate:sandboxProbe:marketplaces:)` with `marketplaces:
+    /// nil`. It keeps this full name, thus a host that keeps a reference to it
+    /// still compiles.
+    ///
+    /// - Parameters:
+    ///   - registry: The registry every operation dereferences at dispatch
+    ///     time.
+    ///   - model: The model that answers each selection prompt.
+    ///   - embedder: The embedder of the index, or `nil`.
+    ///   - followReloads: Whether the tool follows `registry.onReload`
+    ///     itself.
+    ///   - catalogCharacterLimit: The most characters the catalog list of
+    ///     the tool description may have.
+    ///   - visibilityPredicate: Which catalog entries this tool presents.
+    ///   - sandboxProbe: The probe that tells if the process is sandboxed.
+    /// - Returns: The fused `skills` tool, with no marketplace operation.
+    /// - Throws: Whatever the overload with `marketplaces:` throws.
+    public static func make(
+        registry: SkillsRegistry,
+        model: any LanguageModel,
+        embedder: (any PooledEmbedding)? = nil,
+        followReloads: Bool = true,
+        catalogCharacterLimit: Int = defaultCatalogCharacterLimit,
+        visibilityPredicate: @escaping @Sendable (SkillMetadata) -> Bool = { $0.isModelVisible },
+        sandboxProbe: SandboxProbe = .live
+    ) async throws -> SkillsCatalogTool {
+        try await make(
+            registry: registry, model: model, embedder: embedder, followReloads: followReloads,
+            catalogCharacterLimit: catalogCharacterLimit, visibilityPredicate: visibilityPredicate,
+            sandboxProbe: sandboxProbe, marketplaces: nil)
     }
 
     /// Builds the fused `skills` tool over `registry` with no model at all:
@@ -125,9 +163,11 @@ extension SkillsTool {
     ///   - sandboxProbe: The probe that tells if the process is sandboxed.
     ///     Defaults to `SandboxProbe.live`, which reads the current process.
     ///     A host or a test gives its own probe here.
-    ///   - marketplaces: The marketplace list that the host keeps. Defaults
-    ///     to `nil`: the tool then has no marketplace operation. See
-    ///     `SkillsToolContext.marketplaces`.
+    ///   - marketplaces: The marketplace list that the host keeps, or `nil`
+    ///     for none: the tool then has no marketplace operation. See
+    ///     `SkillsToolContext.marketplaces`. It has no default, thus the
+    ///     overload with no `marketplaces:` keeps its full name, which a
+    ///     host can keep as a function reference.
     /// - Returns: The fused `skills` tool, ready to drive from a host with
     ///   no model.
     /// - Throws: `ToolModeError.openModeInSandbox` when the mode of
@@ -141,7 +181,7 @@ extension SkillsTool {
         catalogCharacterLimit: Int = defaultCatalogCharacterLimit,
         visibilityPredicate: @escaping @Sendable (SkillMetadata) -> Bool = { $0.isModelVisible },
         sandboxProbe: SandboxProbe = .live,
-        marketplaces: MarketplaceRegistry? = nil
+        marketplaces: MarketplaceRegistry?
     ) async throws -> SkillsCatalogTool {
         try await assemble(
             registry: registry,
@@ -153,6 +193,40 @@ extension SkillsTool {
             visibilityPredicate: visibilityPredicate,
             sandboxProbe: sandboxProbe,
             marketplaces: marketplaces)
+    }
+
+    /// Builds the fused `skills` tool over `registry` with no model and with
+    /// no marketplace list.
+    ///
+    /// It is `make(registry:embedder:followReloads:catalogCharacterLimit:
+    /// visibilityPredicate:sandboxProbe:marketplaces:)` with `marketplaces:
+    /// nil`. It keeps this full name, thus a host that keeps a reference to it
+    /// still compiles.
+    ///
+    /// - Parameters:
+    ///   - registry: The registry every operation dereferences at dispatch
+    ///     time.
+    ///   - embedder: The embedder of the index, or `nil`.
+    ///   - followReloads: Whether the tool follows `registry.onReload`
+    ///     itself.
+    ///   - catalogCharacterLimit: The most characters the catalog list of
+    ///     the tool description may have.
+    ///   - visibilityPredicate: Which catalog entries this tool presents.
+    ///   - sandboxProbe: The probe that tells if the process is sandboxed.
+    /// - Returns: The fused `skills` tool, with no marketplace operation.
+    /// - Throws: Whatever the overload with `marketplaces:` throws.
+    public static func make(
+        registry: SkillsRegistry,
+        embedder: (any PooledEmbedding)? = nil,
+        followReloads: Bool = true,
+        catalogCharacterLimit: Int = defaultCatalogCharacterLimit,
+        visibilityPredicate: @escaping @Sendable (SkillMetadata) -> Bool = { $0.isModelVisible },
+        sandboxProbe: SandboxProbe = .live
+    ) async throws -> SkillsCatalogTool {
+        try await make(
+            registry: registry, embedder: embedder, followReloads: followReloads,
+            catalogCharacterLimit: catalogCharacterLimit, visibilityPredicate: visibilityPredicate,
+            sandboxProbe: sandboxProbe, marketplaces: nil)
     }
 
     /// The assembly steps both factories above share.

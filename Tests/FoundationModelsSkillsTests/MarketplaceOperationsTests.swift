@@ -187,6 +187,38 @@ struct MarketplaceOperationsTests {
         #expect(answer.contains("`\(Self.acmeID)`: \(Self.acmeURL)"))
     }
 
+    /// The full name of the retrieval factory with no `marketplaces:` still
+    /// names a function. FoundationModelsAgents keeps a reference to it, and
+    /// the tool that it makes has no marketplace operation.
+    @Test func theRetrievalFactoryWithNoMarketplacesKeepsItsName() async throws {
+        let root = try HotReloadTestSupport.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let factory = SkillsTool.make(
+            registry:embedder:followReloads:catalogCharacterLimit:visibilityPredicate:sandboxProbe:)
+        let tool = try await factory(
+            Self.emptyRegistry(at: root), nil, true, SkillsTool.defaultCatalogCharacterLimit, { _ in true }, .live)
+
+        let answer = try await tool.call(arguments: GeneratedContent(properties: ["op": "list marketplace"]))
+
+        #expect(answer.hasPrefix("Unknown operation."))
+    }
+
+    /// The full name of the model factory with no `marketplaces:` still names
+    /// a function, and the tool that it makes has no marketplace operation.
+    @Test func theModelFactoryWithNoMarketplacesKeepsItsName() async throws {
+        let root = try HotReloadTestSupport.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let factory = SkillsTool.make(
+            registry:model:embedder:followReloads:catalogCharacterLimit:visibilityPredicate:sandboxProbe:)
+        let tool = try await factory(
+            Self.emptyRegistry(at: root), ScriptedLanguageModel(""), nil, true,
+            SkillsTool.defaultCatalogCharacterLimit, { _ in true }, .live)
+
+        let answer = try await tool.call(arguments: GeneratedContent(properties: ["op": "list marketplace"]))
+
+        #expect(answer.hasPrefix("Unknown operation."))
+    }
+
     // MARK: - Fixtures
 
     /// A skill registry over the empty folder `root`.
