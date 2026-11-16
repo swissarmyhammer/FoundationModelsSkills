@@ -41,6 +41,9 @@ public struct ListSkill: OperationDefinition {
     /// The resource this operation acts on: `"skill"`.
     public static let noun = skillOperationNoun
 
+    /// `true`: it only reads, thus a call with no `op` can run it.
+    public static let isInferable = true
+
     /// A human- and model-facing summary of what this operation does.
     ///
     /// It says what the model gets: each skill with its description. The

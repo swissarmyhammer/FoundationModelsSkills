@@ -69,6 +69,12 @@ public struct UseSkill: OperationDefinition {
     /// The resource this operation acts on: `"skill"`.
     public static let noun = skillOperationNoun
 
+    /// `true`: a call with no `op` whose keys fit, for example
+    /// `{"id": "kanban"}`, runs `use skill` (^vm78pnz). It reads the skill and
+    /// writes nothing. In `ToolMode.open` its body can run the shell commands
+    /// of the skill, the same as for a call that names `use skill`.
+    public static let isInferable = true
+
     /// A human- and model-facing summary of what this operation does.
     ///
     /// It says what the model gets: instructions to follow, not a text to

@@ -30,6 +30,9 @@ struct MarketplaceOperationsTests {
     /// An id that no marketplace has.
     private static let missingID = "nosuchmarketplace"
 
+    /// The name of a skill that a test writes in the project layer.
+    private static let skillID = "keep-me"
+
     /// A ref that a test writes.
     private static let newRef = "v2"
 
@@ -175,6 +178,34 @@ struct MarketplaceOperationsTests {
         let answer = try await fixture.call(["op": "reset marketplace"])
 
         #expect(answer == "The marketplace list is the default list again: `\(Self.toolsID)`.")
+    }
+
+    // MARK: - A call with no op runs no write
+
+    /// A call with no `op` whose keys fit only `add marketplace` adds no
+    /// marketplace: inference never runs an operation that writes.
+    @Test func aURLWithNoOpAddsNoMarketplace() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+
+        _ = try await fixture.call(["url": Self.toolsURL])
+
+        #expect(try await fixture.ids() == [Self.acmeID])
+    }
+
+    /// A call with no `op` whose keys fit only `remove skill` removes no
+    /// skill.
+    @Test func anIDAndALayerWithNoOpRemoveNoSkill() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let skillFile = fixture.root.appending(path: "\(Self.skillID)/SKILL.md")
+        try FileManager.default.createDirectory(
+            at: skillFile.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("---\nname: \(Self.skillID)\ndescription: A skill.\n---\nThe body.\n".utf8).write(to: skillFile)
+
+        _ = try await fixture.call(["id": Self.skillID, "layer": "project"])
+
+        #expect(FileManager.default.fileExists(atPath: skillFile.path))
     }
 
     // MARK: - A host with no marketplace list

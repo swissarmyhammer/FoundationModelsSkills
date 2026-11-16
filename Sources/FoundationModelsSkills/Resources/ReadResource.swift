@@ -86,6 +86,9 @@ public struct ReadResource: OperationDefinition {
     /// The resource this operation acts on: `"resource"`.
     public static let noun = resourceOperationNoun
 
+    /// `true`: it only reads, thus a call with no `op` can run it.
+    public static let isInferable = true
+
     /// A human- and model-facing summary of what this operation does.
     public static let operationDescription =
         "Read a file of a skill. Give the path relative to the skill directory, "

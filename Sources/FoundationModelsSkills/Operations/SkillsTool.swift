@@ -118,8 +118,10 @@ public enum SkillsTool {
     /// The resolver infers a missing `op` from the keys of the payload
     /// (^vm78pnz). A model sends `{"id": "kanban"}` with no `op` to load a
     /// skill, and those keys fit `use skill`, `list resource`, and
-    /// `remove skill`. `defaultOp` settles such a tie on `use skill`, which
-    /// only reads: the resolver never infers a write.
+    /// `remove skill`. The resolver infers only an operation that declares
+    /// `isInferable`: the operations that only read. Thus `remove skill` is
+    /// not a candidate, and `defaultOp` settles the tie of `use skill` and
+    /// `list resource` on `use skill`. The resolver never infers a write.
     ///
     /// - Returns: A resolver layering `verbAliasOverrides` onto the upstream
     ///   defaults, with `nounAliases`, and with `use skill` as the op of an

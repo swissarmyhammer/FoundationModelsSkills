@@ -156,6 +156,11 @@ internal struct PlainTextMarker<Target: OperationDefinition>: OperationDefinitio
     /// missing parameters.
     internal static var parameterMetadata: [ParamMeta] { Target.parameterMetadata }
 
+    /// The `isInferable` of `Target`, thus the matcher infers a missing `op`
+    /// only where the fused tool does, and never gives the op of an
+    /// operation that the fused tool does not run.
+    internal static var isInferable: Bool { Target.isInferable }
+
     /// Creates a marker from any payload. A marker reads no field.
     ///
     /// - Parameter content: The payload, which the marker does not read.
