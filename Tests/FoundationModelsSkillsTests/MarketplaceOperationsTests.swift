@@ -158,7 +158,52 @@ struct MarketplaceOperationsTests {
         #expect(answer.hasPrefix("Unknown operation."))
     }
 
+    // MARK: - The registry factories
+
+    /// A tool from `SkillsTool.make(registry:marketplaces:)` (no model) has
+    /// the marketplace operations of the registry that it gets.
+    @Test func theRetrievalFactoryGivesTheMarketplacesToTheTool() async throws {
+        let root = try HotReloadTestSupport.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let tool = try await SkillsTool.make(
+            registry: Self.emptyRegistry(at: root), marketplaces: Self.acmeMarketplaces())
+
+        let answer = try await tool.call(arguments: GeneratedContent(properties: ["op": "list marketplace"]))
+
+        #expect(answer.contains("`\(Self.acmeID)`: \(Self.acmeURL)"))
+    }
+
+    /// A tool from `SkillsTool.make(registry:model:marketplaces:)` has the
+    /// marketplace operations of the registry that it gets.
+    @Test func theModelFactoryGivesTheMarketplacesToTheTool() async throws {
+        let root = try HotReloadTestSupport.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let tool = try await SkillsTool.make(
+            registry: Self.emptyRegistry(at: root), model: ScriptedLanguageModel(""),
+            marketplaces: Self.acmeMarketplaces())
+
+        let answer = try await tool.call(arguments: GeneratedContent(properties: ["op": "list marketplace"]))
+
+        #expect(answer.contains("`\(Self.acmeID)`: \(Self.acmeURL)"))
+    }
+
     // MARK: - Fixtures
+
+    /// A skill registry over the empty folder `root`.
+    ///
+    /// - Parameter root: The folder of the one project layer.
+    /// - Returns: The registry.
+    private static func emptyRegistry(at root: URL) -> SkillsRegistry {
+        SkillsRegistry(layers: [DotfolderStack.Layer(source: .project, root: root)], mode: .open)
+    }
+
+    /// A marketplace registry that has only the marketplace ``acmeID``.
+    ///
+    /// - Returns: The registry.
+    private static func acmeMarketplaces() -> MarketplaceRegistry {
+        MarketplaceRegistry(
+            storage: InMemoryMarketplaceSourceStorage(sources: [MarketplaceSource(acmeURL, alias: acmeID)]))
+    }
 
     /// An empty skill layer, a marketplace registry, and the tool over the
     /// two.

@@ -382,8 +382,9 @@ shadows a marketplace skill.
 
 ## Marketplace control
 
-A host that gives a `MarketplaceRegistry` of `FoundationModelsExtras` in
-`SkillsToolContext.marketplaces` lets the model and the clients change the
+A host that gives a `MarketplaceRegistry` of `FoundationModelsExtras` in the
+`marketplaces:` argument of `SkillsTool.make(registry:)` or of
+`SkillsToolContext` lets the model and the clients change the
 list, one marketplace at a time (D190). The `skills` tool then has `add`,
 `edit`, `remove`, `list` and `show marketplace`; see
 [`operations.md`](operations.md#change-the-marketplace-list). The `skills`

@@ -155,7 +155,8 @@ The `agents` tool uses the same words, with `.agents` in place of `.skills`.
 ## Change the marketplace list
 
 The five marketplace operations read and change the `MarketplaceRegistry` of
-`FoundationModelsExtras` that the host gives in `SkillsToolContext.marketplaces`.
+`FoundationModelsExtras` that the host gives in the `marketplaces:` argument of
+`SkillsTool.make(registry:)` or of `SkillsToolContext`.
 The tool has these operations only when the host gives a registry.
 
 - The id of a marketplace is its alias, or else its repository name.

@@ -1,6 +1,7 @@
 import FoundationModels
 import FoundationModelsExtras
 import FoundationModelsMetadataRegistry
+import Marketplace
 import Operations
 
 /// One-call factories that assemble the fused `skills` tool for a host.
@@ -51,7 +52,7 @@ extension SkillsTool {
     ///     cosine signal out.
     ///   - followReloads: Whether the tool follows `registry.onReload`
     ///     itself. Defaults to `true`. See `assemble(registry:mode:embedder:
-    ///     selection:followReloads:catalogCharacterLimit:visibilityPredicate:)`.
+    ///     selection:followReloads:catalogCharacterLimit:visibilityPredicate:sandboxProbe:marketplaces:)`.
     ///   - catalogCharacterLimit: The most characters the catalog list of
     ///     the tool description may have. Defaults to
     ///     `defaultCatalogCharacterLimit`. See `make(context:catalogCharacterLimit:)`.
@@ -61,6 +62,9 @@ extension SkillsTool {
     ///   - sandboxProbe: The probe that tells if the process is sandboxed.
     ///     Defaults to `SandboxProbe.live`, which reads the current process.
     ///     A host or a test gives its own probe here.
+    ///   - marketplaces: The marketplace list that the host keeps. Defaults
+    ///     to `nil`: the tool then has no marketplace operation. See
+    ///     `SkillsToolContext.marketplaces`.
     /// - Returns: The fused `skills` tool, ready to register on a
     ///   `LanguageModelSession`.
     /// - Throws: `ToolModeError.openModeInSandbox` when the mode of
@@ -74,7 +78,8 @@ extension SkillsTool {
         followReloads: Bool = true,
         catalogCharacterLimit: Int = defaultCatalogCharacterLimit,
         visibilityPredicate: @escaping @Sendable (SkillMetadata) -> Bool = { $0.isModelVisible },
-        sandboxProbe: SandboxProbe = .live
+        sandboxProbe: SandboxProbe = .live,
+        marketplaces: MarketplaceRegistry? = nil
     ) async throws -> SkillsCatalogTool {
         try await assemble(
             registry: registry,
@@ -84,7 +89,8 @@ extension SkillsTool {
             followReloads: followReloads,
             catalogCharacterLimit: catalogCharacterLimit,
             visibilityPredicate: visibilityPredicate,
-            sandboxProbe: sandboxProbe)
+            sandboxProbe: sandboxProbe,
+            marketplaces: marketplaces)
     }
 
     /// Builds the fused `skills` tool over `registry` with no model at all:
@@ -109,7 +115,7 @@ extension SkillsTool {
     ///     leaves the cosine signal out.
     ///   - followReloads: Whether the tool follows `registry.onReload`
     ///     itself. Defaults to `true`. See `assemble(registry:mode:embedder:
-    ///     selection:followReloads:catalogCharacterLimit:visibilityPredicate:)`.
+    ///     selection:followReloads:catalogCharacterLimit:visibilityPredicate:sandboxProbe:marketplaces:)`.
     ///   - catalogCharacterLimit: The most characters the catalog list of
     ///     the tool description may have. Defaults to
     ///     `defaultCatalogCharacterLimit`. See `make(context:catalogCharacterLimit:)`.
@@ -119,6 +125,9 @@ extension SkillsTool {
     ///   - sandboxProbe: The probe that tells if the process is sandboxed.
     ///     Defaults to `SandboxProbe.live`, which reads the current process.
     ///     A host or a test gives its own probe here.
+    ///   - marketplaces: The marketplace list that the host keeps. Defaults
+    ///     to `nil`: the tool then has no marketplace operation. See
+    ///     `SkillsToolContext.marketplaces`.
     /// - Returns: The fused `skills` tool, ready to drive from a host with
     ///   no model.
     /// - Throws: `ToolModeError.openModeInSandbox` when the mode of
@@ -131,7 +140,8 @@ extension SkillsTool {
         followReloads: Bool = true,
         catalogCharacterLimit: Int = defaultCatalogCharacterLimit,
         visibilityPredicate: @escaping @Sendable (SkillMetadata) -> Bool = { $0.isModelVisible },
-        sandboxProbe: SandboxProbe = .live
+        sandboxProbe: SandboxProbe = .live,
+        marketplaces: MarketplaceRegistry? = nil
     ) async throws -> SkillsCatalogTool {
         try await assemble(
             registry: registry,
@@ -141,7 +151,8 @@ extension SkillsTool {
             followReloads: followReloads,
             catalogCharacterLimit: catalogCharacterLimit,
             visibilityPredicate: visibilityPredicate,
-            sandboxProbe: sandboxProbe)
+            sandboxProbe: sandboxProbe,
+            marketplaces: marketplaces)
     }
 
     /// The assembly steps both factories above share.
@@ -164,6 +175,7 @@ extension SkillsTool {
     ///   - visibilityPredicate: Which catalog entries the assembled tool
     ///     presents.
     ///   - sandboxProbe: The probe that tells if the process is sandboxed.
+    ///   - marketplaces: The marketplace list that the host keeps, or `nil`.
     /// - Returns: The fused `skills` tool.
     /// - Throws: `ToolModeError.openModeInSandbox` when the mode of
     ///   `registry` is `ToolMode.open` and `sandboxProbe` tells that the
@@ -177,7 +189,8 @@ extension SkillsTool {
         followReloads: Bool,
         catalogCharacterLimit: Int,
         visibilityPredicate: @escaping @Sendable (SkillMetadata) -> Bool,
-        sandboxProbe: SandboxProbe
+        sandboxProbe: SandboxProbe,
+        marketplaces: MarketplaceRegistry?
     ) async throws -> SkillsCatalogTool {
         let context = try await makeContext(
             registry: registry,
@@ -186,12 +199,13 @@ extension SkillsTool {
             selection: selection,
             followReloads: followReloads,
             visibilityPredicate: visibilityPredicate,
-            sandboxProbe: sandboxProbe)
+            sandboxProbe: sandboxProbe,
+            marketplaces: marketplaces)
         return try make(context: context, catalogCharacterLimit: catalogCharacterLimit)
     }
 
     /// Builds the `SkillsToolContext` `assemble(registry:mode:embedder:
-    /// selection:followReloads:catalogCharacterLimit:visibilityPredicate:)`
+    /// selection:followReloads:catalogCharacterLimit:visibilityPredicate:sandboxProbe:marketplaces:)`
     /// hands to `SkillsTool.make(context:catalogCharacterLimit:)`.
     ///
     /// The searcher, the agent, and the context all get the same
@@ -235,6 +249,9 @@ extension SkillsTool {
     ///     presents.
     ///   - sandboxProbe: The probe that `SkillsToolContext.init` gives to
     ///     `ToolMode.validate(probe:)`.
+    ///   - marketplaces: The marketplace list that the host keeps. The
+    ///     context gives it to the tool and to its `skills` endpoint.
+    ///     Defaults to `nil`: no marketplace list.
     /// - Returns: The assembled context.
     /// - Throws: Whatever `SkillsToolContext.init` throws for the mode of
     ///   `registry` and `sandboxProbe`.
@@ -245,7 +262,8 @@ extension SkillsTool {
         selection: SelectionConfig?,
         followReloads: Bool,
         visibilityPredicate: @escaping @Sendable (SkillMetadata) -> Bool,
-        sandboxProbe: SandboxProbe
+        sandboxProbe: SandboxProbe,
+        marketplaces: MarketplaceRegistry? = nil
     ) async throws -> SkillsToolContext {
         let reloads = followReloads ? registry.onReload : nil
         let catalogReloads = registry.onReload
@@ -267,6 +285,7 @@ extension SkillsTool {
             sandboxProbe: sandboxProbe,
             visibilityPredicate: visibilityPredicate,
             reloadFollower: reloads.map { SkillsReloadFollower(reloads: $0, agent: agent) },
-            catalogNoticeFollower: noticeFollower)
+            catalogNoticeFollower: noticeFollower,
+            marketplaces: marketplaces)
     }
 }
