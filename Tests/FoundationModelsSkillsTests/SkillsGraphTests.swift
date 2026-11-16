@@ -58,7 +58,7 @@ struct SkillsGraphTests {
     /// subscription `skillChanges` to `changes`, and obeys each rule of
     /// EXTRAS-9 with no exception: rule 9 too, the `changes` subscription
     /// and the root `cursor`. The endpoint gives the codes of
-    /// `SkillsGraphError` for rule 8.
+    /// `SkillsGraphError` and `SkillsGraphMarketplaceError` for rule 8.
     @Test func theEndpointConforms() async throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
@@ -67,7 +67,7 @@ struct SkillsGraphTests {
         let subscriptionProbe = try await fixture.changesProbe()
 
         let problems = await GraphQLEndpointConformance.problems(
-            of: fixture.graph, scope: .sessionFolder, probes: [queryProbe, subscriptionProbe], codes: SkillsGraphError.codes,
+            of: fixture.graph, scope: .sessionFolder, probes: [queryProbe, subscriptionProbe], codes: SkillsGraphError.codes + SkillsGraphMarketplaceError.codes,
             exceptions: [])
 
         #expect(problems.isEmpty)
@@ -103,15 +103,18 @@ struct SkillsGraphTests {
         #expect(GraphQLSchemaGolden.problems(of: fixture.graph.schema, against: goldenFile).isEmpty)
     }
 
-    /// The app edits skills in place (D190), thus the schema has the three
-    /// skill mutations.
-    @Test func theSchemaHasTheSkillMutations() throws {
+    /// The app edits skills and skill marketplaces in place (D190), thus the
+    /// schema has the three skill mutations and the three marketplace
+    /// mutations.
+    @Test func theSchemaHasTheSkillAndMarketplaceMutations() throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
 
         let mutation = try #require(try buildSchema(source: fixture.graph.schema).mutationType)
 
-        #expect(try mutation.fields().keys.sorted() == ["addSkill", "removeSkill", "updateSkill"])
+        #expect(try mutation.fields().keys.sorted() == [
+            "addMarketplace", "addSkill", "removeMarketplace", "removeSkill", "updateMarketplace", "updateSkill",
+        ])
     }
 
     // MARK: - skills

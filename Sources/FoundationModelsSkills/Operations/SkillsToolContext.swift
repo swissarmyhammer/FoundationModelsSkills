@@ -1,4 +1,5 @@
 import FoundationModelsExtras
+import Marketplace
 
 /// The shared environment the three skill operations (`SearchSkill`,
 /// `ListSkill`, `UseSkill`) dispatch against once fused into one
@@ -72,6 +73,12 @@ public struct SkillsToolContext: Sendable {
     /// operation of the tool starts a process.
     public let mode: ToolMode
 
+    /// The marketplace list that the host keeps, or `nil` when the host
+    /// keeps none. With a list, the tool has the operations `add`, `edit`,
+    /// `remove`, `list` and `show marketplace`, and the `skills` endpoint
+    /// has the marketplace queries and mutations (D190).
+    public let marketplaces: MarketplaceRegistry?
+
     /// The error of the initializer when its `mode` is not the mode of the
     /// registry.
     ///
@@ -124,6 +131,8 @@ public struct SkillsToolContext: Sendable {
     ///   - catalogNoticeFollower: The notice follower this context keeps
     ///     alive. Its board becomes `catalogNoticeBoard`. Defaults to `nil`,
     ///     which posts no notice.
+    ///   - marketplaces: The marketplace list that the host keeps. Defaults
+    ///     to `nil`: the tool then has no marketplace operation.
     /// - Throws: `ToolModeError.openModeInSandbox` when `mode` is
     ///   `ToolMode.open` and `sandboxProbe` tells that the process is
     ///   sandboxed; `ModeMismatchError` when `mode` is not `registry.mode`.
@@ -134,7 +143,8 @@ public struct SkillsToolContext: Sendable {
         sandboxProbe: SandboxProbe = .live,
         visibilityPredicate: @escaping @Sendable (SkillMetadata) -> Bool = { $0.isModelVisible },
         reloadFollower: SkillsReloadFollower? = nil,
-        catalogNoticeFollower: SkillsCatalogNoticeFollower? = nil
+        catalogNoticeFollower: SkillsCatalogNoticeFollower? = nil,
+        marketplaces: MarketplaceRegistry? = nil
     ) throws {
         try mode.validate(probe: sandboxProbe)
         guard mode == registry.mode else {
@@ -147,6 +157,7 @@ public struct SkillsToolContext: Sendable {
         self.reloadFollower = reloadFollower
         self.catalogNoticeFollower = catalogNoticeFollower
         catalogNoticeBoard = catalogNoticeFollower?.board ?? CatalogNoticeBoard()
+        self.marketplaces = marketplaces
     }
     /// Gives this context with `registry` in place of its registry. Every
     /// other value -- the search agent, the followers and the notice board
@@ -175,5 +186,6 @@ public struct SkillsToolContext: Sendable {
         reloadFollower = base.reloadFollower
         catalogNoticeFollower = base.catalogNoticeFollower
         catalogNoticeBoard = base.catalogNoticeBoard
+        marketplaces = base.marketplaces
     }
 }

@@ -39,6 +39,11 @@ internal struct PlainTextOperations: Sendable {
         AddSkill.opString,
         EditSkill.opString,
         RemoveSkill.opString,
+        AddMarketplace.opString,
+        EditMarketplace.opString,
+        RemoveMarketplace.opString,
+        ListMarketplace.opString,
+        ShowMarketplace.opString,
     ]
 
     /// The tool that resolves a payload against the markers only.

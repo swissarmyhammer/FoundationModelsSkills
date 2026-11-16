@@ -92,6 +92,13 @@ write the registry reloads, thus `use skill` of a new skill works in the same
 session. The `defaults` and `marketplace` layers are read-only. See
 [`docs/operations.md`](docs/operations.md#write-a-skill).
 
+When the host gives a marketplace list (`SkillsToolContext.marketplaces`), the
+model can also change it: `add marketplace`, `edit marketplace`,
+`remove marketplace`, `list marketplace` and `show marketplace`. The
+`skills` GraphQL endpoint gives a client the same skill and marketplace
+changes as mutations. See
+[`docs/operations.md`](docs/operations.md#change-the-marketplace-list).
+
 For each prompt, the selection tier makes a new `LanguageModelSession` on the
 model, and the guided generation of that session holds the answer to the
 `{"ids": [...]}` shape. The tier drops an id that is not a candidate. If the

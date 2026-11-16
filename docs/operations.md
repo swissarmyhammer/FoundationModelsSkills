@@ -74,6 +74,11 @@ whole session:
 | `add skill` | `id` (req), `content` (req, the full `SKILL.md`), `layer?` | Makes the folder `<id>/` and its `SKILL.md` in one writable layer. The layer must not hold the folder yet. The `SKILL.md` must load with no warning and no skip. The answer is one plain-text sentence that names the skill, the layer and the path of the file. After the write, `use skill` of the new id gives its body in the same session. See [Write a skill](#write-a-skill). |
 | `edit skill` | `id` (req), `path?` (default `SKILL.md`), `content` (req), `layer?` | Writes one file of the skill folder of one writable layer. The layer must hold the folder. `path` uses the path rules of `read resource`, but it must be relative. A write of `SKILL.md` must load with no warning and no skip. The answer is one plain-text sentence that names the skill, the layer and the path of the file. |
 | `remove skill` | `id` (req), `layer?` | Deletes the folder of the skill, with all its files, from one writable layer. A copy in another layer stays. The answer is one plain-text sentence that names the skill, the layer and the path of the folder. |
+| `add marketplace` | `url` (req), `ref?`, `sha?`, `path?`, `alias?`, `skills?`, `autoUpdate?` | Adds a skill marketplace to the end of the list. The answer is one plain-text sentence that names the id and the URL. See [Change the marketplace list](#change-the-marketplace-list). |
+| `edit marketplace` | `id` (req), `url?`, `ref?`, `sha?`, `path?`, `alias?`, `skills?`, `allSkills?`, `autoUpdate?` | Changes the fields that the call gives, and keeps the marketplace in its place in the list. An empty text clears `ref`, `sha`, `path` or `alias`. `allSkills: true` takes all the skills again. `update marketplace` is the same operation. |
+| `remove marketplace` | `id` (req) | Removes one marketplace from the list. |
+| `list marketplace` | — | Gives one line for each marketplace: its id and its URL. |
+| `show marketplace` | `id` (req) | Gives each field of one marketplace, one line each. |
 
 ## The combined view of a skill
 
@@ -140,8 +145,30 @@ The `agents` tool uses the same words, with `.agents` in place of `.skills`.
 - After each write, the registry reloads one time. Thus one write gives one
   catalog-change notice when the listed catalog changes, and one change event
   on the `skills` GraphQL endpoint.
+- A client of the `skills` GraphQL endpoint writes through the same
+  `SkillWriter` with `addSkill`, `updateSkill` and `removeSkill`. Each one
+  takes the fields of a skill, not the full file: `description` and `body`.
+  `updateSkill` keeps each other key of the frontmatter.
 - No gate stands in front of a write. The host shows each write on the tool
   call card of the session.
+
+## Change the marketplace list
+
+The five marketplace operations read and change the `MarketplaceRegistry` of
+`FoundationModelsExtras` that the host gives in `SkillsToolContext.marketplaces`.
+The tool has these operations only when the host gives a registry.
+
+- The id of a marketplace is its alias, or else its repository name.
+- A refusal of the registry is a corrective sentence: a duplicate id, an
+  unknown id, or a source that is not usable, for example an empty URL.
+- The registry saves the list and then sends a change. The registry does not
+  fetch the marketplace: the host makes a new `MarketplaceStore` from the
+  list on each change, and the skills of the marketplace load from that
+  store.
+- The `skills` GraphQL endpoint has the same changes for a client:
+  `addMarketplace`, `updateMarketplace` and `removeMarketplace`, with the
+  queries `marketplaces` and `marketplace(id:)` and the subscription
+  `marketplaceChanges(after:)`.
 
 ## The `use skill` answer
 

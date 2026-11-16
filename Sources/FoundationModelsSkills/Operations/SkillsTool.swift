@@ -76,17 +76,30 @@ public enum SkillsTool {
         return try SkillsCatalogTool(
             context: context, name: toolName,
             description: SkillsToolDescription.make(catalog: catalog, characterLimit: catalogCharacterLimit),
-            operations: operations(for: context.mode), resolver: makeResolver(), skillIDs: catalog.map(\.id),
-            skillsGraph: SkillsGraph(registry: context.registry))
+            operations: operations(for: context.mode, withMarketplaces: context.marketplaces != nil),
+            resolver: makeResolver(), skillIDs: catalog.map(\.id),
+            skillsGraph: SkillsGraph(registry: context.registry, marketplaces: context.marketplaces))
     }
 
     /// The operations of the tool in `mode`, in schema order.
     ///
-    /// - Parameter mode: The mode of the tools of the host.
-    /// - Returns: All nine operations in `ToolMode.open`; each operation but
-    ///   `RunScript` in `ToolMode.sandboxed`.
-    private static func operations(for mode: ToolMode) -> [AnyOperation<SkillsToolContext>] {
+    /// - Parameters:
+    ///   - mode: The mode of the tools of the host.
+    ///   - withMarketplaces: Whether the host keeps a marketplace list.
+    /// - Returns: All nine skill operations in `ToolMode.open`; each one but
+    ///   `RunScript` in `ToolMode.sandboxed`. With a marketplace list, also
+    ///   the five marketplace operations.
+    private static func operations(
+        for mode: ToolMode, withMarketplaces: Bool
+    ) -> [AnyOperation<SkillsToolContext>] {
         let scriptOperations = mode == .open ? [AnyOperation(RunScript.self)] : []
+        let marketplaceOperations: [AnyOperation<SkillsToolContext>] =
+            withMarketplaces
+            ? [
+                AnyOperation(AddMarketplace.self), AnyOperation(EditMarketplace.self),
+                AnyOperation(RemoveMarketplace.self), AnyOperation(ListMarketplace.self),
+                AnyOperation(ShowMarketplace.self),
+            ] : []
         return [
             AnyOperation(SearchSkill.self),
             AnyOperation(ListSkill.self),
@@ -97,7 +110,7 @@ public enum SkillsTool {
             AnyOperation(AddSkill.self),
             AnyOperation(EditSkill.self),
             AnyOperation(RemoveSkill.self),
-        ]
+        ] + marketplaceOperations
     }
 
     /// Builds the forgiving resolver `make(context:)` fuses the tool with.
@@ -160,6 +173,11 @@ public enum SkillsTool {
     /// `AddSkill` with no override. No default maps `edit` or `update`, thus
     /// `update` → `edit` is safe: no operation has the verb `update`. Pinned
     /// by `SkillOperationsTests`.
+    ///
+    /// The same rule holds for `ShowMarketplace`. The defaults map `show` to
+    /// `get`, and this table maps `get` to `use`. Thus `"show"` maps to
+    /// itself, so that `"show marketplace"` reaches `ShowMarketplace`.
+    /// Pinned by `MarketplaceOperationsTests`.
     private static let verbAliasOverrides: [String: String] = [
         "find": SearchSkill.verb,
         "discover": SearchSkill.verb,
@@ -172,5 +190,6 @@ public enum SkillsTool {
         "delete": RemoveSkill.verb,
         "rm": RemoveSkill.verb,
         "del": RemoveSkill.verb,
+        "show": ShowMarketplace.verb,
     ]
 }

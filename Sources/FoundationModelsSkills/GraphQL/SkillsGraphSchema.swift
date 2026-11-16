@@ -1,6 +1,7 @@
 import FoundationModelsExtras
 import Graphiti
 import GraphQL
+import Marketplace
 
 // The GraphQL schema of the `skills` endpoint (SK-5): the `SkillSource` enum,
 // the `Skill` and `SkillChange` object types, the arguments, the resolver and
@@ -121,6 +122,14 @@ struct SkillsGraphResolver: Sendable {
     /// The change log that `SkillChangeFeed` fills from the reloads of
     /// ``registry``.
     let changeLog: ChangeLog<ChangedIDs>
+
+    /// The marketplace list that the host keeps, or `nil` when the host
+    /// keeps none.
+    let marketplaces: MarketplaceRegistry?
+
+    /// The change log that `MarketplaceChangeFeed` fills from the changes of
+    /// ``marketplaces``.
+    let marketplaceChangeLog: ChangeLog<ChangedIDs>
 
     /// Resolves `Query.cursor`.
     ///
@@ -249,6 +258,57 @@ struct SkillsGraphAPI: API {
                     Field("removed", at: \.removed).description("The ids of the skills that the reload removed.")
                 }
                 .description("One reload of the skills of the folder that added, changed or removed a skill.")
+                Type(SkillsGraphMarketplace.self, as: "Marketplace") {
+                    Field("id", at: \.id).description("The id of the marketplace: its alias, or else its repository name.")
+                    Field("url", at: \.url)
+                        .description("The location: https://host/owner/repo.git, github:owner/repo, or file:///path.")
+                    Field("ref", at: \.ref).description("The branch or the tag, or null for the default branch.")
+                    Field("sha", at: \.sha).description("The commit pin, or null. It wins over ref.")
+                    Field("path", at: \.path).description("The subfolder of the repository, or null for the root.")
+                    Field("alias", at: \.alias).description("The local name, or null. When it is set, it is the id.")
+                    Field("skills", at: \.skills).description("The skills to take, or null for all the skills.")
+                    Field("autoUpdate", at: \.autoUpdate)
+                        .description("Whether the store installs a new commit when it finds one.")
+                }
+                .description("One skill marketplace of the list.")
+                Type(SkillsGraphMarketplaceChange.self, as: "MarketplaceChange") {
+                    Field("cursor", at: \.cursor).description("The cursor that resumes after this change.")
+                    Field("at", at: \.at).description("The time of the change.")
+                    Field("added", at: \.added).description("The ids of the marketplaces that the change added.")
+                    Field("changed", at: \.changed).description("The ids of the marketplaces that the change changed.")
+                    Field("removed", at: \.removed)
+                        .description("The ids of the marketplaces that the change removed. A new id is a remove and an add.")
+                }
+                .description("One change of the marketplace list.")
+                Input(AddMarketplaceInput.self) {
+                    InputField("url", at: \.url)
+                        .description("The location: https://host/owner/repo.git, github:owner/repo, or file:///path.")
+                    InputField("ref", at: \.ref).description("The branch or the tag. Omit it for the default branch.")
+                    InputField("sha", at: \.sha).description("The commit pin. It wins over ref.")
+                    InputField("path", at: \.path).description("The subfolder of the repository.")
+                    InputField("alias", at: \.alias).description("The local name, which is then the id.")
+                    InputField("skills", at: \.skills).description("The skills to take. Omit it for all the skills.")
+                    InputField("autoUpdate", at: \.autoUpdate)
+                        .description("Whether the store installs a new commit when it finds one. Omit it for true.")
+                }
+                .description("The fields of addMarketplace.")
+                Input(UpdateMarketplaceInput.self) {
+                    InputField("id", at: \.id).description("The id of the marketplace to change.")
+                    InputField("url", at: \.url).description("The new location.")
+                    InputField("ref", at: \.ref).description("The new branch or tag. An empty text clears it.")
+                    InputField("sha", at: \.sha).description("The new commit pin. An empty text clears it.")
+                    InputField("path", at: \.path).description("The new subfolder. An empty text clears it.")
+                    InputField("alias", at: \.alias)
+                        .description("The new local name. An empty text clears it. A new alias changes the id.")
+                    InputField("skills", at: \.skills).description("The new skills to take.")
+                    InputField("allSkills", at: \.allSkills).description("True to take all the skills again.")
+                    InputField("autoUpdate", at: \.autoUpdate).description("The new auto-update flag.")
+                }
+                .description("The fields of updateMarketplace. A field that you omit does not change.")
+                Input(RemoveMarketplaceInput.self) {
+                    InputField("id", at: \.id).description("The id of the marketplace to remove.")
+                }
+                .description("The fields of removeMarketplace.")
             }
             .addQuery {
                 Field("cursor", at: SkillsGraphResolver.cursor)
@@ -259,6 +319,14 @@ struct SkillsGraphAPI: API {
                     Argument("id", at: \.id).description("The id of the skill, which is its name.")
                 }
                 .description("One skill, or null when no skill has the id.")
+                Field("marketplaceCursor", at: SkillsGraphResolver.marketplaceCursor)
+                    .description("The cursor of the newest change of the marketplaces, for marketplaceChanges(after:).")
+                Field("marketplaces", at: SkillsGraphResolver.marketplaces)
+                    .description("Each skill marketplace of the list, in order. Empty when the host keeps no list.")
+                Field("marketplace", at: SkillsGraphResolver.marketplace) {
+                    Argument("id", at: \.id).description("The id of the marketplace.")
+                }
+                .description("One marketplace, or null when no marketplace has the id.")
             }
             .addMutation {
                 Field("addSkill", at: SkillsGraphResolver.addSkill) {
@@ -279,6 +347,24 @@ struct SkillsGraphAPI: API {
                 .description(
                     "Deletes a skill and all its files from one layer. A copy in another layer stays. "
                         + "Gives NOT_FOUND or SKILL_READ_ONLY for a skill that cannot be deleted.")
+                Field("addMarketplace", at: SkillsGraphResolver.addMarketplace) {
+                    Argument("input", at: \.input).description("The new marketplace.")
+                }
+                .description(
+                    "Adds a skill marketplace to the end of the list. Gives the new marketplace, or "
+                        + "DUPLICATE_MARKETPLACE, INVALID_MARKETPLACE or MARKETPLACES_UNAVAILABLE.")
+                Field("updateMarketplace", at: SkillsGraphResolver.updateMarketplace) {
+                    Argument("input", at: \.input).description("The marketplace and its changes.")
+                }
+                .description(
+                    "Changes the source of one marketplace, in its place in the list. Gives the changed marketplace, "
+                        + "or NOT_FOUND, DUPLICATE_MARKETPLACE, INVALID_MARKETPLACE or MARKETPLACES_UNAVAILABLE.")
+                Field("removeMarketplace", at: SkillsGraphResolver.removeMarketplace) {
+                    Argument("input", at: \.input).description("The marketplace to remove.")
+                }
+                .description(
+                    "Removes one marketplace from the list. Gives the removed marketplace, or NOT_FOUND or "
+                        + "MARKETPLACES_UNAVAILABLE.")
             }
             .addSubscription {
                 SubscriptionField(
@@ -295,6 +381,22 @@ struct SkillsGraphAPI: API {
                 }
                 .description(
                     "One change for each reload that adds, changes or removes a skill. "
+                        + "A cursor that cannot resume gives RESYNC_REQUIRED.")
+                SubscriptionField(
+                    "marketplaceChanges",
+                    at: { (entry: ChangeLogEntry<ChangedIDs>) in
+                        { (_: SkillsGraphContext, _: SkillsGraphChangesArguments) async throws -> SkillsGraphMarketplaceChange in
+                            SkillsGraphMarketplaceChange(entry)
+                        }
+                    },
+                    atSub: SkillsGraphResolver.marketplaceChanges
+                ) {
+                    Argument("after", at: \.after)
+                        .description(
+                            "The cursor to resume after, from marketplaceCursor or a change. Omit it for the new changes only.")
+                }
+                .description(
+                    "One change for each add, update or remove of a marketplace. "
                         + "A cursor that cannot resume gives RESYNC_REQUIRED.")
             }
             .build()

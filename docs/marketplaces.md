@@ -382,11 +382,18 @@ shadows a marketplace skill.
 
 ## Marketplace control
 
-Marketplace control is a host function. The model surface gets no marketplace
-operation; see [`operations.md`](operations.md). This package has no
-marketplace command group. A host lists, checks, updates, and pins its
-marketplaces through the `MarketplaceStore` of `FoundationModelsExtras`, and it
-edits `marketplaces.yaml` itself.
+A host that gives a `MarketplaceRegistry` of `FoundationModelsExtras` in
+`SkillsToolContext.marketplaces` lets the model and the clients change the
+list, one marketplace at a time (D190). The `skills` tool then has `add`,
+`edit`, `remove`, `list` and `show marketplace`; see
+[`operations.md`](operations.md#change-the-marketplace-list). The `skills`
+GraphQL endpoint has `marketplaces`, `marketplace(id:)`, `addMarketplace`,
+`updateMarketplace`, `removeMarketplace` and `marketplaceChanges(after:)`.
+The registry saves the list through the storage of the host. It does not
+fetch: on each change the host makes a new `MarketplaceStore` from the list.
+
+The host still checks, updates, and pins its marketplaces through the
+`MarketplaceStore`. This package has no marketplace command group.
 
 ## Publish a marketplace
 

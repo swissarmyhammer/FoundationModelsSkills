@@ -149,6 +149,123 @@ type SkillChange {
   removed: [ID!]!
 }
 
+"""One skill marketplace of the list."""
+type Marketplace {
+  """The id of the marketplace: its alias, or else its repository name."""
+  id: ID!
+
+  """
+  The location: https://host/owner/repo.git, github:owner/repo, or file:///path.
+  """
+  url: String!
+
+  """The branch or the tag, or null for the default branch."""
+  ref: String
+
+  """The commit pin, or null. It wins over ref."""
+  sha: String
+
+  """The subfolder of the repository, or null for the root."""
+  path: String
+
+  """The local name, or null. When it is set, it is the id."""
+  alias: String
+
+  """The skills to take, or null for all the skills."""
+  skills: [String!]
+
+  """Whether the store installs a new commit when it finds one."""
+  autoUpdate: Boolean!
+}
+
+"""One change of the marketplace list."""
+type MarketplaceChange {
+  """The cursor that resumes after this change."""
+  cursor: String!
+
+  """The time of the change."""
+  at: DateTime!
+
+  """The ids of the marketplaces that the change added."""
+  added: [ID!]!
+
+  """The ids of the marketplaces that the change changed."""
+  changed: [ID!]!
+
+  """
+  The ids of the marketplaces that the change removed. A new id is a remove and an add.
+  """
+  removed: [ID!]!
+}
+
+"""The fields of addMarketplace."""
+input AddMarketplaceInput {
+  """
+  The location: https://host/owner/repo.git, github:owner/repo, or file:///path.
+  """
+  url: String!
+
+  """The branch or the tag. Omit it for the default branch."""
+  ref: String
+
+  """The commit pin. It wins over ref."""
+  sha: String
+
+  """The subfolder of the repository."""
+  path: String
+
+  """The local name, which is then the id."""
+  alias: String
+
+  """The skills to take. Omit it for all the skills."""
+  skills: [String!]
+
+  """
+  Whether the store installs a new commit when it finds one. Omit it for true.
+  """
+  autoUpdate: Boolean
+}
+
+"""
+The fields of updateMarketplace. A field that you omit does not change.
+"""
+input UpdateMarketplaceInput {
+  """The id of the marketplace to change."""
+  id: ID!
+
+  """The new location."""
+  url: String
+
+  """The new branch or tag. An empty text clears it."""
+  ref: String
+
+  """The new commit pin. An empty text clears it."""
+  sha: String
+
+  """The new subfolder. An empty text clears it."""
+  path: String
+
+  """
+  The new local name. An empty text clears it. A new alias changes the id.
+  """
+  alias: String
+
+  """The new skills to take."""
+  skills: [String!]
+
+  """True to take all the skills again."""
+  allSkills: Boolean
+
+  """The new auto-update flag."""
+  autoUpdate: Boolean
+}
+
+"""The fields of removeMarketplace."""
+input RemoveMarketplaceInput {
+  """The id of the marketplace to remove."""
+  id: ID!
+}
+
 type Query {
   """The cursor of the newest change of the skills, for changes(after:)."""
   cursor: String!
@@ -161,6 +278,22 @@ type Query {
     """The id of the skill, which is its name."""
     id: ID!
   ): Skill
+
+  """
+  The cursor of the newest change of the marketplaces, for marketplaceChanges(after:).
+  """
+  marketplaceCursor: String!
+
+  """
+  Each skill marketplace of the list, in order. Empty when the host keeps no list.
+  """
+  marketplaces: [Marketplace!]!
+
+  """One marketplace, or null when no marketplace has the id."""
+  marketplace(
+    """The id of the marketplace."""
+    id: ID!
+  ): Marketplace
 }
 
 type Mutation {
@@ -187,6 +320,30 @@ type Mutation {
     """The skill to delete."""
     input: RemoveSkillInput!
   ): RemoveSkillPayload
+
+  """
+  Adds a skill marketplace to the end of the list. Gives the new marketplace, or DUPLICATE_MARKETPLACE, INVALID_MARKETPLACE or MARKETPLACES_UNAVAILABLE.
+  """
+  addMarketplace(
+    """The new marketplace."""
+    input: AddMarketplaceInput!
+  ): Marketplace
+
+  """
+  Changes the source of one marketplace, in its place in the list. Gives the changed marketplace, or NOT_FOUND, DUPLICATE_MARKETPLACE, INVALID_MARKETPLACE or MARKETPLACES_UNAVAILABLE.
+  """
+  updateMarketplace(
+    """The marketplace and its changes."""
+    input: UpdateMarketplaceInput!
+  ): Marketplace
+
+  """
+  Removes one marketplace from the list. Gives the removed marketplace, or NOT_FOUND or MARKETPLACES_UNAVAILABLE.
+  """
+  removeMarketplace(
+    """The marketplace to remove."""
+    input: RemoveMarketplaceInput!
+  ): Marketplace
 }
 
 type Subscription {
@@ -199,4 +356,14 @@ type Subscription {
     """
     after: String
   ): SkillChange!
+
+  """
+  One change for each add, update or remove of a marketplace. A cursor that cannot resume gives RESYNC_REQUIRED.
+  """
+  marketplaceChanges(
+    """
+    The cursor to resume after, from marketplaceCursor or a change. Omit it for the new changes only.
+    """
+    after: String
+  ): MarketplaceChange!
 }

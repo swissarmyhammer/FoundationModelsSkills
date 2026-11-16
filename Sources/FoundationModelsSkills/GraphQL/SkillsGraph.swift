@@ -1,5 +1,6 @@
 import FoundationModelsExtras
 import GraphQL
+import Marketplace
 
 /// The `skills` GraphQL endpoint (SK-5): the skills of one registry for the
 /// clients of a host, under the endpoint conventions of EXTRAS-9.
@@ -80,15 +81,25 @@ public final class SkillsGraph: GraphQLEndpoint {
     // periphery:ignore
     private let feed: SkillChangeFeed
 
+    /// The feed that appends one event to the marketplace change log for
+    /// each change of the marketplace list, or `nil` when the host keeps no
+    /// list. Held for its lifetime only, as ``feed``.
+    // periphery:ignore
+    private let marketplaceFeed: MarketplaceChangeFeed?
+
     /// Makes the endpoint over a registry, with a new change log of the
     /// default size.
     ///
-    /// - Parameter registry: The registry whose skills the endpoint gives.
-    ///   Each call reads its current catalog generation, and each reload
-    ///   feeds the change log.
+    /// - Parameters:
+    ///   - registry: The registry whose skills the endpoint gives. Each call
+    ///     reads its current catalog generation, and each reload feeds the
+    ///     change log.
+    ///   - marketplaces: The marketplace list that the host keeps, or `nil`
+    ///     when the host keeps none. Then `marketplaces` is empty and each
+    ///     marketplace mutation gives `MARKETPLACES_UNAVAILABLE`.
     /// - Throws: An error of the schema builder.
-    public convenience init(registry: SkillsRegistry) throws {
-        try self.init(registry: registry, changeLog: ChangeLog())
+    public convenience init(registry: SkillsRegistry, marketplaces: MarketplaceRegistry? = nil) throws {
+        try self.init(registry: registry, changeLog: ChangeLog(), marketplaces: marketplaces)
     }
 
     /// Makes the endpoint over a registry and a change log.
@@ -100,10 +111,18 @@ public final class SkillsGraph: GraphQLEndpoint {
     ///   - registry: The registry whose skills the endpoint gives.
     ///   - changeLog: The change log of the endpoint. The endpoint is its one
     ///     writer.
+    ///   - marketplaces: The marketplace list that the host keeps, or `nil`.
     /// - Throws: An error of the schema builder.
-    init(registry: SkillsRegistry, changeLog: ChangeLog<ChangedIDs>) throws {
-        api = try SkillsGraphAPI(resolver: SkillsGraphResolver(registry: registry, changeLog: changeLog))
+    init(
+        registry: SkillsRegistry, changeLog: ChangeLog<ChangedIDs>, marketplaces: MarketplaceRegistry? = nil
+    ) throws {
+        let marketplaceChangeLog = ChangeLog<ChangedIDs>()
+        api = try SkillsGraphAPI(
+            resolver: SkillsGraphResolver(
+                registry: registry, changeLog: changeLog, marketplaces: marketplaces,
+                marketplaceChangeLog: marketplaceChangeLog))
         feed = SkillChangeFeed(registry: registry, changeLog: changeLog)
+        marketplaceFeed = marketplaces.map { MarketplaceChangeFeed(marketplaces: $0, changeLog: marketplaceChangeLog) }
     }
 
     /// The schema of the endpoint in SDL.
