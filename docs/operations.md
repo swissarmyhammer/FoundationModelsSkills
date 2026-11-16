@@ -292,6 +292,11 @@ resolve to `use`. The `run` verb belongs to `run script`, thus `run skill`
 does not resolve to `use skill`. `create` and `new` resolve to `add`.
 `update` resolves to `edit`. `delete`, `rm`, and `del` resolve to `remove`.
 
+The noun `file` resolves to `resource`, thus `read file` is `read resource`.
+An `op` of one word that names the verb or the noun of exactly one operation
+runs that operation: `read` is `read resource`, and `script` is `run script`.
+A word that names several operations, such as `list`, resolves to nothing.
+
 ## A payload with no `op`
 
 Some models leave `op` out, or put the whole payload in one `arguments` key.

@@ -109,11 +109,18 @@ public enum SkillsTool {
     /// only reads: the resolver never infers a write.
     ///
     /// - Returns: A resolver layering `verbAliasOverrides` onto the upstream
-    ///   defaults, with `use skill` as the op of an op-less payload that fits
-    ///   several operations.
+    ///   defaults, with `nounAliases`, and with `use skill` as the op of an
+    ///   op-less payload that fits several operations.
     private static func makeResolver() -> OperationResolver {
-        OperationResolver(verbAliases: verbAliasOverrides, defaultOp: UseSkill.opString)
+        OperationResolver(verbAliases: verbAliasOverrides, nounAliases: nounAliases, defaultOp: UseSkill.opString)
     }
+
+    /// The noun aliases of this tool: `file` → `resource`, since each
+    /// resource of a skill is a file, thus `read file` is `read resource` and
+    /// `list file` is `list resource`. No other noun here is a file.
+    private static let nounAliases: [String: String] = [
+        "file": ReadResource.noun
+    ]
 
     /// The verb aliases this tool's operation set needs, layered onto
     /// `OperationResolver.defaultVerbAliases`: `find`/

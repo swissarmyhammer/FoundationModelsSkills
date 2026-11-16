@@ -109,6 +109,21 @@ struct ResourceOpsTests {
         #expect(json.contains("building release notes"))
     }
 
+    /// A model sent `{"op": "read", "id": …, "path": …}` on a SWE-bench run
+    /// and got "Unknown operation" twice. These ops all mean `read resource`.
+    @Test(arguments: ["read", "Read", "read file", "read_resource", "file read"])
+    func aForgivableReadOpReadsTheResourceAsReadResourceDoes(op: String) async throws {
+        let tool = try Self.makeTool()
+        let expected = try await tool.call(
+            arguments: GeneratedContent(
+                properties: ["op": "read resource", "id": "release-notes", "path": "scripts/build.sh"]))
+
+        let json = try await tool.call(
+            arguments: GeneratedContent(properties: ["op": op, "id": "release-notes", "path": "scripts/build.sh"]))
+
+        #expect(json == expected)
+    }
+
     // MARK: - Binary result
 
     @Test func readResourceOnABinaryAssetGivesTheBinaryResultWithItsByteSize() async throws {
