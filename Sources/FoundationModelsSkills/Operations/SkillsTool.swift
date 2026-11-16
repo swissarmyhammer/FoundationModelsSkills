@@ -88,7 +88,7 @@ public enum SkillsTool {
     ///   - withMarketplaces: Whether the host keeps a marketplace list.
     /// - Returns: All nine skill operations in `ToolMode.open`; each one but
     ///   `RunScript` in `ToolMode.sandboxed`. With a marketplace list, also
-    ///   the five marketplace operations.
+    ///   the six marketplace operations.
     private static func operations(
         for mode: ToolMode, withMarketplaces: Bool
     ) -> [AnyOperation<SkillsToolContext>] {
@@ -98,7 +98,7 @@ public enum SkillsTool {
             ? [
                 AnyOperation(AddMarketplace.self), AnyOperation(EditMarketplace.self),
                 AnyOperation(RemoveMarketplace.self), AnyOperation(ListMarketplace.self),
-                AnyOperation(ShowMarketplace.self),
+                AnyOperation(ShowMarketplace.self), AnyOperation(ResetMarketplace.self),
             ] : []
         return [
             AnyOperation(SearchSkill.self),
@@ -130,9 +130,12 @@ public enum SkillsTool {
 
     /// The noun aliases of this tool: `file` → `resource`, since each
     /// resource of a skill is a file, thus `read file` is `read resource` and
-    /// `list file` is `list resource`. No other noun here is a file.
+    /// `list file` is `list resource`. No other noun here is a file. Also
+    /// `marketplaces` → `marketplace`, thus `reset marketplaces` and `list
+    /// marketplaces` reach the operations of the list.
     private static let nounAliases: [String: String] = [
-        "file": ReadResource.noun
+        "file": ReadResource.noun,
+        "marketplaces": ResetMarketplace.noun,
     ]
 
     /// The verb aliases this tool's operation set needs, layered onto

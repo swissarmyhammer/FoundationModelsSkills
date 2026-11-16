@@ -95,7 +95,8 @@ session. The `defaults` and `marketplace` layers are read-only. See
 When the host gives a marketplace list (the `marketplaces:` argument of
 `SkillsTool.make(registry:)` or of `SkillsToolContext`), the
 model can also change it: `add marketplace`, `edit marketplace`,
-`remove marketplace`, `list marketplace` and `show marketplace`. The
+`remove marketplace`, `list marketplace`, `show marketplace` and
+`reset marketplace`. The
 `skills` GraphQL endpoint gives a client the same skill and marketplace
 changes as mutations. See
 [`docs/operations.md`](docs/operations.md#change-the-marketplace-list).

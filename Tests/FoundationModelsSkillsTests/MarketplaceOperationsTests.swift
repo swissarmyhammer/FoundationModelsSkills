@@ -145,6 +145,38 @@ struct MarketplaceOperationsTests {
         #expect(try await fixture.ids().isEmpty)
     }
 
+    // MARK: - reset marketplace
+
+    /// `reset marketplace` makes the list the default list of the storage.
+    @Test func resetMarketplaceRestoresTheDefaultList() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+
+        _ = try await fixture.call(["op": "reset marketplace"])
+
+        #expect(try await fixture.ids() == [Self.toolsID])
+    }
+
+    /// `reset marketplaces` (the plural noun) is `reset marketplace`.
+    @Test func resetMarketplacesIsResetMarketplace() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+
+        _ = try await fixture.call(["op": "reset marketplaces"])
+
+        #expect(try await fixture.ids() == [Self.toolsID])
+    }
+
+    /// `reset marketplace` answers one sentence that names the new list.
+    @Test func resetMarketplaceAnswersOneSentence() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+
+        let answer = try await fixture.call(["op": "reset marketplace"])
+
+        #expect(answer == "The marketplace list is the default list again: `\(Self.toolsID)`.")
+    }
+
     // MARK: - A host with no marketplace list
 
     /// A tool whose context has no marketplace registry has no marketplace
@@ -238,7 +270,8 @@ struct MarketplaceOperationsTests {
     }
 
     /// An empty skill layer, a marketplace registry, and the tool over the
-    /// two.
+    /// two. The default list of the storage, which a reset restores, has
+    /// only ``toolsURL``.
     private struct Fixture {
         /// The temporary root of the skill layer.
         let root: URL
@@ -264,7 +297,11 @@ struct MarketplaceOperationsTests {
         ) throws {
             root = try HotReloadTestSupport.makeTempDirectory()
             marketplaces =
-                withMarketplaces ? MarketplaceRegistry(storage: InMemoryMarketplaceSourceStorage(sources: sources)) : nil
+                withMarketplaces
+                ? MarketplaceRegistry(
+                    storage: InMemoryMarketplaceSourceStorage(
+                        sources: sources, defaultSources: [MarketplaceSource(MarketplaceOperationsTests.toolsURL)]))
+                : nil
             let registry = SkillsRegistry(layers: [DotfolderStack.Layer(source: .project, root: root)], mode: .open)
             let searcher = MetadataSearcher(items: registry.metadata())
             let context = try SkillsToolContext(

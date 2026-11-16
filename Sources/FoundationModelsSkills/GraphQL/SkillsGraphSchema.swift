@@ -309,6 +309,11 @@ struct SkillsGraphAPI: API {
                     InputField("id", at: \.id).description("The id of the marketplace to remove.")
                 }
                 .description("The fields of removeMarketplace.")
+                Input(ResetMarketplacesInput.self) {
+                    InputField("clientMutationId", at: \.clientMutationId)
+                        .description("An optional text of the client. The reset does not read it.")
+                }
+                .description("The fields of resetMarketplaces. The reset needs no field.")
             }
             .addQuery {
                 Field("cursor", at: SkillsGraphResolver.cursor)
@@ -365,6 +370,13 @@ struct SkillsGraphAPI: API {
                 .description(
                     "Removes one marketplace from the list. Gives the removed marketplace, or NOT_FOUND or "
                         + "MARKETPLACES_UNAVAILABLE.")
+                Field("resetMarketplaces", at: SkillsGraphResolver.resetMarketplaces) {
+                    Argument("input", at: \.input).description("The reset. It needs no field.")
+                }
+                .description(
+                    "Makes the list the default list of the host again. Gives the new list, or INVALID_MARKETPLACE "
+                        + "or MARKETPLACES_UNAVAILABLE. Each id that the reset removes, adds or changes gives a "
+                        + "marketplaceChanges event.")
             }
             .addSubscription {
                 SubscriptionField(

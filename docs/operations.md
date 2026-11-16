@@ -79,6 +79,7 @@ whole session:
 | `remove marketplace` | `id` (req) | Removes one marketplace from the list. |
 | `list marketplace` | — | Gives one line for each marketplace: its id and its URL. |
 | `show marketplace` | `id` (req) | Gives each field of one marketplace, one line each. |
+| `reset marketplace` | — | Makes the list the default list of the host again. The answer is one plain-text sentence that names the id of each marketplace of the new list. `reset marketplaces` is the same operation. |
 
 ## The combined view of a skill
 
@@ -154,7 +155,7 @@ The `agents` tool uses the same words, with `.agents` in place of `.skills`.
 
 ## Change the marketplace list
 
-The five marketplace operations read and change the `MarketplaceRegistry` of
+The six marketplace operations read and change the `MarketplaceRegistry` of
 `FoundationModelsExtras` that the host gives in the `marketplaces:` argument of
 `SkillsTool.make(registry:)` or of `SkillsToolContext`.
 The tool has these operations only when the host gives a registry.
@@ -166,8 +167,12 @@ The tool has these operations only when the host gives a registry.
   fetch the marketplace: the host makes a new `MarketplaceStore` from the
   list on each change, and the skills of the marketplace load from that
   store.
+- A reset asks the storage of the host for its default list
+  (`MarketplaceSourceStorage.resetSources()`). The registry sends one change
+  for each id that the reset removes, adds or changes.
 - The `skills` GraphQL endpoint has the same changes for a client:
-  `addMarketplace`, `updateMarketplace` and `removeMarketplace`, with the
+  `addMarketplace`, `updateMarketplace`, `removeMarketplace` and
+  `resetMarketplaces`, with the
   queries `marketplaces` and `marketplace(id:)` and the subscription
   `marketplaceChanges(after:)`.
 

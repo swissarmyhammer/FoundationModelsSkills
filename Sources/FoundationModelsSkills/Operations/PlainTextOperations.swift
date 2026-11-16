@@ -44,6 +44,7 @@ internal struct PlainTextOperations: Sendable {
         RemoveMarketplace.opString,
         ListMarketplace.opString,
         ShowMarketplace.opString,
+        ResetMarketplace.opString,
     ]
 
     /// The tool that resolves a payload against the markers only.

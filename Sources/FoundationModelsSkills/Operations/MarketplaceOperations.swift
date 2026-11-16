@@ -3,7 +3,7 @@ import Marketplace
 import Operations
 
 // The marketplace operations of the `skills` tool (D190, D100): `add`,
-// `edit`, `remove`, `list` and `show marketplace`. Each one goes to the
+// `edit`, `remove`, `list`, `show` and `reset marketplace`. Each one goes to the
 // `MarketplaceRegistry` of the context, the same registry as the marketplace
 // mutations of the `skills` endpoint. The tool has these operations only when
 // the context has a registry. Each answer is one plain text, and each refusal
@@ -193,6 +193,60 @@ public struct RemoveMarketplace: OperationDefinition {
         try await MarketplaceParameters.answer(in: context) { marketplaces in
             let entry = try await marketplaces.remove(id: id)
             return "Removed the marketplace `\(entry.id)`: \(entry.source.url)."
+        }
+    }
+}
+
+/// Makes the marketplace list the default list of the host again, through
+/// `MarketplaceRegistry.reset()`. The registry sends one change for each id
+/// that the reset removes, adds or changes.
+public struct ResetMarketplace: OperationDefinition {
+    /// The shared context this operation dispatches against.
+    public typealias Context = SkillsToolContext
+
+    /// This operation's result: one sentence, or a corrective message.
+    public typealias Output = MarketplaceAnswer
+
+    /// Creates the operation. It has no parameter.
+    public init() {}
+
+    /// The action this operation performs: `"reset"`.
+    public static let verb = "reset"
+
+    /// The resource this operation acts on: `"marketplace"`.
+    public static let noun = marketplaceOperationNoun
+
+    /// A human- and model-facing summary of what this operation does.
+    public static let operationDescription =
+        "Make the skill marketplace list the default list of the host again. It removes each marketplace that you added."
+
+    /// This operation has no parameter.
+    public static let parameterMetadata: [ParamMeta] = []
+
+    /// Decodes the operation from a resolved payload.
+    ///
+    /// - Parameter content: The payload, which has no field to read.
+    public init(_: GeneratedContent) throws {}
+
+    /// This operation's parameters re-encoded as `GeneratedContent`: none.
+    public var generatedContent: GeneratedContent {
+        GeneratedContentBuilder.make(required: [], optional: [])
+    }
+
+    /// Resets the list, or returns a corrective message.
+    ///
+    /// - Parameter context: The shared context that gives the registry.
+    /// - Returns: One sentence that names the id of each marketplace of the
+    ///   new list, or a corrective message.
+    /// - Throws: An error of the storage of the registry.
+    public func execute(in context: SkillsToolContext) async throws -> MarketplaceAnswer {
+        try await MarketplaceParameters.answer(in: context) { marketplaces in
+            let entries = try await marketplaces.reset()
+            guard !entries.isEmpty else {
+                return "The marketplace list is the default list again: it is empty."
+            }
+            let ids = entries.map { "`\($0.id)`" }.joined(separator: ", ")
+            return "The marketplace list is the default list again: \(ids)."
         }
     }
 }

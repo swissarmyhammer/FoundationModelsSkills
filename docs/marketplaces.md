@@ -386,10 +386,13 @@ A host that gives a `MarketplaceRegistry` of `FoundationModelsExtras` in the
 `marketplaces:` argument of `SkillsTool.make(registry:)` or of
 `SkillsToolContext` lets the model and the clients change the
 list, one marketplace at a time (D190). The `skills` tool then has `add`,
-`edit`, `remove`, `list` and `show marketplace`; see
+`edit`, `remove`, `list`, `show` and `reset marketplace`; see
 [`operations.md`](operations.md#change-the-marketplace-list). The `skills`
 GraphQL endpoint has `marketplaces`, `marketplace(id:)`, `addMarketplace`,
-`updateMarketplace`, `removeMarketplace` and `marketplaceChanges(after:)`.
+`updateMarketplace`, `removeMarketplace`, `resetMarketplaces` and
+`marketplaceChanges(after:)`. A reset makes the list the default list of the
+host again: the storage of the host clears its value (`resetSources()`) and
+gives the list that then applies.
 The registry saves the list through the storage of the host. It does not
 fetch: on each change the host makes a new `MarketplaceStore` from the list.
 

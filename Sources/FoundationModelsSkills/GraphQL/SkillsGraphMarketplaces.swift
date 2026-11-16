@@ -4,7 +4,8 @@ import Marketplace
 
 // The skill marketplaces of the `skills` endpoint (D190): the queries
 // `marketplaces` and `marketplace(id:)`, the mutations `addMarketplace`,
-// `updateMarketplace` and `removeMarketplace`, and the subscription
+// `updateMarketplace`, `removeMarketplace` and `resetMarketplaces`, and the
+// subscription
 // `marketplaceChanges(after:)`. Each call goes to the `MarketplaceRegistry`
 // of Extras that the host gives. The registry does not refresh the
 // `MarketplaceStore`: the host makes a new store on each change.
@@ -166,6 +167,16 @@ struct UpdateMarketplaceInput: Codable, Sendable {
 struct RemoveMarketplaceInput: Codable, Sendable {
     /// The id of the marketplace to remove.
     let id: ToolkitID
+}
+
+/// The `input` object of `resetMarketplaces`.
+///
+/// The reset needs no field. A GraphQL `input` object must have a field, and
+/// each mutation takes an `input` (rule 7), thus the object has one optional
+/// field that the reset does not read.
+struct ResetMarketplacesInput: Codable, Sendable {
+    /// A text of the client, or `nil`. The reset does not read it.
+    let clientMutationId: String?
 }
 
 // MARK: - Errors
@@ -347,6 +358,22 @@ extension SkillsGraphResolver {
         return try await Self.coding {
             SkillsGraphMarketplace(try await marketplaces.remove(id: arguments.input.id.text))
         }
+    }
+
+    /// Resolves `Mutation.resetMarketplaces`.
+    ///
+    /// The registry asks its storage for the default list of the host, saves
+    /// it, and sends one change for each id that the reset removes, adds or
+    /// changes.
+    ///
+    /// - Returns: Each marketplace of the new list, in order.
+    /// - Throws: `INVALID_MARKETPLACE`, `MARKETPLACES_UNAVAILABLE`, or an
+    ///   error of the storage.
+    func resetMarketplaces(
+        context _: SkillsGraphContext, arguments _: SkillsGraphInputArguments<ResetMarketplacesInput>
+    ) async throws -> [SkillsGraphMarketplace] {
+        let marketplaces = try requireMarketplaces()
+        return try await Self.coding { try await marketplaces.reset().map(SkillsGraphMarketplace.init) }
     }
 
     /// The marketplace registry of the endpoint.

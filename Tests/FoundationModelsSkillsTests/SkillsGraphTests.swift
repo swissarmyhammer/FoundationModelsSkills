@@ -113,7 +113,8 @@ struct SkillsGraphTests {
         let mutation = try #require(try buildSchema(source: fixture.graph.schema).mutationType)
 
         #expect(try mutation.fields().keys.sorted() == [
-            "addMarketplace", "addSkill", "removeMarketplace", "removeSkill", "updateMarketplace", "updateSkill",
+            "addMarketplace", "addSkill", "removeMarketplace", "removeSkill", "resetMarketplaces", "updateMarketplace",
+            "updateSkill",
         ])
     }
 

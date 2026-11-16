@@ -40,6 +40,9 @@ struct SkillsGraphMarketplaceTests {
     /// The selection of each field of a `Marketplace`.
     private static let fields = "id url ref sha path alias skills autoUpdate"
 
+    /// The `resetMarketplaces` document. Its input has no required field.
+    private static let resetMutation = "mutation { resetMarketplaces(input: {}) { id } }"
+
     // MARK: - Queries
 
     /// `marketplaces` gives each marketplace of the registry.
@@ -241,6 +244,39 @@ struct SkillsGraphMarketplaceTests {
         #expect(reply.codes == ["NOT_FOUND"])
     }
 
+    // MARK: - resetMarketplaces
+
+    /// `resetMarketplaces` makes the list the default list of the storage.
+    @Test func resetMarketplacesRestoresTheDefaultList() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+
+        _ = try await fixture.run(Self.resetMutation)
+
+        #expect(try await fixture.ids() == [Self.toolsID])
+    }
+
+    /// `resetMarketplaces` gives the new list.
+    @Test func resetMarketplacesGivesTheNewList() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+
+        let reply = try await fixture.run(Self.resetMutation)
+
+        let list = try #require(reply.data?["resetMarketplaces"] as? [[String: Any]])
+        #expect(list.compactMap { $0["id"] as? String } == [Self.toolsID])
+    }
+
+    /// `resetMarketplaces` with no registry gives `MARKETPLACES_UNAVAILABLE`.
+    @Test func resetMarketplacesWithNoRegistryGivesMarketplacesUnavailable() async throws {
+        let fixture = try Fixture(withMarketplaces: false)
+        defer { fixture.remove() }
+
+        let reply = try await fixture.run(Self.resetMutation)
+
+        #expect(reply.codes == ["MARKETPLACES_UNAVAILABLE"])
+    }
+
     // MARK: - marketplaceChanges
 
     /// `addMarketplace` gives one change with the new id.
@@ -281,6 +317,22 @@ struct SkillsGraphMarketplaceTests {
         #expect(event["removed"] as? [String] == [Self.acmeID])
     }
 
+    /// `resetMarketplaces` first gives a change that removes the old id.
+    ///
+    /// The test reads the change only after a reset with no error: a failed
+    /// reset sends no change, and the stream then waits for ever.
+    @Test func resetMarketplacesGivesARemoveChange() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let start = try await fixture.marketplaceCursor()
+
+        let reply = try await fixture.run(Self.resetMutation)
+        try #require(reply.codes.isEmpty)
+        let event = try await fixture.firstChange(after: start)
+
+        #expect(event["removed"] as? [String] == [Self.acmeID])
+    }
+
     // MARK: - Fixtures
 
     /// One parsed GraphQL response.
@@ -302,7 +354,8 @@ struct SkillsGraphMarketplaceTests {
     }
 
     /// An empty skill layer, a marketplace registry with ``acmeID`` (or no
-    /// marketplace registry), and the endpoint over the two.
+    /// marketplace registry), and the endpoint over the two. The default
+    /// list of the storage, which a reset restores, has only ``toolsURL``.
     private struct Fixture {
         /// The temporary root of the skill layer.
         let root: URL
@@ -326,7 +379,10 @@ struct SkillsGraphMarketplaceTests {
                 SkillsGraphMarketplaceTests.acmeURL, alias: SkillsGraphMarketplaceTests.acmeID, select: acmeSelection)
             marketplaces =
                 withMarketplaces
-                ? MarketplaceRegistry(storage: InMemoryMarketplaceSourceStorage(sources: [source])) : nil
+                ? MarketplaceRegistry(
+                    storage: InMemoryMarketplaceSourceStorage(
+                        sources: [source], defaultSources: [MarketplaceSource(SkillsGraphMarketplaceTests.toolsURL)]))
+                : nil
             let registry = SkillsRegistry(layers: [DotfolderStack.Layer(source: .project, root: root)], mode: .open)
             graph = try SkillsGraph(registry: registry, marketplaces: marketplaces)
         }

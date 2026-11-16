@@ -266,6 +266,12 @@ input RemoveMarketplaceInput {
   id: ID!
 }
 
+"""The fields of resetMarketplaces. The reset needs no field."""
+input ResetMarketplacesInput {
+  """An optional text of the client. The reset does not read it."""
+  clientMutationId: String
+}
+
 type Query {
   """The cursor of the newest change of the skills, for changes(after:)."""
   cursor: String!
@@ -344,6 +350,14 @@ type Mutation {
     """The marketplace to remove."""
     input: RemoveMarketplaceInput!
   ): Marketplace
+
+  """
+  Makes the list the default list of the host again. Gives the new list, or INVALID_MARKETPLACE or MARKETPLACES_UNAVAILABLE. Each id that the reset removes, adds or changes gives a marketplaceChanges event.
+  """
+  resetMarketplaces(
+    """The reset. It needs no field."""
+    input: ResetMarketplacesInput!
+  ): [Marketplace!]!
 }
 
 type Subscription {
