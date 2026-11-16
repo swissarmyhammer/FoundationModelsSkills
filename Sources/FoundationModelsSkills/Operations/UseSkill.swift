@@ -69,12 +69,6 @@ public struct UseSkill: OperationDefinition {
     /// The resource this operation acts on: `"skill"`.
     public static let noun = skillOperationNoun
 
-    /// `true`: a call with no `op` whose keys fit, for example
-    /// `{"id": "kanban"}`, runs `use skill` (^vm78pnz). It reads the skill and
-    /// writes nothing. In `ToolMode.open` its body can run the shell commands
-    /// of the skill, the same as for a call that names `use skill`.
-    public static let isInferable = true
-
     /// A human- and model-facing summary of what this operation does.
     ///
     /// It says what the model gets: instructions to follow, not a text to
@@ -187,5 +181,64 @@ public struct UseSkill: OperationDefinition {
         return SkillFilesText.text(
             id: id, rows: ListResource.listedRows(in: overlay),
             mode: context.mode)
+    }
+}
+
+/// `UseSkill` that a call with no `op` can run: the `use skill` of the tool
+/// in `ToolMode.sandboxed`.
+///
+/// `UseSkill` keeps the default `isInferable` of `false`. In `ToolMode.open`
+/// the body of a skill can run its shell commands, and a guessed call must
+/// have no side effect. Thus `{"id": "kanban"}` runs no operation there: the
+/// answer tells the model to name `use skill`. In `ToolMode.sandboxed` the
+/// body runs no command, thus `SkillsTool.make(context:)` gives this
+/// operation in place of `UseSkill`, and the call loads the skill (^vm78pnz).
+///
+/// It has the verb, the noun, the parameters and the work of `UseSkill`.
+struct InferableUseSkill: OperationDefinition {
+    /// The shared context this operation dispatches against.
+    typealias Context = SkillsToolContext
+
+    /// The result of `UseSkill`.
+    typealias Output = UseSkillOutput
+
+    /// The `UseSkill` that does the work.
+    let operation: UseSkill
+
+    /// The verb of `UseSkill`.
+    static var verb: String { UseSkill.verb }
+
+    /// The noun of `UseSkill`.
+    static var noun: String { UseSkill.noun }
+
+    /// `true`: in `ToolMode.sandboxed`, `use skill` only reads.
+    static var isInferable: Bool { true }
+
+    /// The description of `UseSkill`.
+    static var operationDescription: String { UseSkill.operationDescription }
+
+    /// The parameters of `UseSkill`.
+    static var parameterMetadata: [ParamMeta] { UseSkill.parameterMetadata }
+
+    /// Decodes the operation as `UseSkill` does.
+    ///
+    /// - Parameter content: The payload to decode.
+    /// - Throws: An error of `UseSkill.init(_:)`.
+    init(_ content: GeneratedContent) throws {
+        operation = try UseSkill(content)
+    }
+
+    /// The payload of `UseSkill`.
+    var generatedContent: GeneratedContent {
+        operation.generatedContent
+    }
+
+    /// Runs `UseSkill`.
+    ///
+    /// - Parameter context: The shared context.
+    /// - Returns: The answer of `UseSkill`.
+    /// - Throws: An error of `UseSkill.execute(in:)`.
+    func execute(in context: SkillsToolContext) async throws -> UseSkillOutput {
+        try await operation.execute(in: context)
     }
 }
