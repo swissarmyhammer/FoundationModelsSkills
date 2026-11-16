@@ -21,9 +21,14 @@ import GraphQL
 ///   A cursor that the change log cannot resume after gives
 ///   `RESYNC_REQUIRED`. `skillChanges` is an alias of `changes`.
 ///
-/// The endpoint reads and changes nothing on disk: it has no `Mutation`
-/// type (D84). It has no package error code: each error is a code of the
-/// toolkit.
+/// - `Mutation.addSkill`, `Mutation.updateSkill` and `Mutation.removeSkill`
+///   add, edit and delete a skill in the user layer or the project layer
+///   (D190). Each write goes to `SkillWriter`, the writer of the `add skill`,
+///   `edit skill` and `remove skill` operations of the `skills` tool, and
+///   reloads the registry, thus `changes` gives one `SkillChange` for it. The
+///   errors are `NOT_FOUND` of the toolkit and the codes of
+///   `SkillsGraphError`: `SKILL_EXISTS`, `SKILL_READ_ONLY` and
+///   `INVALID_SKILL`.
 ///
 /// The endpoint is a class because its identity is part of its contract:
 /// one endpoint serves one registry, with one change log. `SkillsTool.make(context:)`

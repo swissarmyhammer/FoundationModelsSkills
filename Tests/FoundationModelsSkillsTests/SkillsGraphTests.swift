@@ -57,8 +57,8 @@ struct SkillsGraphTests {
     /// the toolkit, rewrites `skill(name:)` to `skill(id:)` and the
     /// subscription `skillChanges` to `changes`, and obeys each rule of
     /// EXTRAS-9 with no exception: rule 9 too, the `changes` subscription
-    /// and the root `cursor`. The endpoint has no code of its own, thus it
-    /// gives no code for rule 8.
+    /// and the root `cursor`. The endpoint gives the codes of
+    /// `SkillsGraphError` for rule 8.
     @Test func theEndpointConforms() async throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
@@ -67,7 +67,7 @@ struct SkillsGraphTests {
         let subscriptionProbe = try await fixture.changesProbe()
 
         let problems = await GraphQLEndpointConformance.problems(
-            of: fixture.graph, scope: .sessionFolder, probes: [queryProbe, subscriptionProbe], codes: [],
+            of: fixture.graph, scope: .sessionFolder, probes: [queryProbe, subscriptionProbe], codes: SkillsGraphError.codes,
             exceptions: [])
 
         #expect(problems.isEmpty)
@@ -103,12 +103,15 @@ struct SkillsGraphTests {
         #expect(GraphQLSchemaGolden.problems(of: fixture.graph.schema, against: goldenFile).isEmpty)
     }
 
-    /// The endpoint changes nothing, thus it has no `Mutation` type (D84).
-    @Test func theSchemaHasNoMutationType() throws {
+    /// The app edits skills in place (D190), thus the schema has the three
+    /// skill mutations.
+    @Test func theSchemaHasTheSkillMutations() throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
 
-        #expect(try buildSchema(source: fixture.graph.schema).mutationType == nil)
+        let mutation = try #require(try buildSchema(source: fixture.graph.schema).mutationType)
+
+        #expect(try mutation.fields().keys.sorted() == ["addSkill", "removeSkill", "updateSkill"])
     }
 
     // MARK: - skills

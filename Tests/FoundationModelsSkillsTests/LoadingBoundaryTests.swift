@@ -18,8 +18,9 @@ import Testing
 /// A write is not a load. `SkillWriter` makes, writes and deletes the files of
 /// a skill in a writable layer, and Extras gives no such write, thus that one
 /// file is exempt from the `FileManager` rule. It checks the text of a new
-/// `SKILL.md` before the file exists, thus no stack can read it, and it is
-/// exempt from the `FrontmatterDocument.split` rule too.
+/// `SKILL.md` before the file exists, thus no stack can read it, and it
+/// splits the current `SKILL.md` of an `update` to write a new description or
+/// body, thus it is exempt from the `FrontmatterDocument.split` rule too.
 ///
 /// This suite is the one guard of that whole boundary. It gives
 /// `SwiftSourceScan` a test of a line, and that reader walks every Swift file
@@ -56,7 +57,9 @@ struct LoadingBoundaryTests {
     /// The writer of a skill folder, which makes, writes and deletes the
     /// files of a skill in a writable layer. Extras gives no write of a skill
     /// folder, and the writer checks a new `SKILL.md` with the split of
-    /// Extras before the file exists, thus no stack can read it yet.
+    /// Extras before the file exists, thus no stack can read it yet. Its
+    /// `update` splits the current `SKILL.md`, which it reads through a
+    /// `DotfolderStack`, to change only the description or the body.
     private static let skillWriterFile = "\(sourcesPath)/Registry/SkillWriter.swift"
 
     /// The re-export file, whose comment tells a host which names of Extras

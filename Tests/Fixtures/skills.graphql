@@ -49,6 +49,82 @@ type Skill {
   False when the enabled key of the skill turns it off. The model does not see it then.
   """
   enabled: Boolean!
+
+  """
+  The description as the SKILL.md gives it, not rendered. An editor shows this text.
+  """
+  rawDescription: String!
+
+  """The Markdown body of the SKILL.md, not rendered."""
+  body: String!
+}
+
+"""
+A layer that a mutation can write. The defaults and marketplace layers are read-only.
+"""
+enum SkillLayer {
+  """The user layer, for all projects."""
+  USER
+
+  """The project layer, for this project only."""
+  PROJECT
+}
+
+"""What removeSkill deleted."""
+type RemoveSkillPayload {
+  """The id of the deleted skill."""
+  id: ID!
+
+  """The layer that the mutation deleted the skill from."""
+  layer: SkillLayer!
+
+  """
+  The copy of the skill in another layer that stays, or null when no copy stays.
+  """
+  skill: Skill
+}
+
+"""The fields of addSkill."""
+input AddSkillInput {
+  """The id of the new skill: the name of its folder."""
+  id: ID!
+
+  """The description of the new skill."""
+  description: String!
+
+  """The Markdown body of the new skill. Omit it for no body."""
+  body: String
+
+  """The layer to write. Omit it for USER."""
+  layer: SkillLayer
+}
+
+"""The fields of updateSkill. A field that you omit does not change."""
+input UpdateSkillInput {
+  """The id of the skill to change."""
+  id: ID!
+
+  """The new description. Omit it for no change."""
+  description: String
+
+  """The new Markdown body. Omit it for no change."""
+  body: String
+
+  """
+  The layer to write, which must hold the skill. Omit it for the writable layer of the highest precedence that holds the skill.
+  """
+  layer: SkillLayer
+}
+
+"""The fields of removeSkill."""
+input RemoveSkillInput {
+  """The id of the skill to delete."""
+  id: ID!
+
+  """
+  The layer to delete from, which must hold the skill. Omit it for the writable layer of the highest precedence that holds the skill.
+  """
+  layer: SkillLayer
 }
 
 """
@@ -85,6 +161,32 @@ type Query {
     """The id of the skill, which is its name."""
     id: ID!
   ): Skill
+}
+
+type Mutation {
+  """
+  Makes a new skill: its folder and its SKILL.md. Gives the skill that wins for the id, or SKILL_EXISTS or INVALID_SKILL.
+  """
+  addSkill(
+    """The new skill."""
+    input: AddSkillInput!
+  ): Skill
+
+  """
+  Writes a new description or body into the SKILL.md of a skill. Gives the skill that wins for the id, or NOT_FOUND, SKILL_READ_ONLY or INVALID_SKILL.
+  """
+  updateSkill(
+    """The skill and its changes."""
+    input: UpdateSkillInput!
+  ): Skill
+
+  """
+  Deletes a skill and all its files from one layer. A copy in another layer stays. Gives NOT_FOUND or SKILL_READ_ONLY for a skill that cannot be deleted.
+  """
+  removeSkill(
+    """The skill to delete."""
+    input: RemoveSkillInput!
+  ): RemoveSkillPayload
 }
 
 type Subscription {

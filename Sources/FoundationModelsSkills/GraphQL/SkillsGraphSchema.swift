@@ -66,10 +66,18 @@ struct SkillsGraphSkill: Codable, Sendable {
     /// Whether the skill is on.
     let enabled: Bool
 
-    /// Makes the object of one record of the registry.
+    /// The description as the `SKILL.md` gives it, not rendered.
+    let rawDescription: String
+
+    /// The Markdown body of the `SKILL.md`, not rendered.
+    let body: String
+
+    /// Makes the object of the content of one skill of the registry.
     ///
-    /// - Parameter record: The record.
-    init(_ record: SkillRecord) {
+    /// - Parameter content: The record, the frontmatter and the body of the
+    ///   skill.
+    init(_ content: SkillContent) {
+        let record = content.record
         id = ToolkitID(record.id)
         name = record.id
         description = record.description
@@ -77,6 +85,8 @@ struct SkillsGraphSkill: Codable, Sendable {
         source = SkillsGraphSource(record.layer)
         marketplace = record.marketplace
         enabled = record.isEnabled
+        rawDescription = content.frontmatter.description ?? ""
+        body = content.body
     }
 }
 
@@ -136,7 +146,7 @@ struct SkillsGraphResolver: Sendable {
     /// - Returns: Each skill of the registry, the skills that are off
     ///   included, sorted by id.
     func skills(context _: SkillsGraphContext, arguments _: NoArguments) -> [SkillsGraphSkill] {
-        registry.records().map(SkillsGraphSkill.init)
+        registry.skillContents().values.sorted { $0.record.id < $1.record.id }.map(SkillsGraphSkill.init)
     }
 
     /// Resolves `Query.skill`.
@@ -144,7 +154,7 @@ struct SkillsGraphResolver: Sendable {
     /// - Parameter arguments: The id of the skill.
     /// - Returns: The skill, or `nil` when no skill has the id.
     func skill(context _: SkillsGraphContext, arguments: SkillsGraphSkillArguments) -> SkillsGraphSkill? {
-        registry.records().first { record in record.id == arguments.id.text }.map(SkillsGraphSkill.init)
+        registry.skillContents()[arguments.id.text].map(SkillsGraphSkill.init)
     }
 }
 
@@ -187,8 +197,49 @@ struct SkillsGraphAPI: API {
                         .description("The marketplace of the skill, for example name@1a2b3c4, or null for a local skill.")
                     Field("enabled", at: \.enabled)
                         .description("False when the enabled key of the skill turns it off. The model does not see it then.")
+                    Field("rawDescription", at: \.rawDescription)
+                        .description("The description as the SKILL.md gives it, not rendered. An editor shows this text.")
+                    Field("body", at: \.body).description("The Markdown body of the SKILL.md, not rendered.")
                 }
                 .description("One skill on disk, also one that is off.")
+                Enum(SkillsGraphLayer.self, as: "SkillLayer") {
+                    Value(.user).description("The user layer, for all projects.")
+                    Value(.project).description("The project layer, for this project only.")
+                }
+                .description("A layer that a mutation can write. The defaults and marketplace layers are read-only.")
+                Type(RemoveSkillPayload.self) {
+                    Field("id", at: \.id).description("The id of the deleted skill.")
+                    Field("layer", at: \.layer).description("The layer that the mutation deleted the skill from.")
+                    Field("skill", at: \.skill)
+                        .description("The copy of the skill in another layer that stays, or null when no copy stays.")
+                }
+                .description("What removeSkill deleted.")
+                Input(AddSkillInput.self) {
+                    InputField("id", at: \.id).description("The id of the new skill: the name of its folder.")
+                    InputField("description", at: \.description).description("The description of the new skill.")
+                    InputField("body", at: \.body).description("The Markdown body of the new skill. Omit it for no body.")
+                    InputField("layer", at: \.layer).description("The layer to write. Omit it for USER.")
+                }
+                .description("The fields of addSkill.")
+                Input(UpdateSkillInput.self) {
+                    InputField("id", at: \.id).description("The id of the skill to change.")
+                    InputField("description", at: \.description)
+                        .description("The new description. Omit it for no change.")
+                    InputField("body", at: \.body).description("The new Markdown body. Omit it for no change.")
+                    InputField("layer", at: \.layer)
+                        .description(
+                            "The layer to write, which must hold the skill. "
+                                + "Omit it for the writable layer of the highest precedence that holds the skill.")
+                }
+                .description("The fields of updateSkill. A field that you omit does not change.")
+                Input(RemoveSkillInput.self) {
+                    InputField("id", at: \.id).description("The id of the skill to delete.")
+                    InputField("layer", at: \.layer)
+                        .description(
+                            "The layer to delete from, which must hold the skill. "
+                                + "Omit it for the writable layer of the highest precedence that holds the skill.")
+                }
+                .description("The fields of removeSkill.")
                 Type(IDChange.self, as: "SkillChange") {
                     Field("cursor", at: \.cursor).description("The cursor that resumes after this change.")
                     Field("at", at: \.at).description("The time of the reload that made the change.")
@@ -208,6 +259,26 @@ struct SkillsGraphAPI: API {
                     Argument("id", at: \.id).description("The id of the skill, which is its name.")
                 }
                 .description("One skill, or null when no skill has the id.")
+            }
+            .addMutation {
+                Field("addSkill", at: SkillsGraphResolver.addSkill) {
+                    Argument("input", at: \.input).description("The new skill.")
+                }
+                .description(
+                    "Makes a new skill: its folder and its SKILL.md. Gives the skill that wins for the id, "
+                        + "or SKILL_EXISTS or INVALID_SKILL.")
+                Field("updateSkill", at: SkillsGraphResolver.updateSkill) {
+                    Argument("input", at: \.input).description("The skill and its changes.")
+                }
+                .description(
+                    "Writes a new description or body into the SKILL.md of a skill. Gives the skill that wins for "
+                        + "the id, or NOT_FOUND, SKILL_READ_ONLY or INVALID_SKILL.")
+                Field("removeSkill", at: SkillsGraphResolver.removeSkill) {
+                    Argument("input", at: \.input).description("The skill to delete.")
+                }
+                .description(
+                    "Deletes a skill and all its files from one layer. A copy in another layer stays. "
+                        + "Gives NOT_FOUND or SKILL_READ_ONLY for a skill that cannot be deleted.")
             }
             .addSubscription {
                 SubscriptionField(

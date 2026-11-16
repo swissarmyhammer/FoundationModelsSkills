@@ -71,7 +71,7 @@ public struct SkillWriteResult: Sendable, Equatable, Encodable {
 /// corrective message for the model when the write did not occur.
 public typealias SkillWriteOutcome = CorrectiveOutcome<SkillWriteResult>
 
-/// Adds, edits and removes the files of a skill in the `.user` or `.project`
+/// Adds, edits, updates and removes the files of a skill in the `.user` or `.project`
 /// layer of a `SkillsRegistry`, and then reloads the registry.
 ///
 /// The target root of a write is the root of the highest-precedence layer of
@@ -92,7 +92,7 @@ public typealias SkillWriteOutcome = CorrectiveOutcome<SkillWriteResult>
 /// - a name that is not one path component;
 /// - a layer that the registry does not have;
 /// - `add` of a folder that the layer already holds;
-/// - `edit` or `remove` of a folder that the layer does not hold;
+/// - `edit`, `update` or `remove` of a folder that the layer does not hold;
 /// - `edit` of a path that leaves the skill folder (the path rules of
 ///   `ReadResource`);
 /// - a `SKILL.md` that `SkillValidator` gives a warning or a skip for.
@@ -197,6 +197,45 @@ public struct SkillWriter: Sendable {
         }
     }
 
+    /// Writes a new description, a new body, or the two, into the
+    /// `SKILL.md` of the skill `name` in `layer`.
+    ///
+    /// The writer reads the current file of the layer through a
+    /// `DotfolderStack` of that one layer, and splits it with the split of
+    /// Extras. A new description writes the frontmatter again, with the
+    /// other keys in their order; a new body keeps the frontmatter text. The
+    /// new file must be valid, the same as for `edit`.
+    ///
+    /// - Parameters:
+    ///   - name: The name of the skill.
+    ///   - description: The new description, or `nil` for no change.
+    ///   - body: The new body, or `nil` for no change.
+    ///   - layer: The layer to write. The default is ``SkillWriteLayer/default``.
+    /// - Returns: The file that the write changed, or a corrective message.
+    /// - Throws: Whatever the YAML emitter or the file system throws.
+    public func update(
+        name: String, description: String?, body: String?, layer: SkillWriteLayer = .default
+    ) throws -> SkillWriteOutcome {
+        try write(name: name, layer: layer) { target in
+            let relativePath = "\(name)/\(Self.skillFileName)"
+            guard target.holdsFolder, let current = DotfolderStack(layers: [target.layer]).content(relativePath) else {
+                return .corrective(missingFolderMessage(target, for: .edit))
+            }
+            let split = FrontmatterDocument.split(text: current)
+            guard let text = try SkillFileText.changed(split, description: description, body: body) else {
+                return .corrective(
+                    "The frontmatter of the `\(Self.skillFileName)` of `\(name)` is not a YAML mapping, thus its "
+                        + "description cannot change. Write the whole file with `edit`.")
+            }
+            let fileURL = target.folder.appendingPathComponent(Self.skillFileName)
+            if let message = Self.invalidSkillFileMessage(text, at: fileURL, of: target) {
+                return .corrective(message)
+            }
+            try text.write(to: fileURL, atomically: true, encoding: .utf8)
+            return .success(target.result(path: fileURL))
+        }
+    }
+
     // MARK: - The target of a write
 
     /// The skill folder of one write, in the layer that the write changes.
@@ -277,7 +316,7 @@ public struct SkillWriter: Sendable {
     ///
     /// - Parameter name: The name of a skill.
     /// - Returns: `true` for a name that is safe to join onto a layer root.
-    private static func isSinglePathComponent(_ name: String) -> Bool {
+    static func isSinglePathComponent(_ name: String) -> Bool {
         !name.isEmpty && !name.contains(pathSeparator) && !relativeFolderNames.contains(name)
     }
 
