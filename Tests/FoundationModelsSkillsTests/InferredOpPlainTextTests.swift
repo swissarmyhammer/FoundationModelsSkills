@@ -9,11 +9,11 @@ import Testing
 ///
 /// The `Operations` runtime infers a missing `op` from the keys of the
 /// payload, and unwraps a lone `arguments` object (^vm78pnz). A call of the
-/// Recursive Flint model is `{"id": "kanban"}`: the keys fit `use skill` and
-/// `list resource`, and the resolver of the tool settles on `use skill`. The
-/// answer of an inferred or unwrapped `use skill` is the rendered body as
-/// plain text, as it is for an explicit `use skill`. An explicit op keeps
-/// the answer it had.
+/// Recursive Flint model is `{"id": "kanban"}`: the keys fit `use skill`,
+/// `list resource` and `remove skill`, and the `defaultOp` of the resolver of
+/// the tool settles the tie on `use skill`. The answer of an inferred or
+/// unwrapped `use skill` is the rendered body as plain text, as it is for an
+/// explicit `use skill`. An explicit op keeps the answer it had.
 struct InferredOpPlainTextTests {
     // MARK: - Constants
 

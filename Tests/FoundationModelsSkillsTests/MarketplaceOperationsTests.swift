@@ -180,22 +180,23 @@ struct MarketplaceOperationsTests {
         #expect(answer == "The marketplace list is the default list again: `\(Self.toolsID)`.")
     }
 
-    // MARK: - A call with no op runs no write
+    // MARK: - A call with no op runs the operation that its keys fit
 
-    /// A call with no `op` whose keys fit only `add marketplace` adds no
-    /// marketplace: inference never runs an operation that writes.
-    @Test func aURLWithNoOpAddsNoMarketplace() async throws {
+    /// A call with no `op` whose keys fit only `add marketplace` adds the
+    /// marketplace: each operation is inferable unless it opts out, also an
+    /// operation that writes.
+    @Test func aURLWithNoOpAddsTheMarketplace() async throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
 
         _ = try await fixture.call(["url": Self.toolsURL])
 
-        #expect(try await fixture.ids() == [Self.acmeID])
+        #expect(try await fixture.ids() == [Self.acmeID, Self.toolsID])
     }
 
-    /// A call with no `op` whose keys fit only `remove skill` removes no
+    /// A call with no `op` whose keys fit only `remove skill` removes the
     /// skill.
-    @Test func anIDAndALayerWithNoOpRemoveNoSkill() async throws {
+    @Test func anIDAndALayerWithNoOpRemoveTheSkill() async throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
         let skillFile = fixture.root.appending(path: "\(Self.skillID)/SKILL.md")
@@ -205,7 +206,7 @@ struct MarketplaceOperationsTests {
 
         _ = try await fixture.call(["id": Self.skillID, "layer": "project"])
 
-        #expect(FileManager.default.fileExists(atPath: skillFile.path))
+        #expect(!FileManager.default.fileExists(atPath: skillFile.path))
     }
 
     // MARK: - A host with no marketplace list

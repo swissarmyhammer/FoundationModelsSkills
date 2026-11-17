@@ -84,6 +84,15 @@ comments:
     - evidence: review sha HEAD~1..HEAD (5adc9d5): 0 findings, 0 confirmed, 0 refuted; 8 files reviewed, 7 validator runs, 0 failed; 6 .kanban files excluded by .reviewignore. All 4 items of "Review Findings (2026-11-17 06:40)" are checked. The diff shows each fix: isResolutionFailure keeps unknownOperation, unnamedOperation and missingRequired silent; reportUnexpected calls assertionFailure and logger.error for each other error; the tests use FixtureLibrary.makeProjectRegistry() and FixtureLibrary.makeSkillsTool(registry:), and the private copies are removed.
     - next: none. The task is in done.
   timestamp: 2026-11-17T12:49:20.761089+00:00
+- actor: claude-code
+  id: 01m7mrwgyjt83y7cwxh1hgmc47
+  text: |-
+    ### finish iteration 2 — clean
+    - implement: changed — 8 files, 4 findings fixed
+    - test: green — swift test, 905 tests in 74 suites passed
+    - commit: 5adc9d5
+    - review: clean — 0 findings, 4/4 prior findings checked; task moved to done
+  timestamp: 2026-11-17T12:49:37.234163+00:00
 position_column: done
 position_ordinal: ffba80
 title: 'SK-10: an op-less skills call runs use skill, and its answer stays plain text'

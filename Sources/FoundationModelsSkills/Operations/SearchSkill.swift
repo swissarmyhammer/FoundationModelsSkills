@@ -61,9 +61,6 @@ public struct SearchSkill: OperationDefinition {
     /// The resource this operation acts on: `"skill"`.
     public static let noun = skillOperationNoun
 
-    /// `true`: it only reads, thus a call with no `op` can run it.
-    public static let isInferable = true
-
     /// A human- and model-facing summary of what this operation does.
     ///
     /// It tells the model what to search for: the kind of work it does

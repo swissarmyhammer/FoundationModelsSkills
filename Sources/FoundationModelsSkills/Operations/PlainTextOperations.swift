@@ -26,9 +26,10 @@ import Operations
 /// that op is one of `plainTextOpStrings`.
 ///
 /// The markers mirror every operation, not only the plain-text ones, because
-/// the inference of an op depends on the whole set: `{"id": …}` fits
-/// `use skill` and `list resource`, and `defaultOp` settles it only among the
-/// operations that fit. A marker reads no field and does no work, thus the
+/// the inference of an op depends on the whole set: each operation is
+/// inferable unless it opts out, `{"id": …}` fits `use skill`,
+/// `list resource` and `remove skill`, and `defaultOp` settles the tie only
+/// among the operations that fit. A marker reads no field and does no work, thus the
 /// match never runs an operation and never counts against the retry cap of
 /// the fused tool.
 internal struct PlainTextOperations: Sendable {
@@ -206,7 +207,9 @@ internal struct PlainTextMarker<Target: OperationDefinition>: OperationDefinitio
     internal static var parameterMetadata: [ParamMeta] { Target.parameterMetadata }
 
     /// The `isInferable` of `Target`, thus the matcher infers a missing `op`
-    /// only where the fused tool does, and never gives the op of an
+    /// over the same operations as the fused tool. An operation is
+    /// inferable unless it opts out, and a marker of an operation that opts
+    /// out also opts out. Thus the matcher never gives the op of an
     /// operation that the fused tool does not run.
     internal static var isInferable: Bool { Target.isInferable }
 
