@@ -77,8 +77,15 @@ comments:
     - evidence: 8 files — Sources/FoundationModelsSkills/Operations/PlainTextOperations.swift, Sources/FoundationModelsSkills/Tracing/SkillsTracing.swift, Tests/FoundationModelsSkillsTests/PlainTextOperationsErrorTests.swift (new), Tests/FoundationModelsSkillsTests/FixtureLibrary.swift, Tests/FoundationModelsSkillsTests/InferredOpPlainTextTests.swift, Tests/FoundationModelsSkillsTests/UseSkillPlainTextTests.swift, Tests/FoundationModelsSkillsTests/SkillsCLITests.swift, Tests/FoundationModelsSkillsTests/SkillsTracingTests.swift. `swift build --build-tests` complete; `swift test` 905 tests in 74 suites passed. The only warning is the mlx-swift build-system "missing creator for mutated node", outside the touched code. 4 of 4 findings checked.
     - next: /review
   timestamp: 2026-11-17T12:47:51.351179+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01m7mrw0vsv25xgdakzrdftcya
+  text: |-
+    ### review — clean
+    - evidence: review sha HEAD~1..HEAD (5adc9d5): 0 findings, 0 confirmed, 0 refuted; 8 files reviewed, 7 validator runs, 0 failed; 6 .kanban files excluded by .reviewignore. All 4 items of "Review Findings (2026-11-17 06:40)" are checked. The diff shows each fix: isResolutionFailure keeps unknownOperation, unnamedOperation and missingRequired silent; reportUnexpected calls assertionFailure and logger.error for each other error; the tests use FixtureLibrary.makeProjectRegistry() and FixtureLibrary.makeSkillsTool(registry:), and the private copies are removed.
+    - next: none. The task is in done.
+  timestamp: 2026-11-17T12:49:20.761089+00:00
+position_column: done
+position_ordinal: ffba80
 title: 'SK-10: an op-less skills call runs use skill, and its answer stays plain text'
 ---
 ## What
