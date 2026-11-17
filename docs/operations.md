@@ -338,28 +338,26 @@ and infers a missing `op` from the keys of the payload: an operation fits when
 each key names one of its parameters and the payload holds each of its
 required parameters.
 
-An inference runs only an operation that declares `isInferable`: an operation
-with no side effect. In this tool these are `search skill`, `list skill` and
-`read resource`, and `use skill` in `ToolMode.sandboxed` only. In
-`ToolMode.open` the body of a skill can run its shell commands, thus a guessed
-`use skill` could have a side effect. Each other operation runs only when the
-call names it in `op`: the operations that write (`add`, `edit` and
-`remove skill`, `run script`, and the marketplace writes), `list resource`,
-`list marketplace` and `show marketplace`. A call with no `op` that
+An inference runs only an operation that declares `isInferable`. In this tool
+these are the operations that only read: `search skill`, `list skill`,
+`use skill`, `list resource` and `read resource`. An operation that writes
+(`add`, `edit` and `remove skill`, `run script`, and each marketplace
+operation) runs only when the call names it in `op`. A call with no `op` that
 fits no inferable operation does not run. Its answer tells the model to name
 the operation, and lists the operations that fit the keys and each valid
 operation.
 
 - `{"id": "kanban"}` fits `use skill`, `list resource`, and `remove skill`.
-  In `ToolMode.sandboxed` only `use skill` of these is inferable, thus the
-  call loads the skill. In `ToolMode.open` none is inferable, thus the call
-  does not run, and the answer tells the model to name `use skill`.
+  `remove skill` writes, thus it is not a candidate. The tool sets
+  `use skill` as the `defaultOp` of its resolver, thus the call loads the
+  skill. In `ToolMode.open` the body of the skill can run its shell commands,
+  the same as for a call that names `use skill`.
 - `{"id": "kanban", "layer": "project"}` fits only `remove skill`. It does not
   run, and it removes nothing.
 - `{"url": "github:acme/skills"}` fits only `add marketplace`. It does not
   run.
-- `{"id": "kanban", "arguments": []}` fits only `use skill`. In
-  `ToolMode.sandboxed` it loads the skill with no arguments.
+- `{"id": "kanban", "arguments": []}` fits only `use skill`, and loads the
+  skill with no arguments.
 - `{"arguments": {"op": "use skill", "id": "kanban"}}` is the same call as
   `{"op": "use skill", "id": "kanban"}`.
 

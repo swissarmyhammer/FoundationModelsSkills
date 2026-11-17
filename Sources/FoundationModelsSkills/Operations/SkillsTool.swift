@@ -87,15 +87,12 @@ public enum SkillsTool {
     ///   - mode: The mode of the tools of the host.
     ///   - withMarketplaces: Whether the host keeps a marketplace list.
     /// - Returns: All nine skill operations in `ToolMode.open`; each one but
-    ///   `RunScript` in `ToolMode.sandboxed`. In `ToolMode.sandboxed`,
-    ///   `InferableUseSkill` is in place of `UseSkill`: a call with no `op`
-    ///   can load a skill only where its body runs no command. With a marketplace list, also
+    ///   `RunScript` in `ToolMode.sandboxed`. With a marketplace list, also
     ///   the six marketplace operations.
     private static func operations(
         for mode: ToolMode, withMarketplaces: Bool
     ) -> [AnyOperation<SkillsToolContext>] {
         let scriptOperations = mode == .open ? [AnyOperation(RunScript.self)] : []
-        let useSkill = mode == .open ? AnyOperation(UseSkill.self) : AnyOperation(InferableUseSkill.self)
         let marketplaceOperations: [AnyOperation<SkillsToolContext>] =
             withMarketplaces
             ? [
@@ -106,7 +103,7 @@ public enum SkillsTool {
         return [
             AnyOperation(SearchSkill.self),
             AnyOperation(ListSkill.self),
-            useSkill,
+            AnyOperation(UseSkill.self),
             AnyOperation(ListResource.self),
             AnyOperation(ReadResource.self),
         ] + scriptOperations + [
@@ -122,15 +119,9 @@ public enum SkillsTool {
     /// (^vm78pnz). A model sends `{"id": "kanban"}` with no `op` to load a
     /// skill, and those keys fit `use skill`, `list resource`, and
     /// `remove skill`. The resolver infers only an operation that declares
-    /// `isInferable`: an operation with no side effect. `remove skill`
-    /// writes, thus it is not inferable. `use skill` is inferable only in
-    /// `ToolMode.sandboxed`, where the body runs no command. `list resource`
-    /// only reads, but it is not inferable: else `{"id": "kanban"}` in
-    /// `ToolMode.open` would list the files in place of the answer that tells
-    /// the model to name the operation. Thus the call loads the skill in
-    /// `ToolMode.sandboxed`, and runs nothing in `ToolMode.open`.
-    /// `defaultOp` names `use skill` for a payload that fits it and another
-    /// inferable operation.
+    /// `isInferable`: the operations that only read. Thus `remove skill` is
+    /// not a candidate, and `defaultOp` settles the tie of `use skill` and
+    /// `list resource` on `use skill`. The resolver never infers a write.
     ///
     /// - Returns: A resolver layering `verbAliasOverrides` onto the upstream
     ///   defaults, with `nounAliases`, and with `use skill` as the op of an
