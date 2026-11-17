@@ -1,0 +1,1 @@
+{"id":"01M7MRCM8B39GCQQFWRNGDC1D8","timestamp":"2026-11-17T12:40:56.331475Z","op":"create","item_id":"01M7MRCM8A8CTZ5P3VKQ6HPSC5","forward_patch":"--- original\n+++ modified\n@@ -0,0 +1,2 @@\n+color: fbca04\n+tag_name: operations\n","reverse_patch":"--- original\n+++ modified\n@@ -1,2 +0,0 @@\n-color: fbca04\n-tag_name: operations\n","transaction_id":null}

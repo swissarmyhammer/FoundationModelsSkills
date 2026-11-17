@@ -1,5 +1,6 @@
 import Foundation
 import FoundationModels
+import Logging
 import Operations
 
 /// The operations of the fused `skills` tool whose answer the model reads as
@@ -98,21 +99,69 @@ internal struct PlainTextOperations: Sendable {
     ///
     /// - Parameter arguments: The payload that the fused tool dispatched.
     /// - Returns: `true` when the matcher resolves the payload to an op of
-    ///   `plainTextOpStrings`.
+    ///   `plainTextOpStrings`. `false` when the payload resolves to no
+    ///   operation, and `false` with an assertion failure and an error log
+    ///   when the matcher throws an error that it must not throw.
     private func isPlainTextOperation(_ arguments: GeneratedContent) async -> Bool {
+        let opJSON: String
         do {
-            let opJSON = try await matcher.perform(arguments)
-            return Self.decodedString(from: opJSON).map(Self.plainTextOpStrings.contains) ?? false
+            opJSON = try await matcher.perform(arguments)
         } catch {
-            // `perform` throws `OperationError.unknownOperation` for a
-            // payload that resolves to no operation, and
-            // `OperationError.missingRequired` for a payload that lacks a
-            // required parameter. The fused tool answers each one with a
-            // corrective, which is plain text already. A marker decodes each
-            // payload and does no work, thus no other error can come here.
+            if !Self.isResolutionFailure(error) {
+                Self.reportUnexpected(error)
+            }
+            return false
+        }
+        return Self.decodedString(from: opJSON).map(Self.plainTextOpStrings.contains) ?? false
+    }
+
+    /// Whether `error` means that the matcher resolved no operation for a
+    /// payload.
+    ///
+    /// `perform` throws `OperationError.unknownOperation` for an `op` that
+    /// names no operation, `OperationError.unnamedOperation` for a payload
+    /// with no `op` that the resolver cannot infer, and
+    /// `OperationError.missingRequired` for a payload that lacks a required
+    /// parameter. The fused tool answers each one with a corrective, which is
+    /// plain text already, thus each one is expected.
+    ///
+    /// A marker decodes each payload, does no work, and throws nothing. Thus
+    /// each other error, also a `CancellationError`, is not expected.
+    ///
+    /// - Parameter error: The error that the matcher threw.
+    /// - Returns: `true` for an error that resolves no operation.
+    internal static func isResolutionFailure(_ error: any Error) -> Bool {
+        guard let operationError = error as? OperationError else {
+            return false
+        }
+        switch operationError {
+        case .unknownOperation, .unnamedOperation, .missingRequired:
+            return true
+        case .decodingFailed, .encodingFailed, .executionFailed:
             return false
         }
     }
+
+    /// Makes an error that the matcher must not throw visible: an assertion
+    /// failure stops a debug build, and an error log records the error in a
+    /// release build. The answer then stays as the fused tool gave it.
+    ///
+    /// The log names the type of the error and never its description,
+    /// because the description can hold content of the user (see
+    /// `SkillsTracing`).
+    ///
+    /// - Parameter error: The error that the matcher threw.
+    private static func reportUnexpected(_ error: any Error) {
+        let errorType = String(reflecting: type(of: error))
+        assertionFailure("\(unexpectedErrorMessage): \(errorType)")
+        Logger(label: SkillsTracing.LoggerLabel.operations).error(
+            "\(unexpectedErrorMessage)", metadata: [SkillsTracing.MetadataKey.errorType: "\(errorType)"])
+    }
+
+    /// The message of the assertion and of the log for an error that the
+    /// matcher must not throw.
+    private static let unexpectedErrorMessage =
+        "The plain-text matcher threw an unexpected error; the answer of the fused tool stays as it is"
 
     /// Decodes `json` when it is one JSON string.
     ///

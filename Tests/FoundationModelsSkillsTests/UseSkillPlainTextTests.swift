@@ -52,8 +52,8 @@ struct UseSkillPlainTextTests {
 
     @Test(arguments: useSkillOps)
     func theAnswerIsTheRenderedBodyCharacterForCharacter(op: String) async throws {
-        let registry = Self.makeFixtureRegistry()
-        let tool = try Self.makeTool(registry: registry)
+        let registry = FixtureLibrary.makeProjectRegistry()
+        let tool = try FixtureLibrary.makeSkillsTool(registry: registry)
         let renderedBody = try await registry.call(id: Self.commitSkillID, arguments: [Self.commitMessage])
 
         let answer = try await tool.call(arguments: Self.useCommitArguments(op: op))
@@ -63,7 +63,7 @@ struct UseSkillPlainTextTests {
 
     @Test(arguments: useSkillOps)
     func theAnswerHoldsNoJSONStructureAroundTheBody(op: String) async throws {
-        let tool = try Self.makeTool(registry: Self.makeFixtureRegistry())
+        let tool = try FixtureLibrary.makeSkillsTool(registry: FixtureLibrary.makeProjectRegistry())
 
         let answer = try await tool.call(arguments: Self.useCommitArguments(op: op))
 
@@ -77,8 +77,8 @@ struct UseSkillPlainTextTests {
 
     @Test(arguments: useSkillOps)
     func performGivesTheRenderedBodyToo(op: String) async throws {
-        let registry = Self.makeFixtureRegistry()
-        let tool = try Self.makeTool(registry: registry)
+        let registry = FixtureLibrary.makeProjectRegistry()
+        let tool = try FixtureLibrary.makeSkillsTool(registry: registry)
         let renderedBody = try await registry.call(id: Self.commitSkillID, arguments: [Self.commitMessage])
 
         let answer = try await tool.perform(Self.useCommitArguments(op: op))
@@ -90,7 +90,7 @@ struct UseSkillPlainTextTests {
 
     @Test(arguments: useSkillOps)
     func anUnknownIDGivesAPlainSentenceThatNamesTheClosestValidIDs(op: String) async throws {
-        let tool = try Self.makeTool(registry: Self.makeFixtureRegistry())
+        let tool = try FixtureLibrary.makeSkillsTool(registry: FixtureLibrary.makeProjectRegistry())
 
         let answer = try await tool.call(
             arguments: GeneratedContent(properties: ["op": op, "id": Self.unknownSkillID]))
@@ -100,8 +100,8 @@ struct UseSkillPlainTextTests {
 
     @Test(arguments: useSkillOps)
     func aCallWithNoArgumentsGivesTheRenderedBodyWithTheArgumentEmpty(op: String) async throws {
-        let registry = Self.makeFixtureRegistry()
-        let tool = try Self.makeTool(registry: registry)
+        let registry = FixtureLibrary.makeProjectRegistry()
+        let tool = try FixtureLibrary.makeSkillsTool(registry: registry)
         let renderedBody = try await registry.call(id: Self.commitSkillID, arguments: [])
 
         let answer = try await tool.call(
@@ -190,8 +190,8 @@ struct UseSkillPlainTextTests {
     private static let manyFileCount = 102
 
     @Test func useSkillOfReleaseNotesGivesTheBodyThenTheFilesAndTheCalls() async throws {
-        let registry = Self.makeFixtureRegistry()
-        let tool = try Self.makeTool(registry: registry)
+        let registry = FixtureLibrary.makeProjectRegistry()
+        let tool = try FixtureLibrary.makeSkillsTool(registry: registry)
         let renderedBody = try await registry.call(id: Self.releaseNotesSkillID, arguments: [])
 
         let answer = try await tool.call(arguments: Self.useArguments(id: Self.releaseNotesSkillID))
@@ -201,7 +201,8 @@ struct UseSkillPlainTextTests {
     }
 
     @Test func useSkillOfReleaseNotesGivesTheIncludedReferenceTextThenTheFourFileRows() async throws {
-        let answer = try await Self.useAnswer(id: Self.releaseNotesSkillID, registry: Self.makeFixtureRegistry())
+        let answer = try await Self.useAnswer(
+            id: Self.releaseNotesSkillID, registry: FixtureLibrary.makeProjectRegistry())
 
         let includedLine = try #require(answer.range(of: Self.includedStyleLine))
         let heading = try #require(answer.range(of: Self.filesHeading))
@@ -211,7 +212,8 @@ struct UseSkillPlainTextTests {
     }
 
     @Test func theBodyOfReleaseNotesNamesEachFileByItsExactRelativePath() async throws {
-        let renderedBody = try await Self.makeFixtureRegistry().call(id: Self.releaseNotesSkillID, arguments: [])
+        let renderedBody = try await FixtureLibrary.makeProjectRegistry().call(
+            id: Self.releaseNotesSkillID, arguments: [])
 
         for path in Self.releaseNotesBodyPaths {
             #expect(renderedBody.contains("`\(path)`"), "the body must name `\(path)`")
@@ -221,7 +223,7 @@ struct UseSkillPlainTextTests {
 
     @Test func theSandboxedModeGivesNoRunCall() async throws {
         let registry = SkillsRegistry(roots: [ResourceTestSupport.projectSkillsRoot], mode: .sandboxed)
-        let tool = try Self.makeTool(registry: registry)
+        let tool = try FixtureLibrary.makeSkillsTool(registry: registry)
         let renderedBody = try await registry.call(id: Self.releaseNotesSkillID, arguments: [])
 
         let answer = try await tool.call(arguments: Self.useArguments(id: Self.releaseNotesSkillID))
@@ -285,7 +287,7 @@ struct UseSkillPlainTextTests {
     }
 
     @Test func theAddedTextHoldsNoTag() async throws {
-        let registry = Self.makeFixtureRegistry()
+        let registry = FixtureLibrary.makeProjectRegistry()
         let renderedBody = try await registry.call(id: Self.releaseNotesSkillID, arguments: [])
 
         let answer = try await Self.useAnswer(id: Self.releaseNotesSkillID, registry: registry)
@@ -306,9 +308,10 @@ struct UseSkillPlainTextTests {
     ///   - id: The skill id to load.
     ///   - registry: The registry the tool dispatches against.
     /// - Returns: The plain-text answer.
-    /// - Throws: Whatever `makeTool(registry:)` or `call(arguments:)` throws.
+    /// - Throws: Whatever `FixtureLibrary.makeSkillsTool(registry:)` or
+    ///   `call(arguments:)` throws.
     private static func useAnswer(id: String, registry: SkillsRegistry) async throws -> String {
-        try await makeTool(registry: registry).call(arguments: useArguments(id: id))
+        try await FixtureLibrary.makeSkillsTool(registry: registry).call(arguments: useArguments(id: id))
     }
 
     /// The payload that loads `id` with no arguments.
@@ -317,23 +320,6 @@ struct UseSkillPlainTextTests {
     /// - Returns: The payload.
     private static func useArguments(id: String) -> GeneratedContent {
         GeneratedContent(properties: ["op": useSkillOps[0], "id": id])
-    }
-
-    /// Builds a registry over the `project/.skills` fixture root.
-    ///
-    /// - Returns: The registry that the tool and the expected body share.
-    private static func makeFixtureRegistry() -> SkillsRegistry {
-        SkillsRegistry(roots: [FixtureLibrary.url(relativePath: "project/.skills")], mode: .open)
-    }
-
-    /// Builds the fused `skills` tool over `registry`, with the model-facing
-    /// visibility predicate.
-    ///
-    /// - Parameter registry: The registry the tool dispatches against.
-    /// - Returns: The fused tool.
-    /// - Throws: Whatever `SkillsTool.make(context:)` throws.
-    private static func makeTool(registry: SkillsRegistry) throws -> SkillsCatalogTool {
-        try SkillsTool.make(context: FixtureLibrary.makeSkillsToolContext(registry: registry))
     }
 
     /// The payload that loads `commitSkillID` with `commitMessage`.

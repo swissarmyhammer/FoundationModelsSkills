@@ -172,9 +172,9 @@ enum FixtureLibrary {
     /// criteria call for.
     ///
     /// Shared by `SkillOperationsTests.makeFixtureContext()` (the model
-    /// surface's own registry) and `SkillsCLITests.makeModelTool(registry:)`
-    /// (a registry the CLI test also drives directly), so the two suites'
-    /// dispatch-context construction can never drift.
+    /// surface's own registry) and `makeSkillsTool(registry:)` (the fused
+    /// tool of each suite that builds one), so the dispatch-context
+    /// construction of the suites can never drift.
     ///
     /// The context gets the mode of `registry`.
     ///
@@ -186,4 +186,34 @@ enum FixtureLibrary {
         return try SkillsToolContext(
             registry: registry, searchAgent: SkillSearchAgent(searcher: searcher), mode: registry.mode)
     }
+
+    /// Builds the fused `skills` tool over `registry`, with the context of
+    /// ``makeSkillsToolContext(registry:)``.
+    ///
+    /// The one builder of the fused tool over a given registry. Each suite
+    /// that compares the answer of the tool with a direct call of the same
+    /// registry builds the tool here, thus no suite keeps its own copy.
+    ///
+    /// - Parameter registry: The registry the tool dispatches against.
+    /// - Returns: The fused tool.
+    /// - Throws: Whatever `makeSkillsToolContext(registry:)` or
+    ///   `SkillsTool.make(context:)` throws.
+    static func makeSkillsTool(registry: SkillsRegistry) throws -> SkillsCatalogTool {
+        try SkillsTool.make(context: makeSkillsToolContext(registry: registry))
+    }
+
+    /// Builds a registry in `ToolMode.open` over the `project/.skills`
+    /// fixture root alone.
+    ///
+    /// The one builder of this registry. Each suite that reads the fixture
+    /// skills of the project root builds its registry here, thus no suite
+    /// keeps its own copy.
+    ///
+    /// - Returns: A new registry over the project fixture root.
+    static func makeProjectRegistry() -> SkillsRegistry {
+        SkillsRegistry(roots: [url(relativePath: projectSkillsPath)], mode: .open)
+    }
+
+    /// The path of the project fixture root, relative to `root(thisFile:)`.
+    private static let projectSkillsPath = "project/.skills"
 }

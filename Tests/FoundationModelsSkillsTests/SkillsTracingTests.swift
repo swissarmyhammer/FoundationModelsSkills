@@ -41,6 +41,7 @@ struct SkillsTracingTests {
     private static let loggerLabels = [
         SkillsTracing.LoggerLabel.search,
         SkillsTracing.LoggerLabel.registry,
+        SkillsTracing.LoggerLabel.operations,
     ]
 
     /// Every span attribute key of the vocabulary.

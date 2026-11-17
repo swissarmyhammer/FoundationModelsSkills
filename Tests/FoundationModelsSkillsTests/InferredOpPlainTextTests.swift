@@ -46,30 +46,30 @@ struct InferredOpPlainTextTests {
     // MARK: - A payload with no op
 
     @Test func anIDWithNoOpGivesTheRenderedBody() async throws {
-        let registry = Self.makeFixtureRegistry()
+        let registry = FixtureLibrary.makeProjectRegistry()
         let renderedBody = try await registry.call(id: Self.commitSkillID, arguments: [])
 
-        let answer = try await Self.makeTool(registry: registry).call(
+        let answer = try await FixtureLibrary.makeSkillsTool(registry: registry).call(
             arguments: GeneratedContent(properties: [Self.idKey: Self.commitSkillID]))
 
         #expect(answer == renderedBody)
     }
 
     @Test func performOfAnIDWithNoOpGivesTheRenderedBody() async throws {
-        let registry = Self.makeFixtureRegistry()
+        let registry = FixtureLibrary.makeProjectRegistry()
         let renderedBody = try await registry.call(id: Self.commitSkillID, arguments: [])
 
-        let answer = try await Self.makeTool(registry: registry).perform(
+        let answer = try await FixtureLibrary.makeSkillsTool(registry: registry).perform(
             GeneratedContent(properties: [Self.idKey: Self.commitSkillID]))
 
         #expect(answer == renderedBody)
     }
 
     @Test func anIDBesideAnEmptyArgumentsArrayWithNoOpGivesTheRenderedBody() async throws {
-        let registry = Self.makeFixtureRegistry()
+        let registry = FixtureLibrary.makeProjectRegistry()
         let renderedBody = try await registry.call(id: Self.commitSkillID, arguments: [])
 
-        let answer = try await Self.makeTool(registry: registry).call(
+        let answer = try await FixtureLibrary.makeSkillsTool(registry: registry).call(
             arguments: GeneratedContent(properties: [Self.argumentsKey: [String](), Self.idKey: Self.commitSkillID]))
 
         #expect(answer == renderedBody)
@@ -78,20 +78,21 @@ struct InferredOpPlainTextTests {
     // MARK: - A payload in one arguments key
 
     @Test func aUseSkillPayloadInArgumentsGivesTheRenderedBody() async throws {
-        let registry = Self.makeFixtureRegistry()
+        let registry = FixtureLibrary.makeProjectRegistry()
         let renderedBody = try await registry.call(id: Self.commitSkillID, arguments: [])
 
-        let answer = try await Self.makeTool(registry: registry).call(
-            arguments: Self.wrapped(GeneratedContent(properties: [Self.opKey: Self.useSkillOp, Self.idKey: Self.commitSkillID])))
+        let answer = try await FixtureLibrary.makeSkillsTool(registry: registry).call(
+            arguments: Self.wrapped(
+                GeneratedContent(properties: [Self.opKey: Self.useSkillOp, Self.idKey: Self.commitSkillID])))
 
         #expect(answer == renderedBody)
     }
 
     @Test func anIDWithNoOpInArgumentsGivesTheRenderedBody() async throws {
-        let registry = Self.makeFixtureRegistry()
+        let registry = FixtureLibrary.makeProjectRegistry()
         let renderedBody = try await registry.call(id: Self.commitSkillID, arguments: [])
 
-        let answer = try await Self.makeTool(registry: registry).call(
+        let answer = try await FixtureLibrary.makeSkillsTool(registry: registry).call(
             arguments: Self.wrapped(GeneratedContent(properties: [Self.idKey: Self.commitSkillID])))
 
         #expect(answer == renderedBody)
@@ -100,17 +101,17 @@ struct InferredOpPlainTextTests {
     // MARK: - An explicit op keeps its answer
 
     @Test func anExplicitUseSkillGivesTheRenderedBody() async throws {
-        let registry = Self.makeFixtureRegistry()
+        let registry = FixtureLibrary.makeProjectRegistry()
         let renderedBody = try await registry.call(id: Self.commitSkillID, arguments: [])
 
-        let answer = try await Self.makeTool(registry: registry).call(
+        let answer = try await FixtureLibrary.makeSkillsTool(registry: registry).call(
             arguments: GeneratedContent(properties: [Self.opKey: Self.useSkillOp, Self.idKey: Self.commitSkillID]))
 
         #expect(answer == renderedBody)
     }
 
     @Test func anExplicitListResourceStillGivesItsJSONRows() async throws {
-        let answer = try await Self.makeTool(registry: Self.makeFixtureRegistry()).call(
+        let answer = try await FixtureLibrary.makeSkillsTool(registry: FixtureLibrary.makeProjectRegistry()).call(
             arguments: GeneratedContent(properties: [
                 Self.opKey: Self.listResourceOp, Self.idKey: Self.releaseNotesSkillID,
             ]))
@@ -119,7 +120,7 @@ struct InferredOpPlainTextTests {
     }
 
     @Test func aListResourcePayloadInArgumentsStillGivesItsJSONRows() async throws {
-        let answer = try await Self.makeTool(registry: Self.makeFixtureRegistry()).call(
+        let answer = try await FixtureLibrary.makeSkillsTool(registry: FixtureLibrary.makeProjectRegistry()).call(
             arguments: Self.wrapped(
                 GeneratedContent(properties: [Self.opKey: Self.listResourceOp, Self.idKey: Self.releaseNotesSkillID])))
 
@@ -134,22 +135,5 @@ struct InferredOpPlainTextTests {
     /// - Returns: The wrapped payload.
     private static func wrapped(_ payload: GeneratedContent) -> GeneratedContent {
         GeneratedContent(properties: [argumentsKey: payload])
-    }
-
-    /// Builds a registry over the `project/.skills` fixture root.
-    ///
-    /// - Returns: The registry that the tool and the expected body share.
-    private static func makeFixtureRegistry() -> SkillsRegistry {
-        SkillsRegistry(roots: [FixtureLibrary.url(relativePath: "project/.skills")], mode: .open)
-    }
-
-    /// Builds the fused `skills` tool over `registry`, with the model-facing
-    /// visibility predicate.
-    ///
-    /// - Parameter registry: The registry the tool dispatches against.
-    /// - Returns: The fused tool.
-    /// - Throws: Whatever `SkillsTool.make(context:)` throws.
-    private static func makeTool(registry: SkillsRegistry) throws -> SkillsCatalogTool {
-        try SkillsTool.make(context: FixtureLibrary.makeSkillsToolContext(registry: registry))
     }
 }

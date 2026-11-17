@@ -14,15 +14,9 @@ struct SkillsCLITests {
 
     private static let projectSkillsRoot = FixtureLibrary.url(relativePath: "project/.skills")
 
-    /// Builds a fresh registry over the fixture library's `commit` /
-    /// `deploy` / `lint` / … skills.
-    private static func makeFixtureRegistry() -> SkillsRegistry {
-        SkillsRegistry(roots: [Self.projectSkillsRoot], mode: .open)
-    }
-
     /// Builds the CLI driver over a fresh fixture registry.
     private static func makeFixtureDriver() throws -> OperationCLIDriver {
-        try SkillsCLI.makeDriver(registry: Self.makeFixtureRegistry())
+        try SkillsCLI.makeDriver(registry: FixtureLibrary.makeProjectRegistry())
     }
 
     // MARK: - Invocation table
@@ -53,7 +47,7 @@ struct SkillsCLITests {
         #expect(result.exitCode == 0)
         #expect(
             try await Self.decodedText(result.output)
-                == Self.makeFixtureRegistry().call(id: "commit", arguments: ["fix parser"]))
+                == FixtureLibrary.makeProjectRegistry().call(id: "commit", arguments: ["fix parser"]))
     }
 
     // MARK: - CLI syntax: positional id vs --id flag
@@ -86,7 +80,7 @@ struct SkillsCLITests {
         #expect(result.exitCode == 0)
         #expect(
             try await Self.decodedText(result.output)
-                == Self.makeFixtureRegistry().call(id: "deploy", arguments: ["production"]))
+                == FixtureLibrary.makeProjectRegistry().call(id: "deploy", arguments: ["production"]))
     }
 
     @Test func useVerbHonorsTheSandboxedMode() async throws {
@@ -133,7 +127,7 @@ struct SkillsCLITests {
         let result = await driver.run(arguments: ["skill", "use", "--id", "deploy"])
 
         #expect(result.exitCode == 0)
-        #expect(try await Self.decodedText(result.output) == Self.makeFixtureRegistry().call(id: "deploy"))
+        #expect(try await Self.decodedText(result.output) == FixtureLibrary.makeProjectRegistry().call(id: "deploy"))
     }
 
     @Test func useVerbRefusesLintWhichIsModelOnly() async throws {
@@ -220,9 +214,9 @@ struct SkillsCLITests {
     // MARK: - Round trip: CLI payload == model payload
 
     @Test func searchVerbRoundTripsToTheIdenticalModelDispatchOutput() async throws {
-        let registry = Self.makeFixtureRegistry()
+        let registry = FixtureLibrary.makeProjectRegistry()
         let driver = try SkillsCLI.makeDriver(registry: registry)
-        let modelTool = try Self.makeModelTool(registry: registry)
+        let modelTool = try FixtureLibrary.makeSkillsTool(registry: registry)
 
         let cliResult = await driver.run(arguments: ["skill", "search", "--query", "commit"])
         let modelOutput = try await modelTool.call(
@@ -235,9 +229,9 @@ struct SkillsCLITests {
     }
 
     @Test func listVerbRoundTripsToTheIdenticalModelDispatchOutputForAModelVisibleFilter() async throws {
-        let registry = Self.makeFixtureRegistry()
+        let registry = FixtureLibrary.makeProjectRegistry()
         let driver = try SkillsCLI.makeDriver(registry: registry)
-        let modelTool = try Self.makeModelTool(registry: registry)
+        let modelTool = try FixtureLibrary.makeSkillsTool(registry: registry)
 
         // `filter: "commit"` matches only `commit`, which both surfaces
         // agree is visible -- the two dispatch paths must therefore agree on
@@ -251,9 +245,9 @@ struct SkillsCLITests {
     }
 
     @Test func useVerbRoundTripsToTheIdenticalModelDispatchOutputForCommit() async throws {
-        let registry = Self.makeFixtureRegistry()
+        let registry = FixtureLibrary.makeProjectRegistry()
         let driver = try SkillsCLI.makeDriver(registry: registry)
-        let modelTool = try Self.makeModelTool(registry: registry)
+        let modelTool = try FixtureLibrary.makeSkillsTool(registry: registry)
 
         let cliResult = await driver.run(arguments: ["skill", "use", "--id", "commit", "--arguments", "fix parser"])
         let modelOutput = try await modelTool.call(
@@ -266,9 +260,9 @@ struct SkillsCLITests {
     }
 
     @Test func resourceListVerbRoundTripsToTheIdenticalModelDispatchOutput() async throws {
-        let registry = Self.makeFixtureRegistry()
+        let registry = FixtureLibrary.makeProjectRegistry()
         let driver = try SkillsCLI.makeDriver(registry: registry)
-        let modelTool = try Self.makeModelTool(registry: registry)
+        let modelTool = try FixtureLibrary.makeSkillsTool(registry: registry)
 
         let cliResult = await driver.run(arguments: ["resource", "list", "--id", "release-notes"])
         let modelOutput = try await modelTool.call(
@@ -279,9 +273,9 @@ struct SkillsCLITests {
     }
 
     @Test func resourceReadVerbRoundTripsToTheIdenticalModelDispatchOutput() async throws {
-        let registry = Self.makeFixtureRegistry()
+        let registry = FixtureLibrary.makeProjectRegistry()
         let driver = try SkillsCLI.makeDriver(registry: registry)
-        let modelTool = try Self.makeModelTool(registry: registry)
+        let modelTool = try FixtureLibrary.makeSkillsTool(registry: registry)
 
         let cliResult = await driver.run(
             arguments: ["resource", "read", "--id", "release-notes", "--path", "scripts/build.sh"])
@@ -294,9 +288,9 @@ struct SkillsCLITests {
     }
 
     @Test func scriptRunVerbRoundTripsToTheIdenticalModelDispatchOutput() async throws {
-        let registry = Self.makeFixtureRegistry()
+        let registry = FixtureLibrary.makeProjectRegistry()
         let driver = try SkillsCLI.makeDriver(registry: registry)
-        let modelTool = try Self.makeModelTool(registry: registry)
+        let modelTool = try FixtureLibrary.makeSkillsTool(registry: registry)
 
         let cliResult = await driver.run(
             arguments: ["script", "run", "--id", "release-notes", "--path", "scripts/build.sh"])
@@ -351,12 +345,5 @@ struct SkillsCLITests {
     /// - Throws: A decode error when `output` is not one JSON string.
     private static func listedIDs(_ output: String) throws -> [String] {
         SkillLineReader.ids(in: try decodedText(output))
-    }
-
-    /// Builds the model-facing fused tool over `registry`, via the same
-    /// `FixtureLibrary.makeSkillsToolContext(registry:)` helper
-    /// `SkillOperationsTests.makeFixtureContext()` uses.
-    private static func makeModelTool(registry: SkillsRegistry) throws -> SkillsCatalogTool {
-        try SkillsTool.make(context: FixtureLibrary.makeSkillsToolContext(registry: registry))
     }
 }

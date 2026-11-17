@@ -152,6 +152,10 @@ enum SkillsTracing {
         /// The logger of ``SkillsRegistry``. It gets the "enter" record of
         /// each skill load.
         static let registry = prefix + "registry"
+
+        /// The logger of `PlainTextOperations`. It gets the record of an
+        /// error that the plain-text matcher must not throw.
+        static let operations = prefix + "operations"
     }
 
     /// The tracer that a call opens its span through.
