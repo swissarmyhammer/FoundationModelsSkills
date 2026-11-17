@@ -29,6 +29,22 @@ comments:
     - evidence: 5 files — Sources/FoundationModelsSkills/Operations/PlainTextOperations.swift, Sources/FoundationModelsSkills/Operations/SkillsCatalogTool.swift, Sources/FoundationModelsSkills/Operations/SkillsTool.swift, docs/operations.md, Tests/FoundationModelsSkillsTests/InferredOpPlainTextTests.swift. `swift build --build-tests` exit 0; `swift test` 838 tests in 71 suites passed; the only warning is the mlx-swift build-system "missing creator for mutated node", outside the touched code.
     - next: /review
   timestamp: 2026-11-14T21:13:02.955684+00:00
+- actor: claude-code
+  id: 01m7mr20d0ev5a78f9znpfs8nq
+  text: |-
+    ### Check at HEAD 3043498 (after 2d716b6 isInferable and the revert of 6df83ad)
+
+    - Requirement 1: `SkillsTool.makeResolver()` passes `defaultOp: UseSkill.opString`. Its doc says that `{"id"}` fits `use skill`, `list resource` and `remove skill`, that `remove skill` is not inferable, and that `defaultOp` settles the tie on `use skill`. Correct.
+    - Requirement 2: `PlainTextOperations` mirrors each operation of the fused tool. `PlainTextMarker.isInferable` passes on `Target.isInferable`, thus the matcher infers over the same candidate set as the dispatch. `UseSkill.isInferable` is `true` with no `ToolMode` condition, thus the inference is the same in `ToolMode.open` and `ToolMode.sandboxed`. Correct.
+    - Requirement 3: `InferredOpPlainTextTests` has `{"id"}` (call and perform), `{"arguments": [], "id"}`, `{"arguments": {"op": "use skill", "id"}}`, `{"arguments": {"id"}}`, and explicit `use skill` and `list resource` (also wrapped). Correct.
+    - docs/operations.md "A payload with no `op`" states the current rule: only `isInferable` operations are inferred, `remove skill` fits `{"id"}` but is not a candidate, `defaultOp` gives `use skill`. Correct.
+    - Requirement 4: `swift build --build-tests` complete; `swift test` 903 tests in 73 suites passed. The only warning is the mlx-swift build-system "missing creator for mutated node", outside the touched code.
+    - Note: the type doc of `PlainTextOperations` and the doc of the test suite say that `{"id"}` "fits `use skill` and `list resource`". That is the set of inferable operations that fit. docs/operations.md and `makeResolver()` give the full statement. No code change.
+
+    ### implement — no-change
+    - evidence: no file changed. `swift build --build-tests` exit 0; `swift test` 903 tests in 73 suites passed.
+    - next: /review
+  timestamp: 2026-11-17T12:35:08.320411+00:00
 position_column: doing
 position_ordinal: '80'
 title: 'SK-10: an op-less skills call runs use skill, and its answer stays plain text'
