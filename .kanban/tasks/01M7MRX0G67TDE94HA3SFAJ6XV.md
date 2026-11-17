@@ -21,8 +21,15 @@ comments:
     - evidence: `swift build --build-tests` complete; `swift test` 905 tests in 74 suites passed, 0 issues. Files: Sources/FoundationModelsSkills/Operations/{UseSkill,SearchSkill,ListSkill,SkillsTool,PlainTextOperations}.swift, Sources/FoundationModelsSkills/Resources/{ReadResource,ListResource}.swift, Tests/FoundationModelsSkillsTests/{MarketplaceOperationsTests,InferredOpPlainTextTests}.swift, docs/operations.md, Package.resolved (gitignored).
     - next: /review
   timestamp: 2026-11-17T12:53:46.863544+00:00
-position_column: doing
-position_ordinal: '80'
+- actor: claude-code
+  id: 01m7ms68j1rn13dzkx0fbjv3z8
+  text: |-
+    ### review — clean
+    - evidence: review sha HEAD~1..HEAD (1ca2fe6): 0 findings, 0 confirmed, 0 refuted; 7 validator runs attempted, 0 failed. 9 files reviewed. No validator matched docs/operations.md. The .kanban files are ignored by .reviewignore.
+    - next: none. The task is in done.
+  timestamp: 2026-11-17T12:54:56.321706+00:00
+position_column: done
+position_ordinal: ffbb80
 title: Adopt default-inferable operations from FoundationModelsExtras 09d38f9
 ---
 FoundationModelsExtras main 09d38f9 sets the default of `OperationDefinition.isInferable` to `true`. `isInferable: false` is now an opt-out. An op-less guess can now run an operation with side effects. Adopt this rule in Skills.
